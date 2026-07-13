@@ -1,0 +1,1119 @@
+import Foundation
+import SwiftUI
+import TadaWordsContent
+import TadaWordsDesignSystem
+import TadaWordsDomain
+import TadaWordsLearning
+
+@MainActor
+final class TadaWordsAppModel: ObservableObject {
+    @Published private(set) var destination: AppDestination = .profileChooser
+    @Published private(set) var selectedProfile: KidProfile?
+    @Published private(set) var todayRouteStatuses: [LearningMode: TodayQuestRouteStatus] = [:]
+    @Published private(set) var calendarMonthSummary: DailyQuestMonthSummary?
+    @Published private(set) var isCalendarLoading = false
+    @Published private(set) var calendarLoadFailed = false
+    @Published private(set) var profiles: [KidProfile]
+    @Published private(set) var isCreatingChildProfile = false
+    @Published private(set) var childProfileCreationError: String?
+    @Published private(set) var worldProgression: WorldProgression?
+    @Published private(set) var rewardCollections: [WorldTheme: RewardCollection] = [:]
+    @Published private(set) var worldSelectionError: String?
+
+    private let contentProvider: any QuestContentProviding
+    private let audioPromptService: any AudioPromptService
+    private let audioExperienceService: any AudioExperienceService
+    private let practiceSettingsRepository: (any PracticeSettingsRepository)?
+    private let attemptEventRepository: any AttemptEventRepository
+    private let wordProgressRepository: any WordProgressRepository
+    private let dailyQuestCoordinator: DailyQuestCoordinator
+    private let clock: any AppClock
+    private let timeZone: TimeZone
+    private let progressReducer: WordProgressReducer
+    private let questTimerFactory: (TimeInterval) -> QuestTimerModel
+    private let childSessionRepository: (any ChildSessionRepository)?
+    private let childProfileCreator: (any ChildProfileCreating)?
+    private let profileRepository: (any KidProfileRepository)?
+    private let onLearningDataChanged: @Sendable () async -> Void
+
+    private var activeQuest: ActiveQuest?
+    private var pendingCompletion: PendingItemCompletion?
+    private var preparationTask: Task<Void, Never>?
+    private var persistenceTask: Task<Void, Never>?
+    private var activePreparationID: UUID?
+    private var routeStatusTask: Task<Void, Never>?
+    private var calendarTask: Task<Void, Never>?
+    private var profileSelectionTask: Task<Void, Never>?
+    private var worldProgressTask: Task<Void, Never>?
+    private var didPrepareInitialProfile = false
+    private var isApplicationActive = true
+
+    init(
+        profiles: [KidProfile] = .previewProfiles,
+        contentProvider: any QuestContentProviding = UnavailableQuestContentProvider(),
+        audioPromptService: any AudioPromptService = SilentAudioPromptService(),
+        audioExperienceService: any AudioExperienceService =
+            SilentAudioExperienceService(),
+        practiceSettingsRepository: (any PracticeSettingsRepository)? = nil,
+        attemptEventRepository: any AttemptEventRepository =
+            UnavailableAttemptEventRepository(),
+        wordProgressRepository: any WordProgressRepository =
+            UnavailableWordProgressRepository(),
+        dailyQuestCoordinator: DailyQuestCoordinator = DailyQuestCoordinator(
+            repository: InMemoryDailyQuestRepository(),
+            timeZone: .current
+        ),
+        clock: any AppClock = SystemAppClock(),
+        timeZone: TimeZone = .current,
+        initialProfileID: ProfileID? = nil,
+        childSessionRepository: (any ChildSessionRepository)? = nil,
+        childProfileCreator: (any ChildProfileCreating)? = nil,
+        profileRepository: (any KidProfileRepository)? = nil,
+        progressReducer: WordProgressReducer = WordProgressReducer(),
+        onLearningDataChanged: @escaping @Sendable () async -> Void = {},
+        questTimerFactory: @escaping (TimeInterval) -> QuestTimerModel = {
+            QuestTimerModel(emergencyAfter: $0)
+        }
+    ) {
+        self.profiles = profiles
+        self.contentProvider = contentProvider
+        self.audioPromptService = audioPromptService
+        self.audioExperienceService = audioExperienceService
+        self.practiceSettingsRepository = practiceSettingsRepository
+        self.attemptEventRepository = attemptEventRepository
+        self.wordProgressRepository = wordProgressRepository
+        self.dailyQuestCoordinator = dailyQuestCoordinator
+        self.clock = clock
+        self.timeZone = timeZone
+        self.childSessionRepository = childSessionRepository
+        self.childProfileCreator = childProfileCreator
+        self.profileRepository = profileRepository
+        self.progressReducer = progressReducer
+        self.onLearningDataChanged = onLearningDataChanged
+        self.questTimerFactory = questTimerFactory
+        if let initialProfile = profiles.first(where: { $0.id == initialProfileID }) {
+            selectedProfile = initialProfile
+            destination = .lobby
+        }
+    }
+
+    var selectedTheme: TadaWorldTheme {
+        guard let selectedProfile else { return .moonpetal }
+        return TadaWorldTheme.from(selectedProfile.selectedWorld)
+    }
+
+    func selectProfile(_ profile: KidProfile) {
+        guard let currentProfile = profiles.first(where: { $0.id == profile.id }) else {
+            return
+        }
+        applyProfileSelection(currentProfile)
+        profileSelectionTask?.cancel()
+        profileSelectionTask = Task { [weak self] in
+            await self?.persistLastSelectedProfile(currentProfile.id)
+        }
+    }
+
+    func selectProfileAndWait(_ profile: KidProfile) async {
+        guard let currentProfile = profiles.first(where: { $0.id == profile.id }) else {
+            return
+        }
+        applyProfileSelection(currentProfile)
+        await persistLastSelectedProfile(currentProfile.id)
+    }
+
+    func prepareInitialProfileIfNeeded() {
+        guard !didPrepareInitialProfile else { return }
+        didPrepareInitialProfile = true
+        guard let selectedProfile else { return }
+        beginProfileServices(for: selectedProfile)
+    }
+
+    @discardableResult
+    func createChildProfileAndWait(nickname: String) async -> Bool {
+        guard !isCreatingChildProfile else { return false }
+        guard let childProfileCreator else {
+            childProfileCreationError = Self.creationFailureMessage
+            return false
+        }
+        isCreatingChildProfile = true
+        childProfileCreationError = nil
+        do {
+            let profile = try await childProfileCreator.createProfile(
+                displayName: nickname,
+                existingProfiles: profiles
+            )
+            profiles.append(profile)
+            profiles.sort(by: Self.isProfileOrderedBefore)
+            isCreatingChildProfile = false
+            await selectProfileAndWait(profile)
+            return true
+        } catch let error as ChildProfileCreationError {
+            isCreatingChildProfile = false
+            childProfileCreationError = Self.message(for: error)
+            return false
+        } catch {
+            isCreatingChildProfile = false
+            childProfileCreationError = Self.creationFailureMessage
+            return false
+        }
+    }
+
+    func clearChildProfileCreationError() {
+        childProfileCreationError = nil
+    }
+
+    private func applyProfileSelection(_ profile: KidProfile) {
+        abandonActiveQuest()
+        routeStatusTask?.cancel()
+        calendarTask?.cancel()
+        todayRouteStatuses = [:]
+        calendarMonthSummary = nil
+        worldProgression = nil
+        rewardCollections = [:]
+        calendarLoadFailed = false
+        selectedProfile = profile
+        destination = .lobby
+        didPrepareInitialProfile = true
+        beginProfileServices(for: profile)
+    }
+
+    private func beginProfileServices(for profile: KidProfile) {
+        Task { [weak self] in
+            await self?.activateAudio(for: profile)
+        }
+        routeStatusTask = Task { [weak self] in
+            await self?.refreshTodayRouteStatuses(for: profile)
+        }
+        refreshCalendar()
+        refreshWorldProgress()
+    }
+
+    func showProfiles() {
+        abandonActiveQuest()
+        routeStatusTask?.cancel()
+        routeStatusTask = nil
+        calendarTask?.cancel()
+        calendarTask = nil
+        todayRouteStatuses = [:]
+        calendarMonthSummary = nil
+        worldProgressTask?.cancel()
+        worldProgression = nil
+        rewardCollections = [:]
+        Task {
+            await audioExperienceService.stopAmbientAudio()
+        }
+        destination = .profileChooser
+    }
+
+    func showLobby() {
+        abandonActiveQuest()
+        destination = .lobby
+        refreshCalendar()
+        refreshWorldProgress()
+    }
+
+    func refreshWorldProgress() {
+        guard let selectedProfile else { return }
+        worldProgressTask?.cancel()
+        worldProgressTask = Task { [weak self] in
+            await self?.loadWorldProgress(for: selectedProfile)
+        }
+    }
+
+    func refreshWorldProgressAndWait() async {
+        guard let selectedProfile else { return }
+        worldProgressTask?.cancel()
+        await loadWorldProgress(for: selectedProfile)
+    }
+
+    func selectWorld(_ world: WorldTheme) {
+        worldProgressTask?.cancel()
+        worldProgressTask = Task { [weak self] in
+            await self?.selectWorldAndWait(world)
+        }
+    }
+
+    func selectWorldAndWait(_ world: WorldTheme) async {
+        guard let profile = selectedProfile,
+            worldProgression?.state(for: world)?.isUnlocked == true,
+            world != profile.selectedWorld,
+            let profileRepository
+        else { return }
+        let updated = KidProfile(
+            id: profile.id,
+            displayName: profile.displayName,
+            avatar: profile.avatar,
+            selectedWorld: world,
+            starterWorld: profile.starterWorld,
+            guardianUnlockedWorlds: profile.guardianUnlockedWorlds,
+            schoolGrade: profile.schoolGrade,
+            ageYears: profile.ageYears,
+            voiceprintStatus: profile.voiceprintStatus,
+            createdAt: profile.createdAt,
+            updatedAt: clock.now
+        )
+        do {
+            try await profileRepository.save(updated)
+            guard selectedProfile?.id == updated.id else { return }
+            selectedProfile = updated
+            if let index = profiles.firstIndex(where: { $0.id == updated.id }) {
+                profiles[index] = updated
+            }
+            await activateAudio(for: updated)
+            await loadWorldProgress(for: updated)
+        } catch {
+            worldSelectionError = "Ask a grown-up to try changing worlds again."
+        }
+    }
+
+    func clearWorldSelectionError() {
+        worldSelectionError = nil
+    }
+
+    func availability(for mode: LearningMode) -> QuestAvailability {
+        guard let selectedProfile else { return .blocked(.emptyPool) }
+        return contentProvider.availability(for: mode, profile: selectedProfile)
+    }
+
+    func todayRouteStatus(for mode: LearningMode) -> TodayQuestRouteStatus {
+        todayRouteStatuses[mode] ?? .ready
+    }
+
+    func refreshTodayRouteStatusesAndWait() async {
+        guard let selectedProfile else { return }
+        await refreshTodayRouteStatuses(for: selectedProfile)
+    }
+
+    var currentLocalDay: LocalDay {
+        LocalDay(date: clock.now, timeZone: timeZone)
+    }
+
+    func refreshCalendar() {
+        guard let selectedProfile else { return }
+        calendarTask?.cancel()
+        isCalendarLoading = true
+        calendarLoadFailed = false
+        calendarTask = Task { [weak self] in
+            await self?.loadCalendar(for: selectedProfile)
+        }
+    }
+
+    func refreshCalendarAndWait() async {
+        guard let selectedProfile else { return }
+        calendarTask?.cancel()
+        isCalendarLoading = true
+        calendarLoadFailed = false
+        await loadCalendar(for: selectedProfile)
+    }
+
+    func startQuest(_ mode: LearningMode) {
+        guard let request = beginPreparation(for: mode) else { return }
+        Task {
+            await audioExperienceService.play(.click)
+        }
+        preparationTask = Task { [weak self] in
+            await self?.loadPreparedQuest(request)
+        }
+    }
+
+    func setApplicationActive(_ isActive: Bool) {
+        guard isApplicationActive != isActive else { return }
+        isApplicationActive = isActive
+        if isActive {
+            activeQuest?.timer.resume(from: .appInactive)
+        } else {
+            activeQuest?.timer.suspend(for: .appInactive)
+        }
+        Task {
+            await audioExperienceService.setApplicationActive(isActive)
+        }
+    }
+
+    /// Async test/integration seam that exercises the same preparation path as
+    /// the UI without polling published state.
+    func prepareQuestAndWait(_ mode: LearningMode) async {
+        guard let request = beginPreparation(for: mode) else { return }
+        await loadPreparedQuest(request)
+    }
+
+    func speak(_ prompt: WordPrompt) {
+        Task { [weak self] in
+            await self?.speakAndWait(prompt)
+        }
+    }
+
+    func speakAndWait(_ prompt: WordPrompt) async {
+        guard let profileID = selectedProfile?.id else { return }
+        do {
+            try await audioPromptService.play(prompt, for: profileID)
+        } catch is CancellationError {
+            return
+        } catch {
+            destination = .blocked(
+                mode: prompt.learningMode,
+                reason: .audioUnavailable
+            )
+        }
+    }
+
+    func finishItem(
+        _ session: QuestSession,
+        summary: QuestAttemptSummary
+    ) {
+        guard let pendingID = beginItemCompletion(session, summary: summary) else {
+            return
+        }
+        persistenceTask = Task { [weak self] in
+            await self?.persistPendingCompletion(pendingID)
+        }
+    }
+
+    /// Async test/integration seam for durable item completion.
+    func finishItemAndWait(
+        _ session: QuestSession,
+        summary: QuestAttemptSummary
+    ) async {
+        guard let pendingID = beginItemCompletion(session, summary: summary) else {
+            return
+        }
+        await persistPendingCompletion(pendingID)
+    }
+
+    func recoverQuest(_ mode: LearningMode) {
+        guard let pendingCompletion, pendingCompletion.mode == mode else {
+            startQuest(mode)
+            return
+        }
+        activeQuest?.timer.suspend(for: .saving)
+        destination = .loading(
+            mode: mode,
+            phase: .saving(
+                currentItem: pendingCompletion.itemIndex + 1,
+                totalItems: pendingCompletion.totalItems
+            )
+        )
+        persistenceTask?.cancel()
+        persistenceTask = Task { [weak self] in
+            await self?.persistPendingCompletion(pendingCompletion.id)
+        }
+    }
+
+    func recoverQuestAndWait(_ mode: LearningMode) async {
+        guard let pendingCompletion, pendingCompletion.mode == mode else {
+            await prepareQuestAndWait(mode)
+            return
+        }
+        activeQuest?.timer.suspend(for: .saving)
+        destination = .loading(
+            mode: mode,
+            phase: .saving(
+                currentItem: pendingCompletion.itemIndex + 1,
+                totalItems: pendingCompletion.totalItems
+            )
+        )
+        await persistPendingCompletion(pendingCompletion.id)
+    }
+
+    private func beginPreparation(for mode: LearningMode) -> QuestPreparationRequest? {
+        guard let profile = selectedProfile else {
+            destination = .profileChooser
+            return nil
+        }
+
+        routeStatusTask?.cancel()
+        routeStatusTask = nil
+
+        switch contentProvider.availability(for: mode, profile: profile) {
+        case .available:
+            break
+        case .blocked(let reason):
+            destination = .blocked(mode: mode, reason: reason)
+            return nil
+        }
+
+        abandonActiveQuest()
+        let request = QuestPreparationRequest(
+            id: UUID(),
+            mode: mode,
+            profile: profile
+        )
+        activePreparationID = request.id
+        destination = .loading(mode: mode, phase: .preparing)
+        return request
+    }
+
+    private func loadPreparedQuest(_ request: QuestPreparationRequest) async {
+        do {
+            let candidate = try await contentProvider.prepareQuest(
+                for: request.mode,
+                profile: request.profile
+            )
+            try Task.checkCancellation()
+            guard activePreparationID == request.id else { return }
+            guard selectedProfile?.id == request.profile.id else { return }
+            guard candidate.plan.profileID == request.profile.id else {
+                showPreparationFailure(.storageUnavailable, request: request)
+                return
+            }
+            guard candidate.plan.configuration.learningMode == request.mode else {
+                showPreparationFailure(.storageUnavailable, request: request)
+                return
+            }
+            let dailyState = try await dailyQuestCoordinator.loadOrCreateToday(
+                candidate: candidate.plan,
+                on: clock.now
+            )
+            try Task.checkCancellation()
+            guard activePreparationID == request.id else { return }
+            guard selectedProfile?.id == request.profile.id else { return }
+            let launch =
+                dailyQuestCoordinator.todayLaunch(from: dailyState)
+                ?? dailyQuestCoordinator.practiceAgainLaunch(
+                    from: dailyState,
+                    startedAt: clock.now
+                )
+            guard let launch else {
+                showPreparationFailure(.storageUnavailable, request: request)
+                return
+            }
+            guard launch.questPlan.profileID == request.profile.id else {
+                showPreparationFailure(.storageUnavailable, request: request)
+                return
+            }
+            guard launch.questPlan.configuration.learningMode == request.mode else {
+                showPreparationFailure(.storageUnavailable, request: request)
+                return
+            }
+            var prompts: [WordPrompt]
+            if launch.questPlan == candidate.plan {
+                prompts = candidate.orderedPrompts
+            } else {
+                prompts = try await contentProvider.prompts(
+                    for: launch.questPlan,
+                    profile: request.profile
+                )
+            }
+            try Task.checkCancellation()
+            guard activePreparationID == request.id else { return }
+            guard selectedProfile?.id == request.profile.id else { return }
+            guard !prompts.isEmpty else {
+                showPreparationFailure(.emptyPool, request: request)
+                return
+            }
+            guard prompts.allSatisfy({ $0.learningMode == request.mode }) else {
+                showPreparationFailure(.storageUnavailable, request: request)
+                return
+            }
+            guard Set(prompts.map(\.id)).count == prompts.count else {
+                showPreparationFailure(.storageUnavailable, request: request)
+                return
+            }
+            guard
+                launch.questPlan.orderedItems.map(\.wordPromptID)
+                    == prompts.map(\.id)
+            else {
+                showPreparationFailure(.storageUnavailable, request: request)
+                return
+            }
+
+            let storedAttempts = try await attemptEventRepository.attempts(
+                for: request.profile.id,
+                wordPromptID: nil
+            )
+            let runAttempts = storedAttempts.filter {
+                $0.questID == launch.questPlan.id
+            }
+            let effectivePlan = ProblemNewReviewReplacement().adjustedPlan(
+                launch.questPlan,
+                attempts: runAttempts,
+                personalPaceBands: candidate.personalPaceBands
+            )
+            if effectivePlan != launch.questPlan {
+                let retainedWordIDs = Set(
+                    effectivePlan.orderedItems.map(\.wordPromptID)
+                )
+                prompts = prompts.filter { retainedWordIDs.contains($0.id) }
+            }
+            let recovery = try PersistedQuestRecoveryResolver().resolve(
+                plan: effectivePlan,
+                attempts: storedAttempts
+            )
+            for completedPrompt in prompts.prefix(recovery.nextItemIndex) {
+                try await rebuildAndSaveProgress(
+                    profileID: request.profile.id,
+                    prompt: completedPrompt,
+                    mode: request.mode,
+                    expectedEvents: recovery.eventsByWordID[completedPrompt.id] ?? []
+                )
+            }
+            try Task.checkCancellation()
+            guard activePreparationID == request.id else { return }
+            guard selectedProfile?.id == request.profile.id else { return }
+
+            let timer = questTimerFactory(candidate.emergencyAfter)
+            let recoveredQuest = ActiveQuest(
+                launch: launch,
+                plan: effectivePlan,
+                profileID: request.profile.id,
+                world: request.profile.selectedWorld,
+                mode: request.mode,
+                prompts: prompts,
+                deviceClass: candidate.deviceClass,
+                personalPaceBands: candidate.personalPaceBands,
+                interfacePreferences: candidate.interfacePreferences,
+                timer: timer,
+                currentIndex: recovery.nextItemIndex,
+                attempts: recovery.attempts,
+                completedWordIDs: recovery.completedWordIDs
+            )
+            activeQuest = recoveredQuest
+            todayRouteStatuses[request.mode] = TodayQuestRouteStatus(
+                state: dailyState
+            )
+            activePreparationID = nil
+            preparationTask = nil
+            if recovery.nextItemIndex == prompts.count {
+                let pending = recoveredQuestCompletion(
+                    quest: recoveredQuest,
+                    recovery: recovery
+                )
+                pendingCompletion = pending
+                timer.suspend(for: .saving)
+                destination = .loading(
+                    mode: request.mode,
+                    phase: .saving(
+                        currentItem: prompts.count,
+                        totalItems: prompts.count
+                    )
+                )
+                await persistPendingCompletion(pending.id)
+                return
+            }
+            timer.start()
+            if !isApplicationActive {
+                timer.suspend(for: .appInactive)
+            }
+            showCurrentItem()
+        } catch is CancellationError {
+            return
+        } catch QuestContentError.emptyPool {
+            showPreparationFailure(.emptyPool, request: request)
+        } catch QuestContentError.noReviewDue {
+            showPreparationFailure(.noReviewDue, request: request)
+        } catch {
+            showPreparationFailure(.storageUnavailable, request: request)
+        }
+    }
+
+    private func showPreparationFailure(
+        _ reason: QuestBlockReason,
+        request: QuestPreparationRequest
+    ) {
+        guard activePreparationID == request.id else { return }
+        activePreparationID = nil
+        preparationTask = nil
+        activeQuest = nil
+        destination = .blocked(mode: request.mode, reason: reason)
+    }
+
+    private func beginItemCompletion(
+        _ session: QuestSession,
+        summary: QuestAttemptSummary
+    ) -> UUID? {
+        guard pendingCompletion == nil else { return nil }
+        guard let quest = activeQuest else { return nil }
+        guard quest.id == session.id else { return nil }
+        guard quest.profileID == session.profileID else { return nil }
+        guard quest.mode == session.mode else { return nil }
+        guard quest.currentIndex + 1 == session.currentItem else { return nil }
+        guard quest.currentPrompt.id == session.prompt.id else { return nil }
+        guard quest.timer === session.timer else { return nil }
+        guard !summary.records.isEmpty else { return nil }
+        quest.timer.suspend(for: .saving)
+
+        let earliestDate =
+            quest.attempts.last?.occurredAt.addingTimeInterval(0.001)
+            ?? clock.now
+        let baseDate = max(clock.now, earliestDate)
+        let records = persistenceRecords(
+            from: summary,
+            existingAttempts: quest.attempts.filter {
+                $0.wordPromptID == quest.currentPrompt.id
+            }
+        )
+        let events = records.enumerated().map { index, record in
+            AttemptEvent(
+                questID: quest.id,
+                profileID: quest.profileID,
+                wordPromptID: quest.currentPrompt.id,
+                learningMode: quest.mode,
+                evidence: record.evidence,
+                outcome: record.outcome,
+                timing: record.timing,
+                occurredAt: baseDate.addingTimeInterval(Double(index) / 1_000),
+                replayCount: record.replayCount,
+                recognitionConfidence: record.confidence,
+                paceContext: quest.currentPrompt.paceContext(
+                    deviceClass: quest.deviceClass
+                )
+            )
+        }
+        let pending = PendingItemCompletion(
+            id: UUID(),
+            questID: quest.id,
+            profileID: quest.profileID,
+            mode: quest.mode,
+            prompt: quest.currentPrompt,
+            itemIndex: quest.currentIndex,
+            totalItems: quest.prompts.count,
+            events: events,
+            dailyCompletionID: DailyQuestCompletionID(),
+            rewardGrantID: RewardGrantID(),
+            completionRecordedAt: baseDate.addingTimeInterval(
+                Double(summary.records.count) / 1_000
+            )
+        )
+        pendingCompletion = pending
+        destination = .loading(
+            mode: quest.mode,
+            phase: .saving(
+                currentItem: quest.currentIndex + 1,
+                totalItems: quest.prompts.count
+            )
+        )
+        return pending.id
+    }
+
+    private func persistPendingCompletion(_ pendingID: UUID) async {
+        guard let pending = pendingCompletion, pending.id == pendingID else {
+            return
+        }
+
+        do {
+            for event in pending.events {
+                try Task.checkCancellation()
+                try await attemptEventRepository.append(event)
+            }
+            try Task.checkCancellation()
+            try await rebuildAndSaveProgress(for: pending)
+            try Task.checkCancellation()
+            try await commitPersistedCompletion(pendingID)
+        } catch is CancellationError {
+            return
+        } catch {
+            guard pendingCompletion?.id == pendingID else { return }
+            activeQuest?.timer.suspend(for: .saving)
+            persistenceTask = nil
+            destination = .blocked(mode: pending.mode, reason: .storageUnavailable)
+        }
+    }
+
+    private func rebuildAndSaveProgress(
+        for pending: PendingItemCompletion
+    ) async throws {
+        try await rebuildAndSaveProgress(
+            profileID: pending.profileID,
+            prompt: pending.prompt,
+            mode: pending.mode,
+            expectedEvents: pending.events
+        )
+    }
+
+    private func rebuildAndSaveProgress(
+        profileID: ProfileID,
+        prompt: WordPrompt,
+        mode: LearningMode,
+        expectedEvents: [AttemptEvent]
+    ) async throws {
+        let storedAttempts = try await attemptEventRepository.attempts(
+            for: profileID,
+            wordPromptID: prompt.id
+        )
+        let storedAttemptIDs = Set(storedAttempts.map(\.id))
+        guard expectedEvents.allSatisfy({ storedAttemptIDs.contains($0.id) }) else {
+            throw QuestStorageError.unavailable
+        }
+
+        var corrections: [AttemptCorrectionEvent] = []
+        for attempt in storedAttempts {
+            corrections.append(
+                contentsOf: try await attemptEventRepository.corrections(for: attempt.id)
+            )
+        }
+        let progress = try progressReducer.rebuild(
+            profileID: profileID,
+            wordPromptID: prompt.id,
+            learningMode: mode,
+            from: storedAttempts,
+            corrections: corrections
+        )
+        try await wordProgressRepository.save(progress)
+    }
+
+    private func recoveredQuestCompletion(
+        quest: ActiveQuest,
+        recovery: PersistedQuestRecovery
+    ) -> PendingItemCompletion {
+        let finalItemIndex = quest.prompts.count - 1
+        let finalPrompt = quest.prompts[finalItemIndex]
+        let latestAttemptDate = recovery.attempts.last?.occurredAt ?? clock.now
+        return PendingItemCompletion(
+            id: UUID(),
+            questID: quest.id,
+            profileID: quest.profileID,
+            mode: quest.mode,
+            prompt: finalPrompt,
+            itemIndex: finalItemIndex,
+            totalItems: quest.prompts.count,
+            events: recovery.eventsByWordID[finalPrompt.id] ?? [],
+            dailyCompletionID: DailyQuestCompletionID(),
+            rewardGrantID: RewardGrantID(),
+            completionRecordedAt: max(clock.now, latestAttemptDate)
+        )
+    }
+
+    private func persistenceRecords(
+        from summary: QuestAttemptSummary,
+        existingAttempts: [AttemptEvent]
+    ) -> [QuestAttemptRecord] {
+        var hasFirstIndependentAttempt = existingAttempts.contains {
+            $0.evidence == .firstIndependentAttempt
+        }
+        var hasAnswerExposure = existingAttempts.contains {
+            $0.evidence.hasAnswerExposure
+        }
+
+        return summary.records.map { record in
+            var evidence = record.evidence
+            if evidence == .firstIndependentAttempt {
+                if hasAnswerExposure {
+                    evidence = .guidedRetry
+                } else if hasFirstIndependentAttempt {
+                    evidence = .unaidedRetry
+                }
+            }
+
+            if evidence == .firstIndependentAttempt {
+                hasFirstIndependentAttempt = true
+            }
+            if evidence.hasAnswerExposure {
+                hasAnswerExposure = true
+            }
+            return QuestAttemptRecord(
+                evidence: evidence,
+                outcome: record.outcome,
+                confidence: record.confidence,
+                timing: record.timing,
+                replayCount: record.replayCount
+            )
+        }
+    }
+
+    private func commitPersistedCompletion(_ pendingID: UUID) async throws {
+        guard let pending = pendingCompletion, pending.id == pendingID else {
+            return
+        }
+        guard var quest = activeQuest, quest.id == pending.questID else {
+            return
+        }
+        if quest.currentIndex == pending.itemIndex {
+            quest.attempts.append(contentsOf: pending.events)
+            quest.completedWordIDs.insert(pending.prompt.id)
+            quest.applyProblemNewReplacement()
+            quest.currentIndex += 1
+            activeQuest = quest
+        } else {
+            guard quest.currentIndex == pending.itemIndex + 1 else { return }
+            guard quest.completedWordIDs.contains(pending.prompt.id) else {
+                return
+            }
+        }
+
+        if quest.currentIndex < quest.prompts.count {
+            pendingCompletion = nil
+            persistenceTask = nil
+            quest.timer.resume(from: .saving)
+            showCurrentItem()
+        } else {
+            let resultState = try await finishPersistedQuest(
+                quest,
+                pending: pending
+            )
+            guard pendingCompletion?.id == pendingID else { return }
+            guard activeQuest?.id == quest.id else { return }
+            quest.timer.stop()
+            activeQuest = nil
+            pendingCompletion = nil
+            persistenceTask = nil
+            todayRouteStatuses[quest.mode] = TodayQuestRouteStatus(
+                completion: resultState.persistedCompletion
+            )
+            destination = .result(resultState.viewState)
+            refreshCalendar()
+            refreshWorldProgress()
+            Task { await onLearningDataChanged() }
+        }
+    }
+
+    private func showCurrentItem() {
+        guard let quest = activeQuest else { return }
+        guard quest.currentIndex < quest.prompts.count else { return }
+
+        destination = .quest(
+            QuestSession(
+                id: quest.id,
+                profileID: quest.profileID,
+                mode: quest.mode,
+                prompt: quest.currentPrompt,
+                source: quest.currentItem.source,
+                currentItem: quest.currentIndex + 1,
+                totalItems: quest.prompts.count,
+                timer: quest.timer,
+                interfacePreferences: quest.interfacePreferences
+            )
+        )
+    }
+
+    private func finishPersistedQuest(
+        _ quest: ActiveQuest,
+        pending: PendingItemCompletion
+    ) async throws -> PersistedQuestResult {
+        let score = QuestScorer().score(
+            QuestScoringInput(
+                plan: quest.plan,
+                completedWordIDs: quest.completedWordIDs,
+                attempts: quest.attempts,
+                paceContextByWordID: Dictionary(
+                    uniqueKeysWithValues: quest.prompts.map { prompt in
+                        (
+                            prompt.id,
+                            prompt.paceContext(deviceClass: quest.deviceClass)
+                        )
+                    }
+                ),
+                personalPaceBands: quest.personalPaceBands
+            )
+        )
+        let writeResult = try await dailyQuestCoordinator.complete(
+            quest.launch,
+            score: score,
+            world: quest.world,
+            completionID: pending.dailyCompletionID,
+            rewardGrantID: pending.rewardGrantID,
+            completedAt: pending.completionRecordedAt
+        )
+        return PersistedQuestResult(
+            persistedCompletion: writeResult.completion,
+            viewState: QuestResultViewState(
+                mode: quest.mode,
+                score: score,
+                runKind: quest.launch.runKind,
+                rewardGrant: writeResult.rewardGrant
+            )
+        )
+    }
+
+    private func cancelQuestWork() {
+        activePreparationID = nil
+        preparationTask?.cancel()
+        preparationTask = nil
+        persistenceTask?.cancel()
+        persistenceTask = nil
+    }
+
+    private func abandonActiveQuest() {
+        cancelQuestWork()
+        activeQuest?.timer.stop()
+        activeQuest = nil
+        pendingCompletion = nil
+    }
+
+    private func refreshTodayRouteStatuses(for profile: KidProfile) async {
+        var refreshed: [LearningMode: TodayQuestRouteStatus] = [:]
+        do {
+            for mode in LearningMode.allCases {
+                try Task.checkCancellation()
+                let state = try await dailyQuestCoordinator.state(
+                    profileID: profile.id,
+                    learningMode: mode,
+                    on: clock.now
+                )
+                refreshed[mode] = TodayQuestRouteStatus(state: state)
+            }
+            try Task.checkCancellation()
+            guard selectedProfile?.id == profile.id else { return }
+            todayRouteStatuses = refreshed
+            routeStatusTask = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard selectedProfile?.id == profile.id else { return }
+            routeStatusTask = nil
+        }
+    }
+
+    private func loadCalendar(for profile: KidProfile) async {
+        do {
+            let summary = try await dailyQuestCoordinator.monthSummary(
+                profileID: profile.id,
+                containing: clock.now
+            )
+            try Task.checkCancellation()
+            guard selectedProfile?.id == profile.id else { return }
+            calendarMonthSummary = summary
+            isCalendarLoading = false
+            calendarLoadFailed = false
+            calendarTask = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard selectedProfile?.id == profile.id else { return }
+            calendarMonthSummary = nil
+            isCalendarLoading = false
+            calendarLoadFailed = true
+            calendarTask = nil
+        }
+    }
+
+    private func loadWorldProgress(for profile: KidProfile) async {
+        do {
+            async let progression = dailyQuestCoordinator.worldProgression(
+                for: profile
+            )
+            async let collections = dailyQuestCoordinator.rewardCollections(
+                for: profile
+            )
+            let (loadedProgression, loadedCollections) = try await (
+                progression,
+                collections
+            )
+            try Task.checkCancellation()
+            guard selectedProfile?.id == profile.id else { return }
+            worldProgression = loadedProgression
+            rewardCollections = loadedCollections
+            worldProgressTask = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard selectedProfile?.id == profile.id else { return }
+            worldProgression = WorldProgression(profile: profile, completions: [])
+            rewardCollections = [:]
+            worldProgressTask = nil
+        }
+    }
+
+    private func persistLastSelectedProfile(_ profileID: ProfileID) async {
+        guard selectedProfile?.id == profileID else { return }
+        do {
+            try await childSessionRepository?.saveLastSelectedProfileID(profileID)
+        } catch {
+            // Remembering a launch preference must never block play. The
+            // durable profile remains available from the chooser.
+        }
+        guard selectedProfile?.id == profileID else { return }
+        profileSelectionTask = nil
+    }
+
+    private static func isProfileOrderedBefore(
+        _ lhs: KidProfile,
+        _ rhs: KidProfile
+    ) -> Bool {
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt < rhs.createdAt
+        }
+        return lhs.id.rawValue.uuidString < rhs.id.rawValue.uuidString
+    }
+
+    private static let creationFailureMessage =
+        "We couldn't save your player. Ask a grown-up to try again."
+
+    private static func message(
+        for error: ChildProfileCreationError
+    ) -> String {
+        switch error {
+        case .emptyDisplayName:
+            "Type your nickname first."
+        case .displayNameTooLong(let maximumCharacterCount):
+            "Keep your nickname to \(maximumCharacterCount) letters or fewer."
+        case .settingsPersistenceFailed, .profilePersistenceFailed,
+            .rollbackFailed:
+            creationFailureMessage
+        }
+    }
+
+    private func activateAudio(for profile: KidProfile) async {
+        let settings = try? await practiceSettingsRepository?.settings(
+            for: profile.id
+        )
+        guard selectedProfile?.id == profile.id else { return }
+        await audioExperienceService.activate(
+            world: profile.selectedWorld,
+            preferences: settings?.audio ?? .default
+        )
+    }
+}
+
+private struct QuestPreparationRequest: Sendable {
+    let id: UUID
+    let mode: LearningMode
+    let profile: KidProfile
+}
+
+private struct ActiveQuest {
+    let launch: DailyQuestLaunch
+    var plan: QuestPlan
+    let profileID: ProfileID
+    let world: WorldTheme
+    let mode: LearningMode
+    var prompts: [WordPrompt]
+    let deviceClass: DeviceClass
+    let personalPaceBands: [PersonalPaceBand]
+    let interfacePreferences: PracticeInterfacePreferences
+    let timer: QuestTimerModel
+    var currentIndex = 0
+    var attempts: [AttemptEvent] = []
+    var completedWordIDs: Set<WordPromptID> = []
+
+    var currentPrompt: WordPrompt {
+        prompts[currentIndex]
+    }
+
+    var currentItem: QuestPlanItem {
+        plan.orderedItems[currentIndex]
+    }
+
+    var id: QuestID {
+        plan.id
+    }
+
+    mutating func applyProblemNewReplacement() {
+        let adjustedPlan = ProblemNewReviewReplacement().adjustedPlan(
+            launch.questPlan,
+            attempts: attempts,
+            personalPaceBands: personalPaceBands
+        )
+        guard adjustedPlan != plan else { return }
+        let retainedWordIDs = Set(adjustedPlan.orderedItems.map(\.wordPromptID))
+        prompts = prompts.filter { retainedWordIDs.contains($0.id) }
+        plan = adjustedPlan
+    }
+}
+
+private struct PendingItemCompletion {
+    let id: UUID
+    let questID: QuestID
+    let profileID: ProfileID
+    let mode: LearningMode
+    let prompt: WordPrompt
+    let itemIndex: Int
+    let totalItems: Int
+    let events: [AttemptEvent]
+    let dailyCompletionID: DailyQuestCompletionID
+    let rewardGrantID: RewardGrantID
+    let completionRecordedAt: Date
+}
+
+private struct PersistedQuestResult {
+    let persistedCompletion: DailyQuestCompletion
+    let viewState: QuestResultViewState
+}

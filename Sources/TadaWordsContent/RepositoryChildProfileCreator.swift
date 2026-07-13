@@ -1,0 +1,83 @@
+import Foundation
+import TadaWordsDomain
+
+/// Creates a child profile as one visible family operation. Settings are
+/// persisted first, so a profile is never published without isolated defaults.
+public actor RepositoryChildProfileCreator: ChildProfileCreating {
+    public static let maximumDisplayNameCharacterCount = 24
+
+    private static let avatarAssetIDs = [
+        "hare", "fox", "bear", "owl", "cat", "dog",
+    ]
+    private static let worlds: [WorldTheme] = [
+        .moonpetalKingdom, .buildItBay, .pawsAndPines,
+    ]
+
+    private let profileRepository: any KidProfileRepository
+    private let practiceSettingsRepository: any PracticeSettingsRepository
+    private let clock: any AppClock
+
+    public init(
+        profileRepository: any KidProfileRepository,
+        practiceSettingsRepository: any PracticeSettingsRepository,
+        clock: any AppClock
+    ) {
+        self.profileRepository = profileRepository
+        self.practiceSettingsRepository = practiceSettingsRepository
+        self.clock = clock
+    }
+
+    public func createProfile(
+        displayName: String,
+        existingProfiles: [KidProfile]
+    ) async throws -> KidProfile {
+        let nickname = displayName.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !nickname.isEmpty else {
+            throw ChildProfileCreationError.emptyDisplayName
+        }
+        guard nickname.count <= Self.maximumDisplayNameCharacterCount else {
+            throw ChildProfileCreationError.displayNameTooLong(
+                maximumCharacterCount: Self.maximumDisplayNameCharacterCount
+            )
+        }
+
+        let profile = makeProfile(
+            nickname: nickname,
+            existingProfiles: existingProfiles
+        )
+        do {
+            try await practiceSettingsRepository.save(.defaults(for: profile.id))
+        } catch {
+            throw ChildProfileCreationError.settingsPersistenceFailed
+        }
+
+        do {
+            try await profileRepository.save(profile)
+        } catch {
+            do {
+                try await practiceSettingsRepository.delete(for: profile.id)
+            } catch {
+                throw ChildProfileCreationError.rollbackFailed
+            }
+            throw ChildProfileCreationError.profilePersistenceFailed
+        }
+        return profile
+    }
+
+    private func makeProfile(
+        nickname: String,
+        existingProfiles: [KidProfile]
+    ) -> KidProfile {
+        let nextIndex = existingProfiles.count
+        return KidProfile(
+            displayName: nickname,
+            avatar: .cartoonAnimal(
+                assetID: Self.avatarAssetIDs[nextIndex % Self.avatarAssetIDs.count]
+            ),
+            selectedWorld: Self.worlds[nextIndex % Self.worlds.count],
+            createdAt: clock.now
+        )
+    }
+}

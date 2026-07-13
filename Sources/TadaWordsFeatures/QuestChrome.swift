@@ -1,0 +1,205 @@
+import SwiftUI
+import TadaWordsDesignSystem
+import TadaWordsDomain
+
+struct QuestChrome: View {
+    let mode: LearningMode
+    let currentItem: Int
+    let totalItems: Int
+    let elapsedText: String
+    let isEmergency: Bool
+    let theme: TadaWorldTheme
+    let onBack: () -> Void
+    let onPause: () -> Void
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            fullChrome
+            compactChrome
+            ScrollView(.horizontal) {
+                compactChrome
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .padding(.horizontal, TadaPrimitiveTokens.Spacing.medium)
+        .frame(minHeight: 52)
+    }
+
+    private var fullChrome: some View {
+        HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
+            backButton
+
+            HStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                TadaModeMark(tokens: modeTokens, size: 38)
+                Text(mode.title)
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .foregroundStyle(modeTokens.accent)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(mode.title) quest")
+
+            ProgressView(value: Double(currentItem), total: Double(totalItems))
+                .tint(modeTokens.accent)
+                .frame(maxWidth: 320)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(theme.surface.opacity(0.62), in: Capsule())
+                .accessibilityLabel("Quest progress")
+                .accessibilityValue("Item \(currentItem) of \(totalItems)")
+
+            Text("\(currentItem) of \(totalItems)")
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(theme.ink.opacity(0.56))
+                .accessibilityHidden(true)
+
+            Spacer(minLength: TadaPrimitiveTokens.Spacing.small)
+
+            rescueBadge
+
+            timerLabel
+
+            pauseButton
+        }
+    }
+
+    private var compactChrome: some View {
+        HStack(spacing: TadaLayoutTokens.questChromeCompactSpacing) {
+            backButton
+
+            TadaModeMark(tokens: modeTokens, size: 34)
+                .accessibilityLabel("\(mode.title) quest")
+
+            ProgressView(value: Double(currentItem), total: Double(totalItems))
+                .tint(modeTokens.accent)
+                .frame(minWidth: 96, maxWidth: 220)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8)
+                .background(theme.surface.opacity(0.62), in: Capsule())
+                .accessibilityLabel("Quest progress")
+                .accessibilityValue("Item \(currentItem) of \(totalItems)")
+
+            Spacer(minLength: 0)
+            rescueBadge
+            timerLabel
+            pauseButton
+        }
+    }
+
+    private var backButton: some View {
+        Button(action: onBack) {
+            Image(systemName: "chevron.left")
+                .font(.system(.title3, design: .rounded, weight: .bold))
+                .frame(
+                    width: TadaPrimitiveTokens.TouchTarget.minimum,
+                    height: TadaPrimitiveTokens.TouchTarget.minimum
+                )
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(theme.ink.opacity(0.72))
+        .background(theme.surface.opacity(0.72), in: Circle())
+        .accessibilityLabel("Back to quests")
+    }
+
+    @ViewBuilder
+    private var rescueBadge: some View {
+        if isEmergency {
+            HStack(spacing: 4) {
+                TadaWorldMascot(theme: theme, pose: .rescue, size: 34)
+                Text("Rescue time")
+                    .font(.system(.caption, design: .rounded, weight: .bold))
+            }
+            .foregroundStyle(TadaPrimitiveTokens.ColorValue.warning)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Rescue time is on")
+        }
+    }
+
+    private var timerLabel: some View {
+        Label(elapsedText, systemImage: "timer")
+            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+            .monospacedDigit()
+            .foregroundStyle(
+                isEmergency
+                    ? TadaPrimitiveTokens.ColorValue.warning
+                    : theme.ink.opacity(0.62)
+            )
+            .accessibilityLabel(
+                isEmergency
+                    ? "Rescue time. Timer \(spokenTimer)"
+                    : "Timer \(spokenTimer)"
+            )
+    }
+
+    private var pauseButton: some View {
+        Button(action: onPause) {
+            Image(systemName: "pause.fill")
+                .font(.system(.headline, design: .rounded, weight: .bold))
+                .frame(
+                    width: TadaPrimitiveTokens.TouchTarget.minimum,
+                    height: TadaPrimitiveTokens.TouchTarget.minimum
+                )
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(theme.ink.opacity(0.72))
+        .background(theme.surface.opacity(0.72), in: Circle())
+        .accessibilityLabel("Pause quest")
+        .accessibilityHint("Stops the timer and listening")
+    }
+
+    private var spokenTimer: String {
+        let parts = elapsedText.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2 else { return elapsedText }
+        return "\(parts[0]) minutes, \(parts[1]) seconds"
+    }
+
+    private var modeTokens: TadaQuestEntranceTokens {
+        switch mode {
+        case .read:
+            .read(in: theme)
+        case .write:
+            .write(in: theme)
+        }
+    }
+}
+
+struct QuestPauseOverlay: View {
+    let theme: TadaWorldTheme
+    let onResume: () -> Void
+    let onExit: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.26)
+                .ignoresSafeArea()
+
+            TadaPanel(theme: theme) {
+                VStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
+                    Image(systemName: "pause.circle.fill")
+                        .font(.system(size: 54, weight: .bold))
+                        .foregroundStyle(theme.primary)
+                        .accessibilityHidden(true)
+
+                    Text("Quest paused")
+                        .font(.system(.title, design: .rounded, weight: .bold))
+                    Text("The timer and listening are stopped.")
+                        .font(.system(.body, design: .rounded, weight: .medium))
+                        .foregroundStyle(theme.ink.opacity(0.68))
+                        .multilineTextAlignment(.center)
+
+                    Button("Keep going", action: onResume)
+                        .buttonStyle(TadaPrimaryButtonStyle(fill: theme.primary))
+
+                    Button("Back to quests", action: onExit)
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(theme.ink.opacity(0.66))
+                        .frame(minHeight: TadaPrimitiveTokens.TouchTarget.minimum)
+                }
+                .frame(maxWidth: 320)
+            }
+            .padding(TadaPrimitiveTokens.Spacing.large)
+        }
+        .accessibilityAddTraits(.isModal)
+    }
+}

@@ -1,0 +1,633 @@
+import SwiftUI
+import TadaWordsDesignSystem
+import TadaWordsDomain
+
+struct ReadQuestView: View {
+    let session: QuestSession
+    let theme: TadaWorldTheme
+    let recognitionService: any SpeechRecognitionService
+    let audioExperienceService: any AudioExperienceService
+    let permissionActions: SpeechPermissionActions
+    let showsSimulatedVoiceCheck: Bool
+    let onSpeak: () async -> Void
+    let onBack: () -> Void
+    let onComplete: (QuestAttemptSummary) -> Void
+
+    @ObservedObject private var questTimer: QuestTimerModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var attemptState = QuestAttemptStateMachine()
+    @State private var isListening = false
+    @State private var isPaused = false
+    @State private var isPlayingStudyPrompt = false
+    @State private var didPlayInitialStudyPrompt = false
+    @State private var isRequestingPermission = false
+    @State private var didRequestPermission = false
+    @State private var permissionRequestSucceeded = false
+    @State private var listeningTask: Task<Void, Never>?
+    @State private var completionTask: Task<Void, Never>?
+    @State private var answerPlaybackTask: Task<Void, Never>?
+    @State private var pendingCompletion: QuestAttemptSummary?
+    @State private var responseClock: AttemptResponseClock
+    @State private var pendingAttemptTiming = AttemptTiming.unmeasured
+
+    init(
+        session: QuestSession,
+        questTimer: QuestTimerModel,
+        theme: TadaWorldTheme,
+        recognitionService: any SpeechRecognitionService,
+        audioExperienceService: any AudioExperienceService =
+            SilentAudioExperienceService(),
+        permissionActions: SpeechPermissionActions,
+        showsSimulatedVoiceCheck: Bool = false,
+        onSpeak: @escaping () async -> Void,
+        onBack: @escaping () -> Void,
+        onComplete: @escaping (QuestAttemptSummary) -> Void
+    ) {
+        self.session = session
+        self.theme = theme
+        self.recognitionService = recognitionService
+        self.audioExperienceService = audioExperienceService
+        self.permissionActions = permissionActions
+        self.showsSimulatedVoiceCheck = showsSimulatedVoiceCheck
+        self.onSpeak = onSpeak
+        self.onBack = onBack
+        self.onComplete = onComplete
+        _questTimer = ObservedObject(
+            wrappedValue: questTimer
+        )
+        _responseClock = State(
+            initialValue: AttemptResponseClock(
+                startingAt: questTimer.elapsedSeconds
+            )
+        )
+    }
+
+    var body: some View {
+        TadaWorldBackground(theme: theme, sceneStyle: .quest) {
+            ZStack {
+                VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                    QuestChrome(
+                        mode: .read,
+                        currentItem: session.currentItem,
+                        totalItems: session.totalItems,
+                        elapsedText: questTimer.elapsedText,
+                        isEmergency: questTimer.isEmergency,
+                        theme: theme,
+                        onBack: onBack,
+                        onPause: pause
+                    )
+
+                    readingStage
+                }
+                .padding(.vertical, TadaPrimitiveTokens.Spacing.small)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .hiddenFromAccessibility(when: isPaused)
+
+                TadaEmergencyAtmosphere(theme: theme, isActive: questTimer.isEmergency)
+
+                if let pendingCompletion {
+                    completionFeedback(for: pendingCompletion)
+                        .transition(.scale(scale: 0.88).combined(with: .opacity))
+                        .zIndex(2)
+                }
+
+                if isPaused {
+                    QuestPauseOverlay(theme: theme, onResume: resume, onExit: onBack)
+                }
+            }
+        }
+        .onDisappear {
+            listeningTask?.cancel()
+            completionTask?.cancel()
+            answerPlaybackTask?.cancel()
+            attemptState.cancelAttempt()
+            Task {
+                await audioExperienceService.setEmergencyMode(false)
+            }
+        }
+        .task {
+            await playInitialStudyPromptIfNeeded()
+        }
+        .task(id: questTimer.isEmergency) {
+            await audioExperienceService.setEmergencyMode(questTimer.isEmergency)
+        }
+        .sensoryFeedback(.success, trigger: successFeedbackTrigger)
+    }
+
+    @ViewBuilder
+    private var readingStage: some View {
+        if verticalSizeClass == .compact {
+            HStack(spacing: TadaPrimitiveTokens.Spacing.large) {
+                TadaWorldMascot(theme: theme, pose: .encouraging, size: 72)
+                wordCard
+                    .frame(maxWidth: 510)
+                microphoneButton
+            }
+            .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
+            .frame(maxWidth: 900, maxHeight: .infinity)
+            .overlay(alignment: .bottom) {
+                feedbackView
+                    .offset(y: -2)
+            }
+        } else {
+            VStack(spacing: TadaPrimitiveTokens.Spacing.large) {
+                TadaWorldMascot(theme: theme, pose: .encouraging, size: 78)
+                wordCard
+                    .frame(
+                        minWidth: TadaLayoutTokens.readCardStandardMinimumWidth,
+                        maxWidth: 720
+                    )
+                microphoneButton
+                feedbackView
+            }
+            .frame(maxWidth: 760, maxHeight: .infinity)
+        }
+    }
+
+    private var wordCard: some View {
+        VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+            Label("Read it aloud", systemImage: "mouth.fill")
+                .font(.system(.headline, design: .rounded, weight: .bold))
+                .foregroundStyle(theme.primary)
+
+            Text(session.prompt.displayText)
+                .font(
+                    .system(
+                        size: verticalSizeClass == .compact ? 78 : 104,
+                        weight: .bold,
+                        design: .rounded
+                    )
+                )
+                .minimumScaleFactor(0.52)
+                .lineLimit(1)
+                .foregroundStyle(theme.ink)
+                .padding(.horizontal, 20)
+                .accessibilityHidden(true)
+
+            Text("A word is shown on screen.")
+                .font(.system(.caption, design: .rounded, weight: .medium))
+                .foregroundStyle(theme.ink.opacity(0.001))
+                .frame(height: 1)
+                .accessibilityLabel("A word is shown. Tap the microphone and read it aloud.")
+        }
+        .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
+        .padding(.vertical, verticalSizeClass == .compact ? 14 : 20)
+        .background(
+            theme.surface,
+            in: RoundedRectangle(
+                cornerRadius: TadaPrimitiveTokens.Radius.large,
+                style: .continuous
+            )
+        )
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: TadaPrimitiveTokens.Radius.large,
+                style: .continuous
+            )
+            .strokeBorder(Color.white.opacity(0.78), lineWidth: 2)
+        }
+        .overlay(alignment: .bottom) {
+            HStack(spacing: 5) {
+                ForEach(0..<7, id: \.self) { index in
+                    Capsule()
+                        .fill(theme.primary.opacity(0.62))
+                        .frame(width: 14, height: CGFloat(4 + (index % 3) * 3))
+                }
+            }
+            .offset(y: 4)
+        }
+        .shadow(color: theme.primary.opacity(0.18), radius: 18, y: 9)
+    }
+
+    private var microphoneButton: some View {
+        Button(action: startListening) {
+            VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                ZStack {
+                    Circle()
+                        .fill(theme.surface.opacity(0.74))
+                        .scaleEffect(1.18)
+                    Circle()
+                        .fill(isListening ? TadaPrimitiveTokens.ColorValue.success : theme.primary)
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.74), lineWidth: 5)
+                        .padding(7)
+                    Image(systemName: isListening ? "waveform" : "mic.fill")
+                        .font(.system(size: 46, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .symbolEffect(.variableColor.iterative, isActive: isListening)
+                }
+                .frame(
+                    width: verticalSizeClass == .compact ? 96 : 112,
+                    height: verticalSizeClass == .compact ? 96 : 112
+                )
+                .shadow(color: theme.primary.opacity(0.24), radius: 16, y: 8)
+
+                Text(microphoneButtonTitle)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .foregroundStyle(theme.ink)
+
+                #if DEBUG
+                    if showsSimulatedVoiceCheck {
+                        Label("Simulated voice check", systemImage: "wrench.and.screwdriver.fill")
+                            .font(.system(.caption2, design: .rounded, weight: .bold))
+                            .foregroundStyle(theme.ink.opacity(0.62))
+                            .accessibilityLabel("Demo mode. Simulated voice check.")
+                    }
+                #endif
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(
+            isListening || isPlayingStudyPrompt || isPaused
+                || attemptState.completedSummary != nil
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(microphoneAccessibilityLabel)
+        .accessibilityHint("Read the word shown on screen")
+    }
+
+    private var microphoneAccessibilityLabel: String {
+        if isPlayingStudyPrompt {
+            return "Listen to the new word first"
+        }
+        let action = isListening ? "Listening" : "Start listening"
+        #if DEBUG
+            if showsSimulatedVoiceCheck {
+                return "\(action). Demo mode. Simulated voice check."
+            }
+        #endif
+        return action
+    }
+
+    private var microphoneButtonTitle: String {
+        if isPlayingStudyPrompt {
+            return "Listen first…"
+        }
+        return isListening ? "Listening…" : "Tap to read"
+    }
+
+    @ViewBuilder
+    private var feedbackView: some View {
+        if let feedback = currentFeedback {
+            HStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                TadaWorldMascot(
+                    theme: theme,
+                    pose: feedback.kind == .technical ? .encouraging : .cheering,
+                    size: verticalSizeClass == .compact ? 42 : 50
+                )
+
+                VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                    Label(feedback.message, systemImage: feedback.symbol)
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(theme.ink.opacity(0.76))
+
+                    if feedback.showsPermissionAction && !permissionRequestSucceeded {
+                        if didRequestPermission {
+                            Text(
+                                "A grown-up can allow Speech Recognition and Microphone in Settings."
+                            )
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(theme.ink.opacity(0.66))
+                        } else {
+                            Button(action: requestMicrophonePermission) {
+                                Label(
+                                    isRequestingPermission ? "Checking…" : "Ask to use microphone",
+                                    systemImage: "person.crop.circle.badge.checkmark"
+                                )
+                            }
+                            .buttonStyle(
+                                TadaPrimaryButtonStyle(fill: theme.primary, isCompact: true)
+                            )
+                            .disabled(isRequestingPermission)
+                            .accessibilityHint(
+                                "Only this button asks for microphone and speech recognition permission"
+                            )
+                        }
+                    }
+
+                    if attemptState.canSkipAfterTechnicalIssues {
+                        Button("Move On", action: moveOnAfterTechnicalIssues)
+                            .buttonStyle(
+                                TadaPrimaryButtonStyle(
+                                    fill: theme.primary,
+                                    isCompact: true
+                                )
+                            )
+                            .accessibilityHint(
+                                "Moves to the next word without counting this as wrong"
+                            )
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(theme.surface.opacity(0.90), in: Capsule())
+            .frame(maxWidth: 430)
+            .transition(.scale(scale: 0.92).combined(with: .opacity))
+        }
+    }
+
+    private var currentFeedback: ReadFeedback? {
+        if permissionRequestSucceeded {
+            return ReadFeedback(
+                message: "Microphone ready. Tap to read.",
+                symbol: "checkmark.circle.fill",
+                kind: .success
+            )
+        }
+
+        guard case .feedback(let feedback) = attemptState.phase else { return nil }
+        switch feedback {
+        case .tryAgain(let remainingAttempts):
+            return ReadFeedback(
+                message: retryMessage(remainingAttempts: remainingAttempts),
+                symbol: "arrow.clockwise.circle.fill",
+                kind: .tryAgain
+            )
+        case .rewriteAfterAnswer:
+            return ReadFeedback(
+                message: "Listen, then try once more.",
+                symbol: "speaker.wave.2.fill",
+                kind: .tryAgain
+            )
+        case .recognitionUncertain:
+            return ReadFeedback(
+                message: "I’m not sure I heard that. Please try again.",
+                symbol: "ear.badge.questionmark",
+                kind: .technical
+            )
+        case .technicalRetry(let reason):
+            return technicalFeedback(for: reason)
+        }
+    }
+
+    private func startListening() {
+        guard !isListening, !isPlayingStudyPrompt, attemptState.beginAttempt() else { return }
+        let responseLatency = ElapsedTime(
+            seconds: responseClock.elapsed(at: questTimer.elapsedSeconds)
+        )
+        pendingAttemptTiming = AttemptTiming(
+            totalResponseTime: responseLatency,
+            speechOnsetLatency: responseLatency
+        )
+        questTimer.suspend(for: .speechRecognition)
+        permissionRequestSucceeded = false
+        withAnimation(.easeOut(duration: TadaPrimitiveTokens.Motion.quick)) {
+            isListening = true
+        }
+
+        listeningTask?.cancel()
+        listeningTask = Task { @MainActor in
+            await audioExperienceService.prepareForRecording()
+            let request = SpeechRecognitionRequest(
+                profileID: session.profileID,
+                prompt: session.prompt,
+                maximumRecordingDuration: ElapsedTime(seconds: 5),
+                speakerFilterPolicy: .useWhenAvailable,
+                noiseSuppressionEnabled: true
+            )
+
+            do {
+                let result = try await recognitionService.recognize(request)
+                await audioExperienceService.finishRecording()
+                guard !Task.isCancelled, !isPaused else {
+                    attemptState.cancelAttempt()
+                    isListening = false
+                    questTimer.resume(from: .speechRecognition)
+                    return
+                }
+                receive(result)
+            } catch is CancellationError {
+                await audioExperienceService.finishRecording()
+                attemptState.cancelAttempt()
+                isListening = false
+                if !isPaused {
+                    questTimer.resume(from: .speechRecognition)
+                }
+            } catch {
+                await audioExperienceService.finishRecording()
+                receive(
+                    RecognitionResult(
+                        decision: .technicalFailure(.serviceUnavailable)
+                    )
+                )
+            }
+        }
+    }
+
+    private func playInitialStudyPromptIfNeeded() async {
+        guard
+            !didPlayInitialStudyPrompt,
+            ReadStudyPromptPolicy.shouldDemonstrate(source: session.source)
+        else { return }
+        didPlayInitialStudyPrompt = true
+        attemptState.markStudyExposure()
+        isPlayingStudyPrompt = true
+        questTimer.suspend(for: .promptPlayback)
+        announceForAccessibility("Listen to the new word. Then read it by yourself.")
+        await onSpeak()
+        guard !Task.isCancelled else { return }
+        isPlayingStudyPrompt = false
+        questTimer.resume(from: .promptPlayback)
+        responseClock.reset(at: questTimer.elapsedSeconds)
+    }
+
+    private func receive(_ result: RecognitionResult) {
+        isListening = false
+        playFeedback(for: result.decision)
+        attemptState.receive(result, timing: pendingAttemptTiming)
+        if let message = currentFeedback?.message {
+            announceForAccessibility(message)
+        }
+        if let summary = attemptState.completedSummary {
+            if summary.completion == .needsPractice,
+                summary.records.contains(where: { $0.outcome == .incorrect })
+            {
+                playAnswerThenComplete(summary)
+            } else {
+                showCompletion(summary)
+            }
+        } else {
+            // Every retry starts a fresh response-time window. Recognition,
+            // permission, and prior speaking time must not leak into the next
+            // valid attempt.
+            responseClock.reset(at: questTimer.elapsedSeconds)
+            pendingAttemptTiming = .unmeasured
+        }
+        if !isPaused {
+            questTimer.resume(from: .speechRecognition)
+        }
+    }
+
+    private func playFeedback(for decision: RecognitionDecision) {
+        let cue: FunctionalAudioCue
+        switch decision {
+        case .matched:
+            cue = .correct
+        case .notMatched:
+            cue = .validRetry
+        case .uncertain, .technicalFailure:
+            cue = .technicalRetry
+        }
+        Task {
+            await audioExperienceService.play(cue)
+        }
+    }
+
+    private func playAnswerThenComplete(_ summary: QuestAttemptSummary) {
+        questTimer.suspend(for: .promptPlayback)
+        answerPlaybackTask?.cancel()
+        answerPlaybackTask = Task { @MainActor in
+            await onSpeak()
+            guard !Task.isCancelled else { return }
+            questTimer.resume(from: .promptPlayback)
+            showCompletion(summary)
+        }
+    }
+
+    private func moveOnAfterTechnicalIssues() {
+        guard attemptState.skipAfterTechnicalIssues() else { return }
+        guard let summary = attemptState.completedSummary else { return }
+        showCompletion(summary)
+    }
+
+    private func requestMicrophonePermission() {
+        guard !isRequestingPermission else { return }
+        isRequestingPermission = true
+
+        Task { @MainActor in
+            let isAuthorized = await permissionActions.requestAuthorization()
+            didRequestPermission = true
+            permissionRequestSucceeded = isAuthorized
+            isRequestingPermission = false
+            announceForAccessibility(
+                isAuthorized
+                    ? "Microphone ready. Tap to read."
+                    : "A grown-up can allow Speech Recognition and Microphone in Settings."
+            )
+        }
+    }
+
+    private func retryMessage(remainingAttempts: Int) -> String {
+        if remainingAttempts == 1 {
+            return "Nice try. One more try."
+        }
+        return "Nice try. You have \(remainingAttempts) more tries."
+    }
+
+    private func technicalFeedback(for reason: TechnicalFailureReason) -> ReadFeedback {
+        switch reason {
+        case .permissionDenied:
+            return ReadFeedback(
+                message: "A grown-up needs to turn on the microphone first.",
+                symbol: "mic.slash.fill",
+                kind: .technical,
+                showsPermissionAction: true
+            )
+        case .noUsableAudio:
+            return ReadFeedback(
+                message: "I couldn’t hear a clear voice. Try once more.",
+                symbol: "waveform.slash",
+                kind: .technical
+            )
+        case .wrongSpeaker:
+            return ReadFeedback(
+                message: "I couldn’t tell whose voice that was. Try once more.",
+                symbol: "person.wave.2.fill",
+                kind: .technical
+            )
+        case .onDeviceRecognitionUnavailable:
+            return ReadFeedback(
+                message: onDeviceRecognitionUnavailableMessage,
+                symbol: "iphone.and.arrow.forward",
+                kind: .technical
+            )
+        case .serviceUnavailable:
+            return ReadFeedback(
+                message: "Listening is taking a short break. Try again.",
+                symbol: "ear.badge.exclamationmark",
+                kind: .technical
+            )
+        case .timedOut:
+            return ReadFeedback(
+                message: "I didn’t hear the word in time. Try again.",
+                symbol: "timer",
+                kind: .technical
+            )
+        case .corruptedInput:
+            return ReadFeedback(
+                message: "That recording didn’t come through. Try again.",
+                symbol: "waveform.badge.exclamationmark",
+                kind: .technical
+            )
+        }
+    }
+
+    private var onDeviceRecognitionUnavailableMessage: String {
+        #if targetEnvironment(simulator)
+            "Real voice checking needs a physical iPhone or iPad."
+        #else
+            "Private voice checking isn’t available on this device."
+        #endif
+    }
+
+    private func showCompletion(_ summary: QuestAttemptSummary) {
+        let announcement =
+            summary.completion == .needsPractice
+            ? "We’ll practice this one again."
+            : "You got it!"
+        announceForAccessibility(announcement)
+        withAnimation(
+            .spring(
+                response: reduceMotion ? 0.01 : TadaPrimitiveTokens.Motion.reaction,
+                dampingFraction: 0.70
+            )
+        ) {
+            pendingCompletion = summary
+        }
+        completionTask?.cancel()
+        completionTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(reduceMotion ? 40 : 430))
+            guard !Task.isCancelled else { return }
+            onComplete(summary)
+        }
+    }
+
+    private func completionFeedback(for summary: QuestAttemptSummary) -> some View {
+        let isSuccess = summary.completion != .needsPractice
+        return TadaFeedbackBurst(
+            theme: theme,
+            kind: isSuccess ? .success : .tryAgain,
+            message: isSuccess ? "You got it!" : "We’ll practice this one again."
+        )
+    }
+
+    private var successFeedbackTrigger: Bool {
+        guard let pendingCompletion else { return false }
+        return pendingCompletion.completion != .needsPractice
+    }
+
+    private func pause() {
+        listeningTask?.cancel()
+        attemptState.cancelAttempt()
+        isListening = false
+        questTimer.suspend(for: .userPause)
+        questTimer.resume(from: .speechRecognition)
+        isPaused = true
+    }
+
+    private func resume() {
+        isPaused = false
+        questTimer.resume(from: .userPause)
+    }
+}
+
+private struct ReadFeedback {
+    let message: String
+    let symbol: String
+    var kind: TadaFeedbackKind = .tryAgain
+    var showsPermissionAction = false
+}

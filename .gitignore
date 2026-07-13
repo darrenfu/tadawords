@@ -1,0 +1,27 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcresult
+*.xcarchive
+*.xccheckout
+*.xcscmblueprint
+*.dSYM
+*.dSYM.zip
+*.ipa
+.xcode.env.local
+.env
+.env.*
+!.env.example
+*.p12
+*.mobileprovision
+*.cer
+*.key
+*.pem
+*.p8
+
+# Superseded local QA captures; keep only evidence referenced by the audits.
+QAArtifacts/Audit-2026-07-12/
+QAArtifacts/Final/

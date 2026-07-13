@@ -1,0 +1,299 @@
+import SwiftUI
+import TadaWordsDesignSystem
+import TadaWordsDomain
+
+@MainActor
+public struct GuardianRootView: View {
+    @StateObject private var model: GuardianDashboardViewModel
+    @AccessibilityFocusState private var loadingOverlayIsFocused: Bool
+    private let onExit: () -> Void
+
+    /// Preview convenience. Production composition must use `init(store:onExit:)`.
+    public init(onExit: @escaping () -> Void = {}) {
+        self.onExit = onExit
+        _model = StateObject(
+            wrappedValue: GuardianDashboardViewModel(
+                store: DemoGuardianFamilyStore(),
+                audioPromptService: SilentGuardianAudioPromptService(),
+                audioExperienceService: SilentAudioExperienceService()
+            )
+        )
+    }
+
+    public init(
+        audioPromptService: any AudioPromptService,
+        audioExperienceService: any AudioExperienceService =
+            SilentAudioExperienceService(),
+        onExit: @escaping () -> Void = {}
+    ) {
+        self.onExit = onExit
+        _model = StateObject(
+            wrappedValue: GuardianDashboardViewModel(
+                store: DemoGuardianFamilyStore(),
+                audioPromptService: audioPromptService,
+                audioExperienceService: audioExperienceService
+            )
+        )
+    }
+
+    public init(
+        store: any GuardianFamilyStore,
+        onExit: @escaping () -> Void = {}
+    ) {
+        self.onExit = onExit
+        _model = StateObject(
+            wrappedValue: GuardianDashboardViewModel(
+                store: store,
+                audioPromptService: SilentGuardianAudioPromptService(),
+                audioExperienceService: SilentAudioExperienceService()
+            )
+        )
+    }
+
+    public init(
+        store: any GuardianFamilyStore,
+        audioPromptService: any AudioPromptService,
+        audioExperienceService: any AudioExperienceService =
+            SilentAudioExperienceService(),
+        familySyncCoordinator: (any FamilySyncCoordinating)? = nil,
+        notificationScheduler: (any LearningNotificationScheduling)? = nil,
+        voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)? = nil,
+        voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
+        requestSpeechAuthorization: @escaping @Sendable () async -> Bool = { false },
+        sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing =
+            AllowSensitiveGuardianActions(),
+        onExit: @escaping () -> Void = {}
+    ) {
+        self.onExit = onExit
+        _model = StateObject(
+            wrappedValue: GuardianDashboardViewModel(
+                store: store,
+                audioPromptService: audioPromptService,
+                audioExperienceService: audioExperienceService,
+                familySyncCoordinator: familySyncCoordinator,
+                notificationScheduler: notificationScheduler,
+                voiceprintEnrollmentService: voiceprintEnrollmentService,
+                voiceprintRepository: voiceprintRepository,
+                requestSpeechAuthorization: requestSpeechAuthorization,
+                sensitiveActionAuthorizer: sensitiveActionAuthorizer
+            )
+        )
+    }
+
+    public var body: some View {
+        ZStack {
+            GuardianSemanticTokens.background
+                .ignoresSafeArea()
+
+            destinationView
+                .id(model.transitionKey)
+                .tadaNavigationMotion(
+                    value: model.transitionKey,
+                    standardTransition: .opacity.combined(with: .move(edge: .trailing))
+                )
+                .accessibilityHidden(model.isLoading)
+
+            if model.isLoading {
+                loadingOverlay
+            }
+        }
+        .foregroundStyle(GuardianSemanticTokens.foreground)
+        .environment(\.font, .system(.body, design: .rounded))
+        .onChange(of: model.isLoading, initial: true) { _, isLoading in
+            loadingOverlayIsFocused = isLoading
+        }
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(
+                get: { model.errorMessage != nil },
+                set: { if !$0 { model.errorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                model.errorMessage = nil
+            }
+        } message: {
+            Text(model.errorMessage ?? "Please try again.")
+        }
+    }
+
+    @ViewBuilder
+    private var destinationView: some View {
+        switch model.destination {
+        case .parentGate:
+            GuardianParentGateView(
+                onExit: onExit,
+                onContinue: model.unlockGuardianArea
+            )
+
+        case .dashboard:
+            if let snapshot = model.snapshot {
+                GuardianTodayView(
+                    snapshot: snapshot,
+                    onLock: model.lockGuardianArea,
+                    onQuickAdd: model.showQuickAdd,
+                    onOpenPool: model.showPool,
+                    onOpenSettings: model.showSettings,
+                    onOpenProfiles: model.showProfiles,
+                    onOpenReports: model.showReports,
+                    onOpenFamilySync: model.showFamilySync,
+                    syncState: model.guardianSyncState
+                )
+            } else {
+                GuardianLoadingView(onRetry: model.refresh)
+            }
+
+        case .profiles:
+            if let family = model.familySnapshot {
+                GuardianProfilesView(
+                    family: family,
+                    onBack: model.showDashboard,
+                    onSelect: model.selectProfile,
+                    onEdit: model.showEditProfile,
+                    onVoiceprint: model.showVoiceprint,
+                    onAdd: model.showNewProfile
+                )
+            } else {
+                GuardianLoadingView(onRetry: model.refresh)
+            }
+
+        case .profileEditor(let profile):
+            GuardianProfileEditorView(
+                existingProfile: profile,
+                onBack: model.showProfiles,
+                onSave: { draft in
+                    model.saveProfile(
+                        existingProfile: profile,
+                        draft: draft
+                    )
+                },
+                onDelete: profile.map { existing in
+                    { model.deleteProfile(existing) }
+                }
+            )
+
+        case .quickAdd:
+            GuardianQuickAddView(
+                onBack: model.showDashboard,
+                onSubmit: model.importWords
+            )
+
+        case .pool(let mode):
+            GuardianPoolView(
+                mode: mode,
+                words: model.snapshot?.pool(for: mode) ?? [],
+                routeSettings: routeSettings(for: mode),
+                onBack: model.showDashboard,
+                onAddWords: model.showQuickAdd,
+                onPlay: model.play,
+                onDeactivate: model.deactivate
+            )
+
+        case .settings:
+            if let settings = model.snapshot?.practiceSettings {
+                GuardianPracticeSettingsView(
+                    settings: settings,
+                    onBack: model.showDashboard,
+                    onSave: model.savePracticeSettings
+                )
+            } else {
+                GuardianLoadingView(onRetry: model.refresh)
+            }
+
+        case .familySync:
+            GuardianFamilySyncView(
+                status: model.syncStatus,
+                shareURL: model.shareURL,
+                shareURLText: $model.shareURLText,
+                onBack: model.showDashboard,
+                onSyncNow: model.syncNow,
+                onCreateShare: model.createFamilyShare,
+                onAcceptShare: model.acceptFamilyShare
+            )
+
+        case .voiceprint(let profile):
+            GuardianVoiceprintEnrollmentView(
+                profile: profile,
+                progress: model.voiceprintProgress,
+                isCapturing: model.isCapturingVoiceprint,
+                onBack: model.cancelVoiceprint,
+                onBegin: { model.beginVoiceprint(for: profile) },
+                onCapture: model.captureVoiceprintSegment,
+                onFinish: { model.finishVoiceprint(for: profile) }
+            )
+
+        case .reports:
+            GuardianReportsView(
+                report: model.report,
+                selectedPeriod: model.reportPeriod,
+                onBack: model.showDashboard,
+                onSelectPeriod: model.loadReport,
+                onCorrect: model.correctAttempt,
+                onAuthorizeExport: model.authorizeReportExport
+            )
+
+        case .importReport(let report):
+            GuardianImportReportView(
+                report: report,
+                onAddMore: model.showQuickAdd,
+                onDone: model.showDashboard
+            )
+        }
+    }
+
+    private func routeSettings(for mode: LearningMode) -> LearningRouteSettings {
+        guard let settings = model.snapshot?.practiceSettings else {
+            switch mode {
+            case .read:
+                return .defaultRead
+            case .write:
+                return .defaultWrite
+            }
+        }
+        return settings.route(for: mode)
+    }
+
+    private var loadingOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.12)
+                .ignoresSafeArea()
+            ProgressView("Saving…")
+                .font(.system(.body, design: .rounded, weight: .semibold))
+                .padding(24)
+                .background(
+                    .regularMaterial,
+                    in: RoundedRectangle(
+                        cornerRadius: GuardianPrimitiveTokens.Radius.medium,
+                        style: .continuous
+                    ))
+        }
+        .accessibilityAddTraits(.isModal)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Saving")
+        .accessibilityHint("Please wait while your changes are saved")
+        .accessibilityFocused($loadingOverlayIsFocused)
+    }
+}
+
+private struct SilentGuardianAudioPromptService: AudioPromptService {
+    func play(_ prompt: WordPrompt, for profileID: ProfileID) async throws {
+        _ = prompt
+        _ = profileID
+    }
+}
+
+private struct GuardianLoadingView: View {
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(spacing: GuardianPrimitiveTokens.Spacing.medium) {
+            ProgressView()
+                .controlSize(.large)
+            Text("Loading guardian tools…")
+                .font(.system(.headline, design: .rounded, weight: .semibold))
+            Button("Try again", action: onRetry)
+                .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
