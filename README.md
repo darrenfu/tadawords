@@ -1,63 +1,141 @@
-# Tada Words
+<p align="center">
+  <img src="Apps/TadaWordsApp/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" width="112" alt="Tada Words app icon">
+</p>
 
-Tada Words is a landscape-only SwiftUI learning app for early readers. Children practice two independent skills: Read shows a sight word for the child to say, while Write plays a word for the child to handwrite.
+<h1 align="center">Tada Words</h1>
 
-The app is local-first and supports iPhone and iPad. Core quests keep working without a network connection. Production composition uses Apple Speech, Vision handwriting recognition, procedural world audio, device-scoped voiceprints, local notifications, local JSON snapshots, and optional CloudKit family sync.
+<p align="center"><strong>Short, playful sight-word practice for early readers on iPhone and iPad.</strong></p>
 
-## What V1 includes
+<p align="center">
+  <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
+  <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
+  <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
+  <img src="https://img.shields.io/badge/status-V1%20pre--release-6D48D7" alt="V1 pre-release">
+</p>
 
-- Separate Read and Write pools, Today Quest buttons, settings, histories, and review schedules
-- Parent-entered words plus optional grade-based recommendations with automatic de-duplication
-- Ebbinghaus-style review priority, child-relative pace, guided retries, score, stars, and true mastery criteria
-- Multiple Kid Profiles, last-profile restore, nickname-only child creation, animal or photo avatars, grade, age, and world selection
-- First-run parent onboarding with versioned consent, Profile setup, and optional starter words for both pools
-- Three separate original worlds, 20 small rewards and five milestones per world, world unlocks, and Collection
-- Guardian Today, monthly quest calendar, 7-day and 30-day reports, correction history, and comma-separated values (CSV) export
-- Profile-specific audio, notification, left-handed writing, Reduced Sound, and Calm Rescue settings
-- Crash-resumable profile deletion that clears local learning data, reminders, and the device voiceprint
-- Optional CloudKit sync and Apple iCloud family invitations
+Tada Words gives children two separate daily quests for sight words:
 
-CloudKit and family sharing require an Apple Developer Team, the configured iCloud container, signed-in iCloud accounts, and physical-device acceptance. Simulator builds intentionally use a device-only local sync transport; the real CloudKit transport is created only by a signed physical-device build. Voiceprint matching runs on the device and never syncs its template. It is an accuracy aid, not proof that the microphone captured only one person.
+- **Read:** See a word and say it aloud.
+- **Write:** Hear a word and write the whole word by hand.
 
-## Modules
+Parents can enter each week's school list or let the app fill a short practice set from its grade-based catalog. The review scheduler brings back words based on recall strength, errors, help use, replays, and each child's response pace.
 
-```text
-TadaWordsDomain            Entities, value objects, and service contracts
-TadaWordsLearning          Planning, review, evidence, mastery, and scoring
-TadaWordsContent           Pools, recommendations, persistence, sync records, and rewards
-TadaWordsDesignSystem      Reusable child and Guardian design tokens and components
-TadaWordsFeatures          Profiles, lobby, Read, Write, results, worlds, and Collection
-TadaWordsGuardianFeatures  Parent gate, profiles, settings, reports, sync, and voice setup
-TadaWordsApplePlatform     Speech, Vision, audio, Keychain, notifications, and CloudKit
-TadaWordsAppShell          Production composition and local-first bootstrap
-TadaWordsPreview           macOS-hosted SwiftUI preview executable
-```
+> **Project status:** The V1 source, automated tests, and simulator builds pass. CloudKit consent and remote erasure need implementation before family deployment. Physical-device testing, child speech calibration, handwriting calibration, and live CloudKit acceptance remain open. See the [acceptance checklist](MVP_ACCEPTANCE.md).
 
-Dependencies point inward. Domain code does not import SwiftUI, Speech, Vision, PencilKit, UserNotifications, or CloudKit.
+The app ships three separate visual worlds: Moonpetal Kingdom, Build-It Bay, and Paws & Pines. Each world keeps its own scene, music, sound cues, and reward collection.
 
-## Run the checks
+## Learning model
+
+| Route | Prompt | Child response | Evidence |
+|---|---|---|---|
+| Read Quest | The app shows a sight word | The child says the word | On-device speech recognition plus optional device voiceprint confidence |
+| Write Quest | The app speaks a sight word | The child writes the complete word | Vision handwriting recognition from the drawing canvas |
+| Review | The scheduler selects due and weak words | The child retrieves the word again | Accuracy, elapsed time, help, replay, and retry history |
+
+The app demonstrates each new word once before independent recall. Read allows two valid retries. Write reveals the answer after an error and offers one guided rewrite. Technical speech or recognition failures do not reduce the child's score.
+
+The scheduler uses an Ebbinghaus-style recall model. A word reaches Mastered after independent success on three local dates and a predicted 14-day recall rate above the configured threshold.
+
+## V1 features
+
+| Area | Included |
+|---|---|
+| Practice | Separate Read and Write pools, independent Today Quest buttons, New and Review ordering, timer, Rescue state, score, stars, and mastery |
+| Word setup | Parent-entered pools, automatic de-duplication, smart fill, and grade-based recommendations |
+| Profiles | Multiple child profiles, nickname entry, last-profile restore, animal or photo avatar, grade, age, and preferred world |
+| Motivation | Three original worlds, 20 small rewards and five milestones per world, unlocks, and a Collection screen |
+| Guardian tools | Parent gate, Today dashboard, monthly quest calendar, 7-day and 30-day reports, corrections, settings, and CSV export |
+| Accessibility | Landscape-only layouts, shared 44-point minimum targets, VoiceOver labels and announcements, Reduce Motion, left-handed writing, Reduced Sound, and Calm Rescue; physical accessibility acceptance remains open |
+| Platform | Apple Speech, Vision handwriting recognition, Keychain voiceprints, local notifications, local JSON snapshots, and a CloudKit transport whose consent gate remains a release blocker |
+
+## Architecture
+
+The Swift package keeps learning policy separate from SwiftUI and Apple frameworks.
+
+| Module | Responsibility |
+|---|---|
+| `TadaWordsDomain` | Entities, value objects, and service contracts |
+| `TadaWordsLearning` | Planning, review, scoring, pace, and mastery rules |
+| `TadaWordsContent` | Word pools, persistence, recommendations, sync records, and rewards |
+| `TadaWordsDesignSystem` | Shared child and Guardian components and visual tokens |
+| `TadaWordsFeatures` | Profiles, lobby, Read, Write, results, worlds, and Collection |
+| `TadaWordsGuardianFeatures` | Parent gate, setup, settings, reports, corrections, and sync controls |
+| `TadaWordsApplePlatform` | Speech, Vision, audio, Keychain, notifications, and CloudKit adapters |
+| `TadaWordsAppShell` | Production composition and local-first bootstrap |
+
+The iOS target depends on `TadaWordsAppShell`, `TadaWordsApplePlatform`, and `TadaWordsDomain`. Package target declarations enforce the remaining boundaries. Read [ARCHITECTURE.md](ARCHITECTURE.md) for dependency rules and data flow.
+
+## Requirements
+
+- macOS with Xcode and an iOS 18 or later SDK
+- Swift 6
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen) for project regeneration
+- An Apple Developer Team for signed device builds and CloudKit
+
+The latest V1 acceptance run used Xcode 26.6, an iPhone 17 Pro Max simulator, and an iPad Pro 13-inch simulator.
+
+## Build and test
 
 ```sh
+git clone https://github.com/darrenfu/tadawords.git
+cd tadawords
+
+brew install xcodegen
 make generate
 make check
-./Scripts/verify-device-readiness.sh
-swift run TadaWordsPreview
+open TadaWords.xcodeproj
 ```
 
-`make generate` creates the canonical `TadaWords.xcodeproj` from `project.yml`. Open only that project. The canonical 367-test check and both Release simulator builds passed. The stale numbered project copies and `Apps/TadaWordsApp/Info 2.plist` have been removed; only the canonical project and plist remain.
+`make check` runs strict Swift formatting checks and the Swift package test suite. The latest V1 pass contains **367 tests with zero failures**.
 
-Direct device installation requires Developer Mode, a selected Apple development Team, and a valid signing identity. CloudKit also requires the `iCloud.com.tadawords.app` container under that Team.
+Run the device-readiness script before installing on an iPhone or iPad:
 
-## Understand local data
+```sh
+./Scripts/verify-device-readiness.sh
+```
 
-Asset-catalog `Contents.json` files describe app icons and colors. Child data lives in JSON snapshots under the app's Application Support directory. Tada Words has no app-owned server database. When a guardian enables Family Sync, CloudKit copies supported learning records between authorized Apple accounts; local files remain the offline source for quests.
+Follow [DEVICE_DEPLOYMENT.md](DEVICE_DEPLOYMENT.md) for signing, Developer Mode, and direct installation.
 
-## Product and acceptance documents
+## Data and privacy
 
-- [Run the V1 acceptance checklist](MVP_ACCEPTANCE.md)
-- [Read the V1 product design](TADA_WORDS_V1_PRODUCT_DESIGN.md)
-- [Review remaining release work](V1_BACKLOG.md)
-- [Install on a physical device](DEVICE_DEPLOYMENT.md)
-- [Review the current feature audit](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md)
-- [Review the current design audit](QAArtifacts/DESIGN_AUDIT_2026-07-12.md)
-- [Review the voiceprint Device Alpha plan](VOICEPRINT_DEVICE_ALPHA.md)
+- The app stores child profiles, word pools, quest history, and settings in local JSON snapshots.
+- The app does not run an app-owned server database.
+- Speech and enrollment audio buffers stay in memory. The app does not save or upload raw child recordings.
+- Each device stores its voiceprint template in Keychain. CloudKit does not sync the template, so each device needs its own enrollment.
+- The signed-device V1 starts CloudKit synchronization after onboarding when the configured container and an iCloud account are available. The app does not yet store a separate guardian opt-in.
+- Profile deletion clears local learning data, reminders, and the local voiceprint. It uploads a tombstone that prevents profile resurrection, but it does not yet erase records already stored in CloudKit.
+
+The voiceprint provides a confidence signal. It does not prove that only the selected child spoke. Production use needs representative same-child and different-speaker testing.
+
+Simulator builds use a local-only family sync transport. Signed physical-device builds use the real CloudKit path after the developer configures `iCloud.com.tadawords.app` and signs in to iCloud. Add a persisted, default-off guardian consent gate and remote record erasure before using that path with family data.
+
+## Validation status
+
+| Check | Result |
+|---|---|
+| Strict Swift format lint | Passed |
+| Swift tests | 367 passed, 0 failed |
+| iPhone 17 Pro Max Release simulator | Built, installed, and launched |
+| iPad Pro 13-inch Release simulator | Built, installed, and launched |
+| Landscape declarations | Landscape Left and Landscape Right only |
+| CloudKit guardian opt-in and remote erasure | Implementation required |
+| Physical child speech, handwriting, audio, accessibility, and CloudKit | Acceptance open |
+
+The [feature audit](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md) records the implementation evidence. The [V1 backlog](V1_BACKLOG.md) lists the remaining device and human acceptance work.
+
+## Test fixture attribution
+
+The repository includes one unmodified child-speech fixture from [OpenSLR SLR101, speechocean762](https://www.openslr.org/101/) under CC BY 4.0. Read its [source and license record](Tests/Fixtures/ChildSpeech/LICENSE_SOURCE.md) and [SHA-256 checksum](Tests/Fixtures/ChildSpeech/SHA256SUMS). The app does not bundle this test file.
+
+## Documentation
+
+- [Product and interaction design](TADA_WORDS_V1_PRODUCT_DESIGN.md)
+- [Design review](TADA_WORDS_DESIGN_REVIEW.md)
+- [V1 acceptance checklist](MVP_ACCEPTANCE.md)
+- [Physical-device deployment](DEVICE_DEPLOYMENT.md)
+- [Voiceprint Device Alpha plan](VOICEPRINT_DEVICE_ALPHA.md)
+- [Visual and accessibility audit](QAArtifacts/DESIGN_AUDIT_2026-07-12.md)
+
+## License
+
+The project source does not include an open-source license. Copyright remains with the project owner. Third-party material retains the copyright and license stated in its attribution file.

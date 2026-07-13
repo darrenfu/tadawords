@@ -14,10 +14,14 @@ This backlog now tracks release acceptance and external configuration. The confi
 - Install the canonical `TadaWords.xcodeproj` build
 - Complete one Read and one Write quest on each device
 
-### CLOUD-01: Configure and validate CloudKit
+### CLOUD-01: Add consent and erasure, then validate CloudKit
 
-**Status:** Code complete; Apple environment acceptance open
+**Status:** Privacy release blocker; transport code complete, persisted guardian opt-in and remote erasure missing
 
+- Add a persisted, default-off Family Sync choice for each Profile
+- Block launch, onboarding-completion, and lifecycle synchronization until the guardian opts in
+- Let the guardian disable sync without blocking local quests
+- Delete existing Profile, pool, attempt, progress, plan, reward, avatar, and settings records from private or shared CloudKit storage when a Profile is deleted
 - Create or attach `iCloud.com.tadawords.app` under the selected Team
 - Deploy the CloudKit development schema
 - Validate private-database sync on two devices using one Apple ID
@@ -112,5 +116,5 @@ The numbered projects were generated snapshots, not source inputs. A repository 
 - Three separate worlds, 20 small rewards and five milestones each, world unlocks, Collection, and monthly Calendar
 - Guardian Today, Needs Attention, 7-day and 30-day reports, corrections, and CSV export
 - Crash-resumable profile deletion, local notifications, sensitive-action authentication, and device-local voice setup
-- Optional local-first CloudKit synchronization and family invitations
+- CloudKit transport and family invitations; persisted guardian opt-in and remote erasure remain open
 - Light-mode V1 visual system, compact landscape layouts, 44-point targets, VoiceOver announcements, Reduce Motion, and left-handed writing controls

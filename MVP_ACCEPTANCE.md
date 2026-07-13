@@ -70,7 +70,7 @@ make check
 | 7 日与 30 日报告 | 代码已完成 | 检查趋势、单词详情、识别纠正和 CSV 导出 |
 | Crash-resumable Profile 删除 | 代码已完成 | 删除本地资料、单词、历史、奖励、提醒和本机声纹 |
 | 本地通知与安静时段 | 代码已完成 | 每日、Pool low、完成、同步失败、周报与时间设置 |
-| CloudKit 同步与家庭邀请 | 代码已完成，需要 Apple 环境验收 | 需要 Developer Team、iCloud container 与两个 Apple 账号 |
+| CloudKit 同步与家庭邀请 | 传输代码已完成；持久 opt-in gate 与远端删除未完成 | 实现后再用 Developer Team、iCloud container 与两个 Apple 账号验收 |
 | 1 分钟声纹注册与 Read 匹配 | Device Alpha 代码已完成，需要儿童样本校准 | 声纹只存本机 Keychain，原始录音不保存或同步 |
 | Apple Pencil 与掌触过滤 | 代码已完成，需要真机验收 | iPhone 用手指，iPad 分别测试手指与 Pencil |
 | VoiceOver、Reduce Motion、动态字体 | 代码已完成，需要真机验收 | 完整走查反馈播报、焦点、横屏紧凑高度 |
@@ -177,13 +177,15 @@ make check
 
 这部分必须使用已配置 `iCloud.com.tadawords.app` 的 Apple Developer Team。准备两个登录不同 Apple ID 的设备。
 
+当前签名真机代码会在 onboarding 完成、启动和生命周期同步点调用 CloudKit，没有独立且持久化的家长 opt-in。Profile 删除会传播 tombstone，但不会删除已经上传的 CloudKit records。完成这两个隐私 blocker 前，只能用测试数据执行本节，不能把 Family Sync 作为可发布功能。
+
 1. 在设备 A 创建 Profile、单词、设置与学习记录
 2. 在 **Family sync** 点 **Sync now**
 3. 创建家庭邀请，并通过系统 Share Sheet 发给设备 B
 4. 在设备 B 接受邀请并同步
 5. 确认 Profile、Pool、设置、attempt、correction、进度、日计划、完成和奖励一致
 6. 两台设备离线修改不同记录，再联网同步
-7. 删除一个 Profile，确认 tombstone 防止另一台设备把它恢复
+7. 删除一个 Profile，确认 tombstone 防止另一台设备把它恢复，并确认 CloudKit 中该 Profile 的既有 records 已被擦除
 8. 断网完成 Quest，确认本地学习不受同步失败影响
 
 通过标准：Quest 提交不等待 CloudKit。同步失败显示状态并保留本地数据。声纹模板不进入 CloudKit；每台设备单独注册声纹。
@@ -207,7 +209,7 @@ make check
 3. 完成建档、加词、设置和 Quest 后强制退出
 4. 重新打开，确认所有数据与上次 Profile 恢复
 
-`Contents.json` 只描述 Xcode 资产。运行数据位于 App 沙盒的 Application Support 目录。App 没有自建服务器数据库；CloudKit 只在启用 Family Sync 后复制支持的记录。
+`Contents.json` 只描述 Xcode 资产。运行数据位于 App 沙盒的 Application Support 目录。App 没有自建服务器数据库。当前签名真机 V1 在 iCloud 可用时会自动同步；发布前必须加入默认关闭的持久化 Family Sync consent gate。
 
 ## 完成真机发布验收
 
@@ -220,6 +222,7 @@ make check
 - VoiceOver、Reduce Motion 与动态字体
 - 每个 World 的女声、音乐、ducking、响度和疲劳感
 - 两个 Apple ID 的 CloudKit 邀请、冲突、离线恢复和删除传播
+- Family Sync 默认关闭、家长 opt-in 持久化、关闭同步与远端 records 擦除
 - 本地通知授权、安静时段与实际投递
 
 只有这些设备项目通过后，才能把 Device Alpha 和家庭同步标记为已验收。

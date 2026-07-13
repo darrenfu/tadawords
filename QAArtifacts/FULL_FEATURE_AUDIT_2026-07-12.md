@@ -1,12 +1,12 @@
 # Tada Words full feature audit follow-up
 
-This follow-up replaces the stale gap list from the initial 2026-07-12 audit. Confirmed V1 behaviors now have production paths. The remaining blockers require Apple service configuration, physical devices, representative child samples, or human listening.
+This follow-up replaces the stale gap list from the initial 2026-07-12 audit. Confirmed learning behaviors have production paths. CloudKit still needs a persisted guardian consent gate and remote record erasure. Other blockers require Apple service configuration, physical devices, representative child samples, or human listening.
 
 ## Verdict
 
-Tada Words is a local-first V1 candidate for iPhone and iPad. It implements separate Read and Write quests, adaptive review, Profiles, Worlds, rewards, reports, notifications, device-local voice setup, and optional CloudKit family sync.
+Tada Words is a local-first V1 candidate for iPhone and iPad. It implements separate Read and Write quests, adaptive review, Profiles, Worlds, rewards, reports, notifications, device-local voice setup, and a CloudKit sync transport.
 
-Do not label the release Device Alpha accepted yet. CloudKit, voiceprint accuracy, handwriting, Pencil, VoiceOver, landscape rotation, Camera, notifications, and audio quality still need physical-device evidence.
+Do not label the release Device Alpha accepted yet. CloudKit consent and remote erasure need implementation. CloudKit runtime behavior, voiceprint accuracy, handwriting, Pencil, VoiceOver, landscape rotation, Camera, notifications, and audio quality still need physical-device evidence.
 
 ## Evidence states
 
@@ -128,12 +128,12 @@ The voiceprint route treats mismatch as a technical retry. It does not prove tha
 | Requirement | Status | Current implementation |
 |---|---|---|
 | Offline local persistence | Code complete | Atomic JSON snapshots under Application Support |
-| CloudKit multi-device sync | Code complete; external setup required | Private and shared databases, profile zones, conflict resolution, retry status, and local-first coordinator; Simulator intentionally uses local-only transport, while real CloudKit requires a signed physical device and iCloud |
+| CloudKit multi-device sync | Transport code complete; consent gap and external setup remain | Private and shared databases, profile zones, conflict resolution, retry status, and local-first coordinator; signed-device V1 auto-starts sync without a separate persisted opt-in |
 | Family invitation across Apple IDs | Code complete; external setup required | CKShare URL creation, ShareLink, paste-to-accept flow, and shared database reads |
-| Profile deletion propagation | Code complete; external setup required | Syncable profile tombstone prevents remote resurrection |
+| Profile deletion propagation | Partial; privacy release blocker | A syncable tombstone prevents resurrection, but the transport does not erase existing CloudKit records |
 | Local notifications | Code complete; device acceptance open | Daily, Pool low, completion, sync failure, weekly summary, editable times, and quiet hours |
 | No raw child recordings persisted or uploaded | Code complete; dynamic audit open | Speech and enrollment buffers stay in memory; voiceprint template stays in this-device-only Keychain |
-| No app-owned server database | Code complete | Core data stays local; optional CloudKit copies authorized records |
+| No app-owned server database | Code complete | Core data stays local; a configured signed build can copy records to CloudKit, and the missing guardian opt-in gate blocks family deployment |
 
 ### Accessibility and presentation
 
