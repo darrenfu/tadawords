@@ -148,13 +148,13 @@ public enum LearningNotificationPrivacyCopy {
         case .dailyReminder:
             "Open the app when your family is ready to practice."
         case .poolLow:
-            "Open the grown-ups area to add upcoming school words."
+            "Open Parents to add upcoming school words."
         case .questCompletion:
             "Open the app to see today's progress."
         case .syncFailure:
-            "Open the grown-ups area to review sync status."
+            "Open Parents to review sync status."
         case .weeklySummary:
-            "Open the grown-ups area to review learning patterns."
+            "Open Parents to review learning patterns."
         }
     }
 }

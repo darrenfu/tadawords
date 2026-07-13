@@ -7,6 +7,33 @@ import XCTest
 
 @MainActor
 final class AudioExperienceIntegrationTests: XCTestCase {
+    func testRememberedProfileDoesNotActivateAmbientAudioBeforeChildTaps() async {
+        let profile = KidProfile(
+            displayName: "Mia",
+            avatar: .cartoonAnimal(assetID: "hare"),
+            selectedWorld: .pawsAndPines,
+            createdAt: Date(timeIntervalSince1970: 1_735_689_600)
+        )
+        let audio = AudioExperienceSpy()
+        let model = TadaWordsAppModel(
+            profiles: [profile],
+            audioExperienceService: audio,
+            initialProfileID: profile.id
+        )
+
+        for _ in 0..<20 { await Task.yield() }
+
+        let activationBeforeTap = await audio.latestActivation()
+        XCTAssertNil(model.selectedProfile)
+        XCTAssertEqual(model.lastPlayedProfileID, profile.id)
+        XCTAssertNil(activationBeforeTap)
+
+        model.selectProfile(profile)
+        await waitForAudioActivation(audio)
+        let activationAfterTap = await audio.latestActivation()
+        XCTAssertEqual(activationAfterTap?.world, .pawsAndPines)
+    }
+
     func testSelectingProfileAppliesItsPersistedWorldAndAudioPreferences() async throws {
         let profile = KidProfile(
             displayName: "Mia",

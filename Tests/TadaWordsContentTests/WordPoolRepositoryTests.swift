@@ -3,6 +3,88 @@ import TadaWordsDomain
 import XCTest
 
 final class WordPoolRepositoryTests: XCTestCase {
+    func testNewestQueuedWordsAppearFirstAndBatchOrderStaysStable() async throws {
+        let repository = InMemoryWordPoolRepository()
+        let importer = ManualWordPoolImporter(repository: repository)
+        _ = try await importer.importBatch(
+            "old",
+            profileID: ContentTestFixture.profileID,
+            learningMode: .read,
+            addedAt: ContentTestFixture.day.addingTimeInterval(-60)
+        )
+        _ = try await importer.importBatch(
+            "zebra apple",
+            profileID: ContentTestFixture.profileID,
+            learningMode: .read,
+            addedAt: ContentTestFixture.day
+        )
+
+        let entries = try await repository.entries(
+            for: ContentTestFixture.profileID,
+            learningMode: .read,
+            includingInactive: false
+        )
+
+        XCTAssertEqual(entries.map(\.normalizedText), ["zebra", "apple", "old"])
+    }
+
+    func testBatchActivationValidatesEveryIDBeforeMutating() async throws {
+        let repository = InMemoryWordPoolRepository()
+        let result = try await ManualWordPoolImporter(repository: repository).importBatch(
+            "cat dog",
+            profileID: ContentTestFixture.profileID,
+            learningMode: .read,
+            addedAt: ContentTestFixture.day
+        )
+        let cat = try XCTUnwrap(result.inserted.first)
+
+        do {
+            _ = try await repository.setActive(
+                false,
+                entryIDs: [cat.id, ContentTestFixture.entryID(999)]
+            )
+            XCTFail("Expected a missing-entry failure")
+        } catch {
+            XCTAssertEqual(
+                error as? WordPoolRepositoryError,
+                .entryNotFound(ContentTestFixture.entryID(999))
+            )
+        }
+
+        let active = try await repository.entries(
+            for: ContentTestFixture.profileID,
+            learningMode: .read,
+            includingInactive: false
+        )
+        XCTAssertEqual(active.count, 2)
+    }
+
+    func testLegacyRecommendedEntriesNeverEnterTheActiveParentPool() async throws {
+        let repository = InMemoryWordPoolRepository()
+        let recommendation = WordPoolEntryDraft(
+            profileID: ContentTestFixture.profileID,
+            prompt: try WordPrompt(learningMode: .read, text: "legacy"),
+            addedAt: ContentTestFixture.day,
+            source: .gradeRecommendation,
+            positionInBatch: 0
+        )
+        _ = try await repository.upsert([recommendation])
+
+        let active = try await repository.entries(
+            for: ContentTestFixture.profileID,
+            learningMode: .read,
+            includingInactive: false
+        )
+        let history = try await repository.entries(
+            for: ContentTestFixture.profileID,
+            learningMode: .read,
+            includingInactive: true
+        )
+
+        XCTAssertTrue(active.isEmpty)
+        XCTAssertEqual(history.map(\.normalizedText), ["legacy"])
+    }
+
     func testReenteringWordPreservesStableIdentityAndReactivatesIt() async throws {
         let repository = InMemoryWordPoolRepository()
         let importer = ManualWordPoolImporter(repository: repository)

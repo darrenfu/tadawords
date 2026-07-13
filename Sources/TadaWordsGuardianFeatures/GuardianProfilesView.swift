@@ -537,6 +537,16 @@ extension WorldTheme {
             "truck.box.fill"
         case .pawsAndPines:
             "pawprint.fill"
+        case .dinoDiscovery:
+            "lizard.fill"
+        case .firehouseHeroes:
+            "firetruck.fill"
+        case .brickworkCity:
+            "square.grid.3x3.fill"
+        case .frostlightWorld:
+            "snowflake"
+        case .coasterCarnival:
+            "ticket.fill"
         }
     }
 }

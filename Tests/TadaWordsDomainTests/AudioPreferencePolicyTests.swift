@@ -16,6 +16,12 @@ final class AudioPreferencePolicyTests: XCTestCase {
         )
         XCTAssertFalse(AudioPreferencePolicy.shouldPlay(.reward, preferences: preferences))
         XCTAssertFalse(
+            AudioPreferencePolicy.shouldPlay(
+                .writing(tool: .pencil),
+                preferences: preferences
+            )
+        )
+        XCTAssertFalse(
             AudioPreferencePolicy.allowsDecorativeSoundEffects(preferences: preferences)
         )
     }
@@ -29,6 +35,7 @@ final class AudioPreferencePolicyTests: XCTestCase {
             .technicalRetry,
             .star(index: 2),
             .reward,
+            .writing(tool: .brush),
         ]
 
         XCTAssertTrue(
@@ -50,6 +57,12 @@ final class AudioPreferencePolicyTests: XCTestCase {
         XCTAssertFalse(AudioPreferencePolicy.shouldPlay(.correct, preferences: preferences))
         XCTAssertFalse(
             AudioPreferencePolicy.shouldPlay(.technicalRetry, preferences: preferences)
+        )
+        XCTAssertFalse(
+            AudioPreferencePolicy.shouldPlay(
+                .writing(tool: .chalk),
+                preferences: preferences
+            )
         )
     }
 

@@ -187,6 +187,11 @@ private actor NotificationSyncCoordinator: FamilySyncCoordinating {
         self.currentStatus = currentStatus
     }
 
+    func isEnabled() async -> Bool { true }
+    func setEnabled(_ isEnabled: Bool) async throws -> FamilySyncStatus {
+        _ = isEnabled
+        return currentStatus
+    }
     func synchronize() async -> FamilySyncStatus { currentStatus }
     func status() async -> FamilySyncStatus { currentStatus }
 

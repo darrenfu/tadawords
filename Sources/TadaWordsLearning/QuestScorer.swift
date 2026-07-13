@@ -6,12 +6,16 @@ public struct QuestScoringPolicy: Equatable, Sendable {
     public let accuracyPointMaximum: Int
     public let pacePointMaximum: Int
     public let requiredPaceBaselineSampleCount: Int
+    public let slowerPaceGraceRatio: Double
+    public let maximumUnaidedRecoveryCount: Int
 
     public init(
         accuracyStarThreshold: Double = 0.8,
         accuracyPointMaximum: Int = 80,
         pacePointMaximum: Int = 20,
-        requiredPaceBaselineSampleCount: Int = 3
+        requiredPaceBaselineSampleCount: Int = 3,
+        slowerPaceGraceRatio: Double = 0.25,
+        maximumUnaidedRecoveryCount: Int = 1
     ) {
         self.accuracyStarThreshold =
             accuracyStarThreshold
@@ -22,6 +26,17 @@ public struct QuestScoringPolicy: Equatable, Sendable {
         self.requiredPaceBaselineSampleCount = max(
             3,
             requiredPaceBaselineSampleCount
+        )
+        self.slowerPaceGraceRatio = min(
+            1,
+            max(
+                0,
+                slowerPaceGraceRatio.isFinite ? slowerPaceGraceRatio : 0.25
+            )
+        )
+        self.maximumUnaidedRecoveryCount = max(
+            0,
+            maximumUnaidedRecoveryCount
         )
     }
 
@@ -53,8 +68,8 @@ public struct QuestScoringInput: Sendable {
     }
 }
 
-/// Computes guardian-visible accuracy and child-visible stars from the same
-/// narrow evidence boundary used by the memory scheduler.
+/// Keeps guardian-visible accuracy on the memory scheduler's strict first-try
+/// boundary while applying a small, explicit recovery grace to child rewards.
 public struct QuestScorer: Sendable {
     public let policy: QuestScoringPolicy
 
@@ -63,29 +78,48 @@ public struct QuestScorer: Sendable {
     }
 
     public func score(_ input: QuestScoringInput) -> QuestScore {
-        let firstIndependentAttempts = eligibleFirstIndependentAttempts(input)
+        let questAttempts = effectiveQuestAttempts(input)
+        let firstIndependentAttempts = eligibleFirstIndependentAttempts(
+            from: questAttempts
+        )
         let correctCount = firstIndependentAttempts.count { $0.outcome.isCorrect }
         let attemptCount = firstIndependentAttempts.count
         let accuracy =
             attemptCount > 0
             ? Double(correctCount) / Double(attemptCount)
             : 0
-        let meetsAccuracyThreshold =
+        let meetsFirstTryAccuracyThreshold =
             attemptCount > 0
             && accuracy >= policy.accuracyStarThreshold
+        let receivesUnaidedRecoveryGrace =
+            !meetsFirstTryAccuracyThreshold
+            && qualifiesForUnaidedRecoveryGrace(
+                firstIndependentAttempts: firstIndependentAttempts,
+                questAttempts: questAttempts
+            )
+        let rewardAccuracy =
+            receivesUnaidedRecoveryGrace
+            ? max(accuracy, policy.accuracyStarThreshold)
+            : accuracy
+        let meetsAccuracyStarRule =
+            meetsFirstTryAccuracyThreshold || receivesUnaidedRecoveryGrace
+        let paceEligibleAttempts = paceEligibleCorrectAttempts(
+            firstIndependentAttempts: firstIndependentAttempts,
+            questAttempts: questAttempts
+        )
 
         let paceAssessment = assessPace(
-            for: firstIndependentAttempts,
+            for: paceEligibleAttempts,
             input: input,
-            meetsAccuracyThreshold: meetsAccuracyThreshold
+            meetsAccuracyStarRule: meetsAccuracyStarRule
         )
         let stars = stars(
             for: input,
-            meetsAccuracyThreshold: meetsAccuracyThreshold,
+            meetsAccuracyStarRule: meetsAccuracyStarRule,
             paceAssessment: paceAssessment
         )
         let points = points(
-            accuracy: accuracy,
+            accuracy: rewardAccuracy,
             paceAssessment: paceAssessment
         )
 
@@ -98,7 +132,7 @@ public struct QuestScorer: Sendable {
         )
     }
 
-    private func eligibleFirstIndependentAttempts(
+    private func effectiveQuestAttempts(
         _ input: QuestScoringInput
     ) -> [EffectiveAttempt] {
         let plannedWordIDs = Set(
@@ -110,15 +144,19 @@ public struct QuestScorer: Sendable {
                 && attempt.learningMode == input.plan.configuration.learningMode
                 && plannedWordIDs.contains(attempt.wordPromptID)
         }
-        let effectiveAttempts = EffectiveAttemptResolver().resolve(
+        return EffectiveAttemptResolver().resolve(
             questAttempts,
             corrections: input.corrections
         )
+        .sorted(by: effectiveAttemptSort)
+    }
 
+    private func eligibleFirstIndependentAttempts(
+        from effectiveAttempts: [EffectiveAttempt]
+    ) -> [EffectiveAttempt] {
         var seenWordIDs = Set<WordPromptID>()
         return
             effectiveAttempts
-            .sorted(by: effectiveAttemptSort)
             .filter { attempt in
                 guard attempt.original.evidence.countsTowardAccuracy,
                     attempt.outcome.isScorableResponse
@@ -129,12 +167,90 @@ public struct QuestScorer: Sendable {
             }
     }
 
+    /// A single first-try miss can still meet the child-facing accuracy rule
+    /// when the very next valid, unaided retry is correct. Help, answer
+    /// exposure, a second failed retry, or multiple missed words do not receive
+    /// this grace. Guardian-facing first-try accuracy remains unchanged.
+    private func qualifiesForUnaidedRecoveryGrace(
+        firstIndependentAttempts: [EffectiveAttempt],
+        questAttempts: [EffectiveAttempt]
+    ) -> Bool {
+        guard policy.maximumUnaidedRecoveryCount > 0 else { return false }
+
+        let missedFirstAttempts = firstIndependentAttempts.filter {
+            !$0.outcome.isCorrect
+        }
+        guard !missedFirstAttempts.isEmpty,
+            missedFirstAttempts.count <= policy.maximumUnaidedRecoveryCount
+        else {
+            return false
+        }
+
+        return missedFirstAttempts.allSatisfy { missedAttempt in
+            firstUnaidedRetry(
+                after: missedAttempt,
+                in: questAttempts
+            )?.outcome.isCorrect == true
+        }
+    }
+
+    private func paceEligibleCorrectAttempts(
+        firstIndependentAttempts: [EffectiveAttempt],
+        questAttempts: [EffectiveAttempt]
+    ) -> [EffectiveAttempt] {
+        firstIndependentAttempts.compactMap { firstAttempt in
+            if firstAttempt.outcome.isCorrect {
+                return firstAttempt
+            }
+            guard
+                let retry = firstUnaidedRetry(
+                    after: firstAttempt,
+                    in: questAttempts
+                ),
+                retry.outcome.isCorrect
+            else {
+                return nil
+            }
+            return retry
+        }
+    }
+
+    /// Returns only the first valid independent retry. Technical and uncertain
+    /// records are neutral; any answer exposure closes the recovery path.
+    private func firstUnaidedRetry(
+        after firstAttempt: EffectiveAttempt,
+        in questAttempts: [EffectiveAttempt]
+    ) -> EffectiveAttempt? {
+        guard let firstIndex = questAttempts.firstIndex(of: firstAttempt) else {
+            return nil
+        }
+
+        for candidate in questAttempts.dropFirst(firstIndex + 1) {
+            guard
+                candidate.original.wordPromptID
+                    == firstAttempt.original.wordPromptID
+            else {
+                continue
+            }
+            if candidate.original.evidence.hasAnswerExposure {
+                return nil
+            }
+            guard candidate.original.evidence == .unaidedRetry,
+                candidate.outcome.isScorableResponse
+            else {
+                continue
+            }
+            return candidate
+        }
+        return nil
+    }
+
     private func assessPace(
         for attempts: [EffectiveAttempt],
         input: QuestScoringInput,
-        meetsAccuracyThreshold: Bool
+        meetsAccuracyStarRule: Bool
     ) -> PersonalPaceAssessment {
-        guard meetsAccuracyThreshold else { return .unavailable }
+        guard meetsAccuracyStarRule else { return .unavailable }
 
         let correctAttempts = attempts.filter { $0.outcome.isCorrect }
         guard !correctAttempts.isEmpty else { return .unavailable }
@@ -158,7 +274,8 @@ public struct QuestScorer: Sendable {
         }
 
         return PersonalPaceEvaluator(
-            requiredBaselineSampleCount: policy.requiredPaceBaselineSampleCount
+            requiredBaselineSampleCount: policy.requiredPaceBaselineSampleCount,
+            slowerPaceGraceRatio: policy.slowerPaceGraceRatio
         ).assess(
             measurements: measurements,
             personalBands: input.personalPaceBands
@@ -167,7 +284,7 @@ public struct QuestScorer: Sendable {
 
     private func stars(
         for input: QuestScoringInput,
-        meetsAccuracyThreshold: Bool,
+        meetsAccuracyStarRule: Bool,
         paceAssessment: PersonalPaceAssessment
     ) -> QuestStars {
         var earned = Set<QuestStar>()
@@ -180,15 +297,28 @@ public struct QuestScorer: Sendable {
         {
             earned.insert(.completion)
         }
-        if meetsAccuracyThreshold {
+        if meetsAccuracyStarRule {
             earned.insert(.accuracy)
         }
-        if meetsAccuracyThreshold,
-            paceAssessment == .withinPersonalBand
+        if meetsAccuracyStarRule,
+            earnsPaceStar(paceAssessment)
         {
             earned.insert(.personalPace)
         }
         return QuestStars(earned: earned)
+    }
+
+    private func earnsPaceStar(
+        _ assessment: PersonalPaceAssessment
+    ) -> Bool {
+        switch assessment {
+        case .withinPersonalBand, .calibrating:
+            // Calibration is neutral and requires valid timing. It should not
+            // make the baseline-building quests feel like an automatic failure.
+            true
+        case .unavailable, .outsidePersonalBand:
+            false
+        }
     }
 
     private func points(

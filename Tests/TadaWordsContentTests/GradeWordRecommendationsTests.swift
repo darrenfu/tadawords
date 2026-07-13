@@ -4,7 +4,7 @@ import TadaWordsDomain
 import XCTest
 
 final class GradeWordRecommendationsTests: XCTestCase {
-    func testFallbackFillsOnlyShortageAndDeduplicatesManualWords() async throws {
+    func testLegacyAutomaticSettingCannotWriteRecommendedWords() async throws {
         let profile = KidProfile(
             displayName: "Kid",
             avatar: .cartoonAnimal(assetID: "hare"),
@@ -35,7 +35,8 @@ final class GradeWordRecommendationsTests: XCTestCase {
                 reviewWordLimit: 0,
                 contentOrder: .newThenReview,
                 emergencyAfterSeconds: 180
-            )
+            ),
+            wordRecommendationMode: .gradeAutomatic
         )
 
         try await recommender.refillIfNeeded(
@@ -49,9 +50,10 @@ final class GradeWordRecommendationsTests: XCTestCase {
             includingInactive: true
         )
 
-        XCTAssertEqual(entries.count, 3)
+        XCTAssertEqual(settings.wordRecommendationMode, .manualOnly)
+        XCTAssertEqual(entries.count, 1)
         XCTAssertEqual(entries.filter { $0.normalizedText == "all" }.count, 1)
-        XCTAssertEqual(entries.filter { $0.source == .gradeRecommendation }.count, 2)
+        XCTAssertTrue(entries.allSatisfy { $0.source == .guardianManual })
     }
 
     func testManualOnlyNeverInventsWords() async throws {

@@ -6,25 +6,29 @@ import TadaWordsDomain
 
 @main
 struct TadaWordsApp: App {
+    @UIApplicationDelegateAdaptor(TadaWordsAppDelegate.self)
+    private var appDelegate
+
     private let audioExperienceService: AppleAudioExperienceService
     private let audioPromptService: SystemAudioPromptService
     private let voiceprintRepository: KeychainDeviceVoiceprintRepository
     private let speechRecognitionService: AppleSpeechRecognitionService
     private let voiceprintEnrollmentService: AppleVoiceprintEnrollmentService
-    private let familySyncTransport: any FamilySyncTransport
+    private let familySyncTransport: (any FamilySyncTransport)?
     private let notificationScheduler = AppleLearningNotificationScheduler()
     private let sensitiveActionAuthorizer = AppleSensitiveGuardianActionAuthorizer()
     private let handwritingRecognitionService = AppleHandwritingRecognitionService()
+    private let imageTextRecognitionService = AppleImageTextRecognitionService()
     private let speechPermissionController = AppleSpeechPermissionController()
 
     init() {
         let experience = AppleAudioExperienceService()
         let voiceprints = KeychainDeviceVoiceprintRepository()
-        #if targetEnvironment(simulator)
+        #if targetEnvironment(simulator) || LOCAL_DEVICE_QA
             // CKContainer traps when an intentionally unsigned simulator build
-            // has no iCloud entitlement. Simulator QA remains local-first;
-            // signed physical-device builds use the real CloudKit transport.
-            familySyncTransport = SimulatorLocalOnlyFamilySyncTransport()
+            // has no iCloud entitlement. Simulator and Local Device QA builds
+            // use the AppShell's explicit device-only composition instead.
+            familySyncTransport = nil
         #else
             familySyncTransport = CloudKitFamilySyncTransport()
         #endif
@@ -49,6 +53,8 @@ struct TadaWordsApp: App {
                 TadaWordsApplicationView(
                     audioPromptService: audioPromptService,
                     audioExperienceService: audioExperienceService,
+                    interfaceOrientationController:
+                        appDelegate.interfaceOrientationController,
                     demoMode: true
                 )
             } else {
@@ -58,13 +64,16 @@ struct TadaWordsApp: App {
                     audioPromptService: audioPromptService,
                     speechRecognitionService: speechRecognitionService,
                     handwritingRecognitionService: handwritingRecognitionService,
+                    imageTextRecognitionService: imageTextRecognitionService,
                     requestSpeechAuthorization: requestSpeechAuthorization,
                     audioExperienceService: audioExperienceService,
                     familySyncTransport: familySyncTransport,
                     notificationScheduler: notificationScheduler,
                     voiceprintEnrollmentService: voiceprintEnrollmentService,
                     voiceprintRepository: voiceprintRepository,
-                    sensitiveActionAuthorizer: sensitiveActionAuthorizer
+                    sensitiveActionAuthorizer: sensitiveActionAuthorizer,
+                    interfaceOrientationController:
+                        appDelegate.interfaceOrientationController
                 )
             }
         }
@@ -112,41 +121,4 @@ struct TadaWordsApp: App {
             await controller.requestPermissions().isAuthorized
         }
     }
-}
-
-private actor SimulatorLocalOnlyFamilySyncTransport: FamilySyncTransport {
-    func availability() async -> FamilySyncAvailability { .noAccount }
-
-    func prepareProfileZone(_ profileID: ProfileID) async throws {
-        _ = profileID
-    }
-
-    func fetchRecords(
-        for profileID: ProfileID
-    ) async throws -> [FamilySyncRecord] {
-        _ = profileID
-        return []
-    }
-
-    func push(
-        _ records: [FamilySyncRecord],
-        for profileID: ProfileID
-    ) async throws {
-        _ = records
-        _ = profileID
-    }
-
-    func createShare(for profileID: ProfileID) async throws -> URL {
-        _ = profileID
-        throw SimulatorFamilySyncError.unavailable
-    }
-
-    func acceptShare(at url: URL) async throws -> ProfileID {
-        _ = url
-        throw SimulatorFamilySyncError.unavailable
-    }
-}
-
-private enum SimulatorFamilySyncError: Error {
-    case unavailable
 }

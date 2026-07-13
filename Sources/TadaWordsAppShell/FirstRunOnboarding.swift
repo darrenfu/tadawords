@@ -2,6 +2,11 @@ import Foundation
 import TadaWordsDomain
 import TadaWordsGuardianFeatures
 
+enum FirstRunOnboardingPurpose: String, Codable, Equatable, Sendable {
+    case fullSetup
+    case consentRefresh
+}
+
 struct FirstRunOnboardingState: Codable, Equatable, Sendable {
     enum Status: String, Codable, Sendable {
         case pending
@@ -15,8 +20,12 @@ struct FirstRunOnboardingState: Codable, Equatable, Sendable {
     let profileID: ProfileID?
     let consentVersion: Int?
     let consentedAt: Date?
+    let purpose: FirstRunOnboardingPurpose?
 
-    static func pending(startedAt: Date) -> FirstRunOnboardingState {
+    static func pending(
+        startedAt: Date,
+        purpose: FirstRunOnboardingPurpose
+    ) -> FirstRunOnboardingState {
         FirstRunOnboardingState(
             schemaVersion: 1,
             status: .pending,
@@ -24,7 +33,8 @@ struct FirstRunOnboardingState: Codable, Equatable, Sendable {
             completedAt: nil,
             profileID: nil,
             consentVersion: nil,
-            consentedAt: nil
+            consentedAt: nil,
+            purpose: purpose
         )
     }
 
@@ -40,7 +50,8 @@ struct FirstRunOnboardingState: Codable, Equatable, Sendable {
             completedAt: completedAt,
             profileID: profileID,
             consentVersion: consentVersion,
-            consentedAt: consentVersion == nil ? nil : completedAt
+            consentedAt: consentVersion == nil ? nil : completedAt,
+            purpose: purpose
         )
     }
 }
@@ -62,9 +73,22 @@ actor LocalFirstRunOnboardingRepository {
         )
     }
 
-    func markPending(startedAt: Date) throws {
-        if try state() != nil { return }
-        try persist(.pending(startedAt: startedAt))
+    func markPending(
+        startedAt: Date,
+        purpose: FirstRunOnboardingPurpose
+    ) throws {
+        let current = try state()
+        if current?.status == .pending, current?.purpose == purpose { return }
+        let resolvedPurpose =
+            current?.status == .pending
+            ? current?.purpose ?? purpose
+            : purpose
+        try persist(
+            .pending(
+                startedAt: current?.startedAt ?? startedAt,
+                purpose: resolvedPurpose
+            )
+        )
     }
 
     func markCompleted(
@@ -72,7 +96,9 @@ actor LocalFirstRunOnboardingRepository {
         completedAt: Date,
         consentVersion: Int? = nil
     ) throws {
-        let current = try state() ?? .pending(startedAt: completedAt)
+        let current =
+            try state()
+            ?? .pending(startedAt: completedAt, purpose: .fullSetup)
         try persist(
             current.completed(
                 profileID: profileID,
@@ -103,26 +129,52 @@ enum FirstRunOnboardingError: Error, Equatable {
 
 struct FirstRunOnboardingCompletion: Sendable {
     let profiles: [KidProfile]
-    let selectedProfileID: ProfileID
+    /// A valid remembered child opens directly. `nil` intentionally routes
+    /// families without a remembered choice to the profile chooser.
+    let selectedProfileID: ProfileID?
+}
+
+enum FirstRunOnboardingProfileSelection {
+    static func profile(
+        in profiles: [KidProfile],
+        purpose: FirstRunOnboardingPurpose,
+        lastSelectedProfileID: ProfileID?
+    ) -> KidProfile? {
+        if purpose == .consentRefresh,
+            let lastSelectedProfileID,
+            let selected = profiles.first(where: { $0.id == lastSelectedProfileID })
+        {
+            return selected
+        }
+        return profiles.first
+    }
+
+    static func validLastSelectedProfileID(
+        in profiles: [KidProfile],
+        lastSelectedProfileID: ProfileID?
+    ) -> ProfileID? {
+        lastSelectedProfileID.flatMap { candidate in
+            profiles.contains(where: { $0.id == candidate }) ? candidate : nil
+        }
+    }
 }
 
 struct FirstRunOnboardingSubmission: Sendable {
+    enum Action: Sendable {
+        case createProfile(GuardianProfileDraft)
+        case confirmExistingProfiles
+    }
+
     static let currentConsentVersion = 1
 
-    let profileDraft: GuardianProfileDraft
-    let readWords: String
-    let writeWords: String
+    let action: Action
     let consentVersion: Int
 
     init(
-        profileDraft: GuardianProfileDraft,
-        readWords: String,
-        writeWords: String,
+        action: Action,
         consentVersion: Int = Self.currentConsentVersion
     ) {
-        self.profileDraft = profileDraft
-        self.readWords = readWords
-        self.writeWords = writeWords
+        self.action = action
         self.consentVersion = consentVersion
     }
 }
@@ -160,10 +212,44 @@ actor FirstRunOnboardingCoordinator {
         else {
             throw FirstRunOnboardingError.consentRequired
         }
-        let draft = submission.profileDraft
         guard let existing = try await profileRepository.profile(id: profileID) else {
             throw FirstRunOnboardingError.profileNotFound
         }
+        switch submission.action {
+        case .confirmExistingProfiles:
+            let profiles = try await profileRepository.profiles()
+            let lastSelectedProfileID =
+                try await childSessionRepository
+                .lastSelectedProfileID()
+            let selectedProfileID =
+                FirstRunOnboardingProfileSelection
+                .validLastSelectedProfileID(
+                    in: profiles,
+                    lastSelectedProfileID: lastSelectedProfileID
+                )
+            try await onboardingRepository.markCompleted(
+                profileID: selectedProfileID ?? existing.id,
+                completedAt: clock.now,
+                consentVersion: submission.consentVersion
+            )
+            return FirstRunOnboardingCompletion(
+                profiles: profiles,
+                selectedProfileID: selectedProfileID
+            )
+        case .createProfile(let draft):
+            return try await createProfile(
+                from: draft,
+                replacing: existing,
+                consentVersion: submission.consentVersion
+            )
+        }
+    }
+
+    private func createProfile(
+        from draft: GuardianProfileDraft,
+        replacing existing: KidProfile,
+        consentVersion: Int
+    ) async throws -> FirstRunOnboardingCompletion {
         let displayName = draft.displayName.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
@@ -203,37 +289,14 @@ actor FirstRunOnboardingCoordinator {
         try await profileRepository.save(profile)
         try await childSessionRepository.saveLastSelectedProfileID(profile.id)
         _ = try await guardianStore.selectProfile(id: profile.id)
-        try await importWordsIfPresent(
-            submission.readWords,
-            learningMode: .read
-        )
-        try await importWordsIfPresent(
-            submission.writeWords,
-            learningMode: .write
-        )
         try await onboardingRepository.markCompleted(
             profileID: profile.id,
             completedAt: clock.now,
-            consentVersion: submission.consentVersion
+            consentVersion: consentVersion
         )
         return FirstRunOnboardingCompletion(
             profiles: try await profileRepository.profiles(),
             selectedProfileID: profile.id
-        )
-    }
-
-    private func importWordsIfPresent(
-        _ rawText: String,
-        learningMode: LearningMode
-    ) async throws {
-        guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return
-        }
-        _ = try await guardianStore.importWords(
-            GuardianWordImportRequest(
-                rawText: rawText,
-                learningMode: learningMode
-            )
         )
     }
 }

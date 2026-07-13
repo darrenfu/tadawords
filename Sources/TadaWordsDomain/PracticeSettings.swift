@@ -155,7 +155,7 @@ public struct ProfilePracticeSettings: Codable, Hashable, Sendable {
         notifications: LearningNotificationPreferences = .disabled,
         interface: PracticeInterfacePreferences = .default,
         wordRecommendationMode: WordRecommendationMode =
-            .parentFirstAutomaticFallback
+            .manualOnly
     ) {
         self.profileID = profileID
         self.read = read
@@ -163,7 +163,10 @@ public struct ProfilePracticeSettings: Codable, Hashable, Sendable {
         self.audio = audio
         self.notifications = notifications
         self.interface = interface
-        self.wordRecommendationMode = wordRecommendationMode
+        // Legacy automatic modes remain decodable for existing snapshots, but
+        // V1 content is always sourced from a grown-up.
+        _ = wordRecommendationMode
+        self.wordRecommendationMode = .manualOnly
     }
 
     public static func defaults(
@@ -219,10 +222,7 @@ public struct ProfilePracticeSettings: Codable, Hashable, Sendable {
                 PracticeInterfacePreferences.self,
                 forKey: .interface
             ) ?? .default,
-            wordRecommendationMode: try container.decodeIfPresent(
-                WordRecommendationMode.self,
-                forKey: .wordRecommendationMode
-            ) ?? .parentFirstAutomaticFallback
+            wordRecommendationMode: .manualOnly
         )
     }
 }

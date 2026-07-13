@@ -43,8 +43,14 @@ public struct FamilySyncRecord: Codable, Hashable, Sendable {
     }
 }
 
+public enum FamilySyncCapability: Equatable, Sendable {
+    case deviceOnly
+    case iCloud
+}
+
 public enum FamilySyncAvailability: Equatable, Sendable {
     case available
+    case deviceOnly
     case noAccount
     case restricted
     case temporarilyUnavailable
@@ -52,14 +58,23 @@ public enum FamilySyncAvailability: Equatable, Sendable {
 
 public enum FamilySyncStatus: Equatable, Sendable {
     case idle
+    case optedOut(message: String)
+    case deviceOnly(message: String)
     case syncing
     case synced(at: Date)
     case pendingOffline
-    case thisDeviceOnly(message: String)
+    case iCloudUnavailable(message: String)
     case failed(message: String)
 }
 
+public enum FamilySyncConsentError: Error, Equatable, Sendable {
+    case deviceOnly
+    case optInRequired
+}
+
 public protocol FamilySyncTransport: Sendable {
+    var capability: FamilySyncCapability { get }
+
     func availability() async -> FamilySyncAvailability
 
     func prepareProfileZone(_ profileID: ProfileID) async throws
@@ -74,6 +89,10 @@ public protocol FamilySyncTransport: Sendable {
 }
 
 public protocol FamilySyncCoordinating: Sendable {
+    func isEnabled() async -> Bool
+
+    func setEnabled(_ isEnabled: Bool) async throws -> FamilySyncStatus
+
     func synchronize() async -> FamilySyncStatus
 
     func status() async -> FamilySyncStatus

@@ -20,6 +20,15 @@ public enum TadaWorldSceneStyle: Sendable {
     }
 }
 
+enum TadaWorldSceneMotionPolicy {
+    static func shouldAnimate(
+        style: TadaWorldSceneStyle,
+        reduceMotion: Bool
+    ) -> Bool {
+        style.allowsAmbientMotion && !reduceMotion
+    }
+}
+
 public enum TadaMascotPose: Sendable {
     case resting
     case cheering
@@ -75,6 +84,16 @@ public struct TadaWorldSceneLayer: View {
                     BuildItScene(theme: theme, isDrifting: isDrifting)
                 case .pawsAndPines:
                     PawsScene(theme: theme, isDrifting: isDrifting)
+                case .dinoDiscovery:
+                    DinoDiscoveryScene(theme: theme, isDrifting: isDrifting)
+                case .firehouseHeroes:
+                    FirehouseHeroesScene(theme: theme, isDrifting: isDrifting)
+                case .brickworkCity:
+                    BrickworkCityScene(theme: theme, isDrifting: isDrifting)
+                case .frostlightWorld:
+                    FrostlightWorldScene(theme: theme, isDrifting: isDrifting)
+                case .coasterCarnival:
+                    CoasterCarnivalScene(theme: theme, isDrifting: isDrifting)
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -83,13 +102,30 @@ public struct TadaWorldSceneLayer: View {
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .onAppear {
-            guard style.allowsAmbientMotion, !reduceMotion else { return }
-            withAnimation(
-                .easeInOut(duration: TadaPrimitiveTokens.Motion.ambient)
-                    .repeatForever(autoreverses: true)
-            ) {
-                isDrifting = true
+            synchronizeAmbientMotion()
+        }
+        .onChange(of: reduceMotion) { _, _ in
+            synchronizeAmbientMotion()
+        }
+    }
+
+    private func synchronizeAmbientMotion() {
+        guard
+            TadaWorldSceneMotionPolicy.shouldAnimate(
+                style: style,
+                reduceMotion: reduceMotion
+            )
+        else {
+            withAnimation(.linear(duration: 0.01)) {
+                isDrifting = false
             }
+            return
+        }
+        withAnimation(
+            .easeInOut(duration: TadaPrimitiveTokens.Motion.ambient)
+                .repeatForever(autoreverses: true)
+        ) {
+            isDrifting = true
         }
     }
 }
@@ -152,6 +188,16 @@ public struct TadaWorldMascot: View {
             BuildItMascot(theme: theme, size: size, pose: pose)
         case .pawsAndPines:
             PawsMascot(theme: theme, size: size, pose: pose)
+        case .dinoDiscovery:
+            DinoWorldMascot(theme: theme, size: size, pose: pose)
+        case .firehouseHeroes:
+            FirehouseWorldMascot(theme: theme, size: size, pose: pose)
+        case .brickworkCity:
+            BrickworkWorldMascot(theme: theme, size: size, pose: pose)
+        case .frostlightWorld:
+            FrostlightWorldMascot(theme: theme, size: size, pose: pose)
+        case .coasterCarnival:
+            CoasterWorldMascot(theme: theme, size: size, pose: pose)
         }
     }
 
@@ -421,7 +467,13 @@ private struct MoonpetalScene: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let layout = MoonpetalSceneDecorationLayout(canvasSize: proxy.size)
             ZStack {
+                MoonpetalRainbow(theme: theme)
+                    .frame(width: layout.rainbowSize.width, height: layout.rainbowSize.height)
+                    .position(layout.rainbowCenter)
+                    .offset(y: isDrifting ? -3 : 2)
+
                 ForEach(Array(sparklePoints.enumerated()), id: \.offset) { index, point in
                     Image(systemName: index.isMultiple(of: 2) ? "sparkle" : "star.fill")
                         .font(.system(size: max(10, proxy.size.height * 0.030), weight: .bold))
@@ -447,7 +499,195 @@ private struct MoonpetalScene: View {
                 MoonpetalCastle(theme: theme)
                     .frame(width: proxy.size.width * 0.22, height: proxy.size.height * 0.32)
                     .position(x: proxy.size.width * 0.14, y: proxy.size.height * 0.80)
+
+                MoonpetalUnicorn(theme: theme)
+                    .frame(width: layout.unicornSize.width, height: layout.unicornSize.height)
+                    .position(layout.unicornCenter)
+                    .offset(y: isDrifting ? -4 : 3)
             }
+        }
+    }
+}
+
+struct MoonpetalSceneDecorationLayout: Equatable {
+    let rainbowSize: CGSize
+    let rainbowCenter: CGPoint
+    let unicornSize: CGSize
+    let unicornCenter: CGPoint
+
+    init(canvasSize: CGSize) {
+        rainbowSize = CGSize(
+            width: min(canvasSize.width * 0.19, canvasSize.height * 0.42),
+            height: min(canvasSize.width * 0.10, canvasSize.height * 0.22)
+        )
+        rainbowCenter = CGPoint(x: canvasSize.width * 0.12, y: canvasSize.height * 0.27)
+        unicornSize = CGSize(
+            width: min(canvasSize.width * 0.13, canvasSize.height * 0.29),
+            height: min(canvasSize.width * 0.12, canvasSize.height * 0.27)
+        )
+        unicornCenter = CGPoint(x: canvasSize.width * 0.88, y: canvasSize.height * 0.80)
+    }
+}
+
+/// A quiet edge decoration assembled from original shapes. Its compact footprint keeps the
+/// center of both phone and tablet landscape layouts clear for the learning target.
+private struct MoonpetalRainbow: View {
+    let theme: TadaWorldTheme
+
+    var body: some View {
+        GeometryReader { proxy in
+            let band = max(3, proxy.size.height * 0.13)
+            ZStack(alignment: .bottom) {
+                rainbowBand(
+                    color: theme.secondary.opacity(0.42),
+                    inset: 0,
+                    band: band,
+                    size: proxy.size
+                )
+                rainbowBand(
+                    color: theme.sceneAccent.opacity(0.48),
+                    inset: band,
+                    band: band,
+                    size: proxy.size
+                )
+                rainbowBand(
+                    color: theme.accent.opacity(0.38),
+                    inset: band * 2,
+                    band: band,
+                    size: proxy.size
+                )
+                rainbowBand(
+                    color: theme.primary.opacity(0.32),
+                    inset: band * 3,
+                    band: band,
+                    size: proxy.size
+                )
+
+                HStack {
+                    rainbowCloud(size: proxy.size.height * 0.31)
+                    Spacer()
+                    rainbowCloud(size: proxy.size.height * 0.31)
+                }
+                .padding(.horizontal, proxy.size.width * 0.015)
+            }
+        }
+    }
+
+    private func rainbowBand(
+        color: Color,
+        inset: CGFloat,
+        band: CGFloat,
+        size: CGSize
+    ) -> some View {
+        MoonpetalRainbowArc(insetAmount: inset)
+            .stroke(
+                color,
+                style: StrokeStyle(lineWidth: band, lineCap: .round)
+            )
+            .frame(width: size.width, height: size.height)
+    }
+
+    private func rainbowCloud(size: CGFloat) -> some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.58))
+                .frame(width: size, height: size)
+                .offset(x: -size * 0.24)
+            Circle()
+                .fill(Color.white.opacity(0.68))
+                .frame(width: size * 1.12, height: size * 1.12)
+            Circle()
+                .fill(Color.white.opacity(0.54))
+                .frame(width: size * 0.82, height: size * 0.82)
+                .offset(x: size * 0.34, y: size * 0.08)
+        }
+        .frame(width: size * 1.7, height: size * 1.2)
+    }
+}
+
+private struct MoonpetalRainbowArc: InsettableShape {
+    var insetAmount: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        let radius = max(0, min(rect.width * 0.5, rect.height) - insetAmount)
+        let center = CGPoint(x: rect.midX, y: rect.maxY)
+        var path = Path()
+        path.addArc(
+            center: center,
+            radius: radius,
+            startAngle: .degrees(180),
+            endAngle: .degrees(0),
+            clockwise: false
+        )
+        return path
+    }
+
+    func inset(by amount: CGFloat) -> MoonpetalRainbowArc {
+        var copy = self
+        copy.insetAmount += amount
+        return copy
+    }
+}
+
+/// A tiny storybook unicorn kept at the trailing edge so it adds delight without becoming a
+/// competing instruction or tappable control.
+private struct MoonpetalUnicorn: View {
+    let theme: TadaWorldTheme
+
+    var body: some View {
+        GeometryReader { proxy in
+            let unit = min(proxy.size.width, proxy.size.height)
+            ZStack {
+                Capsule()
+                    .fill(theme.secondary.opacity(0.52))
+                    .frame(width: unit * 0.38, height: unit * 0.13)
+                    .rotationEffect(.degrees(-28))
+                    .offset(x: -unit * 0.42, y: -unit * 0.03)
+
+                ForEach([-0.25, 0.18], id: \.self) { horizontalOffset in
+                    Capsule()
+                        .fill(Color.white.opacity(0.74))
+                        .frame(width: unit * 0.13, height: unit * 0.45)
+                        .offset(x: unit * horizontalOffset, y: unit * 0.28)
+                }
+
+                Capsule()
+                    .fill(Color.white.opacity(0.78))
+                    .frame(width: unit * 0.85, height: unit * 0.50)
+                    .rotationEffect(.degrees(-5))
+                    .offset(x: -unit * 0.08, y: unit * 0.08)
+
+                Circle()
+                    .fill(Color.white.opacity(0.82))
+                    .frame(width: unit * 0.54, height: unit * 0.54)
+                    .offset(x: unit * 0.31, y: -unit * 0.24)
+
+                Triangle()
+                    .fill(theme.sceneAccent.opacity(0.76))
+                    .frame(width: unit * 0.17, height: unit * 0.47)
+                    .rotationEffect(.degrees(22))
+                    .offset(x: unit * 0.40, y: -unit * 0.61)
+
+                VStack(spacing: -unit * 0.03) {
+                    Circle().fill(theme.secondary.opacity(0.72))
+                    Circle().fill(theme.accent.opacity(0.66))
+                    Circle().fill(theme.primary.opacity(0.58))
+                }
+                .frame(width: unit * 0.18, height: unit * 0.50)
+                .rotationEffect(.degrees(-12))
+                .offset(x: unit * 0.10, y: -unit * 0.24)
+
+                Circle()
+                    .fill(theme.ink.opacity(0.66))
+                    .frame(width: unit * 0.055, height: unit * 0.055)
+                    .offset(x: unit * 0.43, y: -unit * 0.29)
+
+                Image(systemName: "sparkle")
+                    .font(.system(size: unit * 0.18, weight: .bold))
+                    .foregroundStyle(theme.sceneAccent.opacity(0.72))
+                    .offset(x: unit * 0.64, y: -unit * 0.55)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -624,7 +864,12 @@ private struct MoonpetalMascot: View {
             Circle()
                 .fill(theme.primary)
                 .frame(width: size * 0.68, height: size * 0.68)
-            MascotFace(theme: theme, size: size, pose: pose)
+            TadaExpressiveMascotFace(
+                theme: theme,
+                size: size,
+                pose: pose,
+                personality: .storybook
+            )
             Image(systemName: "sparkles")
                 .font(.system(size: size * 0.18, weight: .bold))
                 .foregroundStyle(theme.sceneAccent)
@@ -652,8 +897,13 @@ private struct BuildItMascot: View {
                 .fill(theme.sceneAccent)
                 .frame(width: size * 0.54, height: size * 0.24)
                 .offset(y: -size * 0.20)
-            MascotFace(theme: theme, size: size, pose: pose)
-                .offset(y: size * 0.08)
+            TadaExpressiveMascotFace(
+                theme: theme,
+                size: size,
+                pose: pose,
+                personality: .vehicle
+            )
+            .offset(y: size * 0.08)
             Circle()
                 .fill(theme.secondary)
                 .frame(width: size * 0.13)
@@ -686,33 +936,17 @@ private struct PawsMascot: View {
             Circle()
                 .fill(theme.primary)
                 .frame(width: size * 0.76, height: size * 0.76)
-            MascotFace(theme: theme, size: size, pose: pose)
+            TadaExpressiveMascotFace(
+                theme: theme,
+                size: size,
+                pose: pose,
+                personality: .woodland
+            )
             Image(systemName: "leaf.fill")
                 .font(.system(size: size * 0.17, weight: .bold))
                 .foregroundStyle(theme.sceneAccent)
                 .rotationEffect(.degrees(-24))
                 .offset(x: size * 0.27, y: -size * 0.30)
-        }
-    }
-}
-
-private struct MascotFace: View {
-    let theme: TadaWorldTheme
-    let size: CGFloat
-    let pose: TadaMascotPose
-
-    var body: some View {
-        VStack(spacing: size * 0.08) {
-            HStack(spacing: size * 0.18) {
-                Circle().fill(Color.white).frame(width: size * 0.10)
-                Circle().fill(Color.white).frame(width: size * 0.10)
-            }
-            Capsule()
-                .fill(Color.white.opacity(0.92))
-                .frame(
-                    width: pose == .cheering ? size * 0.22 : size * 0.16,
-                    height: pose == .cheering ? size * 0.13 : size * 0.07
-                )
         }
     }
 }

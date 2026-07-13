@@ -273,6 +273,10 @@ public struct RewardCatalogItem: Codable, Hashable, Sendable {
     public let id: RewardItemID
     public let world: WorldTheme
     public let displayName: String
+    /// A stable presentation asset identifier. The current Apple client uses
+    /// SF Symbols, while keeping the value in the catalog lets every surface
+    /// render the same treasure and lets a collected treasure become an avatar.
+    public let iconAssetID: String
     public let tier: RewardTier
     /// Milestones are derived from the number of completed Today quests in
     /// this world. Small collectibles leave this value nil.
@@ -282,12 +286,20 @@ public struct RewardCatalogItem: Codable, Hashable, Sendable {
         id: RewardItemID,
         world: WorldTheme,
         displayName: String,
+        iconAssetID: String = "sparkles",
         tier: RewardTier = .smallCollectible,
         requiredTodayQuestCount: Int? = nil
     ) {
         self.id = id
         self.world = world
         self.displayName = displayName
+        let normalizedIconAssetID = iconAssetID.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        self.iconAssetID =
+            normalizedIconAssetID.isEmpty
+            ? "sparkles"
+            : normalizedIconAssetID
         self.tier = tier
         self.requiredTodayQuestCount =
             tier == .milestone
@@ -299,6 +311,7 @@ public struct RewardCatalogItem: Codable, Hashable, Sendable {
         case id
         case world
         case displayName
+        case iconAssetID
         case tier
         case requiredTodayQuestCount
     }
@@ -309,6 +322,10 @@ public struct RewardCatalogItem: Codable, Hashable, Sendable {
             id: try container.decode(RewardItemID.self, forKey: .id),
             world: try container.decode(WorldTheme.self, forKey: .world),
             displayName: try container.decode(String.self, forKey: .displayName),
+            iconAssetID: try container.decodeIfPresent(
+                String.self,
+                forKey: .iconAssetID
+            ) ?? "sparkles",
             tier: try container.decodeIfPresent(RewardTier.self, forKey: .tier)
                 ?? .smallCollectible,
             requiredTodayQuestCount: try container.decodeIfPresent(

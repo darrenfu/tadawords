@@ -2,8 +2,32 @@
 import Foundation
 import TadaWordsDomain
 
+struct WritingCueThrottle {
+    static let minimumInterval: TimeInterval = 0.075
+
+    private(set) var lastAcceptedTime: TimeInterval?
+
+    mutating func accepts(at time: TimeInterval) -> Bool {
+        guard let lastAcceptedTime else {
+            self.lastAcceptedTime = time
+            return true
+        }
+        guard time >= lastAcceptedTime else {
+            self.lastAcceptedTime = time
+            return true
+        }
+        guard time - lastAcceptedTime >= Self.minimumInterval else { return false }
+        self.lastAcceptedTime = time
+        return true
+    }
+
+    mutating func reset() {
+        lastAcceptedTime = nil
+    }
+}
+
 /// Original, programmatic sound layer. It uses no sampled or downloaded audio.
-/// The three world scores and all effects are synthesized in memory.
+/// Every world score and effect is synthesized in memory.
 public actor AppleAudioExperienceService: AudioExperienceService {
     private static let sampleRate = 44_100.0
 
@@ -11,6 +35,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     private let ambientPlayerA = AVAudioPlayerNode()
     private let ambientPlayerB = AVAudioPlayerNode()
     private let effectPlayer = AVAudioPlayerNode()
+    private let writingPlayer = AVAudioPlayerNode()
     private let launchVoice = AVSpeechSynthesizer()
     private let spokenVoice = SystemSpeechVoiceResolver.preferredVoice()
 
@@ -27,11 +52,13 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     private var ambientTransitionTask: Task<Void, Never>?
     private var transitionGate = AmbientTransitionGate()
     private var ambientBufferCache = AmbientBufferCache<AVAudioPCMBuffer>()
+    private var writingCueThrottle = WritingCueThrottle()
 
     public init() {
         engine.attach(ambientPlayerA)
         engine.attach(ambientPlayerB)
         engine.attach(effectPlayer)
+        engine.attach(writingPlayer)
         let format = AVAudioFormat(
             standardFormatWithSampleRate: Self.sampleRate,
             channels: 2
@@ -39,6 +66,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         engine.connect(ambientPlayerA, to: engine.mainMixerNode, format: format)
         engine.connect(ambientPlayerB, to: engine.mainMixerNode, format: format)
         engine.connect(effectPlayer, to: engine.mainMixerNode, format: format)
+        engine.connect(writingPlayer, to: engine.mainMixerNode, format: format)
         engine.mainMixerNode.outputVolume = 0.72
     }
 
@@ -69,11 +97,11 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         if shouldSpeakLaunchVoice {
             voicePromptDepth += 1
             applyAmbientVolume()
-            let design = SpeechUtteranceDesignPolicy.design(
-                text: "Tada Words!",
-                role: .brand
-            )
-            let utterance = AVSpeechUtterance(string: design.text)
+            let design = LaunchVoiceDesignPolicy.utterance
+            let utterance =
+                AVSpeechUtterance(
+                    ssmlRepresentation: LaunchVoiceDesignPolicy.ssmlRepresentation
+                ) ?? AVSpeechUtterance(string: design.text)
             utterance.voice = spokenVoice
             utterance.rate = design.rate
             utterance.pitchMultiplier = design.pitchMultiplier
@@ -83,7 +111,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
             launchVoice.speak(utterance)
         }
 
-        try? await Task.sleep(for: .milliseconds(1_250))
+        try? await Task.sleep(for: .milliseconds(1_600))
         if shouldSpeakLaunchVoice {
             voicePromptDepth = max(0, voicePromptDepth - 1)
             applyAmbientVolume()
@@ -141,6 +169,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         wantsAmbientAudio = false
         isEmergencyMode = false
         stopAllAmbientPlayers()
+        stopWritingAudio()
     }
 
     public func play(_ cue: FunctionalAudioCue) async {
@@ -150,7 +179,13 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         else {
             return
         }
+        if case .writing(let tool) = cue {
+            playWritingCue(for: tool)
+            return
+        }
+
         guard startEngineIfNeeded() else { return }
+        stopWritingAudio()
         effectPlayer.stop()
         effectPlayer.volume = adjustedVolume(0.20)
         effectPlayer.scheduleBuffer(
@@ -180,6 +215,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
 
     public func prepareForVoicePrompt() async -> Bool {
         guard preferences.voiceEnabled else { return false }
+        stopWritingAudio()
         voicePromptDepth += 1
         applyAmbientVolume()
         return true
@@ -209,6 +245,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         }
         stopAllAmbientPlayers()
         effectPlayer.stop()
+        stopWritingAudio()
         engine.stop()
         deactivateAudioSession()
     }
@@ -226,6 +263,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         } else {
             stopAllAmbientPlayers()
             effectPlayer.stop()
+            stopWritingAudio()
         }
     }
 
@@ -356,6 +394,41 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         if !preferences.soundEffectsEnabled {
             effectPlayer.stop()
         }
+        if !AudioPreferencePolicy.shouldPlay(
+            .writing(tool: .pencil),
+            preferences: preferences
+        ) {
+            stopWritingAudio()
+        }
+    }
+
+    private func stopWritingAudio() {
+        writingPlayer.stop()
+        writingCueThrottle.reset()
+    }
+
+    private func playWritingCue(for tool: HandwritingTool) {
+        guard voicePromptDepth == 0 else { return }
+        guard
+            writingCueThrottle.accepts(
+                at: ProcessInfo.processInfo.systemUptime
+            )
+        else { return }
+        guard startEngineIfNeeded() else { return }
+
+        writingPlayer.stop()
+        writingPlayer.volume = adjustedVolume(0.18)
+        writingPlayer.scheduleBuffer(
+            ProceduralAudioFactory.writingEffect(
+                tool: tool,
+                sampleRate: Self.sampleRate
+            ),
+            at: nil,
+            options: [],
+            completionCallbackType: .dataConsumed,
+            completionHandler: nil
+        )
+        writingPlayer.play()
     }
 
     private func adjustedVolume(_ volume: Float) -> Float {

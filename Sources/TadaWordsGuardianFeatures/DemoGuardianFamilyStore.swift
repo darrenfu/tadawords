@@ -66,6 +66,18 @@ public actor DemoGuardianFamilyStore: GuardianFamilyStore {
         )
     }
 
+    public func setWordsActive(
+        ids: [WordPromptID],
+        learningMode: LearningMode,
+        isActive: Bool
+    ) async throws -> GuardianDashboardSnapshot {
+        try await preparedStore().setWordsActive(
+            ids: ids,
+            learningMode: learningMode,
+            isActive: isActive
+        )
+    }
+
     public func report(
         for period: GuardianReportPeriod
     ) async throws -> GuardianLearningReport {

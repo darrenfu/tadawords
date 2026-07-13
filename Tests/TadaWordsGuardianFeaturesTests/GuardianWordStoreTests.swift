@@ -4,6 +4,37 @@ import XCTest
 @testable import TadaWordsGuardianFeatures
 
 final class GuardianWordStoreTests: XCTestCase {
+    func testOCRPreviewSkipsExistingDuplicatesAndInvalidEdits() {
+        let existing = Set(["cat"])
+        let ready = GuardianEditableOCRWord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            text: "Dog"
+        )
+        let inPool = GuardianEditableOCRWord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+            text: "CAT"
+        )
+        let duplicate = GuardianEditableOCRWord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+            text: "dog"
+        )
+        let invalid = GuardianEditableOCRWord(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
+            text: "123"
+        )
+
+        let analysis = GuardianOCRPreviewAnalysis(
+            words: [ready, inPool, duplicate, invalid],
+            existingNormalizedWords: existing
+        )
+
+        XCTAssertEqual(analysis.addableWords, ["dog"])
+        XCTAssertEqual(analysis.stateByID[ready.id], .ready(normalizedWord: "dog"))
+        XCTAssertEqual(analysis.stateByID[inPool.id], .alreadyInPool)
+        XCTAssertEqual(analysis.stateByID[duplicate.id], .duplicateInPreview)
+        XCTAssertEqual(analysis.stateByID[invalid.id], .invalid)
+    }
+
     func testImportReportsAcceptedDuplicatesAndRejectedWords() async throws {
         let store = DemoGuardianWordStore()
 

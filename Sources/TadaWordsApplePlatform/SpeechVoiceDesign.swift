@@ -31,9 +31,20 @@ struct VoiceSelectionPolicy: Sendable {
     private let preferredIdentifiers: [String]
     private let preferredNames: [String]
 
-    static let brightAmericanEnglish = VoiceSelectionPolicy(
+    /// Apple does not publish speaker ages. This preference therefore uses a
+    /// named, youthful-sounding system persona when it is installed, then
+    /// falls back through natural American English female voices.
+    static let youthfulAmericanEnglish = VoiceSelectionPolicy(
         targetLanguage: "en-US",
         preferredIdentifiers: [
+            "com.apple.eloquence.en-US.Sandy",
+            "com.apple.voice.premium.en-US.Nicky",
+            "com.apple.voice.enhanced.en-US.Nicky",
+            "com.apple.voice.super-compact.en-US.Nicky",
+            "com.apple.voice.compact.en-US.Nicky",
+            "com.apple.voice.premium.en-US.Zoe",
+            "com.apple.voice.enhanced.en-US.Zoe",
+            "com.apple.voice.compact.en-US.Zoe",
             "com.apple.voice.premium.en-US.Ava",
             "com.apple.voice.enhanced.en-US.Ava",
             "com.apple.voice.premium.en-US.Samantha",
@@ -41,8 +52,13 @@ struct VoiceSelectionPolicy: Sendable {
             "com.apple.voice.super-compact.en-US.Samantha",
             "com.apple.voice.compact.en-US.Samantha",
         ],
-        preferredNames: ["Ava", "Samantha", "Zoe", "Allison", "Nicky", "Susan"]
+        preferredNames: [
+            "Sandy", "Nicky", "Zoe", "Flo", "Shelley", "Ava",
+            "Samantha", "Allison", "Susan",
+        ]
     )
+
+    static let brightAmericanEnglish = youthfulAmericanEnglish
 
     init(
         targetLanguage: String,
@@ -126,14 +142,14 @@ struct VoiceSelectionPolicy: Sendable {
             if lhs.suitability != rhs.suitability {
                 return lhs.suitability < rhs.suitability
             }
-            if lhs.quality != rhs.quality {
-                return lhs.quality < rhs.quality
-            }
             if lhs.identifierPreference != rhs.identifierPreference {
                 return lhs.identifierPreference < rhs.identifierPreference
             }
             if lhs.namePreference != rhs.namePreference {
                 return lhs.namePreference < rhs.namePreference
+            }
+            if lhs.quality != rhs.quality {
+                return lhs.quality < rhs.quality
             }
             return lhs.stableIdentifier < rhs.stableIdentifier
         }
@@ -143,6 +159,7 @@ struct VoiceSelectionPolicy: Sendable {
 enum SpokenAudioRole: Hashable, Sendable {
     case brand
     case learning
+    case writeLearning
 }
 
 /// A pure description of delivery. The learning role deliberately keeps the
@@ -178,13 +195,48 @@ enum SpeechUtteranceDesignPolicy {
                 preUtteranceDelay: 0.045,
                 postUtteranceDelay: 0.075
             )
+        case .writeLearning:
+            // Write practice is the child's spelling reference. A slower rate
+            // and longer release keep final consonants such as the "t" in
+            // "at" audible before the ambient score returns.
+            SpeechUtteranceDesign(
+                text: text,
+                rate: 0.38,
+                pitchMultiplier: 1.05,
+                volume: 0.86,
+                preUtteranceDelay: 0.08,
+                postUtteranceDelay: 0.20
+            )
         }
     }
 }
 
+/// A single, natural spoken brand phrase. Keeping the hyphenated name and its
+/// short comma pause in one utterance avoids the robotic seams produced when
+/// AVSpeechSynthesizer queues separate "Ta", "da", and "Words" utterances.
+enum LaunchVoiceDesignPolicy {
+    /// The spoken spelling intentionally follows the owner's reference:
+    /// `tā-'dá, wòrds!` (approximately `tɑːˈdɑː, wɝdz`, or `它达，沃尔子`).
+    /// The pronunciation spelling stays inside one prosody span so the speech
+    /// engine does not insert an audible seam between `tah-` and `DAH`.
+    static let ssmlRepresentation = """
+        <speak><prosody rate="93%" pitch="+7%">tah-DAH</prosody><break time="105ms"/><prosody rate="87%" pitch="-10%">words!</prosody></speak>
+        """
+
+    /// Plain-text fallback for any system voice that rejects the SSML subset.
+    static let utterance = SpeechUtteranceDesign(
+        text: "Tah-DAH, words!",
+        rate: 0.42,
+        pitchMultiplier: 1.10,
+        volume: 0.92,
+        preUtteranceDelay: 0.025,
+        postUtteranceDelay: 0.20
+    )
+}
+
 enum SystemSpeechVoiceResolver {
     static func preferredVoice(
-        policy: VoiceSelectionPolicy = .brightAmericanEnglish
+        policy: VoiceSelectionPolicy = .youthfulAmericanEnglish
     ) -> AVSpeechSynthesisVoice? {
         var voicesByIdentifier: [String: AVSpeechSynthesisVoice] = [:]
         for voice in AVSpeechSynthesisVoice.speechVoices() {

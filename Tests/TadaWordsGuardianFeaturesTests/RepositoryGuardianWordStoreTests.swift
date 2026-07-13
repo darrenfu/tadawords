@@ -460,6 +460,34 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
         XCTAssertEqual(savedProgress, progress)
     }
 
+    func testBatchRemovalAndUndoRestoreEverySelectedWord() async throws {
+        let repository = InMemoryWordPoolRepository()
+        let profile = makeProfile(number: 1, name: "Ava")
+        let store = makeStore(profile: profile, repository: repository)
+        _ = try await store.importWords(
+            GuardianWordImportRequest(
+                rawText: "cat dog fox",
+                learningMode: .read
+            )
+        )
+        let original = try await store.dashboardSnapshot().readPool
+        let selected = Array(original.prefix(2))
+
+        let removed = try await store.setWordsActive(
+            ids: selected.map(\.id),
+            learningMode: .read,
+            isActive: false
+        )
+        XCTAssertEqual(removed.readPool.map(\.normalizedText), ["fox"])
+
+        let restored = try await store.setWordsActive(
+            ids: selected.map(\.id),
+            learningMode: .read,
+            isActive: true
+        )
+        XCTAssertEqual(restored.readPool.map(\.normalizedText), ["cat", "dog", "fox"])
+    }
+
     func testContextRequiredWordCanBeResubmittedWithOneSpokenContext()
         async throws
     {

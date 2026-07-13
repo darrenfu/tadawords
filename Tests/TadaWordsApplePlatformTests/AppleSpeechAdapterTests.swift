@@ -37,7 +37,7 @@ final class AppleSpeechAdapterTests: XCTestCase {
         XCTAssertTrue(configuration.requiresOnDeviceRecognition)
         XCTAssertEqual(
             configuration.partialResultStabilityDuration,
-            .milliseconds(600)
+            .milliseconds(1_200)
         )
     }
 
@@ -141,6 +141,42 @@ final class AppleSpeechAdapterTests: XCTestCase {
         )
     }
 
+    func testCommonAppleRuntimeErrorsMapToActionableFailuresAndKeepDiagnostics() {
+        let noSpeech = NSError(domain: "kAFAssistantErrorDomain", code: 1110)
+        let unauthorized = NSError(domain: "kAFAssistantErrorDomain", code: 1700)
+        let interrupted = NSError(domain: "kAFAssistantErrorDomain", code: 1107)
+        let missingAssets = NSError(domain: "kLSRErrorDomain", code: 102)
+
+        let noSpeechMapping = AppleSpeechErrorMapper.mapping(for: noSpeech)
+        XCTAssertEqual(noSpeechMapping.reason, .noUsableAudio)
+        XCTAssertEqual(
+            noSpeechMapping.diagnostic,
+            AppleSpeechErrorDiagnostic(
+                domain: "kAFAssistantErrorDomain",
+                code: 1110
+            )
+        )
+        XCTAssertTrue(noSpeechMapping.allowsTranscriptFallback)
+        XCTAssertFalse(
+            AppleSpeechErrorMapper.mapping(for: unauthorized).allowsTranscriptFallback
+        )
+        XCTAssertFalse(
+            AppleSpeechErrorMapper.mapping(for: missingAssets).allowsTranscriptFallback
+        )
+        XCTAssertEqual(
+            AppleSpeechErrorMapper.technicalFailureReason(for: unauthorized),
+            .permissionDenied
+        )
+        XCTAssertEqual(
+            AppleSpeechErrorMapper.technicalFailureReason(for: interrupted),
+            .serviceUnavailable
+        )
+        XCTAssertEqual(
+            AppleSpeechErrorMapper.technicalFailureReason(for: missingAssets),
+            .onDeviceRecognitionUnavailable
+        )
+    }
+
     func testOnDeviceCapabilityFailsClosedInSimulatorOrUnsupportedHardware() {
         XCTAssertEqual(
             AppleSpeechCapabilityPolicy.failureReason(
@@ -213,9 +249,51 @@ final class AppleSpeechAdapterTests: XCTestCase {
         XCTAssertEqual(final.completion, .transcript(newerAfterAudioEnded))
         XCTAssertEqual(endpoint.finishAudioIfNeeded(), .none)
         XCTAssertEqual(
-            endpoint.deadlineReached(receivedAudioBuffer: true),
+            endpoint.deadlineReached(receivedUsableAudio: true),
             .none
         )
+    }
+
+    func testEmptyAndPunctuationOnlyPartialsDoNotArmAutomaticEndpointing() {
+        var endpoint = SpeechRecognitionEndpointStateMachine()
+
+        XCTAssertEqual(
+            endpoint.receive(
+                SpeechTranscriptSnapshot(
+                    text: "  …  ",
+                    confidence: RecognitionConfidence(0.99)
+                ),
+                isFinal: false
+            ),
+            .none
+        )
+        XCTAssertNil(endpoint.latestTranscript)
+        XCTAssertNil(endpoint.activeStabilityGeneration)
+        XCTAssertEqual(
+            endpoint.deadlineReached(receivedUsableAudio: false),
+            SpeechRecognitionEndpointTransition(
+                shouldFinishAudio: true,
+                completion: .technicalFailure(.noUsableAudio),
+                stabilityGeneration: nil
+            )
+        )
+    }
+
+    func testErrorCanFinishWithMeaningfulPartialInsteadOfDiscardingIt() {
+        var endpoint = SpeechRecognitionEndpointStateMachine()
+        let partial = SpeechTranscriptSnapshot(
+            text: "look",
+            confidence: RecognitionConfidence(0.91)
+        )
+        _ = endpoint.receive(partial, isFinal: false)
+
+        let transition = endpoint.fail(
+            with: .serviceUnavailable,
+            allowingLatestTranscriptFallback: true
+        )
+
+        XCTAssertTrue(transition.shouldFinishAudio)
+        XCTAssertEqual(transition.completion, .transcript(partial))
     }
 
     func testDeadlineUsesLatestPartialAndLowConfidenceRemainsUncertain() throws {
@@ -226,7 +304,7 @@ final class AppleSpeechAdapterTests: XCTestCase {
         )
         _ = endpoint.receive(latest, isFinal: false)
 
-        let deadline = endpoint.deadlineReached(receivedAudioBuffer: true)
+        let deadline = endpoint.deadlineReached(receivedUsableAudio: true)
 
         XCTAssertTrue(deadline.shouldFinishAudio)
         XCTAssertEqual(deadline.completion, .transcript(latest))
@@ -247,7 +325,7 @@ final class AppleSpeechAdapterTests: XCTestCase {
         var unrecognizedAudioEndpoint = SpeechRecognitionEndpointStateMachine()
 
         XCTAssertEqual(
-            noAudioEndpoint.deadlineReached(receivedAudioBuffer: false),
+            noAudioEndpoint.deadlineReached(receivedUsableAudio: false),
             SpeechRecognitionEndpointTransition(
                 shouldFinishAudio: true,
                 completion: .technicalFailure(.noUsableAudio),
@@ -255,7 +333,7 @@ final class AppleSpeechAdapterTests: XCTestCase {
             )
         )
         XCTAssertEqual(
-            unrecognizedAudioEndpoint.deadlineReached(receivedAudioBuffer: true),
+            unrecognizedAudioEndpoint.deadlineReached(receivedUsableAudio: true),
             SpeechRecognitionEndpointTransition(
                 shouldFinishAudio: true,
                 completion: .technicalFailure(.timedOut),
@@ -304,12 +382,178 @@ final class AppleSpeechAdapterTests: XCTestCase {
 
         completionBox.receive(snapshot, isFinal: true)
         let completion = await waiter.value
-        completionBox.deadlineReached(receivedAudioBuffer: true)
+        completionBox.deadlineReached(receivedUsableAudio: true)
         completionBox.finishAudioIfNeeded()
 
         XCTAssertEqual(completion, .transcript(snapshot))
         XCTAssertEqual(counter.value, 1)
     }
+
+    func testErrorOnlyCallbackUsesPreviouslyReceivedPartialWhenFallbackIsSafe() async {
+        let counter = LockedCounter()
+        let completionBox = SpeechRecognitionCompletionBox(
+            stabilityDelay: .seconds(1),
+            finishAudio: {
+                counter.increment()
+            }
+        )
+        let partial = SpeechTranscriptSnapshot(
+            text: "look",
+            confidence: RecognitionConfidence(0.92)
+        )
+        let waiter = Task {
+            await withCheckedContinuation { continuation in
+                completionBox.install(continuation)
+            }
+        }
+
+        completionBox.receive(partial, isFinal: false)
+        completionBox.fail(
+            with: AppleSpeechErrorMapping(
+                reason: .serviceUnavailable,
+                diagnostic: AppleSpeechErrorDiagnostic(
+                    domain: "kAFAssistantErrorDomain",
+                    code: 1107
+                )
+            )
+        )
+
+        let completion = await waiter.value
+        XCTAssertEqual(completion, .transcript(partial))
+        XCTAssertEqual(counter.value, 1)
+    }
+
+    func testStartupSequenceStartsAudioBeforeRecognitionCanCallback() {
+        var events: [String] = []
+
+        let taskValue = SpeechRecognitionStartupSequence.start(
+            startAudio: {
+                events.append("audio")
+            },
+            startRecognitionTask: {
+                events.append("recognition")
+                return 42
+            }
+        )
+
+        XCTAssertEqual(taskValue, 42)
+        XCTAssertEqual(events, ["audio", "recognition"])
+    }
+
+    func testSpeechActivityGateRejectsSilenceAndAllowsBriefSightWordSpeech() {
+        let thresholds = AppleSpeechActivityThresholds.childSightWord
+        let silence = SpeechCapturedAudio(
+            samples: [Float](repeating: 0, count: 8_000),
+            sampleRate: 16_000
+        )
+        let lowNoise = SpeechCapturedAudio(
+            samples: [Float](repeating: 0.002, count: 8_000),
+            sampleRate: 16_000
+        )
+        let tooBrief = voicedAudio(duration: 0.06)
+        let briefSightWord = voicedAudio(duration: 0.12)
+        let fragmentedNoise = fragmentedVoicedAudio(
+            activeFrameDuration: 0.02,
+            silenceFrameDuration: 0.02,
+            repetitions: 8
+        )
+
+        XCTAssertFalse(
+            SpeechActivityEvidencePolicy.evaluate(
+                silence,
+                thresholds: thresholds
+            ).hasUsableSpeech
+        )
+        XCTAssertFalse(
+            SpeechActivityEvidencePolicy.evaluate(
+                lowNoise,
+                thresholds: thresholds
+            ).hasUsableSpeech
+        )
+        XCTAssertFalse(
+            SpeechActivityEvidencePolicy.evaluate(
+                tooBrief,
+                thresholds: thresholds
+            ).hasUsableSpeech
+        )
+        XCTAssertFalse(
+            SpeechActivityEvidencePolicy.evaluate(
+                fragmentedNoise,
+                thresholds: thresholds
+            ).hasUsableSpeech
+        )
+        XCTAssertTrue(
+            SpeechActivityEvidencePolicy.evaluate(
+                briefSightWord,
+                thresholds: thresholds
+            ).hasUsableSpeech
+        )
+    }
+
+    func testMatchingTranscriptNeedsSpeechEvidenceButAcceptsShortWord() throws {
+        let resolver = AppleSpeechRecognitionResultResolver(
+            decisionPolicy: AppleRecognitionDecisionPolicy(
+                thresholds: .speech,
+                matchPolicy: .sightWordPronunciation
+            ),
+            activityThresholds: .childSightWord
+        )
+        let target = try WordPrompt(learningMode: .read, text: "a")
+        let snapshot = SpeechTranscriptSnapshot(
+            text: "a",
+            confidence: RecognitionConfidence(0.95)
+        )
+
+        let silenceResult = resolver.resolve(
+            snapshot: snapshot,
+            target: target,
+            capturedAudio: SpeechCapturedAudio(
+                samples: [Float](repeating: 0, count: 8_000),
+                sampleRate: 16_000
+            ),
+            speakerAssessment: .unavailable
+        )
+        let voicedResult = resolver.resolve(
+            snapshot: snapshot,
+            target: target,
+            capturedAudio: voicedAudio(duration: 0.12),
+            speakerAssessment: .unavailable
+        )
+
+        XCTAssertEqual(silenceResult.decision, .technicalFailure(.noUsableAudio))
+        XCTAssertEqual(voicedResult.decision, .matched)
+        XCTAssertEqual(voicedResult.recognizedText, "a")
+    }
+}
+
+private func voicedAudio(
+    duration: Double,
+    amplitude: Float = 0.05,
+    sampleRate: Double = 16_000
+) -> SpeechCapturedAudio {
+    let samples = (0..<Int(duration * sampleRate)).map { index in
+        amplitude
+            * Float(sin(2 * Double.pi * 220 * Double(index) / sampleRate))
+    }
+    return SpeechCapturedAudio(samples: samples, sampleRate: sampleRate)
+}
+
+private func fragmentedVoicedAudio(
+    activeFrameDuration: Double,
+    silenceFrameDuration: Double,
+    repetitions: Int,
+    sampleRate: Double = 16_000
+) -> SpeechCapturedAudio {
+    let active = voicedAudio(
+        duration: activeFrameDuration,
+        sampleRate: sampleRate
+    ).samples
+    let silence = [Float](
+        repeating: 0,
+        count: Int(silenceFrameDuration * sampleRate)
+    )
+    let samples = (0..<repetitions).flatMap { _ in active + silence }
+    return SpeechCapturedAudio(samples: samples, sampleRate: sampleRate)
 }
 
 private struct StubPermissionChecker: AppleSpeechPermissionChecking {

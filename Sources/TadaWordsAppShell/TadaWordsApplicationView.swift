@@ -4,6 +4,25 @@ import TadaWordsDomain
 import TadaWordsFeatures
 import TadaWordsGuardianFeatures
 
+enum ApplicationOrientationRoute: Equatable {
+    case child
+    case parents
+    case firstRunParents
+}
+
+enum ApplicationOrientationPolicy {
+    static func mode(
+        for route: ApplicationOrientationRoute
+    ) -> InterfaceOrientationMode {
+        switch route {
+        case .child:
+            .childLandscape
+        case .parents, .firstRunParents:
+            .parentFlexible
+        }
+    }
+}
+
 @MainActor
 public struct TadaWordsApplicationView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -34,11 +53,14 @@ public struct TadaWordsApplicationView: View {
     private let audioExperienceService: any AudioExperienceService
     private let speechRecognitionService: any SpeechRecognitionService
     private let handwritingRecognitionService: any HandwritingRecognitionService
+    private let imageTextRecognitionService: any ImageTextRecognizing
     private let speechPermissionActions: SpeechPermissionActions
     private let notificationScheduler: (any LearningNotificationScheduling)?
     private let voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)?
     private let voiceprintRepository: (any DeviceVoiceprintRepository)?
     private let sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing
+    private let familySyncCapability: FamilySyncCapability
+    private let interfaceOrientationController: any InterfaceOrientationControlling
 
     /// Preview-only convenience. Production callers must use the initializer
     /// that accepts an Application Support directory and a default profile.
@@ -54,6 +76,8 @@ public struct TadaWordsApplicationView: View {
         audioPromptService: any AudioPromptService,
         audioExperienceService: any AudioExperienceService =
             SilentAudioExperienceService(),
+        interfaceOrientationController: any InterfaceOrientationControlling =
+            InertInterfaceOrientationController(),
         demoMode: Bool
     ) {
         launchMode = demoMode ? .demo : .unconfigured
@@ -61,11 +85,14 @@ public struct TadaWordsApplicationView: View {
         self.audioExperienceService = audioExperienceService
         speechRecognitionService = NoSpeechRecognitionService()
         handwritingRecognitionService = NoHandwritingRecognitionService()
+        imageTextRecognitionService = NoImageTextRecognitionService()
         speechPermissionActions = .unavailable
         notificationScheduler = nil
         voiceprintEnrollmentService = nil
         voiceprintRepository = nil
         sensitiveActionAuthorizer = AllowSensitiveGuardianActions()
+        familySyncCapability = .deviceOnly
+        self.interfaceOrientationController = interfaceOrientationController
         _bootstrapModel = StateObject(
             wrappedValue: ApplicationBootstrapModel(
                 bootstrapper: UnavailableApplicationBootstrapper()
@@ -81,6 +108,8 @@ public struct TadaWordsApplicationView: View {
         audioPromptService: any AudioPromptService,
         speechRecognitionService: any SpeechRecognitionService,
         handwritingRecognitionService: any HandwritingRecognitionService,
+        imageTextRecognitionService: any ImageTextRecognizing =
+            NoImageTextRecognitionService(),
         requestSpeechAuthorization: @escaping @Sendable () async -> Bool,
         audioExperienceService: any AudioExperienceService =
             SilentAudioExperienceService(),
@@ -89,15 +118,18 @@ public struct TadaWordsApplicationView: View {
         voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)? = nil,
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
         sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing =
-            AllowSensitiveGuardianActions()
+            AllowSensitiveGuardianActions(),
+        interfaceOrientationController: any InterfaceOrientationControlling =
+            InertInterfaceOrientationController()
     ) {
+        let resolvedFamilySyncTransport =
+            familySyncTransport ?? LocalOnlyFamilySyncTransport()
         let bootstrapper = ProductionApplicationBootstrapper(
             applicationSupportDirectory: applicationSupportDirectory,
             defaultProfile: defaultProfile,
             clock: clock,
             timeZone: timeZone,
-            familySyncTransport: familySyncTransport
-                ?? LocalOnlyFamilySyncTransport(),
+            familySyncTransport: resolvedFamilySyncTransport,
             notificationScheduler: notificationScheduler
         )
         launchMode = .production
@@ -105,6 +137,7 @@ public struct TadaWordsApplicationView: View {
         self.audioExperienceService = audioExperienceService
         self.speechRecognitionService = speechRecognitionService
         self.handwritingRecognitionService = handwritingRecognitionService
+        self.imageTextRecognitionService = imageTextRecognitionService
         speechPermissionActions = SpeechPermissionActions(
             requestAuthorization: requestSpeechAuthorization
         )
@@ -112,6 +145,8 @@ public struct TadaWordsApplicationView: View {
         self.voiceprintEnrollmentService = voiceprintEnrollmentService
         self.voiceprintRepository = voiceprintRepository
         self.sensitiveActionAuthorizer = sensitiveActionAuthorizer
+        familySyncCapability = resolvedFamilySyncTransport.capability
+        self.interfaceOrientationController = interfaceOrientationController
         _bootstrapModel = StateObject(
             wrappedValue: ApplicationBootstrapModel(
                 bootstrapper: bootstrapper
@@ -131,11 +166,15 @@ public struct TadaWordsApplicationView: View {
                     }
             case .unconfigured:
                 UnconfiguredApplicationView()
+                    .onAppear {
+                        applyOrientation(for: .child)
+                    }
             }
         }
         .preferredColorScheme(.light)
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
+            applyOrientation(for: currentOrientationRoute)
             synchronizeIfReady()
         }
     }
@@ -150,12 +189,18 @@ public struct TadaWordsApplicationView: View {
                     audioExperienceService: audioExperienceService,
                     onOpenGuardian: showGuardianArea
                 )
+                .onAppear {
+                    applyOrientation(for: .child)
+                }
             case .guardian:
                 GuardianRootView(
                     audioPromptService: audioPromptService,
                     audioExperienceService: audioExperienceService,
                     onExit: showChildArea
                 )
+                .onAppear {
+                    applyOrientation(for: .parents)
+                }
             }
         }
         .task {
@@ -168,6 +213,9 @@ public struct TadaWordsApplicationView: View {
         switch bootstrapModel.state {
         case .idle, .loading:
             ApplicationLoadingView()
+                .onAppear {
+                    applyOrientation(for: .child)
+                }
         case .ready(let environment):
             productionContent(environment: environment)
         case .failed(let failure):
@@ -175,6 +223,9 @@ public struct TadaWordsApplicationView: View {
                 failure: failure,
                 onRetry: bootstrapModel.retry
             )
+            .onAppear {
+                applyOrientation(for: .child)
+            }
         }
     }
 
@@ -187,13 +238,21 @@ public struct TadaWordsApplicationView: View {
             refreshedChildState == nil
             ? environment.lastSelectedProfileID
             : refreshedChildState?.lastSelectedProfileID
+        let onboardingPurpose = environment.firstRunOnboardingPurpose ?? .fullSetup
+        let onboardingProfile = FirstRunOnboardingProfileSelection.profile(
+            in: childProfiles,
+            purpose: onboardingPurpose,
+            lastSelectedProfileID: initialProfileID
+        )
         Group {
             if environment.requiresFirstRunOnboarding
                 && !hasCompletedFirstRunOnboarding
             {
-                if let profile = childProfiles.first {
+                if let profile = onboardingProfile {
                     FirstRunParentOnboardingView(
                         initialProfile: profile,
+                        purpose: onboardingPurpose,
+                        familySyncCapability: familySyncCapability,
                         onFinish: { submission in
                             try await completeFirstRunOnboarding(
                                 submission: submission,
@@ -202,6 +261,9 @@ public struct TadaWordsApplicationView: View {
                             )
                         }
                     )
+                    .onAppear {
+                        applyOrientation(for: .firstRunParents)
+                    }
                 } else {
                     ApplicationFailureView(
                         failure: ApplicationBootstrapFailure(
@@ -209,6 +271,9 @@ public struct TadaWordsApplicationView: View {
                         ),
                         onRetry: bootstrapModel.retry
                     )
+                    .onAppear {
+                        applyOrientation(for: .firstRunParents)
+                    }
                 }
             } else {
                 Group {
@@ -238,6 +303,9 @@ public struct TadaWordsApplicationView: View {
                             onOpenGuardian: showGuardianArea
                         )
                         .id(childProfileRevision)
+                        .onAppear {
+                            applyOrientation(for: .child)
+                        }
                     case .guardian:
                         GuardianRootView(
                             store: environment.guardianStore,
@@ -249,11 +317,15 @@ public struct TadaWordsApplicationView: View {
                             voiceprintRepository: voiceprintRepository,
                             requestSpeechAuthorization:
                                 speechPermissionActions.requestAuthorization,
+                            imageTextRecognitionService: imageTextRecognitionService,
                             sensitiveActionAuthorizer: sensitiveActionAuthorizer,
                             onExit: {
                                 refreshProfilesAndShowChild(environment: environment)
                             }
                         )
+                        .onAppear {
+                            applyOrientation(for: .parents)
+                        }
                     }
                 }
             }
@@ -301,6 +373,7 @@ public struct TadaWordsApplicationView: View {
             lastSelectedProfileID: completion.selectedProfileID
         )
         childProfileRevision = UUID()
+        applyOrientation(for: .child)
         hasCompletedFirstRunOnboarding = true
 
         Task {
@@ -308,9 +381,11 @@ public struct TadaWordsApplicationView: View {
             await environment.notificationReconciler?.reconcileAll()
         }
 
-        if let profile = completion.profiles.first(where: {
-            $0.id == completion.selectedProfileID
-        }) {
+        if let selectedProfileID = completion.selectedProfileID,
+            let profile = completion.profiles.first(where: {
+                $0.id == selectedProfileID
+            })
+        {
             let settings = try? await environment.practiceSettingsRepository.settings(
                 for: profile.id
             )
@@ -377,11 +452,13 @@ public struct TadaWordsApplicationView: View {
                 // The existing child UI remains usable if a refresh fails. No
                 // profile data is rewritten or discarded here.
             }
+            applyOrientation(for: .child)
             area = .child
         }
     }
 
     private func showChildArea() {
+        applyOrientation(for: .child)
         area = .child
     }
 
@@ -389,7 +466,28 @@ public struct TadaWordsApplicationView: View {
         Task {
             await audioExperienceService.stopAmbientAudio()
         }
+        applyOrientation(for: .parents)
         area = .guardian
+    }
+
+    private func applyOrientation(for route: ApplicationOrientationRoute) {
+        interfaceOrientationController.apply(
+            ApplicationOrientationPolicy.mode(for: route)
+        )
+    }
+
+    private var currentOrientationRoute: ApplicationOrientationRoute {
+        if case .production = launchMode,
+            case .ready(let environment) = bootstrapModel.state,
+            environment.requiresFirstRunOnboarding,
+            !hasCompletedFirstRunOnboarding
+        {
+            return .firstRunParents
+        }
+        if case .guardian = area {
+            return .parents
+        }
+        return .child
     }
 }
 

@@ -55,6 +55,8 @@ public struct GuardianProfileDraft: Equatable, Sendable {
         switch avatar {
         case .cartoonAnimal(let assetID), .photo(let assetID, _):
             assetID
+        case .treasure(_, let iconAssetID):
+            iconAssetID
         }
     }
 
@@ -205,7 +207,8 @@ public struct GuardianDashboardSnapshot: Sendable {
             worldProgression
             ?? WorldProgression(
                 profile: profile,
-                completions: []
+                completions: [],
+                currentLocalDay: today
             )
         self.collections = collections
     }
@@ -222,6 +225,7 @@ public struct GuardianDashboardSnapshot: Sendable {
 
 public enum GuardianSyncState: String, Equatable, Sendable {
     case thisDeviceOnly
+    case off
     case upToDate
     case pending
     case failed
@@ -230,6 +234,8 @@ public enum GuardianSyncState: String, Equatable, Sendable {
         switch self {
         case .thisDeviceOnly:
             "Saved on this device"
+        case .off:
+            "Sync off"
         case .upToDate:
             "Synced"
         case .pending:
@@ -451,12 +457,68 @@ public struct GuardianWordImportReport: Equatable, Sendable {
     }
 }
 
+struct GuardianEditableOCRWord: Identifiable, Equatable {
+    let id: UUID
+    var text: String
+
+    init(id: UUID = UUID(), text: String) {
+        self.id = id
+        self.text = text
+    }
+}
+
+enum GuardianOCRWordState: Equatable {
+    case ready(normalizedWord: String)
+    case alreadyInPool
+    case duplicateInPreview
+    case invalid
+}
+
+struct GuardianOCRPreviewAnalysis: Equatable {
+    let stateByID: [UUID: GuardianOCRWordState]
+    let addableWords: [String]
+
+    init(
+        words: [GuardianEditableOCRWord],
+        existingNormalizedWords: Set<String>
+    ) {
+        var seen = Set<String>()
+        var stateByID: [UUID: GuardianOCRWordState] = [:]
+        var addableWords: [String] = []
+
+        for word in words {
+            guard let normalized = try? EnglishWordNormalizer.normalize(word.text) else {
+                stateByID[word.id] = .invalid
+                continue
+            }
+            guard seen.insert(normalized).inserted else {
+                stateByID[word.id] = .duplicateInPreview
+                continue
+            }
+            guard !existingNormalizedWords.contains(normalized) else {
+                stateByID[word.id] = .alreadyInPool
+                continue
+            }
+            stateByID[word.id] = .ready(normalizedWord: normalized)
+            addableWords.append(normalized)
+        }
+
+        self.stateByID = stateByID
+        self.addableWords = addableWords
+    }
+}
+
 public protocol GuardianWordStore: Sendable {
     func dashboardSnapshot() async throws -> GuardianDashboardSnapshot
     func importWords(_ request: GuardianWordImportRequest) async throws -> GuardianWordImportReport
     func deactivateWord(
         id: WordPromptID,
         learningMode: LearningMode
+    ) async throws -> GuardianDashboardSnapshot
+    func setWordsActive(
+        ids: [WordPromptID],
+        learningMode: LearningMode,
+        isActive: Bool
     ) async throws -> GuardianDashboardSnapshot
     func updatePracticeSettings(
         _ settings: ProfilePracticeSettings

@@ -72,6 +72,58 @@ final class PersonalPaceEvaluatorTests: XCTestCase {
         XCTAssertEqual(outsideAssessment, .outsidePersonalBand)
     }
 
+    func testSlowSideGetsTwentyFivePercentRewardGrace() {
+        let context = TestFixture.paceContext()
+        let band = TestFixture.paceBand(
+            context: context,
+            lower: 1,
+            upper: 3
+        )
+
+        let slightlySlow = PersonalPaceEvaluator().assess(
+            measurements: [
+                PaceMeasurement(
+                    context: context,
+                    elapsedTime: ElapsedTime(seconds: 3.6)
+                )
+            ],
+            personalBands: [band]
+        )
+        let beyondGrace = PersonalPaceEvaluator().assess(
+            measurements: [
+                PaceMeasurement(
+                    context: context,
+                    elapsedTime: ElapsedTime(seconds: 3.8)
+                )
+            ],
+            personalBands: [band]
+        )
+
+        XCTAssertEqual(slightlySlow, .withinPersonalBand)
+        XCTAssertEqual(beyondGrace, .outsidePersonalBand)
+    }
+
+    func testFastEdgeDoesNotReceiveSymmetricGrace() {
+        let context = TestFixture.paceContext()
+        let assessment = PersonalPaceEvaluator().assess(
+            measurements: [
+                PaceMeasurement(
+                    context: context,
+                    elapsedTime: ElapsedTime(seconds: 0.9)
+                )
+            ],
+            personalBands: [
+                TestFixture.paceBand(
+                    context: context,
+                    lower: 1,
+                    upper: 3
+                )
+            ]
+        )
+
+        XCTAssertEqual(assessment, .outsidePersonalBand)
+    }
+
     func testDeviceClassIsPartOfComparablePaceContext() {
         let tabletContext = TestFixture.paceContext()
         let phoneContext = PaceContext(

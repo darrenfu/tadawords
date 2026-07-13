@@ -22,6 +22,9 @@ xcuserdata/
 *.pem
 *.p8
 
+# Xcode/Finder can create numbered project copies; only TadaWords.xcodeproj is canonical.
+TadaWords [0-9]*.xcodeproj/
+
 # Superseded local QA captures; keep only evidence referenced by the audits.
 QAArtifacts/Audit-2026-07-12/
 QAArtifacts/Final/

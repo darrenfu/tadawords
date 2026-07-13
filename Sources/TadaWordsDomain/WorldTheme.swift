@@ -2,11 +2,21 @@ public enum WorldTheme: String, Codable, CaseIterable, Hashable, Sendable {
     case moonpetalKingdom
     case buildItBay
     case pawsAndPines
+    case dinoDiscovery
+    case firehouseHeroes
+    case brickworkCity
+    case frostlightWorld
+    case coasterCarnival
 
     public enum Category: String, Codable, Hashable, Sendable {
         case princess
         case construction
         case animals
+        case dinosaurs
+        case rescue
+        case building
+        case winter
+        case amusement
     }
 
     public var category: Category {
@@ -17,6 +27,16 @@ public enum WorldTheme: String, Codable, CaseIterable, Hashable, Sendable {
             .construction
         case .pawsAndPines:
             .animals
+        case .dinoDiscovery:
+            .dinosaurs
+        case .firehouseHeroes:
+            .rescue
+        case .brickworkCity:
+            .building
+        case .frostlightWorld:
+            .winter
+        case .coasterCarnival:
+            .amusement
         }
     }
 
@@ -28,6 +48,16 @@ public enum WorldTheme: String, Codable, CaseIterable, Hashable, Sendable {
             "Build-It Bay"
         case .pawsAndPines:
             "Paws & Pines"
+        case .dinoDiscovery:
+            "Dino Discovery"
+        case .firehouseHeroes:
+            "Firehouse Heroes"
+        case .brickworkCity:
+            "Brickwork City"
+        case .frostlightWorld:
+            "Frostlight World"
+        case .coasterCarnival:
+            "Coaster Carnival"
         }
     }
 }

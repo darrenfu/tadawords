@@ -10,6 +10,8 @@ public enum CloudKitFamilySyncError: Error, Sendable {
 }
 
 public actor CloudKitFamilySyncTransport: FamilySyncTransport {
+    public nonisolated let capability = FamilySyncCapability.iCloud
+
     private enum Schema {
         static let itemRecordType = "TadaFamilyItem"
         static let rootRecordType = "TadaProfileRoot"

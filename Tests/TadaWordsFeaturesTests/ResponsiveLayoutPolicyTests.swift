@@ -1,3 +1,4 @@
+import TadaWordsDomain
 import XCTest
 
 @testable import TadaWordsFeatures
@@ -33,6 +34,30 @@ final class ResponsiveLayoutPolicyTests: XCTestCase {
         XCTAssertEqual(
             NewPlayerLayoutMode.resolve(hasCompactHeight: false),
             .standard
+        )
+    }
+
+    func testLastPlayedBadgeOnlyMatchesTheRememberedProfile() {
+        let rememberedID = ProfileID()
+        let otherID = ProfileID()
+
+        XCTAssertTrue(
+            ProfileChooserPresentation.isLastPlayed(
+                rememberedID,
+                rememberedProfileID: rememberedID
+            )
+        )
+        XCTAssertFalse(
+            ProfileChooserPresentation.isLastPlayed(
+                otherID,
+                rememberedProfileID: rememberedID
+            )
+        )
+        XCTAssertFalse(
+            ProfileChooserPresentation.isLastPlayed(
+                rememberedID,
+                rememberedProfileID: nil
+            )
         )
     }
 }

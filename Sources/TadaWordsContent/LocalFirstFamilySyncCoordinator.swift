@@ -14,30 +14,67 @@ public protocol FamilySyncRecordStore: Sendable {
 public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
     private let store: any FamilySyncRecordStore
     private let transport: any FamilySyncTransport
+    private let preferenceRepository: any FamilySyncPreferenceRepository
     private let clock: any AppClock
     private var currentStatus: FamilySyncStatus = .idle
 
     public init(
         store: any FamilySyncRecordStore,
         transport: any FamilySyncTransport,
+        preferenceRepository: any FamilySyncPreferenceRepository =
+            InMemoryFamilySyncPreferenceRepository(),
         clock: any AppClock = SystemAppClock()
     ) {
         self.store = store
         self.transport = transport
+        self.preferenceRepository = preferenceRepository
         self.clock = clock
     }
 
+    public func isEnabled() async -> Bool {
+        guard transport.capability == .iCloud else { return false }
+        return (try? await preferenceRepository.isEnabled()) ?? false
+    }
+
+    public func setEnabled(_ isEnabled: Bool) async throws -> FamilySyncStatus {
+        guard transport.capability == .iCloud else {
+            if isEnabled {
+                throw FamilySyncConsentError.deviceOnly
+            }
+            currentStatus = Self.deviceOnlyStatus
+            return currentStatus
+        }
+
+        try await preferenceRepository.setEnabled(isEnabled, updatedAt: clock.now)
+        guard isEnabled else {
+            currentStatus = Self.optedOutStatus
+            return currentStatus
+        }
+        return await synchronize()
+    }
+
     public func synchronize() async -> FamilySyncStatus {
+        guard transport.capability == .iCloud else {
+            currentStatus = Self.deviceOnlyStatus
+            return currentStatus
+        }
+        guard await isEnabled() else {
+            currentStatus = Self.optedOutStatus
+            return currentStatus
+        }
+
         currentStatus = .syncing
         let availability = await transport.availability()
         guard availability == .available else {
             switch availability {
             case .available:
                 break
+            case .deviceOnly:
+                currentStatus = Self.deviceOnlyStatus
             case .temporarilyUnavailable:
                 currentStatus = .pendingOffline
             case .noAccount, .restricted:
-                currentStatus = .thisDeviceOnly(
+                currentStatus = .iCloudUnavailable(
                     message: Self.message(for: availability)
                 )
             }
@@ -57,14 +94,34 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
     }
 
     public func status() async -> FamilySyncStatus {
-        currentStatus
+        guard transport.capability == .iCloud else {
+            currentStatus = Self.deviceOnlyStatus
+            return currentStatus
+        }
+        guard await isEnabled() else {
+            currentStatus = Self.optedOutStatus
+            return currentStatus
+        }
+        return currentStatus
     }
 
     public func createShare(for profileID: ProfileID) async throws -> URL {
-        try await transport.createShare(for: profileID)
+        guard transport.capability == .iCloud else {
+            throw FamilySyncConsentError.deviceOnly
+        }
+        guard await isEnabled() else {
+            throw FamilySyncConsentError.optInRequired
+        }
+        return try await transport.createShare(for: profileID)
     }
 
     public func acceptShare(at url: URL) async throws {
+        guard transport.capability == .iCloud else {
+            throw FamilySyncConsentError.deviceOnly
+        }
+        guard await isEnabled() else {
+            throw FamilySyncConsentError.optInRequired
+        }
         let profileID = try await transport.acceptShare(at: url)
         currentStatus = .syncing
         do {
@@ -111,6 +168,8 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
         switch availability {
         case .available:
             "Sync is available."
+        case .deviceOnly:
+            "This version keeps learning data on this device."
         case .noAccount:
             "Sign in to iCloud to sync Tada Words."
         case .restricted:
@@ -124,4 +183,14 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
         _ = error
         return "Sync could not finish. Local learning data is safe and will retry."
     }
+
+    private static let optedOutStatus = FamilySyncStatus.optedOut(
+        message:
+            "Family sync is off. Learning data stays on this device until a parent turns it on."
+    )
+
+    private static let deviceOnlyStatus = FamilySyncStatus.deviceOnly(
+        message:
+            "This version keeps learning data on this device. Family sync and invitations are unavailable."
+    )
 }

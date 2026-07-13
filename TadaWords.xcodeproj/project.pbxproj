@@ -9,9 +9,9 @@
 /* Begin PBXBuildFile section */
 		1D643D124B98C8C94DD79C95 /* TadaWordsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0C975618AD883EE0E444E4 /* TadaWordsApp.swift */; };
 		4A4C9DC8AC4380DF7179554C /* TadaWordsDomain in Frameworks */ = {isa = PBXBuildFile; productRef = C50445A205350455B5F67E1B /* TadaWordsDomain */; };
-		4EB858E52E35C9AF0CCDA43E /* Info 2.plist in Resources */ = {isa = PBXBuildFile; fileRef = A7EAE3B3EFC25CFC2977875C /* Info 2.plist */; };
 		507F6845BA6B4A18F40B5890 /* TadaWordsAppShell in Frameworks */ = {isa = PBXBuildFile; productRef = 8815CF529824D7C45AE14EB4 /* TadaWordsAppShell */; };
 		6E9734C12B875E773F50C8C4 /* TadaWordsApplePlatform in Frameworks */ = {isa = PBXBuildFile; productRef = BE11A3E6BECC4D3FF3315ABA /* TadaWordsApplePlatform */; };
+		71D25A238F262C7EAEEF2CD7 /* TadaWordsAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBEA4AF2C697B1FD9197C0CF /* TadaWordsAppDelegate.swift */; };
 		87FF374D64B99F185D27E08D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B08D5E6984A29CBBE4D69349 /* PrivacyInfo.xcprivacy */; };
 		F241D33536B52C343A929BDC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 48AC9F95D72A19D6CCCB9EDB /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -19,12 +19,13 @@
 /* Begin PBXFileReference section */
 		3A11FC68477E8CECE3D539C9 /* TadaWords.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TadaWords.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		48AC9F95D72A19D6CCCB9EDB /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		5FC096A7EC9928A79B370330 /* TadaWordsLocalQA.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TadaWordsLocalQA.entitlements; sourceTree = "<group>"; };
 		7E606E231BC91D0F6148BB0C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		8FC055EE962E853CEC0DFBEC /* TadaWords.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TadaWords.entitlements; sourceTree = "<group>"; };
-		A7EAE3B3EFC25CFC2977875C /* Info 2.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info 2.plist"; sourceTree = "<group>"; };
 		ADF5058F6A89AE36C0B071D8 /* Tada Words */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "Tada Words"; path = .; sourceTree = SOURCE_ROOT; };
 		B08D5E6984A29CBBE4D69349 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		CA0C975618AD883EE0E444E4 /* TadaWordsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TadaWordsApp.swift; sourceTree = "<group>"; };
+		DBEA4AF2C697B1FD9197C0CF /* TadaWordsAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TadaWordsAppDelegate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -45,11 +46,12 @@
 			isa = PBXGroup;
 			children = (
 				48AC9F95D72A19D6CCCB9EDB /* Assets.xcassets */,
-				A7EAE3B3EFC25CFC2977875C /* Info 2.plist */,
 				7E606E231BC91D0F6148BB0C /* Info.plist */,
 				B08D5E6984A29CBBE4D69349 /* PrivacyInfo.xcprivacy */,
 				8FC055EE962E853CEC0DFBEC /* TadaWords.entitlements */,
 				CA0C975618AD883EE0E444E4 /* TadaWordsApp.swift */,
+				DBEA4AF2C697B1FD9197C0CF /* TadaWordsAppDelegate.swift */,
+				5FC096A7EC9928A79B370330 /* TadaWordsLocalQA.entitlements */,
 			);
 			name = TadaWordsApp;
 			path = Apps/TadaWordsApp;
@@ -147,7 +149,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				F241D33536B52C343A929BDC /* Assets.xcassets in Resources */,
-				4EB858E52E35C9AF0CCDA43E /* Info 2.plist in Resources */,
 				87FF374D64B99F185D27E08D /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -160,12 +161,77 @@
 			buildActionMask = 2147483647;
 			files = (
 				1D643D124B98C8C94DD79C95 /* TadaWordsApp.swift in Sources */,
+				71D25A238F262C7EAEEF2CD7 /* TadaWordsAppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		179F9C16784ED641CA7B56ED /* LocalQA */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = LocalQA;
+		};
 		423169453BC7474264E771A2 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -229,6 +295,29 @@
 				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
+		};
+		81C302AC485C1CAE7B87DC04 /* LocalQA */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Apps/TadaWordsApp/TadaWordsLocalQA.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = Apps/TadaWordsApp/InfoLocalQA.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app.localqa;
+				PRODUCT_NAME = "Tada Words QA";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) LOCAL_DEVICE_QA";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = LocalQA;
 		};
 		960924C43AC52D0920D362BC /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -338,6 +427,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				423169453BC7474264E771A2 /* Debug */,
+				179F9C16784ED641CA7B56ED /* LocalQA */,
 				C25373032CAA19C2E86B2D8E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -347,6 +437,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B51FCDF510BBCE9DEFEC32A9 /* Debug */,
+				81C302AC485C1CAE7B87DC04 /* LocalQA */,
 				960924C43AC52D0920D362BC /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;

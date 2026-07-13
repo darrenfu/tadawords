@@ -4,9 +4,25 @@ import XCTest
 @testable import TadaWordsFeatures
 
 final class QuestPresentationTests: XCTestCase {
-    func testReadStudyPromptOnlyDemonstratesNewWords() {
-        XCTAssertTrue(ReadStudyPromptPolicy.shouldDemonstrate(source: .new))
-        XCTAssertFalse(ReadStudyPromptPolicy.shouldDemonstrate(source: .review))
+    func testReadPermissionTimingResetsForFirstPromptAndAfterDenial() {
+        XCTAssertTrue(
+            ReadPermissionTimingPolicy.shouldResetResponseClock(
+                hasRequestedPermission: false,
+                wasPreviouslyDenied: false
+            )
+        )
+        XCTAssertTrue(
+            ReadPermissionTimingPolicy.shouldResetResponseClock(
+                hasRequestedPermission: true,
+                wasPreviouslyDenied: true
+            )
+        )
+        XCTAssertFalse(
+            ReadPermissionTimingPolicy.shouldResetResponseClock(
+                hasRequestedPermission: true,
+                wasPreviouslyDenied: false
+            )
+        )
     }
 
     func testFirstTryAccuracyIsNotScoredWithoutIndependentAttempts() {
@@ -37,5 +53,22 @@ final class QuestPresentationTests: XCTestCase {
         )
 
         XCTAssertEqual(result.firstTryAccuracyPercentage, 67)
+    }
+
+    func testPracticePowerUpResultExposesReplayAction() {
+        let result = QuestResultViewState(
+            mode: .read,
+            score: QuestScore(
+                points: 40,
+                firstIndependentCorrectCount: 1,
+                firstIndependentAttemptCount: 1,
+                stars: QuestStars(earned: [.completion]),
+                personalPaceAssessment: .withinPersonalBand
+            ),
+            runKind: .practiceAgain
+        )
+
+        XCTAssertFalse(result.showsNewCollectible)
+        XCTAssertTrue(result.showsReplayAction)
     }
 }

@@ -1,6 +1,6 @@
 # Tada Words — V1 产品与交互设计
 
-> 状态：需求与产品设计已确认，可进入视觉原型与技术验证
+> 状态：真机第一轮反馈与追加需求已纳入；修复后等待 iPhone / iPad 回归验收
 >
 > 项目名称：**Tada Words**
 >
@@ -73,10 +73,10 @@ V1 是 Universal iOS App。
 
 ### 方向规则
 
-- iPad 和 iPhone 的整个 App 只支持 `Landscape Left` 与 `Landscape Right`。
-- Profile Picker、World Lobby、Kid Quest、Guardian 和结果页都不支持竖屏。
-- Guardian 在 iPhone 使用横屏自适应布局，在 iPad 使用横屏侧边栏或多栏布局。
-- App 从设备竖持状态启动时也必须进入横屏；左右两个横屏方向都要验收。
+- Profile Picker、World Lobby、Kid Quest、结果页与 Collection 只支持 `Landscape Left` 与 `Landscape Right`。
+- `Parents`、Parent Gate、Guardian 管理页与首次家长设置支持横竖屏。
+- iPhone 家长路线支持 Portrait 与两个 Landscape，不支持 Portrait Upside Down；iPad 家长路线支持四个方向。
+- 离开家长路线后，App 必须通过 route-level geometry update 立即恢复横屏；孩子页面左右两个横屏方向都要验收。
 - iPhone Kid Quest 会减少背景装饰，优先保证大单词、麦克风和完整书写区。
 
 Write 支持手指；Apple Pencil 仅在兼容设备上启用，并使用防误触。Apple 官方当前的 Pencil 兼容设备为 iPad，因此 iPhone 17 Pro Max 的 Write 输入使用手指。[Apple Pencil compatibility](https://support.apple.com/en-am/108937)
@@ -86,19 +86,20 @@ Write 支持手指；Apple Pencil 仅在兼容设备上启用，并使用防误�
 ```text
 App Launch
 ├── Profile Picker
-│   ├── New Player（孩子只输入昵称）
+│   ├── New Kid（没有 Profile 时直接展开；孩子只输入昵称）
+│   ├── 上次 Profile（有 Profile 时突出显示，孩子点击确认）
 │   └── World Lobby
 │       ├── Read Today’s Quest
 │       ├── Write Today’s Quest
 │       ├── Practice Again
 │       ├── Quest Calendar
-│       ├── World Picker
-│       └── Collection
+│       ├── My Collection（选择已获得 Theme / Icon）
+│       └── Treasure Collection
 └── Parent Gate
     ├── Today
     ├── Words
-    │   ├── Read Pool
-    │   └── Write Pool
+    │   ├── Read Pool：Type / Camera / Photo / Select / Delete
+    │   └── Write Pool：Type / Camera / Photo / Select / Delete
     ├── Reports
     ├── Profiles & Family
     ├── Worlds
@@ -111,20 +112,16 @@ App Launch
 2. 今天 Read 还是 Write？
 3. 在哪个已解锁世界冒险？
 
-选词、复习、难词回流、计时和同步全部由 App 处理。
+App 只从 Guardian 已经录入的 Pool 中编排 New、Review、难词回流和计时；不得从年级词库、内置 catalog 或生成模型自动添加练习词。
 
 ## 5. 首次设置
 
-Guardian 首次启动依次完成：
+首次启动必须先处理 Profile，不先要求输入单词：
 
-1. 阅读并同意儿童声纹、同步与删除规则。
-2. 创建 Kid Profile。
-3. 选择或拍摄头像。
-4. 完成约 1 分钟声纹注册。
-5. 分别输入首批 Read Words 和 Write Words。
-6. 从三个首发 World Pack 中选择 Starter World。
-7. 设置可选通知时间。
-8. 进入 Profile Picker。
+1. 已有 Profile：显示 Picker，并突出上次使用的有效 Profile；孩子点击后进入。
+2. 没有 Profile：直接显示 `New Kid`，输入昵称并选择头像、年级和 Starter World。
+3. 阅读并同意儿童声纹、同步与删除规则。
+4. 声纹注册、单词录入和通知均可稍后在 Parents 中完成，不阻塞第一次进入 Kid Lobby。
 
 ### 一分钟声纹注册
 
@@ -142,7 +139,7 @@ Guardian 首次启动依次完成：
 
 ```text
 ┌──────────────────────────────────────────────────────────┐
-│ Tada Words                                       Parent  │
+│ Tada Words                                       Parents │
 │                                                          │
 │       ( Panda )        ( Bunny )        ( Photo )         │
 │         Mia              Leo              Addy            │
@@ -153,16 +150,16 @@ Guardian 首次启动依次完成：
 
 - 每个 Profile 使用 96 pt 以上的大头像卡片。
 - 孩子先点击自己的头像；App 不依赖声纹自动切换 Profile。
-- App 记住最后使用的有效 Profile；下次冷启动直接进入该 Profile 的 Lobby。若该 Profile 已不存在，则回到 Picker，不猜测其他身份。
-- Picker 提供 `New Player` 卡片。孩子只输入昵称，App 自动分配内置动物头像与 Starter World；完整编辑仍由 Guardian 完成。
+- App 记住最后使用的有效 Profile；下次冷启动在 Picker 中突出该 Profile，但仍由孩子点击确认。若该 Profile 已不存在，则显示普通 Picker，不猜测其他身份。
+- Picker 提供 `New Kid` 卡片。孩子只输入昵称，App 自动分配内置动物头像与 Starter World；完整编辑仍由 Guardian 完成。
 - Read 录音时，才用选中 Profile 的声纹过滤其他说话人。
-- Parent 入口放在稳定的右上角，不与 Quest 主入口争夺注意力。
+- `Parents` 入口放在稳定的右上角，普通单击后立即进入随机算术 Parent Gate，不与 Quest 主入口争夺注意力。
 
 ## 7. World Lobby
 
 ```text
 ┌──────────────────────────────────────────────────────────┐
-│ (Mia)      Moonpetal Kingdom              Worlds  Parent │
+│ (Mia)                                 My Collection Parents│
 │                                                          │
 │                 [ 当前世界互动场景 ]                       │
 │                                                          │
@@ -179,8 +176,10 @@ Guardian 首次启动依次完成：
 - 必须始终显示两个独立的大入口。
 - 不提供把 Read 与 Write 合并的“综合 Today’s Quest”。
 - 当前 World 是全屏背景，但 Quest 卡片位置不随主题改变。
+- Header 不重复放置不可点击的 World 名称胶囊；它容易被误认为按钮。当前主题由整页场景和 My Collection 选中态表达。
 - 已完成的入口显示当日分数和星星，并提供 `Practice Again`。
 - Practice Again 会更新记忆模型，但不重复发放当日永久收藏品，也不计入世界解锁次数。
+- Results 页的 Replay 图标必须是可点击按钮；单击后重新开始同一模式的 `Practice Again`，不重复永久奖励或 Theme / Icon 解锁。
 - `Quest Calendar` 展示当前月每天实际完成的 Quest 次数；Read、Write 和 Practice Again 都按一次完成记录计数，并严格按 Profile 隔离。
 
 ## 8. 单词池与每日编排
@@ -192,14 +191,17 @@ Guardian 每天直接向两个独立 Pool 输入：
 
 ### 输入规则
 
-- 支持逐行或用逗号批量输入。
+- `Type one word` 每次只接收一个词；按 Return 后立即加入当前 Pool、清空输入框，并实时显示在队列最前面。
+- `Take Photo` 与 `Choose Photo` 使用本机 OCR 一次识别照片中的所有英文词；先提供可编辑的去重预览，Guardian 点击 `Add All` 后才写入。
+- OCR 批次整体排在旧词之前，批次内部保持照片中的阅读顺序；识别图片不上传服务器。
 - 自动去掉首尾空格、统一 Unicode 形式并忽略大小写去重。
 - 默认显示为小写；Guardian 可为个别单词保留指定大小写。
 - Read 与 Write 之间不跨组去重；同一个词可以拥有两套独立记录。
-- 重复输入尚未学习的词时，把它移动到当天队列前部。
-- 重复输入已学习的词时，保留历史，并把它提高到 Review 优先级。
+- 同 Pool 重复输入时不创建副本，而是把已有词移动到队列最前面并保留学习历史。
+- 支持单条删除、选择模式与批量删除；批量删除需要确认，并提供短时 Undo。
 - 自动生成标准美式英语发音，允许 Guardian 试听。
 - 不提供多读音选择，也不要求 Guardian 自己录音。
+- 所有新增词必须来自 Guardian typing 或 OCR；Pool 不足时只练已有词，绝不自动补词。
 
 ### 默认题量
 
@@ -259,12 +261,15 @@ Show Word
 ### 行为
 
 - 每题只显示一个大号单词。
-- 新词首次出现可以进行一次明确的发音示范；该示范轮不计独立掌握。
-- 正式判断前不播放答案。
+- 新 Profile、新词和进入 Read Quest 时都保持安静；第一次独立作答前绝不播放目标发音。
+- 大号目标词从当前 World 的高对比深色 palette 中稳定选择颜色；不同题目可变化，但同一次作答、重绘、错误和 Help 展开期间不闪变，颜色不表示正确或错误。
+- 连续两次有效读错后，才显示两个 Help 按钮：`Hear it` 播放标准发音，`See it` 在单词旁显示本地图片提示。技术重试不解锁 Help。
+- 图片 catalog 没有可靠匹配时明确显示暂无图片，不猜测词义；任一 Help 使用后，后续尝试记录为 guided evidence。
 - 孩子点击一次大麦克风，App 自动开始并检测说完。
 - 进行降噪、回声消除、语音活动检测、静音裁剪和声纹匹配。
 - 原始音频只在本机短暂处理，完成后立即删除。
 - App 判断“识别为目标词”，不显示专业发音分数。
+- 文本匹配允许经过测试的保守音近等价，例如目标 `come` 被儿童 ASR 转写为 `kum/cum`；不得用无边界编辑距离把 `come/some`、`cat/cap` 等不同词误判为通过。该等价层不能绕过有效音频、声纹或置信度门。
 
 ### 重试规则
 
@@ -294,20 +299,23 @@ Show Word
 │             - - - - - - - - - - - -                    │
 │             ─────────────────────────                    │
 │                                                          │
-│   Help      Undo       Clear                 [ Done ]     │
+│   🔊  [?]   [🖍 Pen + 12 colors]  [Eraser]   Clear [Done]│
 └──────────────────────────────────────────────────────────┘
 ```
 
 ### 行为
 
 - 新词第一次出现时，短暂显示完整拼写并播放发音；随后隐藏。
+- Write 的标准发音使用比 Read 更慢的清晰语速，并保留更长的句尾释放，确保 `at` 等短词的末尾辅音可听见。
 - 不建立“拼字 → 描写 → 抄写 → 默写”的强制渐进路线。
 - 正式题目只给发音、三线练字区域和按字母数量显示的淡色空位。
 - 发音按钮可以无限重播；重播不算 Help，但记录次数。
-- `Help` 显示正确拼写；使用后仍可完成，但不计独立成功。
+- 单独的 `?` 图标点击后立即显示正确拼写，不出现三选一菜单；使用后仍可完成，但不计独立成功。
 - 支持手指和兼容设备上的 Apple Pencil。
-- 提供固定位置的 `Undo`、`Clear`、`Help` 和大号 `Done`。
-- 不因停笔自动提交。
+- 笔盒提供 Pencil、Crayon、Chalk、Brush 四种笔和 12 种基础色；笔型与颜色独立选择，已写笔画保留落笔时的笔型、颜色与粗细。
+- 四种笔拥有可区分但低刺激的书写音色；只在实际移动落笔时节流播放，发音或录音期间不争夺注意力。
+- 不提供 Undo。固定位置的 Eraser 进行局部擦除，擦除轨迹为当前笔宽的 2.5 倍；`Clear` 单击立即清空，不弹确认。
+- 保留大号 `Done`，停笔不会自动提交。
 
 ### 识别结果
 
@@ -332,8 +340,8 @@ PencilKit 用于手指/Pencil 采集；低系统版本可使用 Vision 的目标
 ### 每轮最多三颗星
 
 1. **Completion Star**：尝试完所有安排题目即可获得。
-2. **Accuracy Star**：独立正确率达到默认 80%。
-3. **Personal Pace Star**：在正确率达到门槛的前提下，有效中位用时达到该孩子的个人目标。
+2. **Accuracy Star**：严格首答正确率达到默认 80%；或整轮只有一次首答错误，并在下一次有效、无辅助重试中立即答对。Guardian 报告的首答正确率仍使用严格值，不被奖励宽限改写。
+3. **Personal Pace Star**：有效中位用时位于个人舒适区；慢侧给予 25% 宽限，过快侧不放宽。前 3 次有效 Quest 的校准期只要有有效计时也授予该星。
 
 ### 分数默认公式
 
@@ -342,7 +350,7 @@ PencilKit 用于手指/Pencil 采集；低系统版本可使用 Vision 的目标
 - Help 后答对可获得完成分，但不算独立正确。
 - 不倒扣、不出现负分、不做跨儿童排名。
 - 技术重试和模型不确定完全排除在分母之外。
-- 前 3 次有效 Quest 用来建立个人速度基线；在此之前第三颗星显示为“Learning your pace”，不会显示为失败。
+- 前 3 次有效 Quest 用来建立个人速度基线，并显示为 `Learning your pace`；校准期不再因此失去第三颗星。
 
 速度星不直接使用整轮紧急时间，而是使用逐词、按词长校正后的个人基线，避免鼓励抢答或潦草书写。
 
@@ -369,13 +377,18 @@ Theme Category
     └── 5 个大型场景里程碑
 ```
 
-V1 首发三个完整 World Pack：
+V1 当前实现八个完整 World Pack：
 
 | World | 类别 | 美术方向 | 示例奖励 |
 |---|---|---|---|
 | Moonpetal Kingdom | Princess | 温暖手绘森林童话 | 皇冠、礼服、宠物、城堡房间 |
 | Build-It Bay | Construction | 明快立体绘本城市 | 工程车、工具、桥梁、城市建筑 |
 | Paws & Pines | Animals | 自然探索与照料 | 动物伙伴、食物、玩具、栖息地 |
+| Dino Discovery | Dinosaurs | 丛林、火山与化石探索 | 小恐龙、化石、探险装备、失落山谷 |
+| Firehouse Heroes | Rescue | 友善消防站与城市救援 | 消防车、安全装备、团队徽章、救援路线 |
+| Brickwork City | Building | 原创彩色积木建造 | 积木、齿轮、车辆、房屋与城市作品 |
+| Frostlight World | Winter | 冰晶、雪地与极光 | 雪花、冰冠、冬日伙伴、晶莹山脉 |
+| Coaster Carnival | Amusement | 过山车与夜间游园会 | 车票、游乐设施、气球、烟花庆典 |
 
 同一类别未来可以拥有多个完全不同画风的 World Pack，例如水彩森林童话、冰晶音乐剧或星空舞会。美术只借鉴抽象的情绪和媒介语言，不复刻 Disney、Ghibli、《冰雪奇缘》的角色、服装、场景和标志性造型。
 
@@ -390,12 +403,15 @@ V1 首发三个完整 World Pack：
 
 ### 世界解锁
 
-- 首次从三个世界中选择一个 Starter World。
-- 完成 3 次 Today’s Quest 解锁第二个世界。
-- 累计完成 8 次 Today’s Quest 解锁第三个世界。
-- Read 或 Write 均计数；Practice Again 不计数。
+- 首次从八个世界中选择一个 Starter World。
+- 同一本地自然日完成 Read Today Quest 和 Write Today Quest，形成一次 `Double Quest Day`。
+- 到下一个本地自然日后，每个尚未领取的 Double Quest Day 按稳定 catalog 顺序解锁一个新 World Theme 和一个新 Profile Icon；当天不提前解锁，隔天才再次打开 App 时会幂等补发。
+- Practice Again、Replay、单独只完成 Read 或 Write 都不计入该解锁。
+- 八个 World Theme 全部获得后不虚构新 Theme；Icon catalog 与未来 World Pack 均可扩展。
 - Guardian 可以更换 Starter World 或直接解锁。
 - 未解锁世界允许预览，但不允许进入 Quest。
+- Kid Lobby 的独立 `My Collection` 页面同时展示已获得/未获得 Theme、Icon 和 Treasure。每个 World 的 25 件 Treasure 都显示相关且互不重复的图标；未解锁时保留灰色图标并叠加锁，而不是换成通用锁。
+- 孩子可以把已收集 Treasure 选为 Profile 头像，未收集 Treasure 不能选择。Theme、动物 Icon、Treasure 头像均按 Profile 持久化，原始照片数据不会因选择奖励头像而被删除。
 
 ## 14. Guardian 端
 
@@ -410,13 +426,15 @@ V1 首发三个完整 World Pack：
 - 当前月 Quest Calendar（每天精确完成次数）
 - 需要关注的词
 - 同步状态
-- `Quick Add Words`
+- `Manage Words`
 
 ### Words
 
-- Read / Write 两个 Tab。
-- 大型批量输入框和 `Add to Pool`。
-- 保存前显示自动去重结果与发音预览。
+- Read / Write 两个明确 Tab。
+- 顶部单词输入栏：每次一个词，Return 即时加入。
+- 本机 `Take Photo` / `Choose Photo` OCR、可编辑导入预览和 `Add All`。
+- 下方 newest-first 队列、单条删除、选择模式、批量删除确认与 Undo。
+- 布局在 iPhone / iPad 横屏均保持 44 pt 触控目标、键盘不遮挡操作。
 - 状态：`Queued`、`Learning`、`Review Due`、`Strong`。
 - 单词详情：编辑大小写、试听、查看历史、删除。
 
@@ -438,7 +456,7 @@ V1 首发三个完整 World Pack：
 - 重试、Help 与发音重播次数
 - 最近练习时间
 - 预计下次 Review
-- “Why this word is recommended now”
+- “Why this word is due for review now”
 
 Guardian 可以纠正一次明显的语音或手写误判。系统修正该 AttemptEvent 并重算状态，不清空整个单词历史。
 
@@ -621,9 +639,11 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 
 #### 启动声音标识
 
-- 每次冷启动播放约 1–1.5 秒的原创 sonic logo，并清楚喊出 **“Tada Words!”**。
-- “Tada Words!” 的核心节奏与发音固定，结尾配器和环境尾音跟随当前选中的 World Pack；尚未选择 Starter World 时使用中性的品牌版本。
-- 口播亲切、有朝气，但不尖锐；不模仿 Todo Math 的旋律、节奏或声音演员。
+- 每次冷启动播放约 1.5–2 秒的原创 sonic logo，并用单个连续 SSML 短句清楚喊出 **`tā-'dá, wòrds!`**（近似“它达，沃尔子”）。
+- 第二音节重读，逗号停顿约 110ms，`words` 音高下落；整体兴奋有朝气，同时不得出现三个排队 utterance 的机械接缝。
+- 优先使用设备上可用的年轻、明亮的美式女声 persona；Apple 系统不提供年龄字段，因此使用确定性的自然女声回退，不能因未下载某个可选声音而静音。
+- 结尾配器和环境尾音跟随当前选中的 World Pack；尚未选择 Starter World 时使用中性的品牌版本。
+- 不模仿 Todo Math 的旋律、节奏、声音演员或任何真人声线。
 - 从后台短暂返回时不重复播放，避免频繁打扰。
 - Guardian 可以关闭启动口播。
 
@@ -645,14 +665,20 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 - `technicalRetry`：使用中性提示音，必须与孩子答错的声音明显不同。
 - 三颗星：三段可区分但属于同一声音家族的揭晓音。
 - 永久收藏品：使用当前 World 的专属完成音，不做随机稀有度音效。
+- 四种书写工具使用原创的短促摩擦/颗粒音色，并按实际移动节流；Reduced Sound 关闭这些装饰性书写音，提示发音播放时也不叠加。
 
 #### 首发 World 的声音方向
 
 | World | 声音方向 |
 |---|---|
-| Moonpetal Kingdom | 轻柔竖琴、钟琴、木笛与细小魔法闪光音 |
+| Moonpetal Kingdom | 约 100 BPM 的欢快原创循环；竖琴、钟琴、低音脉冲、轻鼓、柔和刷奏与魔法闪光音；场景加入两侧彩虹、云朵与独角兽，中央学习安全区保持清晰 |
 | Build-It Bay | 木块、轻打击乐、柔和机械节奏与安全的工程完成音 |
 | Paws & Pines | 马林巴、原声拨弦、鸟鸣和温和自然环境声 |
+| Dino Discovery | 约 80 BPM 的丛林踏步、马林巴与温和低音，不使用吓人的吼叫 |
+| Firehouse Heroes | 约 120 BPM 的欢快巡游节奏，不使用警报器或刺耳警笛 |
+| Brickwork City | 约 120 BPM 的木质积木律动与拼搭音色，不借用商业玩具品牌声音 |
+| Frostlight World | 约 75 BPM 的冰晶钟琴华尔兹与轻盈双倍细分 |
+| Coaster Carnival | 约 150 BPM 的升降拨弦与游园节奏，保持安全峰值和语音空间 |
 
 标准美式单词发音、Help 口播和必要教学提示不随 World 更换声音演员或发音方式，确保孩子形成稳定的听觉参照。
 
@@ -697,15 +723,21 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 ### Child
 
 - 4 岁孩子不阅读说明文字也能选择 Profile 和进入两个 Quest。
+- 冷启动先显示 Profile；没有 Profile 时直接创建，已有 Profile 时突出上次选择但不跳过孩子确认。
 - Read 与 Write 入口不会被误认为同一个任务。
+- Read 第一次独立作答前保持安静；两次有效错误后才出现发音与图片 Help。
 - 完成 Read 题时，技术噪声不会被计为发音错误。
 - 完成 Write 题时，停笔不会触发自动提交。
-- 孩子可以看见分数、三颗星和主题奖励。
+- Write 的慢速示范不会吞掉短词尾音。
+- 孩子可以看见分数、较宽松的三颗星和主题奖励，并从 My Collection 选择已获得 Theme / Icon。
+- 普通单击 Results Replay 会真正开始同模式 Practice Again。
 - 超过阈值后可以继续完成，不出现失败倒计时。
 
 ### Guardian
 
-- 可在 30 秒内向任一 Pool 批量加入单词并试听。
+- 可在 30 秒内通过逐词 typing 或 Camera / Photo OCR 向任一 Pool 加词并试听。
+- 新词即时出现在队列最前；可单删、多选批量删除并 Undo。
+- App 不会在空 Pool 或数量不足时自动生成、推荐或补充单词。
 - 自动去重不会删除另一路线的同名词。
 - 报告能解释某词为何进入 Review。
 - 可以纠正自动识别误判。
@@ -742,7 +774,7 @@ V2 仍需单独确认分级标准、词库版权和 Read / Write 分类规则；
 
 采用分层认证：
 
-- 日常进入 Guardian 区继续使用“长按＋随机算术题”。
+- 日常进入 Guardian 区使用“普通单击 `Parents`＋随机算术题”。
 - 下列敏感操作必须额外通过 Face ID、Touch ID 或设备密码；算术题不能替代系统认证：
   - 邀请或移除 Guardian
   - 导出儿童数据

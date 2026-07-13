@@ -157,6 +157,111 @@ final class AppleRecognitionDecisionPolicyTests: XCTestCase {
         XCTAssertEqual(result.decision, .uncertain)
     }
 
+    func testSpeechPolicyAcceptsCuratedComeRecognizerSpellings() throws {
+        let target = try WordPrompt(learningMode: .read, text: "come")
+        let policy = makeSpeechPolicy()
+
+        for transcript in ["kum", "cum"] {
+            let result = policy.evaluate(
+                transcript: transcript,
+                confidence: RecognitionConfidence(0.60),
+                target: target
+            )
+
+            XCTAssertEqual(
+                result.decision,
+                .matched,
+                "Expected curated ASR spelling \(transcript) to match come"
+            )
+        }
+    }
+
+    func testComeAliasIsDirectionalAndDoesNotFuzzyMatchNeighbors() throws {
+        let policy = makeSpeechPolicy()
+        let come = try WordPrompt(learningMode: .read, text: "come")
+
+        for transcript in ["some", "home", "came"] {
+            XCTAssertEqual(
+                policy.evaluate(
+                    transcript: transcript,
+                    confidence: RecognitionConfidence(0.95),
+                    target: come
+                ).decision,
+                .notMatched,
+                "Unlisted neighbor \(transcript) must not match come"
+            )
+        }
+
+        let aliasAsTarget = try WordPrompt(learningMode: .read, text: "kum")
+        XCTAssertEqual(
+            policy.evaluate(
+                transcript: "come",
+                confidence: RecognitionConfidence(0.95),
+                target: aliasAsTarget
+            ).decision,
+            .notMatched
+        )
+    }
+
+    func testPronunciationAliasesDoNotEnableGeneralNearWordMatching() throws {
+        let policy = makeSpeechPolicy()
+        let examples = [
+            (target: "cat", transcript: "cap"),
+            (target: "look", transcript: "book"),
+            (target: "can", transcript: "cab"),
+        ]
+
+        for example in examples {
+            let target = try WordPrompt(
+                learningMode: .read,
+                text: example.target
+            )
+            XCTAssertEqual(
+                policy.evaluate(
+                    transcript: example.transcript,
+                    confidence: RecognitionConfidence(0.95),
+                    target: target
+                ).decision,
+                .notMatched
+            )
+        }
+    }
+
+    func testLowConfidenceComeAliasStillFailsClosedAsUncertain() throws {
+        let target = try WordPrompt(learningMode: .read, text: "come")
+        let result = makeSpeechPolicy().evaluate(
+            transcript: "kum",
+            confidence: RecognitionConfidence(0.59),
+            target: target
+        )
+
+        XCTAssertEqual(result.decision, .uncertain)
+    }
+
+    func testComeAliasCannotBypassSingleTokenBoundaryNormalization() throws {
+        let target = try WordPrompt(learningMode: .read, text: "come")
+        let policy = makeSpeechPolicy()
+
+        XCTAssertEqual(
+            policy.evaluate(
+                transcript: "“kum!”",
+                confidence: RecognitionConfidence(0.95),
+                target: target
+            ).decision,
+            .matched
+        )
+        for transcript in ["kum now", "k.um", "kum-word"] {
+            XCTAssertEqual(
+                policy.evaluate(
+                    transcript: transcript,
+                    confidence: RecognitionConfidence(0.95),
+                    target: target
+                ).decision,
+                .notMatched
+            )
+        }
+    }
+
     func testSpeechPolicyDoesNotFuzzyAcceptSimilarNonHomophone() throws {
         let target = try WordPrompt(learningMode: .read, text: "look")
         let result = makeSpeechPolicy().evaluate(
@@ -192,6 +297,28 @@ final class AppleRecognitionDecisionPolicyTests: XCTestCase {
         )
 
         XCTAssertEqual(result.decision, .notMatched)
+    }
+
+    func testComeAliasDoesNotApplyToWritingOrExactSpellingPolicy() throws {
+        let readTarget = try WordPrompt(learningMode: .read, text: "come")
+        let writeTarget = try WordPrompt(learningMode: .write, text: "come")
+
+        XCTAssertEqual(
+            makePolicy().evaluate(
+                transcript: "kum",
+                confidence: RecognitionConfidence(0.95),
+                target: readTarget
+            ).decision,
+            .notMatched
+        )
+        XCTAssertEqual(
+            makeSpeechPolicy().evaluate(
+                transcript: "kum",
+                confidence: RecognitionConfidence(0.95),
+                target: writeTarget
+            ).decision,
+            .notMatched
+        )
     }
 
     func testMissingTranscriptOrConfidenceFailsClosedAsUncertain() throws {

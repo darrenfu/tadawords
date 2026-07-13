@@ -94,6 +94,21 @@ public actor LocalJSONWordPoolRepository: WordPoolRepository {
         return updatedEntry
     }
 
+    public func setActive(
+        _ isActive: Bool,
+        entryIDs: [WordPoolEntryID]
+    ) async throws -> [WordPoolEntry] {
+        guard !entryIDs.isEmpty else { return [] }
+        var candidate = try loadedStorage()
+        let updatedEntries = try candidate.setActive(
+            isActive,
+            entryIDs: entryIDs
+        )
+        try persist(candidate)
+        storage = candidate
+        return updatedEntries
+    }
+
     public func mergeSynced(_ entry: WordPoolEntry) throws {
         var candidate = try loadedStorage()
         guard try candidate.mergeSynced(entry) else { return }

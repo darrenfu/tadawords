@@ -13,7 +13,7 @@ public struct ThemedRewardCatalog: RewardCatalogProviding {
     private let itemsByWorld: [WorldTheme: [RewardCatalogItem]]
 
     public init() {
-        itemsByWorld = [
+        let baseItems: [WorldTheme: [RewardCatalogItem]] = [
             .moonpetalKingdom: Self.smallItems(
                 world: .moonpetalKingdom,
                 values: [
@@ -119,7 +119,183 @@ public struct ThemedRewardCatalog: RewardCatalogProviding {
                         ("great-northern-lights", "Great Northern Lights", 40),
                     ]
                 ),
+            .dinoDiscovery: Self.smallItems(
+                world: .dinoDiscovery,
+                values: [
+                    ("tiny-t-rex", "Tiny T-Rex"),
+                    ("triceratops-badge", "Triceratops Badge"),
+                    ("fossil-shell", "Fossil Shell"),
+                    ("raptor-footprint", "Raptor Footprint"),
+                    ("dino-egg", "Dino Egg"),
+                    ("stegosaurus-plate", "Stegosaurus Plate"),
+                    ("amber-gem", "Amber Gem"),
+                    ("jungle-compass", "Jungle Compass"),
+                    ("explorer-hat", "Explorer Hat"),
+                    ("bone-brush", "Bone Brush"),
+                    ("volcano-rock", "Volcano Rock"),
+                    ("fern-flag", "Fern Flag"),
+                    ("pterosaur-wing", "Pterosaur Wing"),
+                    ("dig-site-map", "Dig Site Map"),
+                    ("mammoth-tooth", "Mammoth Tooth"),
+                    ("dino-binoculars", "Dino Binoculars"),
+                    ("canyon-rope", "Canyon Rope"),
+                    ("river-raft", "River Raft"),
+                    ("cave-lantern", "Cave Lantern"),
+                    ("meteor-medal", "Meteor Medal"),
+                ]
+            )
+                + Self.milestones(
+                    world: .dinoDiscovery,
+                    values: [
+                        ("hatchery", "Dinosaur Hatchery", 3),
+                        ("fossil-lab", "Fossil Lab", 8),
+                        ("jungle-base", "Jungle Base", 15),
+                        ("dino-parade", "Dino Parade", 25),
+                        ("lost-valley", "Lost Valley", 40),
+                    ]
+                ),
+            .firehouseHeroes: Self.smallItems(
+                world: .firehouseHeroes,
+                values: [
+                    ("little-fire-engine", "Little Fire Engine"),
+                    ("shiny-helmet", "Shiny Helmet"),
+                    ("rescue-ladder", "Rescue Ladder"),
+                    ("water-hose", "Water Hose"),
+                    ("safety-cone", "Safety Cone"),
+                    ("brave-badge", "Brave Badge"),
+                    ("station-bell", "Station Bell"),
+                    ("rescue-flashlight", "Rescue Flashlight"),
+                    ("first-aid-kit", "First Aid Kit"),
+                    ("rescue-radio", "Rescue Radio"),
+                    ("silver-hydrant", "Silver Hydrant"),
+                    ("fire-boots", "Fire Boots"),
+                    ("city-map", "City Map"),
+                    ("rescue-megaphone", "Rescue Megaphone"),
+                    ("rescue-rope", "Rescue Rope"),
+                    ("traffic-light", "Traffic Light"),
+                    ("station-toolbox", "Station Toolbox"),
+                    ("safety-jacket", "Safety Jacket"),
+                    ("team-flag", "Team Flag"),
+                    ("dalmatian-tag", "Dalmatian Tag"),
+                ]
+            )
+                + Self.milestones(
+                    world: .firehouseHeroes,
+                    values: [
+                        ("fire-station", "Friendly Fire Station", 3),
+                        ("rescue-route", "Rescue Route", 8),
+                        ("hero-team", "Hero Team", 15),
+                        ("kindness-parade", "Kindness Parade", 25),
+                        ("city-star", "City Safety Star", 40),
+                    ]
+                ),
+            .brickworkCity: Self.smallItems(
+                world: .brickworkCity,
+                values: [
+                    ("red-block", "Red Building Block"),
+                    ("blue-block", "Blue Building Block"),
+                    ("yellow-gear", "Yellow Gear"),
+                    ("builder-figure", "Builder Figure"),
+                    ("tiny-window", "Tiny Window"),
+                    ("spinning-wheel", "Spinning Wheel"),
+                    ("bridge-piece", "Bridge Piece"),
+                    ("rocket-block", "Rocket Block"),
+                    ("castle-block", "Castle Block"),
+                    ("flower-brick", "Flower Brick"),
+                    ("robot-head", "Robot Head"),
+                    ("treasure-box", "Treasure Box"),
+                    ("rainbow-tiles", "Rainbow Tiles"),
+                    ("train-piece", "Train Piece"),
+                    ("tree-brick", "Tree Brick"),
+                    ("door-piece", "Door Piece"),
+                    ("flag-pole", "Flag Pole"),
+                    ("crane-block", "Crane Block"),
+                    ("boat-build", "Boat Build"),
+                    ("idea-tile", "Idea Tile"),
+                ]
+            )
+                + Self.milestones(
+                    world: .brickworkCity,
+                    values: [
+                        ("cozy-house", "Cozy Block House", 3),
+                        ("speedy-car", "Speedy Block Car", 8),
+                        ("inventor-fair", "Inventor Fair", 15),
+                        ("whole-planet", "Build-a-Planet", 25),
+                        ("bright-city", "Bright Block City", 40),
+                    ]
+                ),
+            .frostlightWorld: Self.smallItems(
+                world: .frostlightWorld,
+                values: [
+                    ("snowflake-charm", "Snowflake Charm"),
+                    ("crystal-star", "Crystal Star"),
+                    ("ice-skates", "Ice Skates"),
+                    ("polar-mittens", "Polar Mittens"),
+                    ("snowy-lantern", "Snowy Lantern"),
+                    ("penguin-scarf", "Penguin Scarf"),
+                    ("sled-bell", "Sled Bell"),
+                    ("ice-crown", "Ice Crown"),
+                    ("frost-boots", "Frost Boots"),
+                    ("crystal-compass", "Crystal Compass"),
+                    ("snow-globe", "Snow Globe"),
+                    ("hot-cocoa", "Hot Cocoa"),
+                    ("aurora-ribbon", "Aurora Ribbon"),
+                    ("icicle-wand", "Icicle Wand"),
+                    ("polar-map", "Polar Map"),
+                    ("winter-cape", "Winter Cape"),
+                    ("ice-castle-key", "Ice Castle Key"),
+                    ("moon-snowball", "Moon Snowball"),
+                    ("frozen-flower", "Frozen Flower"),
+                    ("northern-gem", "Northern Gem"),
+                ]
+            )
+                + Self.milestones(
+                    world: .frostlightWorld,
+                    values: [
+                        ("snowflake-garden", "Snowflake Garden", 3),
+                        ("winter-lodge", "Winter Lodge", 8),
+                        ("crystal-mountain", "Crystal Mountain", 15),
+                        ("snow-cloud-parade", "Snow Cloud Parade", 25),
+                        ("frostlight-sunrise", "Frostlight Sunrise", 40),
+                    ]
+                ),
+            .coasterCarnival: Self.smallItems(
+                world: .coasterCarnival,
+                values: [
+                    ("golden-ticket", "Golden Ticket"),
+                    ("rocket-car", "Rocket Coaster Car"),
+                    ("loop-badge", "Loop-the-Loop Badge"),
+                    ("ferris-light", "Ferris Wheel Light"),
+                    ("carousel-crown", "Carousel Crown"),
+                    ("popcorn-cup", "Popcorn Cup"),
+                    ("balloon-bundle", "Balloon Bundle"),
+                    ("prize-bear", "Prize Bear"),
+                    ("funhouse-mirror", "Funhouse Mirror"),
+                    ("park-map", "Park Map"),
+                    ("safety-bar", "Safety Bar"),
+                    ("coaster-camera", "Coaster Camera"),
+                    ("parade-flag", "Parade Flag"),
+                    ("cotton-candy", "Cotton Candy"),
+                    ("game-token", "Game Token"),
+                    ("arcade-star", "Arcade Star"),
+                    ("spin-ride", "Spin Ride"),
+                    ("splash-boat", "Splash Boat"),
+                    ("firework-pin", "Firework Pin"),
+                    ("party-hat", "Party Hat"),
+                ]
+            )
+                + Self.milestones(
+                    world: .coasterCarnival,
+                    values: [
+                        ("ticket-gate", "Carnival Ticket Gate", 3),
+                        ("sky-train", "Carnival Sky Train", 8),
+                        ("giant-coaster", "Giant Coaster", 15),
+                        ("balloon-festival", "Balloon Festival", 25),
+                        ("night-spectacular", "Night Spectacular", 40),
+                    ]
+                ),
         ]
+        itemsByWorld = RewardIconCatalog.applyingIcons(to: baseItems)
     }
 
     public func items(for world: WorldTheme) -> [RewardCatalogItem] {
