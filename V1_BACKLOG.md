@@ -106,7 +106,7 @@ The shipping soundscape synthesizes original procedural music and cues. It does 
 
 ### REPO-01: Remove stale generated Xcode artifacts
 
-**Status:** V1 baseline cleanup completed; v0.2 LocalQA files retained; full Swift suite is 479/479, with a final pre-commit artifact scan still required
+**Status:** V1 baseline cleanup completed; v0.2 LocalQA files retained; full Swift suite is 480/480, with a final pre-commit artifact scan still required
 
 Keep:
 

@@ -57,7 +57,7 @@ Overall state: implementation and regression testing in progress.
 | V02-IMP-020 | Improvement | Write tools | Add Pencil, Crayon, Chalk, and Brush tools plus 12 independently selectable basic colors, with persistent distinct stroke styles and gentle per-stroke movement sounds. Replace Undo with a local eraser whose path is 2.5× the active pen width; retain one-tap Clear. | Automated pass | Draw/switch tools/colors/erase partial strokes with finger and Pencil; verify old strokes retain style/color, recognition input, sound throttling, reduced-sound policy, compact layout, and no prompt-audio masking. |
 | V02-IMP-021 | Improvement | Read presentation | Read words use a stable, high-contrast color selected from the active World palette for each attempt, with enough variation across words and no redraw flicker. | Automated pass | Verify all eight World palettes, deterministic redraw/rotation, WCAG contrast, and visible variety across a quest. |
 | V02-IMP-022 | Improvement | Parent navigation | Rename the child-facing entry to `Parents`. Parent setup/management routes support portrait and landscape on iPhone/iPad; all child routes remain landscape-only and restore landscape immediately on exit. | Automated pass | Policy tests and iPad simulator window shapes pass. Rotate every Parent route on physical devices, return through Parent Gate, and confirm Profile/Lobby/Quest/Badge remain landscape in both landscape directions; iPhone raw simulator framebuffer captures are not acceptance evidence. |
-| V02-IMP-023 | Improvement | Child visual style | Refine child-facing typography, microcopy, shapes, and decorative rhythm to feel cuter and more inviting for a Pre-K child while preserving large touch targets, reading contrast, and distinct World identities. | In progress | Compare fresh phone/tablet screenshots, Dynamic Type and VoiceOver, then run a short target-child navigation/appeal observation. |
+| V02-IMP-023 | Improvement | Child visual style | Refine child-facing typography, microcopy, shapes, and decorative rhythm to feel cuter and more inviting for a Pre-K child while preserving large touch targets, reading contrast, and distinct World identities. | Automated pass | Fresh phone/tablet Profile, Lobby, Read, and Result captures pass. Complete Dynamic Type, VoiceOver, and a short target-child navigation/appeal observation on physical devices. |
 | V02-IMP-024 | Improvement | Lobby | Move the former `Collection — See your world treasures` strip into the upper-right header as a compact `Badge` button that opens the same earned-cosmetics screen. | Automated pass | iPhone landscape capture shows the four-item header fits and the bottom strip is gone; physically tap Badge on phone/tablet to confirm navigation. |
 
 ## Daily notes
@@ -84,7 +84,8 @@ Overall state: implementation and regression testing in progress.
 - Moved Collection from the Lobby body to a compact upper-right `Badge` entry.
 - Opened a focused Pre-K visual-style refinement pass; fresh screenshots and
   target-child observation remain required before acceptance.
-- Completed the branch-wide Swift suite: 479/479 passed with zero failures.
+- Completed the branch-wide Swift suite: 479/479 passed with zero failures
+  before the focused Phase 1 presentation test was added.
 - Built the LocalQA app successfully for iPhone 17 Pro Max and iPad Pro 13-inch
   (M5) simulators. Fresh signed physical-device installation remains open.
 
@@ -96,8 +97,16 @@ Overall state: implementation and regression testing in progress.
 - Promoted `V02-IMP-024` to Automated pass after the iPhone landscape capture
   showed the four-item header fitting without the former bottom Collection
   strip. Physical Badge tap-through remains required.
-- Kept `V02-IMP-023` In progress pending the approved Pre-K visual refinement,
-  fresh phone/tablet screenshots, accessibility review, and target-child check.
+- Promoted `V02-IMP-023` to Automated pass after the approved Phase 1 visual
+  refinement: the remembered Profile is statically emphasized; iPhone Lobby
+  uses a 48-point icon dock inside 72-point touch frames while iPad retains
+  labels; Lobby/Read/Result mascots, the iPad Read card and word, and Result
+  reward/replay emphasis are larger through centralized child-scale tokens.
+- Reviewed fresh Profile, Lobby, Read, and Result captures on iPhone 17 Pro Max
+  and iPad Pro 13-inch (M5). No clipping, overlap, or World-identity leakage was
+  observed; physical Dynamic Type, VoiceOver, and target-child appeal remain.
+- Completed the post-refinement branch-wide suite: 480/480 passed with zero
+  failures, and both LocalQA simulator builds passed.
 - Locked the launch-voice implementation target to one continuous `tah-DAH`
   SSML phrase, a 105ms pause, and a lower `words`, matching
   `tā-'dá, wòrds!` / `它达，沃尔子`; device listening approval remains open.

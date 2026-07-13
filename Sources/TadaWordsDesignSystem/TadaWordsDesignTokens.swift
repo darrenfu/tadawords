@@ -58,12 +58,43 @@ public enum TadaTypography {
 }
 
 public enum TadaLayoutTokens {
-    public static let readCardStandardMinimumWidth: CGFloat = 520
     public static let questChromeCompactSpacing: CGFloat = 8
     public static let compactActionRailWidth: CGFloat = 104
     public static let standardActionRailWidth: CGFloat = 142
     public static let compactHeightScrollInset: CGFloat = 12
     public static let statePanelMaximumWidth: CGFloat = 440
+}
+
+/// Centralized child-facing scale values for the most important playful UI elements.
+public enum TadaChildScaleTokens {
+    public enum Profile {
+        public static let lastPlayedScale: CGFloat = 1.03
+    }
+
+    public enum Lobby {
+        public static let mascotCompact: CGFloat = 72
+        public static let mascotRegular: CGFloat = 104
+        public static let utilitySymbolSize: CGFloat = 20
+        public static let utilityVisualDiameter: CGFloat = 48
+        public static let utilityTouchDiameter: CGFloat = 72
+    }
+
+    public enum Read {
+        public static let mascotCompact: CGFloat = 80
+        public static let mascotRegular: CGFloat = 104
+        public static let cardRegularMinimumWidth: CGFloat = 560
+        public static let cardRegularMaximumWidth: CGFloat = 760
+        public static let wordRegularSize: CGFloat = 112
+    }
+
+    public enum Result {
+        public static let mascotCompact: CGFloat = 68
+        public static let mascotRegular: CGFloat = 104
+        public static let rewardCompact: CGFloat = 96
+        public static let rewardRegular: CGFloat = 144
+        public static let replaySymbolCompact: CGFloat = 78
+        public static let replaySymbolRegular: CGFloat = 120
+    }
 }
 
 public enum TadaSemanticColors {

@@ -1,3 +1,4 @@
+import TadaWordsDesignSystem
 import TadaWordsDomain
 import XCTest
 
@@ -58,6 +59,25 @@ final class ResponsiveLayoutPolicyTests: XCTestCase {
                 rememberedID,
                 rememberedProfileID: nil
             )
+        )
+    }
+
+    func testLastPlayedProfileCardGetsStaticEmphasisOnly() {
+        XCTAssertEqual(
+            ProfileChooserPresentation.cardScale(isLastPlayed: true),
+            TadaChildScaleTokens.Profile.lastPlayedScale
+        )
+        XCTAssertEqual(
+            ProfileChooserPresentation.cardScale(isLastPlayed: false),
+            1
+        )
+        XCTAssertEqual(
+            ProfileChooserPresentation.cardZIndex(isLastPlayed: true),
+            1
+        )
+        XCTAssertEqual(
+            ProfileChooserPresentation.cardZIndex(isLastPlayed: false),
+            0
         )
     }
 }

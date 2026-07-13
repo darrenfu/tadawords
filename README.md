@@ -20,7 +20,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing it or scanning a school list with the camera or photo library. Tada Words schedules only those parent-provided words; V1 never grows a Pool from a grade catalog or smart fill. The review scheduler brings words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Work is active on branch `v0.2` after the first physical-iPhone feedback pass. The branch-wide Swift suite passes **479/479**, and LocalQA simulator builds pass for iPhone 17 Pro Max and iPad Pro 13-inch (M5). Fresh physical-device installation, child speech/handwriting, launch-voice listening, accessibility, and iPad acceptance remain open. Family Sync is persisted, default-off, and requires explicit parent opt-in; CloudKit remote erasure remains a release blocker. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md) and [acceptance checklist](MVP_ACCEPTANCE.md).
+> **Project status:** Work is active on branch `v0.2` after the first physical-iPhone feedback pass. The branch-wide Swift suite passes **480/480**, LocalQA simulator builds pass for iPhone 17 Pro Max and iPad Pro 13-inch (M5), and the approved Pre-K visual hierarchy has fresh Profile, Lobby, Read, and Result captures on both form factors. Fresh physical-device installation, child speech/handwriting, launch-voice listening, accessibility, and iPad acceptance remain open. Family Sync is persisted, default-off, and requires explicit parent opt-in; CloudKit remote erasure remains a release blocker. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md) and [acceptance checklist](MVP_ACCEPTANCE.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -92,7 +92,7 @@ make check
 open TadaWords.xcodeproj
 ```
 
-`make check` runs strict Swift formatting checks and the Swift package test suite. The accepted V1 baseline contained **367 tests with zero failures**; it is superseded for the active branch by the full v0.2 run of **479 tests with zero failures**.
+`make check` runs strict Swift formatting checks and the Swift package test suite. The accepted V1 baseline contained **367 tests with zero failures**; it is superseded for the active branch by the full v0.2 run of **480 tests with zero failures**.
 
 Run the device-readiness script before installing on an iPhone or iPad:
 
@@ -123,9 +123,10 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Swift tests | v0.2 full run: 479 passed, 0 failures; supersedes the 367-test V1 baseline |
+| Swift tests | v0.2 full run: 480 passed, 0 failures; supersedes the 367-test V1 baseline |
 | iPhone 17 Pro Max LocalQA simulator | Build passed |
 | iPad Pro 13-inch (M5) LocalQA simulator | Build passed |
+| Pre-K visual hierarchy | Fresh Profile, Lobby, Read, and Result captures pass on both simulators; physical child, VoiceOver, and Dynamic Type acceptance remain open |
 | Route-based orientation | Plist and runtime-policy checks passed. iPad simulator window shapes show Parents rotating while child routes remain landscape. Raw iPhone simulator framebuffer captures are inconclusive, so physical rotation remains open. |
 | Persisted, default-off CloudKit guardian opt-in | Implemented; live-device acceptance open |
 | CloudKit remote erasure | Implementation required |

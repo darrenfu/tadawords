@@ -119,7 +119,11 @@ struct ReadQuestView: View {
     private var readingStage: some View {
         if verticalSizeClass == .compact {
             HStack(spacing: TadaPrimitiveTokens.Spacing.large) {
-                TadaWorldMascot(theme: theme, pose: .encouraging, size: 72)
+                TadaWorldMascot(
+                    theme: theme,
+                    pose: .encouraging,
+                    size: TadaChildScaleTokens.Read.mascotCompact
+                )
                 wordCard
                     .frame(maxWidth: 510)
                 microphoneButton
@@ -132,16 +136,24 @@ struct ReadQuestView: View {
             }
         } else {
             VStack(spacing: TadaPrimitiveTokens.Spacing.large) {
-                TadaWorldMascot(theme: theme, pose: .encouraging, size: 78)
+                TadaWorldMascot(
+                    theme: theme,
+                    pose: .encouraging,
+                    size: TadaChildScaleTokens.Read.mascotRegular
+                )
                 wordCard
                     .frame(
-                        minWidth: TadaLayoutTokens.readCardStandardMinimumWidth,
-                        maxWidth: 720
+                        minWidth: TadaChildScaleTokens.Read.cardRegularMinimumWidth,
+                        maxWidth: TadaChildScaleTokens.Read.cardRegularMaximumWidth
                     )
                 microphoneButton
                 feedbackView
             }
-            .frame(maxWidth: 760, maxHeight: .infinity)
+            .frame(
+                maxWidth: TadaChildScaleTokens.Read.cardRegularMaximumWidth
+                    + (TadaPrimitiveTokens.Spacing.xLarge * 2),
+                maxHeight: .infinity
+            )
         }
     }
 
@@ -155,7 +167,9 @@ struct ReadQuestView: View {
                 Text(session.prompt.displayText)
                     .font(
                         .system(
-                            size: verticalSizeClass == .compact ? 78 : 104,
+                            size: verticalSizeClass == .compact
+                                ? 78
+                                : TadaChildScaleTokens.Read.wordRegularSize,
                             weight: .bold,
                             design: .rounded
                         )

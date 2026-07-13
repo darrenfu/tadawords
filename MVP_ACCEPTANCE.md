@@ -32,12 +32,12 @@ make check
 
 通过标准：格式检查、单元与组合测试、iPhone 17 Pro Max LocalQA 模拟器构建、iPad Pro 13-inch (M5) LocalQA 模拟器构建全部通过。设备准备脚本可以在未配置签名 Team 时报告签名阻塞。
 
-2026-07-13 的 v0.2 自动化证据如下。V1 的 367 项测试只保留为历史基线，已被本轮 479 项全量结果取代：
+2026-07-13 的 v0.2 自动化证据如下。V1 的 367 项测试只保留为历史基线，已被本轮 480 项全量结果取代：
 
 | 检查 | 结果 |
 |---|---|
 | Swift formatter 严格检查 | 通过 |
-| Swift 单元与组合测试 | v0.2 全量 479/479 通过，0 failure；取代 V1 的 367 项基线 |
+| Swift 单元与组合测试 | v0.2 全量 480/480 通过，0 failure；取代 V1 的 367 项基线 |
 | iPhone 17 Pro Max LocalQA 模拟器构建 | 通过 |
 | iPad Pro 13-inch (M5) LocalQA 模拟器构建 | 通过 |
 | 两个 built product 的方向声明 | iPhone 为 Portrait + 两个 Landscape；iPad 为四向；`UIRequiresFullScreen` 为 true；运行时 Parents 可旋转，child route 只允许横屏 |
@@ -68,6 +68,7 @@ make check
 | Double Quest 次日 Theme / Icon | v0.2 代码完成，待真机回归 | 同日 Read+Write 的 Today run 次日解锁；partial/replay 不算；My Collection 可选择已获得项目 |
 | 多 Kid Profile 与上次 Profile | v0.2 代码完成，待真机回归 | 冷启动先到 Picker并突出上次 Profile；每个 Profile 数据、声纹、设置与 cosmetics 隔离 |
 | Profile-first 首次流程 | v0.2 代码完成，待真机布局复验 | 无 Profile 直接 New Kid；首次流程无单词输入 |
+| Pre-K 儿童端视觉层级 | v0.2 模拟器已检查，待儿童与辅助功能验收 | 上次 Profile 静态突出；iPhone Lobby 图标 dock 保留 72 pt 触控区；Read 主词与 Result 奖励更醒目；iPad 保留文字工具入口 |
 | 自拍、照片、动物头像 | 代码已完成 | 真机检查 Camera 与 Photo Library 权限 |
 | 月度打卡 Calendar | 代码已完成 | 每日显示准确 Quest 次数，Practice Again 也计数 |
 | 7 日与 30 日报告 | 代码已完成 | 检查趋势、单词详情、识别纠正和 CSV 导出 |

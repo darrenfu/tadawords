@@ -77,16 +77,15 @@ struct ChildLobbyView: View {
         )
     }
 
+    @ViewBuilder
     private var lobbyHeader: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
+        if isCompactHeight {
+            HStack(spacing: TadaPrimitiveTokens.Spacing.small) {
                 playersButton
-                Spacer()
-                worldsButton
-                calendarButton
-                badgeButton
+                Spacer(minLength: TadaPrimitiveTokens.Spacing.small)
+                compactUtilityDock
             }
-
+        } else {
             HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
                 playersButton
                 Spacer()
@@ -109,8 +108,64 @@ struct ChildLobbyView: View {
                 isCompact: true
             )
         )
+        .accessibilityLabel("Kids")
         .accessibilityHint("Choose a kid profile")
         .accessibilityIdentifier("child-lobby.kids")
+    }
+
+    private var compactUtilityDock: some View {
+        HStack(spacing: 0) {
+            compactUtilityButton(
+                label: "Worlds",
+                symbol: "globe.americas.fill",
+                hint: "Preview or enter an unlocked world",
+                identifier: "child-lobby.worlds",
+                action: onOpenWorlds
+            )
+            compactUtilityButton(
+                label: "Calendar",
+                symbol: "calendar",
+                hint: "Shows this month’s completed quests",
+                identifier: "child-lobby.calendar",
+                action: onOpenCalendar
+            )
+            compactUtilityButton(
+                label: "Badge",
+                symbol: "medal.fill",
+                hint: "See your world treasures",
+                identifier: "child-lobby.badge",
+                action: onOpenCollection
+            )
+        }
+        .padding(.horizontal, 2)
+        .background(theme.surface.opacity(0.48), in: Capsule())
+        .overlay {
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.56), lineWidth: 1)
+        }
+        .shadow(color: theme.ink.opacity(0.10), radius: 9, y: 5)
+    }
+
+    private func compactUtilityButton(
+        label: String,
+        symbol: String,
+        hint: String,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .accessibilityHidden(true)
+        }
+        .buttonStyle(
+            TadaLobbyUtilityButtonStyle(
+                fill: theme.surface,
+                foreground: theme.ink
+            )
+        )
+        .accessibilityLabel(label)
+        .accessibilityHint(hint)
+        .accessibilityIdentifier(identifier)
     }
 
     private var calendarButton: some View {
@@ -125,7 +180,9 @@ struct ChildLobbyView: View {
                 isCompact: true
             )
         )
+        .accessibilityLabel("Calendar")
         .accessibilityHint("Shows this month’s completed quests")
+        .accessibilityIdentifier("child-lobby.calendar")
     }
 
     private var worldsButton: some View {
@@ -140,7 +197,9 @@ struct ChildLobbyView: View {
                 isCompact: true
             )
         )
+        .accessibilityLabel("Worlds")
         .accessibilityHint("Preview or enter an unlocked world")
+        .accessibilityIdentifier("child-lobby.worlds")
     }
 
     private var badgeButton: some View {
@@ -155,6 +214,7 @@ struct ChildLobbyView: View {
                 isCompact: true
             )
         )
+        .accessibilityLabel("Badge")
         .accessibilityHint("See your world treasures")
         .accessibilityIdentifier("child-lobby.badge")
     }
@@ -164,7 +224,9 @@ struct ChildLobbyView: View {
             TadaWorldMascot(
                 theme: theme,
                 pose: .encouraging,
-                size: isCompactHeight ? 56 : 82
+                size: isCompactHeight
+                    ? TadaChildScaleTokens.Lobby.mascotCompact
+                    : TadaChildScaleTokens.Lobby.mascotRegular
             )
 
             VStack(alignment: .leading, spacing: 2) {

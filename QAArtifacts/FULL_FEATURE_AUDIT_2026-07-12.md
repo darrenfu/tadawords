@@ -8,7 +8,7 @@ representative child samples, or human listening.
 
 > **v0.2 supersession:** The 367-test result is retained below only as the
 > accepted V1 historical baseline. The active `v0.2` branch has since completed
-> a branch-wide **479/479** Swift test run and LocalQA simulator builds for iPhone
+> a branch-wide **480/480** Swift test run and LocalQA simulator builds for iPhone
 > 17 Pro Max and iPad Pro 13-inch (M5). Physical-device rotation, child input,
 > accessibility, and audible prosody remain open. The authoritative change
 > history is `FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md`.
@@ -39,19 +39,19 @@ make check
 | Gate | Result |
 |---|---|
 | Strict Swift formatter check | Pass |
-| Swift unit and integration suite | 479 tests passed, 0 failures |
+| Swift unit and integration suite | 480 tests passed, 0 failures |
 | iPhone 17 Pro Max LocalQA simulator build | Pass |
 | iPad Pro 13-inch (M5) LocalQA simulator build | Pass |
 | Built-product orientation declarations | iPhone contains Portrait plus both Landscapes; iPad contains all four; `UIRequiresFullScreen` is true and runtime policy restricts child routes to Landscape |
 | Route-orientation policy tests | Pass; Parents is flexible and child routes restore Landscape |
-| iPad simulator visual evidence | The Parent launch uses a tall/portrait window and child Read uses a landscape window; see `QAArtifacts/v0.2-2026-07-12/iPadPro13-launch.jpg` and `QAArtifacts/v0.2-2026-07-12/iPadPro13-paws-read.jpg` |
-| iPhone child visual evidence | Rotated, readable landscape captures show the Moonpetal Lobby and Read layouts; see `QAArtifacts/v0.2-2026-07-12/iPhone17ProMax-moonpetal-lobby.jpg` and `QAArtifacts/v0.2-2026-07-12/iPhone17ProMax-moonpetal-read.jpg`. These are UI evidence, not raw rotation-policy evidence. |
+| iPad simulator visual evidence | The Parent launch uses a tall/portrait window and child Read uses a landscape window. The fresh Phase 1 set covers Profile, Lobby, Read, and Result under `QAArtifacts/v0.2-phase1-2026-07-13/`; the older route-shape evidence remains under `QAArtifacts/v0.2-2026-07-12/`. |
+| iPhone child visual evidence | Rotated, readable landscape captures under `QAArtifacts/v0.2-phase1-2026-07-13/` show the last-played Profile emphasis, compact Lobby utility dock, enlarged Read hierarchy, and enlarged Result hierarchy. These are UI evidence, not raw rotation-policy evidence. |
 | iPhone simulator orientation capture | Inconclusive because raw framebuffer captures can appear rotated or letterboxed; physical rotation remains required |
 | Built-product CloudKit sharing declaration | `CKSharingSupported` is true |
 | Child-speech fixture integrity and Apple transcription | Pass; checksum valid and output is `Bye.` |
 
 The original audit's 292-test count and the accepted V1 baseline's 367-test
-count are both superseded for `v0.2` by the 479-test run. The older counts remain
+count are both superseded for `v0.2` by the 480-test run. The older counts remain
 in historical cleanup notes only.
 
 ## Requirements traceability
@@ -195,7 +195,7 @@ The repository now keeps only the canonical `TadaWords.xcodeproj`, `Apps/TadaWor
 
 At the accepted V1 baseline, after the canonical 367-test check and both Release
 simulator builds passed, these stale artifacts were removed. That historical
-coverage is superseded by the current 479-test v0.2 run:
+coverage is superseded by the current 480-test v0.2 run:
 
 - `TadaWords 2.xcodeproj`
 - `TadaWords 3.xcodeproj`

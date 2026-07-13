@@ -106,7 +106,11 @@ struct QuestResultView: View {
     private var completionHeader: some View {
         VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
             HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                TadaWorldMascot(theme: theme, pose: .cheering, size: 88)
+                TadaWorldMascot(
+                    theme: theme,
+                    pose: .cheering,
+                    size: TadaChildScaleTokens.Result.mascotRegular
+                )
                 ZStack {
                     Circle()
                         .fill(TadaPrimitiveTokens.ColorValue.success)
@@ -139,7 +143,11 @@ struct QuestResultView: View {
 
     private var compactCompletionHeader: some View {
         HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-            TadaWorldMascot(theme: theme, pose: .cheering, size: 58)
+            TadaWorldMascot(
+                theme: theme,
+                pose: .cheering,
+                size: TadaChildScaleTokens.Result.mascotCompact
+            )
 
             ZStack {
                 Circle()
@@ -232,11 +240,14 @@ struct QuestResultView: View {
                     TadaRewardBadge(
                         theme: theme,
                         isUnlocked: revealPhase >= 4,
-                        size: 124,
+                        size: TadaChildScaleTokens.Result.rewardRegular,
                         symbol: rewardSymbol
                     )
                 } else if result.showsReplayAction {
-                    replayButton(size: 124, symbolSize: 104)
+                    replayButton(
+                        size: TadaChildScaleTokens.Result.rewardRegular,
+                        symbolSize: TadaChildScaleTokens.Result.replaySymbolRegular
+                    )
                 }
 
                 if result.showsNewCollectible {
@@ -332,11 +343,14 @@ struct QuestResultView: View {
                     TadaRewardBadge(
                         theme: theme,
                         isUnlocked: revealPhase >= 4,
-                        size: 86,
+                        size: TadaChildScaleTokens.Result.rewardCompact,
                         symbol: rewardSymbol
                     )
                 } else if result.showsReplayAction {
-                    replayButton(size: 86, symbolSize: 70)
+                    replayButton(
+                        size: TadaChildScaleTokens.Result.rewardCompact,
+                        symbolSize: TadaChildScaleTokens.Result.replaySymbolCompact
+                    )
                 }
 
                 VStack(alignment: .leading, spacing: 4) {

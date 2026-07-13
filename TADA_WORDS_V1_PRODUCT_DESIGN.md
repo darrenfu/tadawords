@@ -151,6 +151,7 @@ App 只从 Guardian 已经录入的 Pool 中编排 New、Review、难词回流�
 - 每个 Profile 使用 96 pt 以上的大头像卡片。
 - 孩子先点击自己的头像；App 不依赖声纹自动切换 Profile。
 - App 记住最后使用的有效 Profile；下次冷启动在 Picker 中突出该 Profile，但仍由孩子点击确认。若该 Profile 已不存在，则显示普通 Picker，不猜测其他身份。
+- 上次 Profile 使用静态 1.03× 尺寸与更高叠放层级突出；其他 Profile 不降透明度，也不使用持续动画。
 - Picker 提供 `New Kid` 卡片。孩子只输入昵称，App 自动分配内置动物头像与 Starter World；完整编辑仍由 Guardian 完成。
 - Read 录音时，才用选中 Profile 的声纹过滤其他说话人。
 - `Parents` 入口放在稳定的右上角，普通单击后立即进入随机算术 Parent Gate，不与 Quest 主入口争夺注意力。
@@ -181,6 +182,15 @@ App 只从 Guardian 已经录入的 Pool 中编排 New、Review、难词回流�
 - Practice Again 会更新记忆模型，但不重复发放当日永久收藏品，也不计入世界解锁次数。
 - Results 页的 Replay 图标必须是可点击按钮；单击后重新开始同一模式的 `Practice Again`，不重复永久奖励或 Theme / Icon 解锁。
 - `Quest Calendar` 展示当前月每天实际完成的 Quest 次数；Read、Write 和 Practice Again 都按一次完成记录计数，并严格按 Profile 隔离。
+
+### v0.2 Pre-K 视觉层级
+
+- iPhone 横屏 Header 保留左侧带字 `Kids`；右侧 `Worlds`、`Calendar`、`Badge` 收入半透明图标 dock。每个图标视觉直径 48 pt，实际触控框 72 × 72 pt，并提供完整 VoiceOver label/hint。
+- iPad Header 继续显示 `Worlds`、`Calendar`、`Badge` 文字，不为追求统一而牺牲大屏可读性。
+- Lobby 主 mascot 在紧凑/标准布局分别为 72/104 pt。
+- Read 主 mascot 为 80/104 pt；标准布局单词卡宽度为 560–760 pt，目标词为 112 pt；iPhone 紧凑布局保留 78 pt 目标词以避免挤压麦克风。
+- Result 主 mascot 为 68/104 pt，reward/replay 主视觉为 96/144 pt。尺寸变化只强化完成感，不改变积分、星星、奖励或 Replay 行为。
+- 以上尺寸来自集中式 child-scale component tokens；不同 World 继续使用自己的 palette、scene、mascot 与 reward，不统一改成公主粉色。
 
 ## 8. 单词池与每日编排
 

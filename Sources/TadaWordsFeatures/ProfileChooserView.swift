@@ -246,6 +246,14 @@ enum ProfileChooserPresentation {
     ) -> Bool {
         profileID == rememberedProfileID
     }
+
+    static func cardScale(isLastPlayed: Bool) -> CGFloat {
+        isLastPlayed ? TadaChildScaleTokens.Profile.lastPlayedScale : 1
+    }
+
+    static func cardZIndex(isLastPlayed: Bool) -> Double {
+        isLastPlayed ? 1 : 0
+    }
 }
 
 private struct ProfileCard: View {
@@ -350,6 +358,8 @@ private struct ProfileCard: View {
             .shadow(color: theme.primary.opacity(0.16), radius: 18, y: 9)
         }
         .buttonStyle(TadaTactileCardButtonStyle())
+        .scaleEffect(ProfileChooserPresentation.cardScale(isLastPlayed: isLastPlayed))
+        .zIndex(ProfileChooserPresentation.cardZIndex(isLastPlayed: isLastPlayed))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Opens today’s Read and Write quests")
