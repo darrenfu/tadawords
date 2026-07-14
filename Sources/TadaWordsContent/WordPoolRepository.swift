@@ -55,6 +55,12 @@ public protocol WordPoolRepository: Sendable {
         entryID: WordPoolEntryID
     ) async throws -> WordPoolEntry
 
+    /// Atomically updates a parent-confirmed set of pool memberships.
+    func setActive(
+        _ isActive: Bool,
+        entryIDs: [WordPoolEntryID]
+    ) async throws -> [WordPoolEntry]
+
     func deleteAll(for profileID: ProfileID) async throws
 }
 
@@ -88,6 +94,13 @@ public actor InMemoryWordPoolRepository: WordPoolRepository {
         entryID: WordPoolEntryID
     ) async throws -> WordPoolEntry {
         try storage.setActive(isActive, entryID: entryID)
+    }
+
+    public func setActive(
+        _ isActive: Bool,
+        entryIDs: [WordPoolEntryID]
+    ) async throws -> [WordPoolEntry] {
+        try storage.setActive(isActive, entryIDs: entryIDs)
     }
 
     public func deleteAll(for profileID: ProfileID) async throws {
@@ -202,7 +215,8 @@ struct WordPoolStorage: Sendable {
             .filter { entry in
                 entry.profileID == profileID
                     && entry.learningMode == learningMode
-                    && (includingInactive || entry.isActive)
+                    && (includingInactive
+                        || (entry.isActive && entry.source == .guardianManual))
             }
             .sorted(by: Self.stableEntryOrder)
     }
@@ -217,6 +231,21 @@ struct WordPoolStorage: Sendable {
         let updatedEntry = existingEntry.settingActive(isActive)
         entriesByID[entryID] = updatedEntry
         return updatedEntry
+    }
+
+    mutating func setActive(
+        _ isActive: Bool,
+        entryIDs: [WordPoolEntryID]
+    ) throws -> [WordPoolEntry] {
+        let uniqueIDs = Array(Set(entryIDs))
+        for entryID in uniqueIDs where entriesByID[entryID] == nil {
+            throw WordPoolRepositoryError.entryNotFound(entryID)
+        }
+        return uniqueIDs.map { entryID in
+            let updatedEntry = entriesByID[entryID]!.settingActive(isActive)
+            entriesByID[entryID] = updatedEntry
+            return updatedEntry
+        }
     }
 
     @discardableResult
@@ -238,8 +267,8 @@ struct WordPoolStorage: Sendable {
         _ left: WordPoolEntry,
         _ right: WordPoolEntry
     ) -> Bool {
-        if left.addedAt != right.addedAt {
-            return left.addedAt < right.addedAt
+        if left.lastQueuedAt != right.lastQueuedAt {
+            return left.lastQueuedAt > right.lastQueuedAt
         }
         if left.positionInLastBatch != right.positionInLastBatch {
             return left.positionInLastBatch < right.positionInLastBatch

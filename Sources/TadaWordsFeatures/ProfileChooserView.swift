@@ -8,6 +8,7 @@ import TadaWordsDomain
 
 struct ProfileChooserView: View {
     let profiles: [KidProfile]
+    let lastPlayedProfileID: ProfileID?
     let onSelect: (KidProfile) -> Void
     let onCreateProfile: (String) async -> Bool
     let isCreatingProfile: Bool
@@ -79,7 +80,14 @@ struct ProfileChooserView: View {
 
                 LazyVGrid(columns: grid, spacing: 18) {
                     ForEach(profiles, id: \.id) { profile in
-                        ProfileCard(profile: profile, density: .standard) {
+                        ProfileCard(
+                            profile: profile,
+                            density: .standard,
+                            isLastPlayed: ProfileChooserPresentation.isLastPlayed(
+                                profile.id,
+                                rememberedProfileID: lastPlayedProfileID
+                            )
+                        ) {
                             onSelect(profile)
                         }
                     }
@@ -130,7 +138,7 @@ struct ProfileChooserView: View {
                     }
                     .scrollIndicators(.visible)
 
-                    Label("Swipe to see more players", systemImage: "arrow.left.and.right")
+                    Label("Swipe to see more kids", systemImage: "arrow.left.and.right")
                         .font(.system(.caption, design: .rounded, weight: .semibold))
                         .foregroundStyle(TadaPrimitiveTokens.ColorValue.softInk)
                 }
@@ -144,7 +152,14 @@ struct ProfileChooserView: View {
     @ViewBuilder
     private var compactProfileCards: some View {
         ForEach(profiles, id: \.id) { profile in
-            ProfileCard(profile: profile, density: .compact) {
+            ProfileCard(
+                profile: profile,
+                density: .compact,
+                isLastPlayed: ProfileChooserPresentation.isLastPlayed(
+                    profile.id,
+                    rememberedProfileID: lastPlayedProfileID
+                )
+            ) {
                 onSelect(profile)
             }
         }
@@ -163,26 +178,23 @@ struct ProfileChooserView: View {
     }
 
     private var guardianButton: some View {
-        Label("Grown-ups", systemImage: "lock.fill")
-            .font(.system(.subheadline, design: .rounded, weight: .bold))
-            .padding(.horizontal, TadaPrimitiveTokens.Spacing.medium)
-            .frame(minHeight: TadaPrimitiveTokens.TouchTarget.minimum)
-            .background(
-                Color.white.opacity(0.84),
-                in: Capsule(style: .continuous)
-            )
-            .foregroundStyle(TadaPrimitiveTokens.ColorValue.ink)
-            .contentShape(Capsule(style: .continuous))
-            .onLongPressGesture(
-                minimumDuration: 1,
-                perform: onOpenGuardian
-            )
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityHint("Touch and hold to open the Parent Gate")
-            .accessibilityAction {
-                onOpenGuardian()
-            }
+        Button(action: onOpenGuardian) {
+            Label("Parents", systemImage: "lock.fill")
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                .padding(.horizontal, TadaPrimitiveTokens.Spacing.medium)
+                .frame(minHeight: TadaPrimitiveTokens.TouchTarget.minimum)
+                .background(
+                    Color.white.opacity(0.84),
+                    in: Capsule(style: .continuous)
+                )
+                .foregroundStyle(TadaPrimitiveTokens.ColorValue.ink)
+                .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .frame(minHeight: TadaPrimitiveTokens.TouchTarget.minimum)
+        .accessibilityLabel("Parents")
+        .accessibilityHint("Opens the Parent Gate")
+        .accessibilityIdentifier("profile-chooser.grown-ups")
     }
 
     private var brand: some View {
@@ -227,6 +239,23 @@ enum ProfileChooserLayoutMode: Equatable {
     }
 }
 
+enum ProfileChooserPresentation {
+    static func isLastPlayed(
+        _ profileID: ProfileID,
+        rememberedProfileID: ProfileID?
+    ) -> Bool {
+        profileID == rememberedProfileID
+    }
+
+    static func cardScale(isLastPlayed: Bool) -> CGFloat {
+        isLastPlayed ? TadaChildScaleTokens.Profile.lastPlayedScale : 1
+    }
+
+    static func cardZIndex(isLastPlayed: Bool) -> Double {
+        isLastPlayed ? 1 : 0
+    }
+}
+
 private struct ProfileCard: View {
     enum Density {
         case standard
@@ -235,6 +264,7 @@ private struct ProfileCard: View {
 
     let profile: KidProfile
     let density: Density
+    let isLastPlayed: Bool
     let action: () -> Void
 
     private var theme: TadaWorldTheme {
@@ -257,7 +287,7 @@ private struct ProfileCard: View {
                         .strokeBorder(Color.white.opacity(0.82), lineWidth: 4)
                         .padding(6)
                     ProfileAvatarContent(
-                        avatar: profile.avatar,
+                        avatar: profile.displayAvatar,
                         symbolSize: density == .compact ? 42 : 54
                     )
                     .clipShape(Circle())
@@ -279,10 +309,17 @@ private struct ProfileCard: View {
                     .foregroundStyle(theme.ink)
                     .lineLimit(1)
 
-                Label(theme.name, systemImage: theme.motifSymbol)
-                    .font(.system(.caption, design: .rounded, weight: .semibold))
-                    .foregroundStyle(theme.primary)
-                    .lineLimit(1)
+                if isLastPlayed {
+                    Label("Last played", systemImage: "sparkles")
+                        .font(.system(.caption, design: .rounded, weight: .bold))
+                        .foregroundStyle(theme.primary)
+                        .lineLimit(1)
+                } else {
+                    Label(theme.name, systemImage: theme.motifSymbol)
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                        .foregroundStyle(theme.primary)
+                        .lineLimit(1)
+                }
             }
             .frame(
                 minWidth: density == .compact ? 172 : nil,
@@ -306,7 +343,10 @@ private struct ProfileCard: View {
                     cornerRadius: TadaPrimitiveTokens.Radius.large,
                     style: .continuous
                 )
-                .strokeBorder(Color.white.opacity(0.76), lineWidth: 2)
+                .strokeBorder(
+                    isLastPlayed ? theme.primary : Color.white.opacity(0.76),
+                    lineWidth: isLastPlayed ? 4 : 2
+                )
             }
             .overlay(alignment: .bottom) {
                 Capsule()
@@ -318,13 +358,20 @@ private struct ProfileCard: View {
             .shadow(color: theme.primary.opacity(0.16), radius: 18, y: 9)
         }
         .buttonStyle(TadaTactileCardButtonStyle())
+        .scaleEffect(ProfileChooserPresentation.cardScale(isLastPlayed: isLastPlayed))
+        .zIndex(ProfileChooserPresentation.cardZIndex(isLastPlayed: isLastPlayed))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Play as \(profile.displayName) in \(theme.name)")
+        .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Opens today’s Read and Write quests")
+    }
+
+    private var accessibilityLabel: String {
+        let base = "Play as \(profile.displayName) in \(theme.name)"
+        return isLastPlayed ? "\(base), last played" : base
     }
 }
 
-private struct ProfileAvatarContent: View {
+struct ProfileAvatarContent: View {
     let avatar: ProfileAvatar
     let symbolSize: CGFloat
 
@@ -404,7 +451,7 @@ private struct NewPlayerCard: View {
                     height: isCompact ? 84 : 112
                 )
 
-                Text("New Player")
+                Text("New Kid")
                     .font(
                         .system(
                             isCompact ? .title3 : .title2,
@@ -450,7 +497,7 @@ private struct NewPlayerCard: View {
             )
         }
         .buttonStyle(TadaTactileCardButtonStyle())
-        .accessibilityLabel("Create a new player")
+        .accessibilityLabel("Create a new kid profile")
         .accessibilityHint("Enter a nickname and get a surprise animal")
     }
 }
@@ -522,7 +569,7 @@ private struct NewPlayerView: View {
     private var form: some View {
         VStack(alignment: .leading, spacing: TadaPrimitiveTokens.Spacing.medium) {
             HStack {
-                Text("Make Your Player!")
+                Text("Make Your Profile!")
                     .font(
                         .system(
                             layoutMode == .compactLandscape ? .title : .largeTitle,
@@ -591,7 +638,7 @@ private struct NewPlayerView: View {
                     } else {
                         Image(systemName: "sparkles")
                     }
-                    Text(isSaving ? "Making your player…" : "Let's Play!")
+                    Text(isSaving ? "Making your profile…" : "Let's Play!")
                 }
                 .font(.system(.title3, design: .rounded, weight: .heavy))
                 .frame(maxWidth: .infinity)

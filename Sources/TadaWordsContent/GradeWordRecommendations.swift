@@ -116,15 +116,12 @@ public enum GradeWordRecommendationCatalog {
 }
 
 public actor RepositoryGradeWordRecommender: GradeWordRecommending {
-    private let repository: any WordPoolRepository
-    private let clock: any AppClock
-
     public init(
         repository: any WordPoolRepository,
         clock: any AppClock = SystemAppClock()
     ) {
-        self.repository = repository
-        self.clock = clock
+        _ = repository
+        _ = clock
     }
 
     public func refillIfNeeded(
@@ -132,81 +129,10 @@ public actor RepositoryGradeWordRecommender: GradeWordRecommending {
         learningMode: LearningMode,
         settings: ProfilePracticeSettings
     ) async throws {
-        guard settings.wordRecommendationMode != .manualOnly else { return }
-        let route = settings.route(for: learningMode)
-        let minimumCount = route.newWordLimit
-        guard minimumCount > 0 else { return }
-        let entries = try await repository.entries(
-            for: profile.id,
-            learningMode: learningMode,
-            includingInactive: true
-        )
-        let active = entries.filter(\.isActive)
-        guard active.count < minimumCount else { return }
-
-        let existingWords = Set(entries.map(\.normalizedText))
-        let manualAnchors =
-            entries
-            .filter { $0.source == .guardianManual }
-            .map(\.normalizedText)
-        let desiredDifficulty =
-            medianComplexity(manualAnchors)
-            ?? defaultComplexity(for: profile.schoolGrade)
-        let candidates = GradeWordRecommendationCatalog.words(
-            for: profile.schoolGrade,
-            learningMode: learningMode
-        ).compactMap { source -> (String, String)? in
-            guard let normalized = try? EnglishWordNormalizer.normalize(source),
-                !existingWords.contains(normalized)
-            else { return nil }
-            return (source, normalized)
-        }.sorted { left, right in
-            let lhsDistance = abs(complexity(left.1) - desiredDifficulty)
-            let rhsDistance = abs(complexity(right.1) - desiredDifficulty)
-            if lhsDistance != rhsDistance { return lhsDistance < rhsDistance }
-            return left.1 < right.1
-        }
-        let needed = minimumCount - active.count
-        let queuedAt = clock.now.addingTimeInterval(-86_400)
-        let drafts = candidates.prefix(needed).enumerated().compactMap {
-            index,
-            candidate -> WordPoolEntryDraft? in
-            guard
-                let prompt = try? WordPrompt(
-                    learningMode: learningMode,
-                    text: candidate.0
-                )
-            else { return nil }
-            return WordPoolEntryDraft(
-                profileID: profile.id,
-                prompt: prompt,
-                addedAt: queuedAt,
-                source: .gradeRecommendation,
-                positionInBatch: index
-            )
-        }
-        _ = try await repository.upsert(drafts)
-    }
-
-    private func medianComplexity(_ words: [String]) -> Double? {
-        guard !words.isEmpty else { return nil }
-        let values = words.map(complexity).sorted()
-        return values[values.count / 2]
-    }
-
-    private func complexity(_ word: String) -> Double {
-        let digraphCount = ["ch", "sh", "th", "wh", "ph", "ee", "oo", "ou"]
-            .filter(word.contains).count
-        return Double(word.count) + Double(digraphCount) * 1.5
-    }
-
-    private func defaultComplexity(for grade: ProfileSchoolGrade) -> Double {
-        switch grade {
-        case .preK: 2.5
-        case .kindergarten: 3.5
-        case .grade1: 4.5
-        case .grade2: 5.5
-        case .grade3: 6.5
-        }
+        // Kept as an API-compatible no-op so older app snapshots and call
+        // sites cannot write recommended words into a pool.
+        _ = profile
+        _ = learningMode
+        _ = settings
     }
 }

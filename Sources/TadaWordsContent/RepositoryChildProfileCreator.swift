@@ -9,9 +9,7 @@ public actor RepositoryChildProfileCreator: ChildProfileCreating {
     private static let avatarAssetIDs = [
         "hare", "fox", "bear", "owl", "cat", "dog",
     ]
-    private static let worlds: [WorldTheme] = [
-        .moonpetalKingdom, .buildItBay, .pawsAndPines,
-    ]
+    private static let worlds = CosmeticProgressionCatalog.worlds
 
     private let profileRepository: any KidProfileRepository
     private let practiceSettingsRepository: any PracticeSettingsRepository

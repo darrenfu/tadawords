@@ -96,6 +96,25 @@ final class RepositoryChildProfileCreatorTests: XCTestCase {
         XCTAssertNil(rolledBackSettings)
     }
 
+    func testCreationRotatesThroughEntireStableWorldCatalog() async throws {
+        let profiles = InMemoryKidProfileRepository()
+        let creator = RepositoryChildProfileCreator(
+            profileRepository: profiles,
+            practiceSettingsRepository: InMemoryPracticeSettingsRepository(),
+            clock: CreatorTestClock()
+        )
+        let existingProfiles = (0..<7).map { index in
+            makeProfile(name: "Kid \(index)")
+        }
+
+        let created = try await creator.createProfile(
+            displayName: "Eighth Kid",
+            existingProfiles: existingProfiles
+        )
+
+        XCTAssertEqual(created.selectedWorld, .coasterCarnival)
+    }
+
     private func makeProfile(name: String) -> KidProfile {
         KidProfile(
             displayName: name,

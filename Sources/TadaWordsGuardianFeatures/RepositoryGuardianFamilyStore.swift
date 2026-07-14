@@ -105,6 +105,12 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
             selectedWorld: draft.selectedWorld,
             starterWorld: existing.starterWorld,
             guardianUnlockedWorlds: draft.guardianUnlockedWorlds,
+            selectedCartoonIconAssetID: values.avatar == existing.avatar
+                ? existing.selectedCartoonIconAssetID
+                : nil,
+            selectedTreasureAvatar: values.avatar == existing.avatar
+                ? existing.selectedTreasureAvatar
+                : nil,
             schoolGrade: draft.schoolGrade,
             ageYears: draft.ageYears,
             voiceprintStatus: existing.voiceprintStatus,
@@ -138,6 +144,8 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
             selectedWorld: existing.selectedWorld,
             starterWorld: existing.starterWorld,
             guardianUnlockedWorlds: existing.guardianUnlockedWorlds,
+            selectedCartoonIconAssetID: existing.selectedCartoonIconAssetID,
+            selectedTreasureAvatar: existing.selectedTreasureAvatar,
             schoolGrade: existing.schoolGrade,
             ageYears: existing.ageYears,
             voiceprintStatus: status,
@@ -171,6 +179,19 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         return try await makeWordStore(for: profile).deactivateWord(
             id: id,
             learningMode: learningMode
+        )
+    }
+
+    public func setWordsActive(
+        ids: [WordPromptID],
+        learningMode: LearningMode,
+        isActive: Bool
+    ) async throws -> GuardianDashboardSnapshot {
+        let profile = try await selectedProfile()
+        return try await makeWordStore(for: profile).setWordsActive(
+            ids: ids,
+            learningMode: learningMode,
+            isActive: isActive
         )
     }
 
@@ -306,6 +327,8 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
             guard !assetID.isEmpty else {
                 throw GuardianFamilyStoreError.unsupportedAvatar(assetID)
             }
+        case .treasure(_, let iconAssetID):
+            throw GuardianFamilyStoreError.unsupportedAvatar(iconAssetID)
         }
         return (displayName, draft.avatar)
     }

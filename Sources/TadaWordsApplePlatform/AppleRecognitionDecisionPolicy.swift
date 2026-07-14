@@ -152,9 +152,9 @@ enum AppleRecognitionMatchPolicy: Equatable, Sendable {
         guard self == .sightWordPronunciation, target.learningMode == .read else {
             return false
         }
-        return SightWordPronunciationEquivalencePolicy.areEquivalent(
-            candidate,
-            target.normalizedText
+        return SightWordPronunciationEquivalencePolicy.matches(
+            candidate: candidate,
+            target: target.normalizedText
         )
     }
 }
@@ -173,9 +173,10 @@ private enum SpeechTranscriptNormalizer {
     }
 }
 
-/// A deliberately small allowlist of stable American-English homophones that
-/// occur in early sight-word lists. This is not spelling-distance matching:
-/// words outside these exact groups remain mismatches.
+/// Deliberately small, reviewable allowlists for early American-English sight
+/// words. Stable homophones are symmetric. Recognizer spelling aliases are
+/// directional and apply only to their explicit target. This is never edit-
+/// distance or general phonetic matching: every unlisted pair is a mismatch.
 enum SightWordPronunciationEquivalencePolicy {
     private static let groups: [Set<String>] = [
         ["be", "bee"],
@@ -206,10 +207,20 @@ enum SightWordPronunciationEquivalencePolicy {
         ["which", "witch"],
     ]
 
-    static func areEquivalent(_ lhs: String, _ rhs: String) -> Bool {
-        guard lhs != rhs else { return true }
-        return groups.contains { group in
-            group.contains(lhs) && group.contains(rhs)
+    /// Plausible single-token spellings emitted by ASR for a correctly spoken
+    /// target. These strings remain internal recognition evidence and are not
+    /// presented as words for the child to learn.
+    private static let recognizerAliasesByTarget: [String: Set<String>] = [
+        "come": ["cum", "kum"]
+    ]
+
+    static func matches(candidate: String, target: String) -> Bool {
+        guard candidate != target else { return true }
+        if groups.contains(where: { group in
+            group.contains(candidate) && group.contains(target)
+        }) {
+            return true
         }
+        return recognizerAliasesByTarget[target]?.contains(candidate) == true
     }
 }

@@ -7,7 +7,7 @@ import XCTest
 
 @MainActor
 final class TadaWordsAppModelTests: XCTestCase {
-    func testValidRememberedProfileStartsInLobbyAndMissingProfileFallsBackToChooser() {
+    func testValidRememberedProfileIsHighlightedButStillRequiresAChildTap() {
         let first = TestFixture.profile(name: "Mia", number: 901)
         let remembered = TestFixture.profile(name: "Coco", number: 902)
 
@@ -15,16 +15,37 @@ final class TadaWordsAppModelTests: XCTestCase {
             profiles: [first, remembered],
             initialProfileID: remembered.id
         )
-        XCTAssertEqual(restored.selectedProfile, remembered)
-        guard case .lobby = restored.destination else {
-            return XCTFail("A valid remembered player should open the child lobby.")
+        XCTAssertNil(restored.selectedProfile)
+        XCTAssertEqual(restored.lastPlayedProfileID, remembered.id)
+        guard case .profileChooser = restored.destination else {
+            return XCTFail("Cold launch must wait for the child to tap a player.")
         }
+
+        restored.selectProfile(remembered)
+        XCTAssertEqual(restored.selectedProfile, remembered)
+        XCTAssertEqual(restored.lastPlayedProfileID, remembered.id)
+        guard case .lobby = restored.destination else {
+            return XCTFail("Tapping the highlighted player should open the lobby.")
+        }
+
+        restored.showProfiles()
+        XCTAssertNil(restored.selectedProfile)
+        XCTAssertEqual(restored.lastPlayedProfileID, remembered.id)
+        guard case .profileChooser = restored.destination else {
+            return XCTFail("Choosing another player must end the active child session.")
+        }
+    }
+
+    func testMissingRememberedProfileHasNoHighlightAndStaysInChooser() {
+        let first = TestFixture.profile(name: "Mia", number: 901)
+        let deleted = TestFixture.profile(name: "Coco", number: 902)
 
         let stale = TadaWordsAppModel(
             profiles: [first],
-            initialProfileID: remembered.id
+            initialProfileID: deleted.id
         )
         XCTAssertNil(stale.selectedProfile)
+        XCTAssertNil(stale.lastPlayedProfileID)
         guard case .profileChooser = stale.destination else {
             return XCTFail("A deleted remembered player must return to the chooser.")
         }
@@ -83,6 +104,9 @@ final class TadaWordsAppModelTests: XCTestCase {
         )
         XCTAssertEqual(rememberedProfileID, created.id)
         XCTAssertNil(model.childProfileCreationError)
+        guard case .lobby = model.destination else {
+            return XCTFail("A newly created player should enter its lobby immediately.")
+        }
     }
 
     func testChildCreationFailureDoesNotAddOrSelectPhantomProfile() async {
@@ -462,7 +486,7 @@ final class TadaWordsAppModelTests: XCTestCase {
         let result = try resultState(from: fixture.model.destination)
         XCTAssertEqual(result.score.firstIndependentAttemptCount, 1)
         XCTAssertEqual(result.score.firstIndependentCorrectCount, 0)
-        XCTAssertEqual(result.score.stars.earned, [.completion])
+        XCTAssertEqual(result.score.stars.earned, [.completion, .accuracy])
         let attemptsAfterRetry = try await records.attempts(
             for: fixture.profile.id,
             wordPromptID: session.prompt.id

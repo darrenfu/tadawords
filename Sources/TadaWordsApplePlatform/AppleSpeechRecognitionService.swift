@@ -1,7 +1,39 @@
 @preconcurrency import AVFoundation
 import Foundation
+import OSLog
 @preconcurrency import Speech
 import TadaWordsDomain
+
+public struct AppleSpeechActivityThresholds: Equatable, Sendable {
+    public let minimumActiveDuration: ElapsedTime
+    public let analysisFrameDuration: ElapsedTime
+    public let minimumFrameRootMeanSquare: Float
+    public let minimumPeakAmplitude: Float
+
+    public init(
+        minimumActiveDuration: ElapsedTime = ElapsedTime(seconds: 0.10),
+        analysisFrameDuration: ElapsedTime = ElapsedTime(seconds: 0.02),
+        minimumFrameRootMeanSquare: Float = 0.004,
+        minimumPeakAmplitude: Float = 0.012
+    ) {
+        self.minimumActiveDuration = ElapsedTime(
+            seconds: max(0.04, minimumActiveDuration.seconds)
+        )
+        self.analysisFrameDuration = ElapsedTime(
+            seconds: max(0.005, analysisFrameDuration.seconds)
+        )
+        self.minimumFrameRootMeanSquare = max(0.0001, minimumFrameRootMeanSquare)
+        self.minimumPeakAmplitude = max(
+            self.minimumFrameRootMeanSquare,
+            minimumPeakAmplitude
+        )
+    }
+
+    /// A deliberately short activity gate for isolated early sight words. It
+    /// rejects empty microphone buffers without requiring a child to sustain
+    /// words such as "a" or "I" for the voiceprint model's longer window.
+    public static let childSightWord = AppleSpeechActivityThresholds()
+}
 
 public struct AppleSpeechRecognitionConfiguration: Equatable, Sendable {
     public let localeIdentifier: String
@@ -9,13 +41,15 @@ public struct AppleSpeechRecognitionConfiguration: Equatable, Sendable {
     public let requiresOnDeviceRecognition: Bool
     public let partialResultStabilityDuration: Duration
     public let decisionThresholds: AppleRecognitionThresholds
+    public let speechActivityThresholds: AppleSpeechActivityThresholds
 
     public init(
         localeIdentifier: String = "en-US",
         maximumAllowedRecordingDuration: ElapsedTime = ElapsedTime(seconds: 15),
         requiresOnDeviceRecognition: Bool = true,
-        partialResultStabilityDuration: Duration = .milliseconds(600),
-        decisionThresholds: AppleRecognitionThresholds = .speech
+        partialResultStabilityDuration: Duration = .milliseconds(1_200),
+        decisionThresholds: AppleRecognitionThresholds = .speech,
+        speechActivityThresholds: AppleSpeechActivityThresholds = .childSightWord
     ) {
         self.localeIdentifier = localeIdentifier
         self.maximumAllowedRecordingDuration =
@@ -26,8 +60,9 @@ public struct AppleSpeechRecognitionConfiguration: Equatable, Sendable {
         self.partialResultStabilityDuration =
             partialResultStabilityDuration > .zero
             ? partialResultStabilityDuration
-            : .milliseconds(600)
+            : .milliseconds(1_200)
         self.decisionThresholds = decisionThresholds
+        self.speechActivityThresholds = speechActivityThresholds
     }
 
     public static let `default` = AppleSpeechRecognitionConfiguration()
@@ -41,8 +76,9 @@ public struct AppleSpeechRecognitionConfiguration: Equatable, Sendable {
 public actor AppleSpeechRecognitionService: SpeechRecognitionService {
     private let configuration: AppleSpeechRecognitionConfiguration
     private let permissionChecker: any AppleSpeechPermissionChecking
-    private let decisionPolicy: AppleRecognitionDecisionPolicy
+    private let resultResolver: AppleSpeechRecognitionResultResolver
     private let voiceprintVerifier: AppleVoiceprintVerifier?
+    private let diagnosticHandler: (@Sendable (AppleSpeechErrorDiagnostic) -> Void)?
 
     private var isRecognizing = false
 
@@ -50,15 +86,20 @@ public actor AppleSpeechRecognitionService: SpeechRecognitionService {
         configuration: AppleSpeechRecognitionConfiguration = .default,
         permissionChecker: any AppleSpeechPermissionChecking =
             SystemAppleSpeechPermissionChecker(),
-        voiceprintVerifier: AppleVoiceprintVerifier? = nil
+        voiceprintVerifier: AppleVoiceprintVerifier? = nil,
+        diagnosticHandler: (@Sendable (AppleSpeechErrorDiagnostic) -> Void)? = nil
     ) {
         self.configuration = configuration
         self.permissionChecker = permissionChecker
-        self.decisionPolicy = AppleRecognitionDecisionPolicy(
-            thresholds: configuration.decisionThresholds,
-            matchPolicy: .sightWordPronunciation
+        self.resultResolver = AppleSpeechRecognitionResultResolver(
+            decisionPolicy: AppleRecognitionDecisionPolicy(
+                thresholds: configuration.decisionThresholds,
+                matchPolicy: .sightWordPronunciation
+            ),
+            activityThresholds: configuration.speechActivityThresholds
         )
         self.voiceprintVerifier = voiceprintVerifier
+        self.diagnosticHandler = diagnosticHandler
     }
 
     public func recognize(
@@ -67,7 +108,7 @@ public actor AppleSpeechRecognitionService: SpeechRecognitionService {
         try Task.checkCancellation()
 
         guard !isRecognizing else {
-            return decisionPolicy.technicalFailure(.serviceUnavailable)
+            return resultResolver.technicalFailure(.serviceUnavailable)
         }
 
         if let reason = AppleSpeechCapabilityPolicy.failureReason(
@@ -75,11 +116,11 @@ public actor AppleSpeechRecognitionService: SpeechRecognitionService {
             isSimulator: Self.isSimulator,
             supportsOnDeviceRecognition: true
         ) {
-            return decisionPolicy.technicalFailure(reason)
+            return resultResolver.technicalFailure(reason)
         }
 
         guard permissionChecker.currentState().isAuthorized else {
-            return decisionPolicy.technicalFailure(.permissionDenied)
+            return resultResolver.technicalFailure(.permissionDenied)
         }
 
         let duration = min(
@@ -87,21 +128,21 @@ public actor AppleSpeechRecognitionService: SpeechRecognitionService {
             configuration.maximumAllowedRecordingDuration.seconds
         )
         guard duration > 0 else {
-            return decisionPolicy.technicalFailure(.timedOut)
+            return resultResolver.technicalFailure(.timedOut)
         }
 
         let locale = Locale(identifier: configuration.localeIdentifier)
         guard let recognizer = SFSpeechRecognizer(locale: locale),
             recognizer.isAvailable
         else {
-            return decisionPolicy.technicalFailure(.serviceUnavailable)
+            return resultResolver.technicalFailure(.serviceUnavailable)
         }
         if let reason = AppleSpeechCapabilityPolicy.failureReason(
             requiresOnDeviceRecognition: configuration.requiresOnDeviceRecognition,
             isSimulator: Self.isSimulator,
             supportsOnDeviceRecognition: recognizer.supportsOnDeviceRecognition
         ) {
-            return decisionPolicy.technicalFailure(reason)
+            return resultResolver.technicalFailure(reason)
         }
 
         isRecognizing = true
@@ -153,34 +194,43 @@ public actor AppleSpeechRecognitionService: SpeechRecognitionService {
 
             let recordingFormat = inputNode.outputFormat(forBus: 0)
             guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
-                return decisionPolicy.technicalFailure(.noUsableAudio)
+                return resultResolver.technicalFailure(.noUsableAudio)
             }
 
             audioCapture.installTap(format: recordingFormat)
 
-            recognitionTask = recognizer.recognitionTask(with: speechRequest) {
-                result,
-                error in
-                if let result {
-                    completionBox.receive(
-                        SpeechTranscriptSnapshot(result: result),
-                        isFinal: result.isFinal
-                    )
+            let diagnosticHandler = self.diagnosticHandler
+            recognitionTask = try SpeechRecognitionStartupSequence.start(
+                startAudio: {
+                    try audioCapture.start()
+                },
+                startRecognitionTask: {
+                    recognizer.recognitionTask(with: speechRequest) {
+                        result,
+                        error in
+                        if let result {
+                            completionBox.receive(
+                                SpeechTranscriptSnapshot(result: result),
+                                isFinal: result.isFinal
+                            )
+                        }
+                        if let error {
+                            let mapping = AppleSpeechErrorMapper.mapping(for: error)
+                            AppleSpeechDiagnosticLogger.report(mapping.diagnostic)
+                            diagnosticHandler?(mapping.diagnostic)
+                            completionBox.fail(with: mapping)
+                        }
+                    }
                 }
-                if let error {
-                    completionBox.fail(
-                        with: AppleSpeechErrorMapper.technicalFailureReason(for: error)
-                    )
-                }
-            }
-
-            try audioCapture.start()
+            )
 
             let deadlineTask = Task {
                 try? await Task.sleep(for: .milliseconds(Int64(duration * 1_000)))
                 guard !Task.isCancelled else { return }
                 completionBox.deadlineReached(
-                    receivedAudioBuffer: audioCapture.hasReceivedAudioBuffer
+                    receivedUsableAudio: resultResolver.hasUsableSpeech(
+                        audioCapture.sampleSnapshot()
+                    )
                 )
             }
             defer { deadlineTask.cancel() }
@@ -195,32 +245,33 @@ public actor AppleSpeechRecognitionService: SpeechRecognitionService {
 
             switch completion {
             case .transcript(let snapshot):
-                let decision = decisionPolicy.evaluate(
-                    transcript: snapshot.text,
-                    confidence: snapshot.confidence,
-                    target: request.prompt
-                )
+                let capturedAudio = audioCapture.sampleSnapshot()
+                guard resultResolver.hasUsableSpeech(capturedAudio) else {
+                    return resultResolver.technicalFailure(.noUsableAudio)
+                }
                 let speakerAssessment = await assessSpeaker(
                     for: request,
-                    capturedAudio: audioCapture.sampleSnapshot()
+                    capturedAudio: capturedAudio
                 )
-                return RecognitionResult(
-                    decision: decision.decision,
-                    recognizedText: decision.recognizedText,
-                    confidence: decision.confidence,
-                    targetSpeakerAssessment: speakerAssessment
+                try Task.checkCancellation()
+                return resultResolver.resolve(
+                    snapshot: snapshot,
+                    target: request.prompt,
+                    capturedAudio: capturedAudio,
+                    speakerAssessment: speakerAssessment
                 )
             case .technicalFailure(let reason):
-                return decisionPolicy.technicalFailure(reason)
+                return resultResolver.technicalFailure(reason)
             case .cancelled:
                 throw CancellationError()
             }
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            return decisionPolicy.technicalFailure(
-                AppleSpeechErrorMapper.technicalFailureReason(for: error)
-            )
+            let mapping = AppleSpeechErrorMapper.mapping(for: error)
+            AppleSpeechDiagnosticLogger.report(mapping.diagnostic)
+            diagnosticHandler?(mapping.diagnostic)
+            return resultResolver.technicalFailure(mapping.reason)
         }
     }
 
@@ -368,10 +419,36 @@ struct SpeechTranscriptSnapshot: Equatable, Sendable {
     }
 }
 
+enum SpeechTranscriptValuePolicy {
+    static func isMeaningful(_ transcript: SpeechTranscriptSnapshot) -> Bool {
+        let trimmed = transcript.text.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !trimmed.isEmpty else { return false }
+        return trimmed.unicodeScalars.contains { scalar in
+            CharacterSet.letters.contains(scalar)
+        }
+    }
+}
+
 enum SpeechRecognitionCompletion: Equatable, Sendable {
     case transcript(SpeechTranscriptSnapshot)
     case technicalFailure(TechnicalFailureReason)
     case cancelled
+}
+
+/// Starts capture before Speech can issue a terminal callback. Some Apple
+/// recognizers report setup failures synchronously from task creation; keeping
+/// the ordering in one testable seam prevents a finished request from starting
+/// its audio engine afterward.
+enum SpeechRecognitionStartupSequence {
+    static func start<TaskType>(
+        startAudio: () throws -> Void,
+        startRecognitionTask: () -> TaskType
+    ) rethrows -> TaskType {
+        try startAudio()
+        return startRecognitionTask()
+    }
 }
 
 struct SpeechRecognitionEndpointTransition: Equatable, Sendable {
@@ -402,11 +479,19 @@ struct SpeechRecognitionEndpointStateMachine: Sendable {
         isFinal: Bool
     ) -> SpeechRecognitionEndpointTransition {
         guard !isCompleted else { return .none }
-        latestTranscript = transcript
 
         if isFinal {
+            latestTranscript = transcript
             return complete(with: .transcript(transcript))
         }
+
+        // Speech can emit empty or punctuation-only hypotheses while the
+        // recognizer warms up. They are not evidence that a child has started
+        // or finished a word, so they must never arm automatic endpointing.
+        guard SpeechTranscriptValuePolicy.isMeaningful(transcript) else {
+            return .none
+        }
+        latestTranscript = transcript
 
         // SFSpeech may emit one last partial while it is finalizing after
         // `endAudio()`. Keep the fresher text, but do not start another timer.
@@ -435,14 +520,18 @@ struct SpeechRecognitionEndpointStateMachine: Sendable {
     }
 
     mutating func fail(
-        with reason: TechnicalFailureReason
+        with reason: TechnicalFailureReason,
+        allowingLatestTranscriptFallback: Bool = false
     ) -> SpeechRecognitionEndpointTransition {
         guard !isCompleted else { return .none }
+        if allowingLatestTranscriptFallback, let latestTranscript {
+            return complete(with: .transcript(latestTranscript))
+        }
         return complete(with: .technicalFailure(reason))
     }
 
     mutating func deadlineReached(
-        receivedAudioBuffer: Bool
+        receivedUsableAudio: Bool
     ) -> SpeechRecognitionEndpointTransition {
         guard !isCompleted else { return .none }
 
@@ -451,7 +540,7 @@ struct SpeechRecognitionEndpointStateMachine: Sendable {
         }
         return complete(
             with: .technicalFailure(
-                receivedAudioBuffer ? .timedOut : .noUsableAudio
+                receivedUsableAudio ? .timedOut : .noUsableAudio
             )
         )
     }
@@ -533,16 +622,19 @@ final class SpeechRecognitionCompletionBox: @unchecked Sendable {
         perform(transition)
     }
 
-    func fail(with reason: TechnicalFailureReason) {
+    func fail(with mapping: AppleSpeechErrorMapping) {
         let transition = lock.withLock {
-            state.fail(with: reason)
+            state.fail(
+                with: mapping.reason,
+                allowingLatestTranscriptFallback: mapping.allowsTranscriptFallback
+            )
         }
         perform(transition)
     }
 
-    func deadlineReached(receivedAudioBuffer: Bool) {
+    func deadlineReached(receivedUsableAudio: Bool) {
         let transition = lock.withLock {
-            state.deadlineReached(receivedAudioBuffer: receivedAudioBuffer)
+            state.deadlineReached(receivedUsableAudio: receivedUsableAudio)
         }
         perform(transition)
     }
@@ -642,7 +734,6 @@ private final class SpeechAudioCapture: @unchecked Sendable {
     private let request: SFSpeechAudioBufferRecognitionRequest
     private let lock = NSLock()
 
-    private var receivedAudioBuffer = false
     private var tapInstalled = false
     private var audioFinished = false
     private var capturedSamples: [Float] = []
@@ -656,10 +747,6 @@ private final class SpeechAudioCapture: @unchecked Sendable {
         self.audioEngine = audioEngine
         self.inputNode = inputNode
         self.request = request
-    }
-
-    var hasReceivedAudioBuffer: Bool {
-        lock.withLock { receivedAudioBuffer }
     }
 
     func sampleSnapshot() -> SpeechCapturedAudio {
@@ -709,7 +796,6 @@ private final class SpeechAudioCapture: @unchecked Sendable {
     private func append(_ buffer: AVAudioPCMBuffer) {
         lock.withLock {
             guard !audioFinished else { return }
-            receivedAudioBuffer = true
             appendVoiceprintSamples(buffer)
             request.append(buffer)
         }
@@ -730,22 +816,219 @@ struct SpeechCapturedAudio: Equatable, Sendable {
     let sampleRate: Double
 }
 
-enum AppleSpeechErrorMapper {
-    static func technicalFailureReason(for error: Error) -> TechnicalFailureReason {
-        let nsError = error as NSError
-        guard nsError.domain == SFSpeechErrorDomain else {
-            return .serviceUnavailable
+struct SpeechActivityEvidence: Equatable, Sendable {
+    let longestActiveDuration: ElapsedTime
+    let peakAmplitude: Float
+    let hasUsableSpeech: Bool
+}
+
+enum SpeechActivityEvidencePolicy {
+    static func evaluate(
+        _ capturedAudio: SpeechCapturedAudio,
+        thresholds: AppleSpeechActivityThresholds
+    ) -> SpeechActivityEvidence {
+        let samples = capturedAudio.samples
+        let sampleRate = capturedAudio.sampleRate
+        guard
+            sampleRate.isFinite,
+            sampleRate > 0,
+            !samples.isEmpty,
+            samples.allSatisfy(\.isFinite)
+        else {
+            return insufficientEvidence
         }
 
-        switch nsError.code {
-        case SFSpeechError.Code.audioReadFailed.rawValue:
-            return .noUsableAudio
-        case SFSpeechError.Code.timeout.rawValue:
-            return .timedOut
-        case SFSpeechError.Code.missingParameter.rawValue:
-            return .corruptedInput
+        let frameSampleCount = max(
+            1,
+            Int(sampleRate * thresholds.analysisFrameDuration.seconds)
+        )
+        var currentActiveSampleCount = 0
+        var longestActiveSampleCount = 0
+        var overallPeak: Float = 0
+
+        for lowerBound in stride(
+            from: samples.startIndex,
+            to: samples.endIndex,
+            by: frameSampleCount
+        ) {
+            let upperBound = min(samples.endIndex, lowerBound + frameSampleCount)
+            let frame = samples[lowerBound..<upperBound]
+            var squareSum = 0.0
+            var framePeak: Float = 0
+            for sample in frame {
+                let magnitude = abs(sample)
+                framePeak = max(framePeak, magnitude)
+                squareSum += Double(sample * sample)
+            }
+            overallPeak = max(overallPeak, framePeak)
+            let rootMeanSquare = Float(
+                sqrt(squareSum / Double(max(1, frame.count)))
+            )
+            if rootMeanSquare >= thresholds.minimumFrameRootMeanSquare,
+                framePeak >= thresholds.minimumPeakAmplitude
+            {
+                currentActiveSampleCount += frame.count
+                longestActiveSampleCount = max(
+                    longestActiveSampleCount,
+                    currentActiveSampleCount
+                )
+            } else {
+                currentActiveSampleCount = 0
+            }
+        }
+
+        let longestActiveDuration = ElapsedTime(
+            seconds: Double(longestActiveSampleCount) / sampleRate
+        )
+        return SpeechActivityEvidence(
+            longestActiveDuration: longestActiveDuration,
+            peakAmplitude: overallPeak,
+            hasUsableSpeech: longestActiveDuration >= thresholds.minimumActiveDuration
+                && overallPeak >= thresholds.minimumPeakAmplitude
+        )
+    }
+
+    private static let insufficientEvidence = SpeechActivityEvidence(
+        longestActiveDuration: .zero,
+        peakAmplitude: 0,
+        hasUsableSpeech: false
+    )
+}
+
+struct AppleSpeechRecognitionResultResolver: Sendable {
+    let decisionPolicy: AppleRecognitionDecisionPolicy
+    let activityThresholds: AppleSpeechActivityThresholds
+
+    func hasUsableSpeech(_ capturedAudio: SpeechCapturedAudio) -> Bool {
+        SpeechActivityEvidencePolicy.evaluate(
+            capturedAudio,
+            thresholds: activityThresholds
+        ).hasUsableSpeech
+    }
+
+    func resolve(
+        snapshot: SpeechTranscriptSnapshot,
+        target: WordPrompt,
+        capturedAudio: SpeechCapturedAudio,
+        speakerAssessment: TargetSpeakerAssessment
+    ) -> RecognitionResult {
+        guard hasUsableSpeech(capturedAudio) else {
+            return technicalFailure(.noUsableAudio)
+        }
+        let decision = decisionPolicy.evaluate(
+            transcript: snapshot.text,
+            confidence: snapshot.confidence,
+            target: target
+        )
+        return RecognitionResult(
+            decision: decision.decision,
+            recognizedText: decision.recognizedText,
+            confidence: decision.confidence,
+            targetSpeakerAssessment: speakerAssessment
+        )
+    }
+
+    func technicalFailure(_ reason: TechnicalFailureReason) -> RecognitionResult {
+        decisionPolicy.technicalFailure(reason)
+    }
+}
+
+public struct AppleSpeechErrorDiagnostic: Equatable, Sendable {
+    public let domain: String
+    public let code: Int
+
+    public init(domain: String, code: Int) {
+        self.domain = domain
+        self.code = code
+    }
+}
+
+struct AppleSpeechErrorMapping: Equatable, Sendable {
+    let reason: TechnicalFailureReason
+    let diagnostic: AppleSpeechErrorDiagnostic
+
+    var allowsTranscriptFallback: Bool {
+        switch reason {
+        case .noUsableAudio, .serviceUnavailable, .timedOut:
+            true
+        case .corruptedInput, .onDeviceRecognitionUnavailable, .permissionDenied,
+            .wrongSpeaker:
+            false
+        }
+    }
+}
+
+private enum AppleSpeechDiagnosticLogger {
+    private static let logger = Logger(
+        subsystem: "com.tadawords.app",
+        category: "SpeechRecognition"
+    )
+
+    static func report(_ diagnostic: AppleSpeechErrorDiagnostic) {
+        logger.error(
+            "Speech recognition failed: domain=\(diagnostic.domain, privacy: .public) code=\(diagnostic.code, privacy: .public)"
+        )
+    }
+}
+
+enum AppleSpeechErrorMapper {
+    static func mapping(for error: Error) -> AppleSpeechErrorMapping {
+        let nsError = error as NSError
+        return AppleSpeechErrorMapping(
+            reason: technicalFailureReason(
+                domain: nsError.domain,
+                code: nsError.code
+            ),
+            diagnostic: AppleSpeechErrorDiagnostic(
+                domain: nsError.domain,
+                code: nsError.code
+            )
+        )
+    }
+
+    static func technicalFailureReason(for error: Error) -> TechnicalFailureReason {
+        mapping(for: error).reason
+    }
+
+    private static func technicalFailureReason(
+        domain: String,
+        code: Int
+    ) -> TechnicalFailureReason {
+        switch domain {
+        case SFSpeechErrorDomain:
+            switch code {
+            case SFSpeechError.Code.audioReadFailed.rawValue:
+                .noUsableAudio
+            case SFSpeechError.Code.timeout.rawValue:
+                .timedOut
+            case SFSpeechError.Code.missingParameter.rawValue,
+                SFSpeechError.Code.undefinedTemplateClassName.rawValue,
+                SFSpeechError.Code.malformedSupplementalModel.rawValue:
+                .corruptedInput
+            default:
+                .serviceUnavailable
+            }
+
+        case "kAFAssistantErrorDomain":
+            switch code {
+            case 1110:
+                .noUsableAudio
+            case 1700:
+                .permissionDenied
+            default:
+                .serviceUnavailable
+            }
+
+        case "kLSRErrorDomain":
+            switch code {
+            case 102, 201:
+                .onDeviceRecognitionUnavailable
+            default:
+                .serviceUnavailable
+            }
+
         default:
-            return .serviceUnavailable
+            .serviceUnavailable
         }
     }
 }

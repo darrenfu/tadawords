@@ -58,12 +58,43 @@ public enum TadaTypography {
 }
 
 public enum TadaLayoutTokens {
-    public static let readCardStandardMinimumWidth: CGFloat = 520
     public static let questChromeCompactSpacing: CGFloat = 8
     public static let compactActionRailWidth: CGFloat = 104
     public static let standardActionRailWidth: CGFloat = 142
     public static let compactHeightScrollInset: CGFloat = 12
     public static let statePanelMaximumWidth: CGFloat = 440
+}
+
+/// Centralized child-facing scale values for the most important playful UI elements.
+public enum TadaChildScaleTokens {
+    public enum Profile {
+        public static let lastPlayedScale: CGFloat = 1.03
+    }
+
+    public enum Lobby {
+        public static let mascotCompact: CGFloat = 72
+        public static let mascotRegular: CGFloat = 104
+        public static let utilitySymbolSize: CGFloat = 20
+        public static let utilityVisualDiameter: CGFloat = 48
+        public static let utilityTouchDiameter: CGFloat = 72
+    }
+
+    public enum Read {
+        public static let mascotCompact: CGFloat = 80
+        public static let mascotRegular: CGFloat = 104
+        public static let cardRegularMinimumWidth: CGFloat = 560
+        public static let cardRegularMaximumWidth: CGFloat = 760
+        public static let wordRegularSize: CGFloat = 112
+    }
+
+    public enum Result {
+        public static let mascotCompact: CGFloat = 68
+        public static let mascotRegular: CGFloat = 104
+        public static let rewardCompact: CGFloat = 96
+        public static let rewardRegular: CGFloat = 144
+        public static let replaySymbolCompact: CGFloat = 78
+        public static let replaySymbolRegular: CGFloat = 120
+    }
 }
 
 public enum TadaSemanticColors {
@@ -76,6 +107,11 @@ public enum TadaWorldID: String, CaseIterable, Identifiable, Sendable {
     case moonpetal
     case buildItBay
     case pawsAndPines
+    case dinoDiscovery
+    case firehouseHeroes
+    case brickworkCity
+    case frostlightWorld
+    case coasterCarnival
 
     public var id: String { rawValue }
 }
@@ -208,7 +244,131 @@ extension TadaWorldTheme {
         mascotName: "Moss"
     )
 
-    public static let all: [TadaWorldTheme] = [moonpetal, buildItBay, pawsAndPines]
+    public static let dinoDiscovery = TadaWorldTheme(
+        id: .dinoDiscovery,
+        name: "Dino Discovery",
+        eyebrow: "Dinosaur world",
+        primary: Color(red: 0.08, green: 0.39, blue: 0.29),
+        secondary: Color(red: 0.59, green: 0.78, blue: 0.22),
+        accent: Color(red: 0.96, green: 0.55, blue: 0.12),
+        backgroundTop: Color(red: 0.73, green: 0.92, blue: 0.83),
+        backgroundBottom: Color(red: 0.98, green: 0.88, blue: 0.63),
+        surface: Color.white.opacity(0.88),
+        ink: Color(red: 0.05, green: 0.24, blue: 0.18),
+        motifSymbol: "lizard.fill",
+        rewardName: "Amber Fossil",
+        rewardSymbol: "fossil.shell.fill",
+        rewardSymbols: [
+            "fossil.shell.fill", "lizard.fill", "leaf.fill", "mountain.2.fill",
+            "pawprint.fill", "sparkles",
+        ],
+        ground: Color(red: 0.25, green: 0.53, blue: 0.27),
+        sceneAccent: Color(red: 0.97, green: 0.66, blue: 0.20),
+        mascotName: "Rumble"
+    )
+
+    public static let firehouseHeroes = TadaWorldTheme(
+        id: .firehouseHeroes,
+        name: "Firehouse Heroes",
+        eyebrow: "Rescue world",
+        primary: Color(red: 0.78, green: 0.13, blue: 0.13),
+        secondary: Color(red: 0.10, green: 0.43, blue: 0.70),
+        accent: Color(red: 1.00, green: 0.70, blue: 0.16),
+        backgroundTop: Color(red: 0.80, green: 0.93, blue: 1.00),
+        backgroundBottom: Color(red: 1.00, green: 0.83, blue: 0.73),
+        surface: Color.white.opacity(0.91),
+        ink: Color(red: 0.30, green: 0.07, blue: 0.08),
+        motifSymbol: "firetruck.fill",
+        rewardName: "Hero Badge",
+        rewardSymbol: "shield.fill",
+        rewardSymbols: [
+            "shield.fill", "firetruck.fill", "flame.fill", "drop.fill",
+            "light.beacon.max.fill", "medal.fill",
+        ],
+        ground: Color(red: 0.39, green: 0.43, blue: 0.48),
+        sceneAccent: Color(red: 1.00, green: 0.75, blue: 0.18),
+        mascotName: "Ember"
+    )
+
+    public static let brickworkCity = TadaWorldTheme(
+        id: .brickworkCity,
+        name: "Brickwork City",
+        eyebrow: "Block-building world",
+        primary: Color(red: 0.08, green: 0.32, blue: 0.72),
+        secondary: Color(red: 0.98, green: 0.72, blue: 0.12),
+        accent: Color(red: 0.91, green: 0.24, blue: 0.18),
+        backgroundTop: Color(red: 0.75, green: 0.92, blue: 0.98),
+        backgroundBottom: Color(red: 1.00, green: 0.93, blue: 0.72),
+        surface: Color.white.opacity(0.91),
+        ink: Color(red: 0.05, green: 0.17, blue: 0.35),
+        motifSymbol: "square.grid.3x3.fill",
+        rewardName: "Master Builder Block",
+        rewardSymbol: "shippingbox.fill",
+        rewardSymbols: [
+            "shippingbox.fill", "square.grid.3x3.fill", "building.2.fill",
+            "hammer.fill", "paintbrush.fill", "flag.fill",
+        ],
+        ground: Color(red: 0.22, green: 0.52, blue: 0.66),
+        sceneAccent: Color(red: 1.00, green: 0.77, blue: 0.16),
+        mascotName: "Tinker"
+    )
+
+    public static let frostlightWorld = TadaWorldTheme(
+        id: .frostlightWorld,
+        name: "Frostlight World",
+        eyebrow: "Snow-and-aurora world",
+        primary: Color(red: 0.16, green: 0.38, blue: 0.67),
+        secondary: Color(red: 0.32, green: 0.76, blue: 0.85),
+        accent: Color(red: 0.66, green: 0.48, blue: 0.88),
+        backgroundTop: Color(red: 0.77, green: 0.91, blue: 1.00),
+        backgroundBottom: Color(red: 0.93, green: 0.88, blue: 1.00),
+        surface: Color.white.opacity(0.89),
+        ink: Color(red: 0.08, green: 0.19, blue: 0.38),
+        motifSymbol: "snowflake",
+        rewardName: "Aurora Crystal",
+        rewardSymbol: "diamond.fill",
+        rewardSymbols: [
+            "diamond.fill", "snowflake", "sparkles", "mountain.2.fill",
+            "moon.stars.fill", "crown.fill",
+        ],
+        ground: Color(red: 0.61, green: 0.78, blue: 0.90),
+        sceneAccent: Color(red: 0.66, green: 0.93, blue: 0.91),
+        mascotName: "Glint"
+    )
+
+    public static let coasterCarnival = TadaWorldTheme(
+        id: .coasterCarnival,
+        name: "Coaster Carnival",
+        eyebrow: "Theme-park world",
+        primary: Color(red: 0.67, green: 0.16, blue: 0.55),
+        secondary: Color(red: 0.08, green: 0.49, blue: 0.76),
+        accent: Color(red: 1.00, green: 0.55, blue: 0.13),
+        backgroundTop: Color(red: 0.80, green: 0.90, blue: 1.00),
+        backgroundBottom: Color(red: 1.00, green: 0.84, blue: 0.91),
+        surface: Color.white.opacity(0.90),
+        ink: Color(red: 0.30, green: 0.07, blue: 0.29),
+        motifSymbol: "ticket.fill",
+        rewardName: "Golden Ride Ticket",
+        rewardSymbol: "ticket.fill",
+        rewardSymbols: [
+            "ticket.fill", "tram.fill", "balloon.2.fill", "party.popper.fill",
+            "star.fill", "trophy.fill",
+        ],
+        ground: Color(red: 0.23, green: 0.47, blue: 0.67),
+        sceneAccent: Color(red: 1.00, green: 0.72, blue: 0.16),
+        mascotName: "Zip"
+    )
+
+    public static let all: [TadaWorldTheme] = [
+        moonpetal,
+        buildItBay,
+        pawsAndPines,
+        dinoDiscovery,
+        firehouseHeroes,
+        brickworkCity,
+        frostlightWorld,
+        coasterCarnival,
+    ]
 
     public static func theme(for id: TadaWorldID) -> TadaWorldTheme {
         all.first(where: { $0.id == id }) ?? moonpetal

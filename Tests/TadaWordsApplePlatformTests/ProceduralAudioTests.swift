@@ -134,16 +134,95 @@ final class ProceduralAudioTests: XCTestCase {
     }
 
     func testWorldPalettesAreMusicallyDistinct() {
-        let palettes = WorldTheme.allCases.map(WorldAudioPalette.palette)
+        let worlds = WorldTheme.allCases
+        let palettes = worlds.map(WorldAudioPalette.palette)
 
-        XCTAssertEqual(Set(palettes).count, WorldTheme.allCases.count)
-        XCTAssertEqual(Set(palettes.map(\.waveform)).count, WorldTheme.allCases.count)
-        XCTAssertEqual(Set(palettes.map(\.rootMIDINote)).count, WorldTheme.allCases.count)
+        XCTAssertEqual(worlds.count, 8)
+        XCTAssertEqual(Set(palettes).count, worlds.count)
 
-        let recipes = WorldTheme.allCases.map {
+        let recipes = worlds.map {
             ProceduralMusicComposer.recipe(for: $0, emergency: false)
         }
-        XCTAssertEqual(Set(recipes).count, WorldTheme.allCases.count)
+        XCTAssertEqual(Set(recipes).count, worlds.count)
+        XCTAssertTrue(recipes.allSatisfy { !$0.notes.isEmpty && !$0.percussion.isEmpty })
+    }
+
+    func testMoonpetalScoreIsUpbeatLayeredAndStillVoiceSafe() {
+        let normal = ProceduralMusicComposer.recipe(
+            for: .moonpetalKingdom,
+            emergency: false
+        )
+        let emergency = ProceduralMusicComposer.recipe(
+            for: .moonpetalKingdom,
+            emergency: true
+        )
+
+        XCTAssertEqual(WorldAudioPalette.palette(for: .moonpetalKingdom).pulseInterval, 0.60)
+        XCTAssertEqual(normal.duration, ProceduralMusicComposer.loopDuration)
+        XCTAssertGreaterThanOrEqual(Set(normal.notes.map(\.instrument)).count, 4)
+        XCTAssertGreaterThanOrEqual(Set(normal.percussion.map(\.voice)).count, 3)
+        XCTAssertGreaterThan(normal.notes.count, 100)
+        XCTAssertGreaterThan(normal.percussion.count, 60)
+        XCTAssertGreaterThan(emergency.percussion.count, normal.percussion.count)
+        XCTAssertTrue(normal.notes.allSatisfy { $0.start + $0.duration <= normal.duration })
+        XCTAssertTrue(normal.percussion.allSatisfy { $0.start < normal.duration })
+
+        let rendered = ProceduralAudioFactory.ambientLoop(
+            world: .moonpetalKingdom,
+            sampleRate: 22_050
+        )
+        XCTAssertEqual(
+            peakAmplitude(in: rendered),
+            ProceduralAudioFactory.ambientTargetPeak,
+            accuracy: 0.0001
+        )
+        XCTAssertLessThan(
+            AmbientMixPolicy.duckedVolume,
+            AmbientMixPolicy.normalVolume * 0.20
+        )
+    }
+
+    func testMoonpetalCelebrationLayersStayIsolatedToPrincessWorld() {
+        let moonpetal = ProceduralMusicComposer.recipe(
+            for: .moonpetalKingdom,
+            emergency: false
+        )
+        let otherWorlds = WorldTheme.allCases.filter { $0 != .moonpetalKingdom }.map {
+            ProceduralMusicComposer.recipe(for: $0, emergency: false)
+        }
+
+        XCTAssertTrue(moonpetal.notes.contains { $0.instrument == .harp })
+        XCTAssertTrue(moonpetal.notes.contains { $0.instrument == .glockenspiel })
+        XCTAssertTrue(moonpetal.notes.contains { $0.instrument == .bouncyBass })
+        XCTAssertTrue(
+            otherWorlds.allSatisfy { recipe in
+                recipe.notes.allSatisfy { $0.instrument != .harp }
+            }
+        )
+        XCTAssertTrue(
+            ProceduralMusicComposer.recipe(for: .frostlightWorld, emergency: false)
+                .notes.contains { $0.instrument == .glockenspiel }
+        )
+    }
+
+    func testEveryWorldScoreFitsTheLoopAndKeepsItsEmergencyLayer() {
+        for world in WorldTheme.allCases {
+            let normal = ProceduralMusicComposer.recipe(for: world, emergency: false)
+            let emergency = ProceduralMusicComposer.recipe(for: world, emergency: true)
+
+            XCTAssertEqual(normal.duration, ProceduralMusicComposer.loopDuration)
+            XCTAssertTrue(normal.notes.allSatisfy { $0.start >= 0 })
+            XCTAssertTrue(
+                normal.notes.allSatisfy { $0.start + $0.duration <= normal.duration }
+            )
+            XCTAssertTrue(
+                normal.percussion.allSatisfy { event in
+                    event.start >= 0 && event.start < normal.duration
+                }
+            )
+            XCTAssertEqual(normal.notes, emergency.notes)
+            XCTAssertGreaterThan(emergency.percussion.count, normal.percussion.count)
+        }
     }
 
     func testEveryFunctionalCueProducesAQuietFiniteBufferInEveryWorld() {
@@ -156,6 +235,10 @@ final class ProceduralAudioTests: XCTestCase {
             .star(index: 1),
             .star(index: 2),
             .reward,
+            .writing(tool: .pencil),
+            .writing(tool: .crayon),
+            .writing(tool: .chalk),
+            .writing(tool: .brush),
         ]
 
         for world in WorldTheme.allCases {
@@ -170,6 +253,40 @@ final class ProceduralAudioTests: XCTestCase {
                 XCTAssertGreaterThan(peakAmplitude(in: buffer), 0)
             }
         }
+    }
+
+    func testWritingToolsProduceFourDistinctShortVoiceSafeTextures() {
+        let buffers = HandwritingTool.allCases.map {
+            ProceduralAudioFactory.writingEffect(
+                tool: $0,
+                sampleRate: 44_100
+            )
+        }
+
+        XCTAssertEqual(Set(buffers.map(fingerprint)).count, HandwritingTool.allCases.count)
+        for buffer in buffers {
+            XCTAssertGreaterThan(buffer.frameLength, 0)
+            XCTAssertLessThanOrEqual(buffer.frameLength, 3_087)
+            XCTAssertGreaterThan(peakAmplitude(in: buffer), 0.01)
+            XCTAssertLessThanOrEqual(
+                peakAmplitude(in: buffer),
+                ProceduralAudioFactory.writingTargetPeak
+            )
+            XCTAssertLessThan(loopBoundaryDiscontinuity(in: buffer), 0.002)
+        }
+    }
+
+    func testWritingCueThrottleRejectsTouchBurstsWithoutBuildingAQueue() {
+        var throttle = WritingCueThrottle()
+
+        XCTAssertTrue(throttle.accepts(at: 10))
+        XCTAssertFalse(throttle.accepts(at: 10.02))
+        XCTAssertFalse(throttle.accepts(at: 10.07))
+        XCTAssertTrue(throttle.accepts(at: 10.08))
+        XCTAssertFalse(throttle.accepts(at: 10.10))
+
+        throttle.reset()
+        XCTAssertTrue(throttle.accepts(at: 10.10))
     }
 
     func testAmbientLoopsAreTwentyFourSecondStereoScoresWithDistinctContent() {

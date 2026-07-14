@@ -15,7 +15,6 @@ struct GuardianPracticeSettingsView: View {
     @State private var calmRescueEnabled: Bool
     @State private var notificationDraft: GuardianNotificationSettingsDraft
     @State private var leftHandedWritingControlsEnabled: Bool
-    @State private var wordRecommendationMode: WordRecommendationMode
 
     init(
         settings: ProfilePracticeSettings,
@@ -50,9 +49,6 @@ struct GuardianPracticeSettingsView: View {
         _leftHandedWritingControlsEnabled = State(
             initialValue: settings.interface.leftHandedLayoutEnabled
         )
-        _wordRecommendationMode = State(
-            initialValue: settings.wordRecommendationMode
-        )
     }
 
     var body: some View {
@@ -84,7 +80,6 @@ struct GuardianPracticeSettingsView: View {
                     }
                 }
 
-                wordRecommendationCard
                 audioSettingsCard
                 interfaceSettingsCard
                 notificationSettingsCard
@@ -112,8 +107,7 @@ struct GuardianPracticeSettingsView: View {
                             notifications: notificationDraft.settings,
                             interface: PracticeInterfacePreferences(
                                 leftHandedLayoutEnabled: leftHandedWritingControlsEnabled
-                            ),
-                            wordRecommendationMode: wordRecommendationMode
+                            )
                         )
                     )
                 }
@@ -157,31 +151,6 @@ struct GuardianPracticeSettingsView: View {
                 Divider()
                 Toggle("Calm Rescue", isOn: $calmRescueEnabled)
                     .accessibilityHint("Keeps Rescue time music gentle")
-            }
-        }
-        .frame(maxWidth: 680, alignment: .leading)
-    }
-
-    private var wordRecommendationCard: some View {
-        GuardianCard {
-            VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.medium) {
-                Label("Word recommendations", systemImage: "text.badge.checkmark")
-                    .font(.system(.title3, design: .rounded, weight: .bold))
-
-                Picker("Word source", selection: $wordRecommendationMode) {
-                    Text("Parent words only")
-                        .tag(WordRecommendationMode.manualOnly)
-                    Text("Parent words + smart fill")
-                        .tag(WordRecommendationMode.parentFirstAutomaticFallback)
-                    Text("Grade-based automatic")
-                        .tag(WordRecommendationMode.gradeAutomatic)
-                }
-                .pickerStyle(.menu)
-                .accessibilityValue(wordRecommendationMode.guardianTitle)
-
-                Text(wordRecommendationMode.guardianExplanation)
-                    .font(.system(.subheadline, design: .rounded, weight: .medium))
-                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
             }
         }
         .frame(maxWidth: 680, alignment: .leading)
@@ -477,30 +446,6 @@ extension QuestContentOrder {
             "New words first"
         case .reviewThenNew:
             "Review words first"
-        }
-    }
-}
-
-extension WordRecommendationMode {
-    fileprivate var guardianTitle: String {
-        switch self {
-        case .manualOnly:
-            "Parent words only"
-        case .parentFirstAutomaticFallback:
-            "Parent words plus smart fill"
-        case .gradeAutomatic:
-            "Grade-based automatic"
-        }
-    }
-
-    fileprivate var guardianExplanation: String {
-        switch self {
-        case .manualOnly:
-            "Practice only words a grown-up adds to the Read and Write pools."
-        case .parentFirstAutomaticFallback:
-            "Use parent-added words first, then fill a short pool with suitable recommendations."
-        case .gradeAutomatic:
-            "Let Tada Words choose words for the child’s selected grade level."
         }
     }
 }

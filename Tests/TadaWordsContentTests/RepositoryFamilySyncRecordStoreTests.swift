@@ -50,6 +50,7 @@ final class RepositoryFamilySyncRecordStoreTests: XCTestCase {
             displayName: fixture.profile.displayName,
             avatar: fixture.profile.avatar,
             selectedWorld: fixture.profile.selectedWorld,
+            selectedCartoonIconAssetID: "fox",
             voiceprintStatus: .enrolled(
                 modelVersion: "local-model",
                 enrolledAt: fixture.now
@@ -66,11 +67,13 @@ final class RepositoryFamilySyncRecordStoreTests: XCTestCase {
             from: profileRecord.payload
         )
         XCTAssertEqual(exported.voiceprintStatus, .notEnrolled)
+        XCTAssertEqual(exported.selectedCartoonIconAssetID, "fox")
 
         try await store.apply([profileRecord], for: enrolled.id)
         let loadedProfile = try await fixture.profiles.profile(id: enrolled.id)
         let saved = try XCTUnwrap(loadedProfile)
         XCTAssertEqual(saved.voiceprintStatus, enrolled.voiceprintStatus)
+        XCTAssertEqual(saved.selectedCartoonIconAssetID, "fox")
     }
 
     func testCommittedDeletionSurvivesRestartAndExportsProfileTombstone()

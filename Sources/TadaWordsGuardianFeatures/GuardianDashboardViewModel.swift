@@ -26,6 +26,7 @@ final class GuardianDashboardViewModel: ObservableObject {
     @Published private(set) var reportPeriod: GuardianReportPeriod = .sevenDays
     @Published var errorMessage: String?
     @Published private(set) var syncStatus: FamilySyncStatus = .idle
+    @Published private(set) var isFamilySyncEnabled = false
     @Published private(set) var shareURL: URL?
     @Published var shareURLText = ""
     @Published private(set) var voiceprintProgress: VoiceprintEnrollmentProgress?
@@ -40,6 +41,7 @@ final class GuardianDashboardViewModel: ObservableObject {
     private let voiceprintRepository: (any DeviceVoiceprintRepository)?
     private let requestSpeechAuthorization: @Sendable () async -> Bool
     private let sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing
+    private var isUpdatingWordPool = false
 
     init(
         store: any GuardianFamilyStore,
@@ -294,6 +296,30 @@ final class GuardianDashboardViewModel: ObservableObject {
         }
     }
 
+    func addWords(
+        _ request: GuardianWordImportRequest
+    ) async -> GuardianWordImportReport? {
+        guard !isUpdatingWordPool else { return nil }
+        isUpdatingWordPool = true
+        defer { isUpdatingWordPool = false }
+
+        let report: GuardianWordImportReport
+        do {
+            report = try await store.importWords(request)
+        } catch {
+            errorMessage = "Those words could not be added. Your existing pools are unchanged."
+            return nil
+        }
+
+        do {
+            snapshot = try await store.dashboardSnapshot()
+        } catch {
+            errorMessage =
+                "The words were added, but the list could not refresh. Reopen Manage Words to try again."
+        }
+        return report
+    }
+
     func play(_ prompt: WordPrompt) {
         guard let profileID = snapshot?.profile.id else { return }
 
@@ -324,6 +350,36 @@ final class GuardianDashboardViewModel: ObservableObject {
         }
     }
 
+    func setWordsActive(
+        _ prompts: [WordPrompt],
+        isActive: Bool
+    ) async -> Bool {
+        guard !isUpdatingWordPool, let mode = prompts.first?.learningMode else {
+            return false
+        }
+        guard prompts.allSatisfy({ $0.learningMode == mode }) else {
+            errorMessage = "Read and Write words must be managed separately."
+            return false
+        }
+
+        isUpdatingWordPool = true
+        defer { isUpdatingWordPool = false }
+        do {
+            snapshot = try await store.setWordsActive(
+                ids: prompts.map(\.id),
+                learningMode: mode,
+                isActive: isActive
+            )
+            return true
+        } catch {
+            errorMessage =
+                isActive
+                ? "Those words could not be restored. Please try again."
+                : "Those words could not be removed. Please try again."
+            return false
+        }
+    }
+
     func savePracticeSettings(_ settings: ProfilePracticeSettings) {
         guard !isLoading else { return }
         isLoading = true
@@ -344,8 +400,10 @@ final class GuardianDashboardViewModel: ObservableObject {
 
     var guardianSyncState: GuardianSyncState {
         switch syncStatus {
-        case .idle, .thisDeviceOnly:
+        case .idle, .deviceOnly, .iCloudUnavailable:
             .thisDeviceOnly
+        case .optedOut:
+            .off
         case .syncing, .pendingOffline:
             .pending
         case .synced:
@@ -356,17 +414,42 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func syncNow() {
-        guard let familySyncCoordinator else { return }
+        guard let familySyncCoordinator, isFamilySyncEnabled else { return }
         Task {
-            guard await sensitiveActionAuthorizer.authorize(.enableFamilySync) else {
-                return
-            }
             syncStatus = await familySyncCoordinator.synchronize()
         }
     }
 
+    func setFamilySyncEnabled(_ isEnabled: Bool) {
+        guard let familySyncCoordinator else { return }
+        Task {
+            if isEnabled,
+                !(await sensitiveActionAuthorizer.authorize(.enableFamilySync))
+            {
+                return
+            }
+            do {
+                syncStatus = try await familySyncCoordinator.setEnabled(isEnabled)
+                isFamilySyncEnabled = await familySyncCoordinator.isEnabled()
+                if !isFamilySyncEnabled {
+                    shareURL = nil
+                    shareURLText = ""
+                }
+            } catch {
+                isFamilySyncEnabled = await familySyncCoordinator.isEnabled()
+                errorMessage =
+                    isEnabled
+                    ? "Family sync could not be turned on. Learning data is still saved on this device."
+                    : "Family sync could not be turned off. Please try again."
+            }
+        }
+    }
+
     func createFamilyShare() {
-        guard let familySyncCoordinator, let profileID = snapshot?.profile.id else {
+        guard isFamilySyncEnabled,
+            let familySyncCoordinator,
+            let profileID = snapshot?.profile.id
+        else {
             return
         }
         Task {
@@ -383,7 +466,8 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func acceptFamilyShare() {
-        guard let familySyncCoordinator,
+        guard isFamilySyncEnabled,
+            let familySyncCoordinator,
             let url = URL(string: shareURLText.trimmingCharacters(in: .whitespacesAndNewlines))
         else {
             errorMessage = "Paste a valid family invitation link."
@@ -470,10 +554,18 @@ final class GuardianDashboardViewModel: ObservableObject {
 
     private func refreshSyncStatus() {
         guard let familySyncCoordinator else {
-            syncStatus = .thisDeviceOnly(message: "Saved on this device.")
+            isFamilySyncEnabled = false
+            syncStatus = .deviceOnly(
+                message: "Learning data is saved on this device."
+            )
             return
         }
-        Task { syncStatus = await familySyncCoordinator.status() }
+        Task {
+            async let enabled = familySyncCoordinator.isEnabled()
+            async let status = familySyncCoordinator.status()
+            isFamilySyncEnabled = await enabled
+            syncStatus = await status
+        }
     }
 
     private func reconcileNotifications(

@@ -6,6 +6,7 @@ struct QuestResultView: View {
     let result: QuestResultViewState
     let theme: TadaWorldTheme
     let audioExperienceService: any AudioExperienceService
+    let onReplay: () -> Void
     let onContinue: () -> Void
 
     init(
@@ -13,11 +14,13 @@ struct QuestResultView: View {
         theme: TadaWorldTheme,
         audioExperienceService: any AudioExperienceService =
             SilentAudioExperienceService(),
+        onReplay: @escaping () -> Void,
         onContinue: @escaping () -> Void
     ) {
         self.result = result
         self.theme = theme
         self.audioExperienceService = audioExperienceService
+        self.onReplay = onReplay
         self.onContinue = onContinue
     }
 
@@ -103,7 +106,11 @@ struct QuestResultView: View {
     private var completionHeader: some View {
         VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
             HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                TadaWorldMascot(theme: theme, pose: .cheering, size: 88)
+                TadaWorldMascot(
+                    theme: theme,
+                    pose: .cheering,
+                    size: TadaChildScaleTokens.Result.mascotRegular
+                )
                 ZStack {
                     Circle()
                         .fill(TadaPrimitiveTokens.ColorValue.success)
@@ -136,7 +143,11 @@ struct QuestResultView: View {
 
     private var compactCompletionHeader: some View {
         HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-            TadaWorldMascot(theme: theme, pose: .cheering, size: 58)
+            TadaWorldMascot(
+                theme: theme,
+                pose: .cheering,
+                size: TadaChildScaleTokens.Result.mascotCompact
+            )
 
             ZStack {
                 Circle()
@@ -229,14 +240,14 @@ struct QuestResultView: View {
                     TadaRewardBadge(
                         theme: theme,
                         isUnlocked: revealPhase >= 4,
-                        size: 124,
+                        size: TadaChildScaleTokens.Result.rewardRegular,
                         symbol: rewardSymbol
                     )
-                } else {
-                    Image(systemName: "arrow.clockwise.circle.fill")
-                        .font(.system(size: 104, weight: .bold))
-                        .foregroundStyle(theme.primary)
-                        .accessibilityHidden(true)
+                } else if result.showsReplayAction {
+                    replayButton(
+                        size: TadaChildScaleTokens.Result.rewardRegular,
+                        symbolSize: TadaChildScaleTokens.Result.replaySymbolRegular
+                    )
                 }
 
                 if result.showsNewCollectible {
@@ -332,14 +343,14 @@ struct QuestResultView: View {
                     TadaRewardBadge(
                         theme: theme,
                         isUnlocked: revealPhase >= 4,
-                        size: 86,
+                        size: TadaChildScaleTokens.Result.rewardCompact,
                         symbol: rewardSymbol
                     )
-                } else {
-                    Image(systemName: "arrow.clockwise.circle.fill")
-                        .font(.system(size: 70, weight: .bold))
-                        .foregroundStyle(theme.primary)
-                        .accessibilityHidden(true)
+                } else if result.showsReplayAction {
+                    replayButton(
+                        size: TadaChildScaleTokens.Result.rewardCompact,
+                        symbolSize: TadaChildScaleTokens.Result.replaySymbolCompact
+                    )
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -381,6 +392,24 @@ struct QuestResultView: View {
         .opacity(revealPhase >= 4 ? 1 : 0)
         .scaleEffect(revealPhase >= 4 ? 1 : 0.92)
         .accessibilityHidden(revealPhase < 4)
+    }
+
+    private func replayButton(size: CGFloat, symbolSize: CGFloat) -> some View {
+        Button(action: onReplay) {
+            Image(systemName: "arrow.clockwise.circle.fill")
+                .font(.system(size: symbolSize, weight: .bold))
+                .foregroundStyle(theme.primary)
+                .frame(
+                    minWidth: max(size, TadaPrimitiveTokens.TouchTarget.minimum),
+                    minHeight: max(size, TadaPrimitiveTokens.TouchTarget.minimum)
+                )
+                .contentShape(Circle())
+        }
+        .buttonStyle(TadaTactileCardButtonStyle())
+        .allowsHitTesting(revealPhase >= 4)
+        .accessibilityLabel("Practice \(result.mode.title) quest again")
+        .accessibilityHint("Starts the same words again")
+        .accessibilityIdentifier("quest-result.replay")
     }
 
     private func revealResults() async {

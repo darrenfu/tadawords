@@ -7,10 +7,12 @@ public struct GuardianRootView: View {
     @StateObject private var model: GuardianDashboardViewModel
     @AccessibilityFocusState private var loadingOverlayIsFocused: Bool
     private let onExit: () -> Void
+    private let imageTextRecognitionService: any ImageTextRecognizing
 
     /// Preview convenience. Production composition must use `init(store:onExit:)`.
     public init(onExit: @escaping () -> Void = {}) {
         self.onExit = onExit
+        imageTextRecognitionService = NoImageTextRecognitionService()
         _model = StateObject(
             wrappedValue: GuardianDashboardViewModel(
                 store: DemoGuardianFamilyStore(),
@@ -27,6 +29,7 @@ public struct GuardianRootView: View {
         onExit: @escaping () -> Void = {}
     ) {
         self.onExit = onExit
+        imageTextRecognitionService = NoImageTextRecognitionService()
         _model = StateObject(
             wrappedValue: GuardianDashboardViewModel(
                 store: DemoGuardianFamilyStore(),
@@ -41,6 +44,7 @@ public struct GuardianRootView: View {
         onExit: @escaping () -> Void = {}
     ) {
         self.onExit = onExit
+        imageTextRecognitionService = NoImageTextRecognitionService()
         _model = StateObject(
             wrappedValue: GuardianDashboardViewModel(
                 store: store,
@@ -60,11 +64,14 @@ public struct GuardianRootView: View {
         voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)? = nil,
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
         requestSpeechAuthorization: @escaping @Sendable () async -> Bool = { false },
+        imageTextRecognitionService: any ImageTextRecognizing =
+            NoImageTextRecognitionService(),
         sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing =
             AllowSensitiveGuardianActions(),
         onExit: @escaping () -> Void = {}
     ) {
         self.onExit = onExit
+        self.imageTextRecognitionService = imageTextRecognitionService
         _model = StateObject(
             wrappedValue: GuardianDashboardViewModel(
                 store: store,
@@ -173,20 +180,31 @@ public struct GuardianRootView: View {
             )
 
         case .quickAdd:
-            GuardianQuickAddView(
+            GuardianWordManagerView(
+                initialMode: .read,
+                readWords: model.snapshot?.readPool ?? [],
+                writeWords: model.snapshot?.writePool ?? [],
+                imageTextRecognitionService: imageTextRecognitionService,
                 onBack: model.showDashboard,
-                onSubmit: model.importWords
+                onSubmit: model.addWords,
+                onPlay: model.play,
+                onSetWordsActive: { prompts, isActive in
+                    await model.setWordsActive(prompts, isActive: isActive)
+                }
             )
 
         case .pool(let mode):
-            GuardianPoolView(
-                mode: mode,
-                words: model.snapshot?.pool(for: mode) ?? [],
-                routeSettings: routeSettings(for: mode),
+            GuardianWordManagerView(
+                initialMode: mode,
+                readWords: model.snapshot?.readPool ?? [],
+                writeWords: model.snapshot?.writePool ?? [],
+                imageTextRecognitionService: imageTextRecognitionService,
                 onBack: model.showDashboard,
-                onAddWords: model.showQuickAdd,
+                onSubmit: model.addWords,
                 onPlay: model.play,
-                onDeactivate: model.deactivate
+                onSetWordsActive: { prompts, isActive in
+                    await model.setWordsActive(prompts, isActive: isActive)
+                }
             )
 
         case .settings:
@@ -203,9 +221,11 @@ public struct GuardianRootView: View {
         case .familySync:
             GuardianFamilySyncView(
                 status: model.syncStatus,
+                isEnabled: model.isFamilySyncEnabled,
                 shareURL: model.shareURL,
                 shareURLText: $model.shareURLText,
                 onBack: model.showDashboard,
+                onSetEnabled: model.setFamilySyncEnabled,
                 onSyncNow: model.syncNow,
                 onCreateShare: model.createFamilyShare,
                 onAcceptShare: model.acceptFamilyShare

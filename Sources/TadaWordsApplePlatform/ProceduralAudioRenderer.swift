@@ -4,6 +4,7 @@ import TadaWordsDomain
 
 enum ProceduralAudioFactory {
     static let ambientTargetPeak: Float = 0.40
+    static let writingTargetPeak: Float = 0.16
 
     static func launchSignature(
         world: WorldTheme?,
@@ -114,6 +115,8 @@ enum ProceduralAudioFactory {
                 ],
                 0.34
             )
+        case .writing(let tool):
+            return writingEffect(tool: tool, sampleRate: sampleRate)
         }
         return makeSimpleBuffer(
             duration: recipe.duration,
@@ -122,6 +125,96 @@ enum ProceduralAudioFactory {
             waveform: palette.waveform,
             gain: recipe.gain
         )
+    }
+
+    /// A tiny, voice-safe texture for one accepted handwriting-move sample.
+    /// The playback service spaces these buffers so they feel continuous while
+    /// a child draws without ever building a queue of stale stroke sounds.
+    static func writingEffect(
+        tool: HandwritingTool,
+        sampleRate: Double
+    ) -> AVAudioPCMBuffer {
+        let duration: Double
+        let gain: Double
+        switch tool {
+        case .pencil:
+            duration = 0.045
+            gain = 0.075
+        case .crayon:
+            duration = 0.060
+            gain = 0.105
+        case .chalk:
+            duration = 0.050
+            gain = 0.080
+        case .brush:
+            duration = 0.070
+            gain = 0.110
+        }
+
+        let buffer = emptyStereoBuffer(duration: duration, sampleRate: sampleRate)
+        guard let channels = buffer.floatChannelData else { return buffer }
+        let frameCount = Int(buffer.frameLength)
+        var previousNoise = (left: 0.0, right: 0.0)
+        var smoothedNoise = (left: 0.0, right: 0.0)
+
+        for frame in 0..<frameCount {
+            let time = Double(frame) / sampleRate
+            let progress = Double(frame) / Double(max(1, frameCount - 1))
+            let attack = min(1, time / 0.002)
+            let release = min(1, max(0, duration - time) / 0.009)
+            let envelope = attack * release
+            let noise = (
+                left: deterministicNoise(frame: frame),
+                right: deterministicNoise(frame: frame &+ 7_919)
+            )
+            smoothedNoise.left = smoothedNoise.left * 0.82 + noise.left * 0.18
+            smoothedNoise.right = smoothedNoise.right * 0.82 + noise.right * 0.18
+
+            let texture: (left: Double, right: Double)
+            switch tool {
+            case .pencil:
+                let graphiteTone = sin(2 * Double.pi * (1_340 + 180 * progress) * time)
+                texture = (
+                    (noise.left - previousNoise.left * 0.68) * 0.72
+                        + graphiteTone * 0.09,
+                    (noise.right - previousNoise.right * 0.68) * 0.72
+                        + graphiteTone * 0.09
+                )
+            case .crayon:
+                let waxTone = softTriangle(2 * Double.pi * 118 * time)
+                texture = (
+                    noise.left * 0.34 + smoothedNoise.left * 0.54 + waxTone * 0.24,
+                    noise.right * 0.34 + smoothedNoise.right * 0.54 + waxTone * 0.24
+                )
+            case .chalk:
+                let dustPulse = frame % 29 < 11 ? 1.0 : 0.32
+                let brittleTone = sin(2 * Double.pi * 3_180 * time)
+                texture = (
+                    (noise.left * 0.78
+                        + deterministicNoise(frame: frame &+ 2_503) * 0.31)
+                        * dustPulse + brittleTone * 0.10,
+                    (noise.right * 0.78
+                        + deterministicNoise(frame: frame &+ 5_009) * 0.31)
+                        * dustPulse + brittleTone * 0.10
+                )
+            case .brush:
+                let bristleTone = sin(2 * Double.pi * 214 * time)
+                texture = (
+                    smoothedNoise.left * 0.92 + bristleTone * 0.08,
+                    smoothedNoise.right * 0.92 + bristleTone * 0.08
+                )
+            }
+
+            channels[0][frame] = Float(texture.left * envelope * gain)
+            channels[1][frame] = Float(texture.right * envelope * gain)
+            previousNoise = noise
+        }
+        hardLimit(
+            channels: channels,
+            frameCount: frameCount,
+            limit: writingTargetPeak
+        )
+        return buffer
     }
 
     private static func render(
@@ -386,13 +479,14 @@ enum ProceduralAudioFactory {
 
     private static func hardLimit(
         channels: UnsafePointer<UnsafeMutablePointer<Float>>,
-        frameCount: Int
+        frameCount: Int,
+        limit: Float = 0.72
     ) {
         for channelIndex in 0..<2 {
             for frame in 0..<frameCount {
                 channels[channelIndex][frame] = max(
-                    -0.72,
-                    min(0.72, channels[channelIndex][frame])
+                    -limit,
+                    min(limit, channels[channelIndex][frame])
                 )
             }
         }

@@ -40,9 +40,11 @@ public actor SystemAudioPromptService: AudioPromptService {
         }
 
         let spokenText = prompt.audioCue.spokenContext ?? prompt.displayText
+        let role: SpokenAudioRole =
+            prompt.learningMode == .write ? .writeLearning : .learning
         let design = SpeechUtteranceDesignPolicy.design(
             text: spokenText,
-            role: .learning
+            role: role
         )
         let utterance = AVSpeechUtterance(string: design.text)
         utterance.voice = voice

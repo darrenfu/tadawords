@@ -9,6 +9,7 @@ import TadaWordsLearning
 final class TadaWordsAppModel: ObservableObject {
     @Published private(set) var destination: AppDestination = .profileChooser
     @Published private(set) var selectedProfile: KidProfile?
+    @Published private(set) var lastPlayedProfileID: ProfileID?
     @Published private(set) var todayRouteStatuses: [LearningMode: TodayQuestRouteStatus] = [:]
     @Published private(set) var calendarMonthSummary: DailyQuestMonthSummary?
     @Published private(set) var isCalendarLoading = false
@@ -45,7 +46,6 @@ final class TadaWordsAppModel: ObservableObject {
     private var calendarTask: Task<Void, Never>?
     private var profileSelectionTask: Task<Void, Never>?
     private var worldProgressTask: Task<Void, Never>?
-    private var didPrepareInitialProfile = false
     private var isApplicationActive = true
 
     init(
@@ -91,9 +91,8 @@ final class TadaWordsAppModel: ObservableObject {
         self.progressReducer = progressReducer
         self.onLearningDataChanged = onLearningDataChanged
         self.questTimerFactory = questTimerFactory
-        if let initialProfile = profiles.first(where: { $0.id == initialProfileID }) {
-            selectedProfile = initialProfile
-            destination = .lobby
+        lastPlayedProfileID = initialProfileID.flatMap { rememberedID in
+            profiles.contains(where: { $0.id == rememberedID }) ? rememberedID : nil
         }
     }
 
@@ -119,13 +118,6 @@ final class TadaWordsAppModel: ObservableObject {
         }
         applyProfileSelection(currentProfile)
         await persistLastSelectedProfile(currentProfile.id)
-    }
-
-    func prepareInitialProfileIfNeeded() {
-        guard !didPrepareInitialProfile else { return }
-        didPrepareInitialProfile = true
-        guard let selectedProfile else { return }
-        beginProfileServices(for: selectedProfile)
     }
 
     @discardableResult
@@ -172,8 +164,8 @@ final class TadaWordsAppModel: ObservableObject {
         rewardCollections = [:]
         calendarLoadFailed = false
         selectedProfile = profile
+        lastPlayedProfileID = profile.id
         destination = .lobby
-        didPrepareInitialProfile = true
         beginProfileServices(for: profile)
     }
 
@@ -199,6 +191,7 @@ final class TadaWordsAppModel: ObservableObject {
         worldProgressTask?.cancel()
         worldProgression = nil
         rewardCollections = [:]
+        selectedProfile = nil
         Task {
             await audioExperienceService.stopAmbientAudio()
         }
@@ -239,35 +232,109 @@ final class TadaWordsAppModel: ObservableObject {
             world != profile.selectedWorld,
             let profileRepository
         else { return }
-        let updated = KidProfile(
-            id: profile.id,
-            displayName: profile.displayName,
-            avatar: profile.avatar,
-            selectedWorld: world,
-            starterWorld: profile.starterWorld,
-            guardianUnlockedWorlds: profile.guardianUnlockedWorlds,
-            schoolGrade: profile.schoolGrade,
-            ageYears: profile.ageYears,
-            voiceprintStatus: profile.voiceprintStatus,
-            createdAt: profile.createdAt,
-            updatedAt: clock.now
+        let updated = profileSelection(
+            from: profile,
+            world: world,
+            cartoonIconAssetID: profile.selectedCartoonIconAssetID,
+            treasureAvatar: profile.selectedTreasureAvatar
         )
         do {
-            try await profileRepository.save(updated)
-            guard selectedProfile?.id == updated.id else { return }
-            selectedProfile = updated
-            if let index = profiles.firstIndex(where: { $0.id == updated.id }) {
-                profiles[index] = updated
-            }
-            await activateAudio(for: updated)
-            await loadWorldProgress(for: updated)
+            try await saveProfileSelection(
+                updated,
+                in: profileRepository,
+                shouldRefreshAudio: true
+            )
         } catch {
-            worldSelectionError = "Ask a grown-up to try changing worlds again."
+            worldSelectionError = "Ask a parent to try changing worlds again."
         }
     }
 
     func clearWorldSelectionError() {
         worldSelectionError = nil
+    }
+
+    func selectCartoonIcon(_ assetID: String) {
+        worldProgressTask?.cancel()
+        worldProgressTask = Task { [weak self] in
+            await self?.selectCartoonIconAndWait(assetID)
+        }
+    }
+
+    func selectCartoonIconAndWait(_ assetID: String) async {
+        guard let profile = selectedProfile,
+            worldProgression?.unlockedCartoonIconAssetIDs.contains(assetID) == true,
+            profile.selectedCartoonIconAssetID != assetID,
+            let profileRepository
+        else { return }
+        let updated = profileSelection(
+            from: profile,
+            world: profile.selectedWorld,
+            cartoonIconAssetID: assetID,
+            treasureAvatar: nil
+        )
+        do {
+            try await saveProfileSelection(updated, in: profileRepository)
+        } catch {
+            worldSelectionError = "Ask a parent to try changing your icon again."
+        }
+    }
+
+    func selectTreasureAvatar(_ item: RewardCatalogItem) {
+        worldProgressTask?.cancel()
+        worldProgressTask = Task { [weak self] in
+            await self?.selectTreasureAvatarAndWait(item)
+        }
+    }
+
+    func selectTreasureAvatarAndWait(_ item: RewardCatalogItem) async {
+        let selection = TreasureAvatarSelection(
+            rewardItemID: item.id,
+            iconAssetID: item.iconAssetID
+        )
+        guard let profile = selectedProfile,
+            profile.selectedTreasureAvatar != selection,
+            rewardCollections[item.world]?.items.contains(where: {
+                $0.item.id == item.id && $0.isCollected
+            }) == true,
+            let profileRepository
+        else { return }
+        let updated = profileSelection(
+            from: profile,
+            world: profile.selectedWorld,
+            cartoonIconAssetID: nil,
+            treasureAvatar: selection
+        )
+        do {
+            try await saveProfileSelection(updated, in: profileRepository)
+        } catch {
+            worldSelectionError = "Ask a parent to try changing your icon again."
+        }
+    }
+
+    func selectOriginalAvatar() {
+        worldProgressTask?.cancel()
+        worldProgressTask = Task { [weak self] in
+            await self?.selectOriginalAvatarAndWait()
+        }
+    }
+
+    func selectOriginalAvatarAndWait() async {
+        guard let profile = selectedProfile,
+            profile.selectedCartoonIconAssetID != nil
+                || profile.selectedTreasureAvatar != nil,
+            let profileRepository
+        else { return }
+        let updated = profileSelection(
+            from: profile,
+            world: profile.selectedWorld,
+            cartoonIconAssetID: nil,
+            treasureAvatar: nil
+        )
+        do {
+            try await saveProfileSelection(updated, in: profileRepository)
+        } catch {
+            worldSelectionError = "Ask a parent to try changing your icon again."
+        }
     }
 
     func availability(for mode: LearningMode) -> QuestAvailability {
@@ -321,6 +388,7 @@ final class TadaWordsAppModel: ObservableObject {
         isApplicationActive = isActive
         if isActive {
             activeQuest?.timer.resume(from: .appInactive)
+            refreshWorldProgress()
         } else {
             activeQuest?.timer.suspend(for: .appInactive)
         }
@@ -978,7 +1046,8 @@ final class TadaWordsAppModel: ObservableObject {
     private func loadWorldProgress(for profile: KidProfile) async {
         do {
             async let progression = dailyQuestCoordinator.worldProgression(
-                for: profile
+                for: profile,
+                on: clock.now
             )
             async let collections = dailyQuestCoordinator.rewardCollections(
                 for: profile
@@ -996,7 +1065,11 @@ final class TadaWordsAppModel: ObservableObject {
             return
         } catch {
             guard selectedProfile?.id == profile.id else { return }
-            worldProgression = WorldProgression(profile: profile, completions: [])
+            worldProgression = WorldProgression(
+                profile: profile,
+                completions: [],
+                currentLocalDay: currentLocalDay
+            )
             rewardCollections = [:]
             worldProgressTask = nil
         }
@@ -1014,6 +1087,46 @@ final class TadaWordsAppModel: ObservableObject {
         profileSelectionTask = nil
     }
 
+    private func profileSelection(
+        from profile: KidProfile,
+        world: WorldTheme,
+        cartoonIconAssetID: String?,
+        treasureAvatar: TreasureAvatarSelection?
+    ) -> KidProfile {
+        KidProfile(
+            id: profile.id,
+            displayName: profile.displayName,
+            avatar: profile.avatar,
+            selectedWorld: world,
+            starterWorld: profile.starterWorld,
+            guardianUnlockedWorlds: profile.guardianUnlockedWorlds,
+            selectedCartoonIconAssetID: cartoonIconAssetID,
+            selectedTreasureAvatar: treasureAvatar,
+            schoolGrade: profile.schoolGrade,
+            ageYears: profile.ageYears,
+            voiceprintStatus: profile.voiceprintStatus,
+            createdAt: profile.createdAt,
+            updatedAt: clock.now
+        )
+    }
+
+    private func saveProfileSelection(
+        _ updated: KidProfile,
+        in repository: any KidProfileRepository,
+        shouldRefreshAudio: Bool = false
+    ) async throws {
+        try await repository.save(updated)
+        guard selectedProfile?.id == updated.id else { return }
+        selectedProfile = updated
+        if let index = profiles.firstIndex(where: { $0.id == updated.id }) {
+            profiles[index] = updated
+        }
+        if shouldRefreshAudio {
+            await activateAudio(for: updated)
+        }
+        await loadWorldProgress(for: updated)
+    }
+
     private static func isProfileOrderedBefore(
         _ lhs: KidProfile,
         _ rhs: KidProfile
@@ -1025,7 +1138,7 @@ final class TadaWordsAppModel: ObservableObject {
     }
 
     private static let creationFailureMessage =
-        "We couldn't save your player. Ask a grown-up to try again."
+        "We couldn't save your kid profile. Ask a parent to try again."
 
     private static func message(
         for error: ChildProfileCreationError

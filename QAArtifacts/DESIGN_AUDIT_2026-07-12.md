@@ -2,11 +2,28 @@
 
 This follow-up records the implementation state after the 2026-07-12 visual audit. The original Phase 1 through Phase 3 source issues are resolved. Physical-device and real-child acceptance remain open.
 
+The active `v0.2` branch supersedes the original three-World screenshots with
+eight World implementations, richer pose-aware mascot faces, a Profile-first
+last-played confirmation, locked treasure artwork, treasure avatars, and a
+four-tool/12-color Write palette with a local eraser. The original screenshots
+remain baseline evidence; the fresh 2026-07-13 Phase 1 captures are the current
+simulator visual evidence.
+
 ## Current verdict
 
 The V1 child hierarchy is implementation-complete. Read and Write use separate shapes, icons, and interaction rhythms. Each World has its own scene, reward catalog, progression, and audio identity. Guardian screens use a calmer information hierarchy.
 
-The remaining work is observation, not another speculative polish pass. Test the app with the target child, VoiceOver, physical landscape rotation, real input devices, and device speakers before changing layout or motion again.
+The owner approved one focused Pre-K Phase 1 refinement on 2026-07-13. It is now implemented and simulator-reviewed. Further visual changes still require a failed observation from the target child, VoiceOver, physical child-landscape and parent-route rotation, real input devices, or device speakers.
+
+## Approved Pre-K Phase 1 — 2026-07-13
+
+- The remembered Profile card has a static 1.03× emphasis and higher stacking priority. Other children are neither dimmed nor animated.
+- iPhone landscape keeps labeled `Kids` on the left and groups icon-only `Worlds`, `Calendar`, and `Badge` in a translucent dock. Each icon has a 48-point visual circle inside a 72-point touch frame. iPad retains labels.
+- Lobby mascots use 72/104 points; Read mascots use 80/104 points; Result mascots use 68/104 points for compact/regular layouts.
+- The regular Read card is 560–760 points wide and uses a 112-point target word. Compact iPhone keeps its 78-point word so the microphone remains comfortably separated.
+- Result reward and Replay emphasis use 96/144 points for compact/regular layouts.
+- All new scale values live in `TadaChildScaleTokens`; the compact utility interaction lives in `TadaLobbyUtilityButtonStyle`. No quest logic, Write canvas structure, or World palette was changed.
+- Fresh iPhone 17 Pro Max and iPad Pro 13-inch (M5) captures show no clipping, card overlap, dock crowding, or cross-World color leakage. The focused presentation test plus the full 480-test suite pass, and both LocalQA builds pass.
 
 ## Resolved Phase 1 findings
 
@@ -34,7 +51,7 @@ The remaining work is observation, not another speculative polish pass. Test the
 - Calendar, bootstrap, loading, blocked, empty, and error routes use a shared child state component
 - Child and Guardian navigation transitions honor Reduce Motion
 - Parent Gate no longer repeats its footer label
-- New Player errors use the shared inline-error component
+- New Kid errors use the shared inline-error component
 - Handwriting accessibility copy says finger on iPhone and finger or Apple Pencil on iPad
 - The app supports left-handed Write controls, Reduced Sound, and Calm Rescue
 
@@ -45,24 +62,40 @@ The remaining work is observation, not another speculative polish pass. Test the
 | Moonpetal Kingdom | Original fairy-tale princess atmosphere | 20 small rewards and five milestones |
 | Build-It Bay | Original engineering vehicle and construction atmosphere | 20 small rewards and five milestones |
 | Paws & Pines | Original animal and forest atmosphere | 20 small rewards and five milestones |
+| Dino Discovery | Original jungle dinosaur and fossil exploration | 20 small rewards and five milestones |
+| Firehouse Heroes | Friendly firehouse and rescue atmosphere without alarm imagery | 20 small rewards and five milestones |
+| Brickwork City | Original colorful block-building atmosphere with no commercial toy branding | 20 small rewards and five milestones |
+| Frostlight World | Original snow, crystal, and aurora atmosphere | 20 small rewards and five milestones |
+| Coaster Carnival | Original roller-coaster and night-carnival atmosphere | 20 small rewards and five milestones |
 
-Rewards never cross World boundaries. The World Picker unlocks additional Worlds after 3 and 8 Today Quest completions. Collection shows permanent small rewards and derived milestone progress.
+Rewards never cross World boundaries. A same-day Read+Write Double Quest unlocks
+one new World and one animal icon on the following local day. Collection shows
+25 distinct icons per World even while locked; collected treasures can become
+Profile avatars without replacing the source photo.
 
 ## Current screenshot evidence
 
-- `QAArtifacts/Final-2026-07-12/iPhone17ProMax-first-run.png`
-- `QAArtifacts/Final-2026-07-12/iPadPro13-first-run.png`
-- `QAArtifacts/VisualAccessibility-2026-07-12/iPhone17ProMax-launch.png`
-- `QAArtifacts/VisualAccessibility-2026-07-12/iPadPro13-launch.png`
-- `QAArtifacts/VisualAccessibility-2026-07-12/iPhone17ProMax-system-dark-app-light.png`
+Fresh Phase 1 evidence:
+
+- `QAArtifacts/v0.2-phase1-2026-07-13/iPhone17ProMax-last-played-profile.jpg`
+- `QAArtifacts/v0.2-phase1-2026-07-13/iPhone17ProMax-moonpetal-lobby.jpg`
+- `QAArtifacts/v0.2-phase1-2026-07-13/iPhone17ProMax-moonpetal-read.jpg`
+- `QAArtifacts/v0.2-phase1-2026-07-13/iPhone17ProMax-moonpetal-result.jpg`
+- `QAArtifacts/v0.2-phase1-2026-07-13/iPadPro13-last-played-profile.jpg`
+- `QAArtifacts/v0.2-phase1-2026-07-13/iPadPro13-moonpetal-lobby.jpg`
+- `QAArtifacts/v0.2-phase1-2026-07-13/iPadPro13-paws-read.jpg`
+- `QAArtifacts/v0.2-phase1-2026-07-13/iPadPro13-paws-result.jpg`
+
+The pre-refinement Lobby/Read captures remain under
+`QAArtifacts/v0.2-2026-07-12/` for direct comparison.
 
 Headless simulator screenshots can store a rotated or letterboxed framebuffer even when the built orientation declarations are correct. Do not crop those images and treat them as full-screen rotation evidence.
 
 ## Physical visual acceptance still required
 
-- Launch and rotate a physical iPhone 17 Pro Max in Landscape Left and Landscape Right
-- Launch and rotate a physical iPad in both landscape directions
-- Verify no route enters Portrait and no keyboard clips Parent Gate or Quick Add
+- On a physical iPhone 17 Pro Max, verify child routes in both Landscapes and Parents in Portrait plus both Landscapes; reject Upside Down
+- On a physical iPad, verify child routes in both Landscapes and Parents in all four orientations
+- Exit Parents while portrait and verify Profile/Lobby immediately restores landscape; confirm no keyboard clips Parent Gate or Word Manager
 - Walk every child and Guardian route at accessibility Dynamic Type sizes
 - Complete Read and Write with VoiceOver and confirm announcements do not overlap
 - Test Reduce Motion during navigation, feedback, Rescue, and reward reveals

@@ -37,6 +37,16 @@ extension TadaWorldTheme {
             .buildItBay
         case .pawsAndPines:
             .pawsAndPines
+        case .dinoDiscovery:
+            .dinoDiscovery
+        case .firehouseHeroes:
+            .firehouseHeroes
+        case .brickworkCity:
+            .brickworkCity
+        case .frostlightWorld:
+            .frostlightWorld
+        case .coasterCarnival:
+            .coasterCarnival
         }
     }
 }
@@ -63,6 +73,8 @@ extension ProfileAvatar {
             }
         case .photo:
             "person.crop.circle.fill"
+        case .treasure(_, let iconAssetID):
+            iconAssetID
         }
     }
 }

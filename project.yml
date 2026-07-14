@@ -8,6 +8,7 @@ options:
 
 configs:
   Debug: debug
+  LocalQA: debug
   Release: release
 
 settings:
@@ -26,6 +27,8 @@ targets:
     platform: iOS
     sources:
       - path: Apps/TadaWordsApp
+        excludes:
+          - InfoLocalQA.plist
     dependencies:
       - package: TadaWordsModules
         product: TadaWordsAppShell
@@ -43,6 +46,13 @@ targets:
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_ENTITLEMENTS: Apps/TadaWordsApp/TadaWords.entitlements
+      configs:
+        LocalQA:
+          PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app.localqa
+          PRODUCT_NAME: Tada Words QA
+          INFOPLIST_FILE: Apps/TadaWordsApp/InfoLocalQA.plist
+          CODE_SIGN_ENTITLEMENTS: Apps/TadaWordsApp/TadaWordsLocalQA.entitlements
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) LOCAL_DEVICE_QA"
     info:
       path: Apps/TadaWordsApp/Info.plist
       properties:
@@ -52,17 +62,20 @@ targets:
         CKSharingSupported: true
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: Tada Words uses the microphone only after the child taps it to check a spoken practice word. Audio is not saved.
-        NSFaceIDUsageDescription: Tada Words uses Face ID to protect sensitive grown-up actions such as sharing or deleting a profile.
-        NSCameraUsageDescription: Tada Words uses the camera only when a grown-up chooses to take a child profile picture.
-        NSPhotoLibraryUsageDescription: Tada Words lets a grown-up choose a picture for a child profile.
+        NSFaceIDUsageDescription: Tada Words uses Face ID to protect sensitive parent actions such as sharing or deleting a profile.
+        NSCameraUsageDescription: Tada Words uses the camera only when a parent chooses a profile photo or scans a word sheet for on-device text recognition.
+        NSPhotoLibraryUsageDescription: Tada Words lets a parent choose a profile photo or a word-sheet photo for on-device text recognition.
         NSSpeechRecognitionUsageDescription: Tada Words uses on-device speech recognition to compare the spoken practice word and give immediate feedback.
         UIRequiresFullScreen: true
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
 
@@ -75,3 +88,17 @@ schemes:
       config: Debug
     archive:
       config: Release
+  TadaWordsLocalQA:
+    build:
+      targets:
+        TadaWords: all
+    run:
+      config: LocalQA
+    test:
+      config: LocalQA
+    profile:
+      config: LocalQA
+    analyze:
+      config: LocalQA
+    archive:
+      config: LocalQA

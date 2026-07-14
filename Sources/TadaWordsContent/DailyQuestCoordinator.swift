@@ -178,14 +178,21 @@ public struct DailyQuestCoordinator: Sendable {
     }
 
     public func worldProgression(
-        for profile: KidProfile
+        for profile: KidProfile,
+        on date: Date
     ) async throws -> WorldProgression {
+        let currentLocalDay = LocalDay(date: date, timeZone: timeZone)
         guard let history = repository as? any DailyQuestHistoryRepository else {
-            return WorldProgression(profile: profile, completions: [])
+            return WorldProgression(
+                profile: profile,
+                completions: [],
+                currentLocalDay: currentLocalDay
+            )
         }
         return WorldProgression(
             profile: profile,
-            completions: try await history.allCompletions(for: profile.id)
+            completions: try await history.allCompletions(for: profile.id),
+            currentLocalDay: currentLocalDay
         )
     }
 

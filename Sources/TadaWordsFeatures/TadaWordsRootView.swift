@@ -330,7 +330,6 @@ public struct TadaWordsRootView: View {
         .environment(\.font, .system(.body, design: .rounded))
         .preferredColorScheme(.light)
         .task {
-            model.prepareInitialProfileIfNeeded()
             await applyDemoLaunchRouteIfNeeded()
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
@@ -353,6 +352,7 @@ public struct TadaWordsRootView: View {
                 ChildWorldPickerView(
                     profile: profile,
                     progression: model.worldProgression,
+                    currentLocalDay: model.currentLocalDay,
                     onSelect: model.selectWorld,
                     onClose: { isWorldPickerPresented = false }
                 )
@@ -362,13 +362,18 @@ public struct TadaWordsRootView: View {
             if let profile = model.selectedProfile {
                 ChildCollectionView(
                     profile: profile,
+                    progression: model.worldProgression,
                     collections: model.rewardCollections,
+                    onSelectWorld: model.selectWorld,
+                    onSelectCartoonIcon: model.selectCartoonIcon,
+                    onSelectTreasureAvatar: model.selectTreasureAvatar,
+                    onSelectOriginalAvatar: model.selectOriginalAvatar,
                     onClose: { isCollectionPresented = false }
                 )
             }
         }
         .alert(
-            "World could not change",
+            "Collection choice could not change",
             isPresented: Binding(
                 get: { model.worldSelectionError != nil },
                 set: { if !$0 { model.clearWorldSelectionError() } }
@@ -376,7 +381,7 @@ public struct TadaWordsRootView: View {
         ) {
             Button("OK", role: .cancel) { model.clearWorldSelectionError() }
         } message: {
-            Text(model.worldSelectionError ?? "Ask a grown-up to try again.")
+            Text(model.worldSelectionError ?? "Ask a parent to try again.")
         }
     }
 
@@ -386,6 +391,7 @@ public struct TadaWordsRootView: View {
         case .profileChooser:
             ProfileChooserView(
                 profiles: model.profiles,
+                lastPlayedProfileID: model.lastPlayedProfileID,
                 onSelect: model.selectProfile,
                 onCreateProfile: model.createChildProfileAndWait,
                 isCreatingProfile: model.isCreatingChildProfile,
@@ -421,6 +427,7 @@ public struct TadaWordsRootView: View {
             } else {
                 ProfileChooserView(
                     profiles: model.profiles,
+                    lastPlayedProfileID: model.lastPlayedProfileID,
                     onSelect: model.selectProfile,
                     onCreateProfile: model.createChildProfileAndWait,
                     isCreatingProfile: model.isCreatingChildProfile,
@@ -492,6 +499,7 @@ public struct TadaWordsRootView: View {
                 result: result,
                 theme: model.selectedTheme,
                 audioExperienceService: audioExperienceService,
+                onReplay: { model.startQuest(result.mode) },
                 onContinue: model.showLobby
             )
         }

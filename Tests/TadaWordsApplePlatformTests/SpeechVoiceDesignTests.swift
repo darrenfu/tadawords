@@ -1,11 +1,29 @@
+import AVFoundation
 import XCTest
 
 @testable import TadaWordsApplePlatform
 
 final class SpeechVoiceDesignTests: XCTestCase {
-    private let policy = VoiceSelectionPolicy.brightAmericanEnglish
+    private let policy = VoiceSelectionPolicy.youthfulAmericanEnglish
 
-    func testPrefersPremiumFemaleAmericanEnglishRegardlessOfInputOrder() throws {
+    func testPrefersYouthfulNamedPersonaBeforeMaturePremiumFallback() {
+        let youthful = candidate(
+            id: "com.apple.eloquence.en-US.Sandy",
+            name: "Sandy",
+            gender: .unspecified,
+            quality: .standard
+        )
+        let maturePremium = candidate(
+            id: "com.apple.voice.premium.en-US.Ava",
+            name: "Ava",
+            gender: .female,
+            quality: .premium
+        )
+
+        XCTAssertEqual(policy.select(from: [maturePremium, youthful]), youthful)
+    }
+
+    func testPrefersYouthfulFemalePersonaRegardlessOfInputOrder() {
         let standardFemale = candidate(
             id: "samantha-standard",
             name: "Samantha",
@@ -27,11 +45,11 @@ final class SpeechVoiceDesignTests: XCTestCase {
 
         XCTAssertEqual(
             policy.select(from: [standardFemale, premiumFemale, enhancedFemale]),
-            premiumFemale
+            enhancedFemale
         )
         XCTAssertEqual(
             policy.select(from: [enhancedFemale, standardFemale, premiumFemale]),
-            premiumFemale
+            enhancedFemale
         )
     }
 
@@ -190,6 +208,46 @@ final class SpeechVoiceDesignTests: XCTestCase {
         XCTAssertLessThanOrEqual(learning.rate, 0.48)
         XCTAssertGreaterThanOrEqual(learning.pitchMultiplier, 1.0)
         XCTAssertLessThanOrEqual(learning.pitchMultiplier, 1.10)
+    }
+
+    func testWriteDeliveryIsSlowerAndProtectsTheWordEnding() {
+        let read = SpeechUtteranceDesignPolicy.design(
+            text: "at",
+            role: .learning
+        )
+        let write = SpeechUtteranceDesignPolicy.design(
+            text: "at",
+            role: .writeLearning
+        )
+
+        XCTAssertEqual(write.text, "at")
+        XCTAssertLessThan(write.rate, read.rate)
+        XCTAssertGreaterThan(write.postUtteranceDelay, read.postUtteranceDelay)
+        XCTAssertGreaterThanOrEqual(write.postUtteranceDelay, 0.18)
+    }
+
+    func testLaunchVoiceKeepsNaturalBrandPhraseInOneUtterance() {
+        let utterance = LaunchVoiceDesignPolicy.utterance
+
+        XCTAssertEqual(utterance.text, "Tah-DAH, words!")
+        XCTAssertEqual(utterance.pitchMultiplier, 1.10, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(utterance.rate, 0.40)
+        XCTAssertLessThanOrEqual(utterance.rate, 0.46)
+        XCTAssertGreaterThanOrEqual(utterance.postUtteranceDelay, 0.20)
+    }
+
+    func testLaunchVoiceSSMLCarriesStressPauseAndFallingLanding() throws {
+        let ssml = LaunchVoiceDesignPolicy.ssmlRepresentation
+
+        XCTAssertTrue(ssml.contains(">tah-DAH</prosody>"))
+        XCTAssertFalse(ssml.contains("tah-<emphasis"))
+        XCTAssertTrue(ssml.contains("<break time=\"105ms\"/>"))
+        XCTAssertTrue(ssml.contains("pitch=\"+7%\""))
+        XCTAssertTrue(ssml.contains("pitch=\"-10%\""))
+
+        let parsed = try XCTUnwrap(AVSpeechUtterance(ssmlRepresentation: ssml))
+        XCTAssertEqual(parsed.speechString, "tah-DAH words!")
+        XCTAssertFalse(parsed.speechString.contains("tah- DAH"))
     }
 
     private func candidate(

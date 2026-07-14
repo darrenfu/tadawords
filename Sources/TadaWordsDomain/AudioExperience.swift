@@ -68,6 +68,7 @@ public enum FunctionalAudioCue: Hashable, Sendable {
     case technicalRetry
     case star(index: Int)
     case reward
+    case writing(tool: HandwritingTool)
 }
 
 /// Keeps the meaning of the parent audio controls independent from the
@@ -90,7 +91,7 @@ public enum AudioPreferencePolicy {
         return switch cue {
         case .correct, .validRetry, .technicalRetry:
             true
-        case .click, .star, .reward:
+        case .click, .star, .reward, .writing:
             false
         }
     }

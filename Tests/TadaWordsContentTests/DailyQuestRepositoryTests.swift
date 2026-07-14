@@ -385,6 +385,12 @@ final class DailyQuestRepositoryTests: XCTestCase {
             XCTAssertEqual(items.filter { $0.tier == .milestone }.count, 5)
             XCTAssertTrue(items.allSatisfy { $0.world == world })
             XCTAssertEqual(Set(items.map(\.id)).count, items.count)
+            XCTAssertTrue(items.allSatisfy { !$0.iconAssetID.isEmpty })
+            XCTAssertEqual(
+                Set(items.map(\.iconAssetID)).count,
+                items.count,
+                "Every treasure in \(world.displayName) needs different artwork"
+            )
         }
 
         let firstDay = try LocalDay(year: 2026, month: 7, day: 12)

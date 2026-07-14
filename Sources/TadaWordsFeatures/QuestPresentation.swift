@@ -30,15 +30,15 @@ enum QuestBlockReason: Equatable {
     var message: String {
         switch self {
         case .emptyPool:
-            "Ask a grown-up to add a few words."
+            "Ask a parent to add a few words."
         case .microphoneDenied:
-            "A grown-up can turn on the microphone in Settings."
+            "A parent can turn on the microphone in Settings."
         case .recognitionUnavailable:
             "Your work is safe. Take a short break, then try again."
         case .audioUnavailable:
             "The word could not play. Your work is safe."
         case .storageUnavailable:
-            "Nothing was counted or rewarded. A grown-up can safely try again."
+            "Nothing was counted or rewarded. A parent can safely try again."
         case .noReviewDue:
             "Nice work. Try new words today."
         }
@@ -108,9 +108,12 @@ struct QuestSession: Identifiable {
     let interfacePreferences: PracticeInterfacePreferences
 }
 
-enum ReadStudyPromptPolicy {
-    static func shouldDemonstrate(source: QuestItemSource) -> Bool {
-        source == .new
+enum ReadPermissionTimingPolicy {
+    static func shouldResetResponseClock(
+        hasRequestedPermission: Bool,
+        wasPreviouslyDenied: Bool
+    ) -> Bool {
+        !hasRequestedPermission || wasPreviouslyDenied
     }
 }
 
@@ -183,6 +186,10 @@ struct QuestResultViewState {
 
     var showsNewCollectible: Bool {
         runKind == .today && rewardGrant != nil
+    }
+
+    var showsReplayAction: Bool {
+        !showsNewCollectible
     }
 
     var firstTryAccuracyPercentage: Int? {

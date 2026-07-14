@@ -1,6 +1,6 @@
 # Tada Words — Design Review
 
-> Review status: completed
+> Review status: v0.2 device-feedback revision in progress; physical regression pending
 >
 > Scope reviewed: product, child UX, Guardian UX, learning design, accessibility, audio, architecture, and delivery risk
 
@@ -10,7 +10,7 @@ The core idea is strong: Read and Write are separate skills, practice requires r
 
 1. a preschool word-learning app;
 2. a cross-account biometric key-management system;
-3. a three-world content production platform.
+3. an eight-world content and reward platform.
 
 The first executable milestone must validate the learning loop before the other two systems can delay or distort it.
 
@@ -18,9 +18,9 @@ The first executable milestone must validate the learning loop before the other 
 
 ### Learning evidence
 
-- Replace a whole-word flash with one 5–8 second `Map the Word` demonstration: play the word, map sound segments left-to-right to letters, mark the irregular part, and show one complete writing example.
+- `Map the Word` may be used only for Write study. Read begins with a visible word and silence; no target audio plays before the child's first independent response.
 - Record `studyExposed`, `firstIndependentAttempt`, `unaidedRetry`, `feedbackExposed`, `guidedRetry`, `helped`, `technicalRetry`, and `recognitionUncertain` separately.
-- Only the first valid attempt before feedback contributes strong mastery evidence and the Accuracy Star.
+- Only the first valid attempt before feedback contributes strong mastery evidence and strict Guardian accuracy. The child-facing Accuracy Star may additionally allow one first-answer miss followed immediately by one valid, unaided correct retry; that reward grace never rewrites mastery evidence.
 - After one independent retry, provide the correct model before a guided retry; do not reinforce the same wrong response three times.
 - A guided success earns completion feedback but not independent mastery.
 
@@ -44,6 +44,7 @@ The first executable milestone must validate the learning loop before the other 
 - Persist first-stroke latency, active-stroke time, and idle time separately.
 - Build separate pace baselines by mode, device class, input method, and word length.
 - Pace is a comfortable personal band, not “faster is always better.” Accuracy must pass first.
+- Calibration attempts with valid timing can earn Pace; after calibration, only the slow side receives 25% grace. The too-fast side remains strict.
 - A technical retry never affects accuracy, pace, stars, or the scheduler.
 
 ### Child-facing hierarchy
@@ -53,6 +54,7 @@ The first executable milestone must validate the learning loop before the other 
 - Quest backgrounds become visually quiet behind the task surface.
 - Live numeric points are removed from the question screen; the final score is revealed at the end.
 - Results reveal in one sequence: completion, stars, score, collectible, then optional world unlock.
+- `Parents` uses a normal tap to open the math Parent Gate. Results Replay is a real button that starts same-mode Practice Again.
 
 ### Blocking and recovery states
 
@@ -73,8 +75,9 @@ Technical states must always have a finite escape path; voice matching cannot cr
 ## Phase 2 — Refinement
 
 - Produce independent iPhone 17 Pro Max landscape layouts; do not shrink the iPad layout.
-- On Write, the canvas owns the center, audio/help use a left tool rail, Done uses the right edge, and Clear requires confirmation or a second deliberate gesture.
-- Reduce Guardian Today to profile switch, Read/Write cards, Quick Add, and one Needs Attention summary.
+- On Write, the canvas owns the center, audio and one-tap `?` use the prompt rail, Done uses the action edge, and a compact tool box selects four pens plus 12 colors. Undo is replaced by a 2.5× local eraser; Clear is immediate because the child explicitly chose a whole-canvas action.
+- Reduce Guardian Today to profile switch, Read/Write cards, Manage Words, and one Needs Attention summary.
+- Manage Words uses one-word Return-to-add, local Camera/Photo OCR review, a newest-first queue, and single/bulk delete with Undo. V1 never auto-adds Grade or smart-fill words.
 - Unify terms: `Guardian`, `Read`, `Write`, and one public memory-state vocabulary.
 - Define a complete token table: values for color, spacing, typography, radii, shadows, motion, layout, audio, and states.
 - Define a World Pack contract: task-safe zone, motion budget, emergency variant, audio palette, and contrast thresholds.
@@ -118,7 +121,7 @@ Technical states must always have a finite escape path; voice matching cannot cr
 - one Read quest and one Write quest;
 - first-attempt event semantics;
 - simple due-review prioritization;
-- three-star results and one collectible per world;
+- attainable three-star results and one collectible per world;
 - local persistence boundary with in-memory implementation for previews and tests.
 
 ## Required technical spikes
@@ -140,12 +143,14 @@ Technical states must always have a finite escape path; voice matching cannot cr
 
 ## What “design complete” means next
 
-The product requirements are complete. Visual design is complete only after interactive prototypes prove that:
+Current requirements are versioned in `FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md`. Visual design is complete only after the v0.2 physical build proves that:
 
 - the target child distinguishes Read from Write without explanation;
 - iPhone handwriting is comfortable for short, medium, and long words;
 - listening, checking, valid retry, and technical retry are distinguishable;
-- a missing Pace Star does not create confusion or frustration;
+- the relaxed recovery and Pace rules reward effort without changing strict Guardian evidence;
 - emergency mode does not cause rushing;
-- a Guardian adds a list in under 30 seconds;
+- a Guardian can type, scan, review, and delete a list without layout clipping;
+- Read help remains hidden until two valid errors, then places a reliable picture beside the word;
+- the next-day Theme/Icon unlock is understandable and My Collection lets the child select only earned cosmetics;
 - all three worlds preserve task contrast and component placement.

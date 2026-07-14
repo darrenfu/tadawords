@@ -12,13 +12,24 @@ public struct PaceMeasurement: Equatable, Sendable {
 }
 
 /// Assesses a child's current response against their own comparable history.
-/// Durations both below and above the comfortable band are outside it; faster
-/// is not treated as inherently better.
+/// The reward band includes a modest slow-side grace for a young learner, while
+/// the fast edge remains strict so guessing is not treated as better work.
 public struct PersonalPaceEvaluator: Sendable {
     public let requiredBaselineSampleCount: Int
+    public let slowerPaceGraceRatio: Double
 
-    public init(requiredBaselineSampleCount: Int = 3) {
+    public init(
+        requiredBaselineSampleCount: Int = 3,
+        slowerPaceGraceRatio: Double = 0.25
+    ) {
         self.requiredBaselineSampleCount = max(3, requiredBaselineSampleCount)
+        self.slowerPaceGraceRatio = min(
+            1,
+            max(
+                0,
+                slowerPaceGraceRatio.isFinite ? slowerPaceGraceRatio : 0.25
+            )
+        )
     }
 
     public func assess(
@@ -77,7 +88,9 @@ public struct PersonalPaceEvaluator: Sendable {
     private func normalizedDistanceFromBand(_ matched: MatchedPace) -> Double {
         let elapsed = matched.measurement.elapsedTime.seconds
         let lowerBound = matched.band.lowerBound.seconds
-        let upperBound = matched.band.upperBound.seconds
+        let upperBound =
+            matched.band.upperBound.seconds
+            * (1 + slowerPaceGraceRatio)
         let scale = max((lowerBound + upperBound) / 2, 0.001)
 
         if elapsed < lowerBound {

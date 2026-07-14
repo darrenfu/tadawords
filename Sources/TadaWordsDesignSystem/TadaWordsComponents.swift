@@ -225,6 +225,66 @@ public struct TadaPrimaryButtonStyle: ButtonStyle {
     }
 }
 
+public struct TadaLobbyUtilityButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
+
+    private let fill: Color
+    private let foreground: Color
+
+    public init(fill: Color, foreground: Color) {
+        self.fill = fill
+        self.foreground = foreground
+    }
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(
+                .system(
+                    size: TadaChildScaleTokens.Lobby.utilitySymbolSize,
+                    weight: .bold,
+                    design: .rounded
+                )
+            )
+            .frame(
+                width: TadaChildScaleTokens.Lobby.utilityVisualDiameter,
+                height: TadaChildScaleTokens.Lobby.utilityVisualDiameter
+            )
+            .foregroundStyle(foreground)
+            .background {
+                Circle()
+                    .fill(fill.opacity(configuration.isPressed ? 0.68 : 0.86))
+            }
+            .overlay {
+                Circle()
+                    .strokeBorder(
+                        Color.white.opacity(configuration.isPressed ? 0.42 : 0.72),
+                        lineWidth: 1.5
+                    )
+            }
+            .shadow(
+                color: foreground.opacity(configuration.isPressed ? 0.08 : 0.18),
+                radius: configuration.isPressed ? 2 : 7,
+                y: configuration.isPressed ? 1 : 4
+            )
+            .frame(
+                width: TadaChildScaleTokens.Lobby.utilityTouchDiameter,
+                height: TadaChildScaleTokens.Lobby.utilityTouchDiameter
+            )
+            .contentShape(Rectangle())
+            .saturation(isEnabled ? 1 : 0.18)
+            .opacity(isEnabled ? 1 : 0.62)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .offset(y: configuration.isPressed ? 2 : 0)
+            .animation(
+                reduceMotion
+                    ? .linear(duration: 0.01)
+                    : .easeOut(duration: TadaPrimitiveTokens.Motion.quick),
+                value: configuration.isPressed
+            )
+    }
+}
+
 public struct TadaTactileCardButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

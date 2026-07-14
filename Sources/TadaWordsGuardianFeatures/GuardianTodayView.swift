@@ -247,9 +247,9 @@ struct GuardianTodayView: View {
                     .font(.system(.title2, design: .rounded, weight: .bold))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Quick Add")
+                    Text("Manage Words")
                         .font(.system(.headline, design: .rounded, weight: .bold))
-                    Text("Type or paste this week’s words")
+                    Text("Type or scan this week’s school list")
                         .font(.system(.subheadline, design: .rounded, weight: .medium))
                         .opacity(0.84)
                 }
@@ -260,7 +260,7 @@ struct GuardianTodayView: View {
         }
         .buttonStyle(GuardianPrimaryButtonStyle())
         .accessibilityElement(children: .combine)
-        .accessibilityHint("Opens manual word entry")
+        .accessibilityHint("Opens Read and Write word management")
     }
 
     private var needsAttentionSection: some View {
@@ -354,7 +354,7 @@ struct GuardianTodayView: View {
     private var familySyncButton: some View {
         Button(action: onOpenFamilySync) {
             HStack {
-                Label("Family sync", systemImage: "person.2.badge.gearshape.fill")
+                Label(familySyncControlTitle, systemImage: familySyncControlSymbol)
                     .font(.system(.headline, design: .rounded, weight: .semibold))
                 Spacer()
                 Text(syncState.title)
@@ -374,7 +374,28 @@ struct GuardianTodayView: View {
         }
         .buttonStyle(.plain)
         .frame(minHeight: 44)
-        .accessibilityHint("Opens iCloud sync and family invitation controls")
+        .accessibilityHint(familySyncAccessibilityHint)
+    }
+
+    private var familySyncAccessibilityHint: String {
+        switch syncState {
+        case .thisDeviceOnly:
+            "Opens storage details. Learning data is saved on this device."
+        case .off:
+            "Opens the parent control for optional iCloud family sync."
+        case .upToDate, .pending, .failed:
+            "Opens iCloud sync and family invitation controls."
+        }
+    }
+
+    private var familySyncControlTitle: String {
+        syncState == .thisDeviceOnly ? "Device storage" : "Family sync"
+    }
+
+    private var familySyncControlSymbol: String {
+        syncState == .thisDeviceOnly
+            ? "externaldrive.fill"
+            : "person.2.badge.gearshape.fill"
     }
 }
 
@@ -473,6 +494,8 @@ extension ProfileAvatar {
             GuardianAnimalAvatar.option(for: assetID)?.symbol ?? "pawprint.fill"
         case .photo:
             "person.crop.circle.fill"
+        case .treasure(_, let iconAssetID):
+            iconAssetID
         }
     }
 }

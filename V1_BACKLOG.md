@@ -1,12 +1,12 @@
 # Tada Words V1 backlog
 
-This backlog now tracks release acceptance and external configuration. The confirmed V1 product flows are implemented in source. Use `MVP_ACCEPTANCE.md` for the executable checklist.
+This backlog tracks release acceptance and external configuration. Physical-iPhone feedback and all subsequent iterations are versioned in `FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md`; the active branch is `v0.2`. Use `MVP_ACCEPTANCE.md` for the executable checklist.
 
 ## Release blockers
 
 ### DEVICE-01: Sign and install on physical devices
 
-**Status:** External setup required
+**Status:** First iPhone LocalQA install/test completed; fresh v0.2 regression and iPad acceptance required
 
 - Select an Apple development Team in Xcode
 - Confirm a valid signing identity
@@ -14,13 +14,30 @@ This backlog now tracks release acceptance and external configuration. The confi
 - Install the canonical `TadaWords.xcodeproj` build
 - Complete one Read and one Write quest on each device
 
+### DEVICE-02: Re-test v0.2 physical-device follow-ups
+
+**Status:** Automated implementation pass complete; fresh physical-device regression required
+
+- Single-tap `Parents` and Results Replay
+- Profile-first clean/returning launch
+- Read silence before first response and Hear/See only after two valid errors
+- Silence/noise/short-word speech behavior and child voiceprint samples
+- Relaxed star recovery, calibration, and slow-side cases
+- Parent Word Manager typing, Camera OCR, Photo OCR, newest-first, delete/Undo, and no automatic words
+- Write final consonants and the continuous `tā-'dá, wòrds!` / `它达，沃尔子` launch phrase: `tah-DAH`, 105ms pause, lower `words`
+- Moonpetal rainbow/unicorn visuals and upbeat score
+- Double-Quest next-day Theme/Icon unlock and My Collection persistence
+- Rotate all Parents routes in portrait/landscape, then confirm every child route restores landscape; simulator policy passes, but physical iPhone/iPad checks remain
+- Tap the upper-right `Badge` on phone and tablet; simulator layout evidence passes, but physical navigation confirmation remains
+
 ### CLOUD-01: Add consent and erasure, then validate CloudKit
 
-**Status:** Privacy release blocker; transport code complete, persisted guardian opt-in and remote erasure missing
+**Status:** Privacy release blocker; persisted guardian opt-in complete, remote erasure missing
 
-- Add a persisted, default-off Family Sync choice for each Profile
-- Block launch, onboarding-completion, and lifecycle synchronization until the guardian opts in
-- Let the guardian disable sync without blocking local quests
+- [x] Add a persisted, default-off Family Sync choice
+- [x] Block launch, onboarding-completion, lifecycle, manual, and invitation synchronization until the guardian opts in
+- [x] Let the guardian disable future sync without blocking local quests
+- [x] Keep LocalQA visibly device-only with a separate bundle ID and no iCloud entitlement
 - Delete existing Profile, pool, attempt, progress, plan, reward, avatar, and settings records from private or shared CloudKit storage when a Profile is deleted
 - Create or attach `iCloud.com.tadawords.app` under the selected Team
 - Deploy the CloudKit development schema
@@ -31,7 +48,7 @@ This backlog now tracks release acceptance and external configuration. The confi
 
 Voiceprint templates remain device-scoped and do not sync through CloudKit.
 
-Simulator builds intentionally use a local/device-only sync transport. The real CloudKit transport runs only in a signed physical-device build with the configured Team, container, and iCloud account.
+Simulator and LocalQA builds intentionally use a local/device-only sync transport. The real CloudKit transport runs only in a normal signed physical-device build with the configured Team, container, iCloud account, and explicit guardian opt-in.
 
 ### VOICE-01: Calibrate child voiceprints
 
@@ -74,14 +91,14 @@ The shipping soundscape synthesizes original procedural music and cues. It does 
 - Verify transient feedback and result summaries announce once
 - Test larger Dynamic Type in compact landscape height
 - Verify Reduce Motion removes repeating travel while preserving visible state changes
-- Check Camera and Photo Library permission copy
+- Check Camera and Photo Library permission copy for both avatars and word-sheet OCR
 
 ### PRODUCT-01: Run the real-child usability session
 
 **Status:** Human acceptance required
 
 - Confirm a pre-reader can distinguish Read and Write without help
-- Confirm the child can switch Profile, World, Calendar, and Collection
+- Confirm the child can switch Profile, World, Calendar, and Badge/Collection
 - Observe whether rewards remain motivating after several sessions
 - Check that Rescue feedback helps without creating pressure
 
@@ -89,12 +106,15 @@ The shipping soundscape synthesizes original procedural music and cues. It does 
 
 ### REPO-01: Remove stale generated Xcode artifacts
 
-**Status:** Completed 2026-07-12 after the canonical 367-test check and both Release simulator builds passed
+**Status:** V1 baseline cleanup completed; v0.2 LocalQA files retained; full Swift suite is 480/480, with a final pre-commit artifact scan still required
 
 Keep:
 
 - `TadaWords.xcodeproj`
 - `Apps/TadaWordsApp/Info.plist`
+- `Apps/TadaWordsApp/InfoLocalQA.plist`
+- `Apps/TadaWordsApp/TadaWordsLocalQA.entitlements`
+- `TadaWords.xcodeproj/xcshareddata/xcschemes/TadaWordsLocalQA.xcscheme`
 - `project.yml`
 
 Removed stale artifacts:
@@ -110,11 +130,13 @@ The numbered projects were generated snapshots, not source inputs. A repository 
 ## Completed V1 scope
 
 - Two independent Today Quest routes, guided retry rules, timing isolation, Ebbinghaus review, and true mastery
-- First-run parent onboarding with versioned consent, Profile setup, optional starter words, and deferred system permissions
-- Manual words, smart fill, Grade automatic recommendations, normalization, and de-duplication
-- Multiple Profiles, child nickname creation, last-profile restore, photo and animal avatars, grade, age, and world settings
-- Three separate worlds, 20 small rewards and five milestones each, world unlocks, Collection, and monthly Calendar
+- Profile-first onboarding with versioned consent, Profile setup, no starter-word form, and deferred system permissions
+- Parent-only words via typing or local Camera/Photo OCR, normalization, newest-first queues, de-duplication, and delete/Undo
+- Multiple Profiles, child nickname creation, last-profile highlight, photo/animal/earned icons, grade, age, and world settings
+- Eight separate original worlds, 20 small rewards and five milestones each,
+  distinct locked/earned treasure icons, treasure avatars, world unlocks,
+  Collection, and monthly Calendar
 - Guardian Today, Needs Attention, 7-day and 30-day reports, corrections, and CSV export
 - Crash-resumable profile deletion, local notifications, sensitive-action authentication, and device-local voice setup
-- CloudKit transport and family invitations; persisted guardian opt-in and remote erasure remain open
+- CloudKit transport, persisted default-off guardian opt-in, disable gate, and family invitations; remote erasure remains open
 - Light-mode V1 visual system, compact landscape layouts, 44-point targets, VoiceOver announcements, Reduce Motion, and left-handed writing controls

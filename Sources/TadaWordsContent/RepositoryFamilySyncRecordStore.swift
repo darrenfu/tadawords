@@ -304,6 +304,8 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
             selectedWorld: profile.selectedWorld,
             starterWorld: profile.starterWorld,
             guardianUnlockedWorlds: profile.guardianUnlockedWorlds,
+            selectedCartoonIconAssetID: profile.selectedCartoonIconAssetID,
+            selectedTreasureAvatar: profile.selectedTreasureAvatar,
             schoolGrade: profile.schoolGrade,
             ageYears: profile.ageYears,
             voiceprintStatus: voiceprintStatus,

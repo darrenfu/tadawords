@@ -25,13 +25,13 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSCameraUsageDescription</key>
-	<string>Tada Words uses the camera only when a grown-up chooses to take a child profile picture.</string>
+	<string>Tada Words uses the camera only when a parent chooses a profile photo or scans a word sheet for on-device text recognition.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Tada Words uses Face ID to protect sensitive grown-up actions such as sharing or deleting a profile.</string>
+	<string>Tada Words uses Face ID to protect sensitive parent actions such as sharing or deleting a profile.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Tada Words uses the microphone only after the child taps it to check a spoken practice word. Audio is not saved.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Tada Words lets a grown-up choose a picture for a child profile.</string>
+	<string>Tada Words lets a parent choose a profile photo or a word-sheet photo for on-device text recognition.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Tada Words uses on-device speech recognition to compare the spoken practice word and give immediate feedback.</string>
 	<key>UILaunchScreen</key>
@@ -43,11 +43,14 @@
 	<true/>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
+		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>

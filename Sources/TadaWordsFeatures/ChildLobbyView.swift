@@ -43,8 +43,6 @@ struct ChildLobbyView: View {
                             }
                         }
                         .frame(maxWidth: 920)
-
-                        rewardPreview
                     }
                     .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
                     .padding(.vertical, isCompactHeight ? 8 : TadaPrimitiveTokens.Spacing.medium)
@@ -79,31 +77,28 @@ struct ChildLobbyView: View {
         )
     }
 
+    @ViewBuilder
     private var lobbyHeader: some View {
-        ViewThatFits(in: .horizontal) {
+        if isCompactHeight {
+            HStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                playersButton
+                Spacer(minLength: TadaPrimitiveTokens.Spacing.small)
+                compactUtilityDock
+            }
+        } else {
             HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
                 playersButton
                 Spacer()
                 worldsButton
                 calendarButton
-                worldPill
-            }
-
-            VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
-                HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                    playersButton
-                    Spacer()
-                    worldsButton
-                    calendarButton
-                }
-                worldPill
+                badgeButton
             }
         }
     }
 
     private var playersButton: some View {
         Button(action: onChooseProfile) {
-            Label("Players", systemImage: "person.2.fill")
+            Label("Kids", systemImage: "person.2.fill")
                 .font(.system(.subheadline, design: .rounded, weight: .bold))
         }
         .buttonStyle(
@@ -111,7 +106,66 @@ struct ChildLobbyView: View {
                 fill: theme.surface,
                 foreground: theme.ink,
                 isCompact: true
-            ))
+            )
+        )
+        .accessibilityLabel("Kids")
+        .accessibilityHint("Choose a kid profile")
+        .accessibilityIdentifier("child-lobby.kids")
+    }
+
+    private var compactUtilityDock: some View {
+        HStack(spacing: 0) {
+            compactUtilityButton(
+                label: "Worlds",
+                symbol: "globe.americas.fill",
+                hint: "Preview or enter an unlocked world",
+                identifier: "child-lobby.worlds",
+                action: onOpenWorlds
+            )
+            compactUtilityButton(
+                label: "Calendar",
+                symbol: "calendar",
+                hint: "Shows this month’s completed quests",
+                identifier: "child-lobby.calendar",
+                action: onOpenCalendar
+            )
+            compactUtilityButton(
+                label: "Badge",
+                symbol: "medal.fill",
+                hint: "See your world treasures",
+                identifier: "child-lobby.badge",
+                action: onOpenCollection
+            )
+        }
+        .padding(.horizontal, 2)
+        .background(theme.surface.opacity(0.48), in: Capsule())
+        .overlay {
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.56), lineWidth: 1)
+        }
+        .shadow(color: theme.ink.opacity(0.10), radius: 9, y: 5)
+    }
+
+    private func compactUtilityButton(
+        label: String,
+        symbol: String,
+        hint: String,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .accessibilityHidden(true)
+        }
+        .buttonStyle(
+            TadaLobbyUtilityButtonStyle(
+                fill: theme.surface,
+                foreground: theme.ink
+            )
+        )
+        .accessibilityLabel(label)
+        .accessibilityHint(hint)
+        .accessibilityIdentifier(identifier)
     }
 
     private var calendarButton: some View {
@@ -126,7 +180,9 @@ struct ChildLobbyView: View {
                 isCompact: true
             )
         )
+        .accessibilityLabel("Calendar")
         .accessibilityHint("Shows this month’s completed quests")
+        .accessibilityIdentifier("child-lobby.calendar")
     }
 
     private var worldsButton: some View {
@@ -141,11 +197,26 @@ struct ChildLobbyView: View {
                 isCompact: true
             )
         )
+        .accessibilityLabel("Worlds")
         .accessibilityHint("Preview or enter an unlocked world")
+        .accessibilityIdentifier("child-lobby.worlds")
     }
 
-    private var worldPill: some View {
-        TadaPill(symbol: theme.motifSymbol, text: theme.name, tint: theme.primary)
+    private var badgeButton: some View {
+        Button(action: onOpenCollection) {
+            Label("Badge", systemImage: "medal.fill")
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+        }
+        .buttonStyle(
+            TadaPrimaryButtonStyle(
+                fill: theme.surface,
+                foreground: theme.ink,
+                isCompact: true
+            )
+        )
+        .accessibilityLabel("Badge")
+        .accessibilityHint("See your world treasures")
+        .accessibilityIdentifier("child-lobby.badge")
     }
 
     private var worldWelcome: some View {
@@ -153,7 +224,9 @@ struct ChildLobbyView: View {
             TadaWorldMascot(
                 theme: theme,
                 pose: .encouraging,
-                size: isCompactHeight ? 56 : 82
+                size: isCompactHeight
+                    ? TadaChildScaleTokens.Lobby.mascotCompact
+                    : TadaChildScaleTokens.Lobby.mascotRegular
             )
 
             VStack(alignment: .leading, spacing: 2) {
@@ -183,38 +256,6 @@ struct ChildLobbyView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var rewardPreview: some View {
-        Button(action: onOpenCollection) {
-            HStack(spacing: isCompactHeight ? 10 : TadaPrimitiveTokens.Spacing.medium) {
-                TadaRewardBadge(
-                    theme: theme,
-                    isUnlocked: false,
-                    size: isCompactHeight ? 46 : 60
-                )
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Collection")
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .foregroundStyle(theme.ink.opacity(0.64))
-                    Text("See your world treasures")
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                        .lineLimit(1)
-                }
-
-                TadaRewardShelf(
-                    theme: theme,
-                    highlightedCount: 0,
-                    isCompact: isCompactHeight,
-                    visibleLimit: isCompactHeight ? 2 : 3
-                )
-            }
-            .padding(.horizontal, isCompactHeight ? 12 : 18)
-            .padding(.vertical, isCompactHeight ? 5 : 10)
-            .background(theme.surface.opacity(0.72), in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint("Opens your world collection")
-    }
 }
 
 private struct QuestEntranceCard: View {

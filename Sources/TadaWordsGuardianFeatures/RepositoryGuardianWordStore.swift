@@ -63,26 +63,56 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
         id: WordPromptID,
         learningMode: LearningMode
     ) async throws -> GuardianDashboardSnapshot {
+        try await setWordsActive(
+            ids: [id],
+            learningMode: learningMode,
+            isActive: false
+        )
+    }
+
+    public func setWordsActive(
+        ids: [WordPromptID],
+        learningMode: LearningMode,
+        isActive: Bool
+    ) async throws -> GuardianDashboardSnapshot {
+        let uniqueIDs = Array(Set(ids))
+        guard !uniqueIDs.isEmpty else { return try await makeSnapshot() }
         let currentSnapshot = try await makeSnapshot()
-        let activeEntries = try await wordPoolRepository.entries(
+        let entries = try await wordPoolRepository.entries(
             for: profile.id,
             learningMode: learningMode,
-            includingInactive: false
+            includingInactive: true
         )
-        guard let entry = activeEntries.first(where: { $0.prompt.id == id }) else {
-            throw GuardianWordStoreError.wordNotFound(id)
+        let entriesByPromptID = Dictionary(
+            uniqueKeysWithValues: entries.map { ($0.prompt.id, $0) }
+        )
+        if let missingID = uniqueIDs.first(where: { entriesByPromptID[$0] == nil }) {
+            throw GuardianWordStoreError.wordNotFound(missingID)
         }
-        _ = try await wordPoolRepository.setActive(false, entryID: entry.id)
+        let selectedEntries = uniqueIDs.compactMap { entriesByPromptID[$0] }
+        _ = try await wordPoolRepository.setActive(
+            isActive,
+            entryIDs: selectedEntries.map(\.id)
+        )
+
+        let selectedIDSet = Set(uniqueIDs)
+        let updatedModePool = entries.compactMap { entry -> WordPrompt? in
+            let active =
+                selectedIDSet.contains(entry.prompt.id)
+                ? isActive
+                : entry.isActive
+            return active ? entry.prompt : nil
+        }
         return GuardianDashboardSnapshot(
             profile: currentSnapshot.profile,
-            readPool: currentSnapshot.readPool.filter { prompt in
-                learningMode != .read || prompt.id != id
-            },
-            writePool: currentSnapshot.writePool.filter { prompt in
-                learningMode != .write || prompt.id != id
-            },
+            readPool: learningMode == .read
+                ? updatedModePool
+                : currentSnapshot.readPool,
+            writePool: learningMode == .write
+                ? updatedModePool
+                : currentSnapshot.writePool,
             needsAttention: currentSnapshot.needsAttention.filter {
-                $0.prompt.id != id
+                isActive || !selectedIDSet.contains($0.prompt.id)
             },
             practiceSettings: currentSnapshot.practiceSettings,
             questCalendar: currentSnapshot.questCalendar,
@@ -269,7 +299,8 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             ),
             worldProgression: WorldProgression(
                 profile: profile,
-                completions: allCompletions
+                completions: allCompletions,
+                currentLocalDay: today
             ),
             collections: collections
         )

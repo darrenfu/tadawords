@@ -17,6 +17,7 @@ struct ApplicationDataPaths: Equatable, Sendable {
     let profileDeletionTombstonesSnapshot: URL
     let deviceIdentitySnapshot: URL
     let firstRunOnboardingSnapshot: URL
+    let familySyncPreferenceSnapshot: URL
 
     init(applicationSupportDirectory: URL) {
         dataDirectory = applicationSupportDirectory.appendingPathComponent(
@@ -59,6 +60,10 @@ struct ApplicationDataPaths: Equatable, Sendable {
             "first-run-onboarding.json",
             isDirectory: false
         )
+        familySyncPreferenceSnapshot = dataDirectory.appendingPathComponent(
+            "family-sync-preference.json",
+            isDirectory: false
+        )
     }
 }
 
@@ -76,6 +81,7 @@ struct ProductionApplicationEnvironment: Sendable {
     let tombstoneRepository: LocalJSONProfileDeletionTombstoneRepository
     let notificationReconciler: ProductionLearningNotificationReconciler?
     let firstRunOnboardingRepository: LocalFirstRunOnboardingRepository
+    let firstRunOnboardingPurpose: FirstRunOnboardingPurpose?
     let requiresFirstRunOnboarding: Bool
     let clock: any AppClock
     let timeZone: TimeZone
@@ -143,6 +149,9 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         let firstRunOnboardingRepository = LocalFirstRunOnboardingRepository(
             snapshotURL: dataPaths.firstRunOnboardingSnapshot
         )
+        let familySyncPreferenceRepository = LocalJSONFamilySyncPreferenceRepository(
+            snapshotURL: dataPaths.familySyncPreferenceSnapshot
+        )
 
         try await recoverPendingProfileDeletions(
             tombstoneRepository: tombstoneRepository,
@@ -155,10 +164,11 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         )
 
         let existingProfiles = try await profileRepository.profiles()
-        let requiresFirstRunOnboarding = try await prepareFirstRunOnboarding(
+        let firstRunOnboardingPurpose = try await prepareFirstRunOnboarding(
             repository: firstRunOnboardingRepository,
             existingProfiles: existingProfiles
         )
+        let requiresFirstRunOnboarding = firstRunOnboardingPurpose != nil
         let seedProfile = try await seedingProfile(
             tombstoneRepository: tombstoneRepository
         )
@@ -224,6 +234,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         let familySyncCoordinator = LocalFirstFamilySyncCoordinator(
             store: syncStore,
             transport: familySyncTransport,
+            preferenceRepository: familySyncPreferenceRepository,
             clock: clock
         )
         let notificationReconciler = notificationScheduler.map { scheduler in
@@ -253,6 +264,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             tombstoneRepository: tombstoneRepository,
             notificationReconciler: notificationReconciler,
             firstRunOnboardingRepository: firstRunOnboardingRepository,
+            firstRunOnboardingPurpose: firstRunOnboardingPurpose,
             requiresFirstRunOnboarding: requiresFirstRunOnboarding,
             clock: clock,
             timeZone: timeZone,
@@ -263,23 +275,42 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
     private func prepareFirstRunOnboarding(
         repository: LocalFirstRunOnboardingRepository,
         existingProfiles: [KidProfile]
-    ) async throws -> Bool {
+    ) async throws -> FirstRunOnboardingPurpose? {
         if let state = try await repository.state() {
-            return state.status == .pending
+            let hasCurrentConsent =
+                state.status == .completed
+                && state.consentVersion
+                    == FirstRunOnboardingSubmission.currentConsentVersion
+            if hasCurrentConsent {
+                return nil
+            }
+            if state.status == .pending, let purpose = state.purpose {
+                return purpose
+            }
+            if state.status == .pending {
+                // Legacy pending markers predate the purpose field and came
+                // from an interrupted first-run setup. Preserve that intent
+                // instead of treating the seeded default profile as an old
+                // install that only needs a consent refresh.
+                try await repository.markPending(
+                    startedAt: clock.now,
+                    purpose: .fullSetup
+                )
+                return .fullSetup
+            }
         }
 
-        if existingProfiles.isEmpty {
-            try await repository.markPending(startedAt: clock.now)
-            return true
-        }
+        // Missing or stale consent always reopens the parent flow without
+        // rewriting any existing profile or learning data during migration.
+        let purpose = onboardingPurpose(for: existingProfiles)
+        try await repository.markPending(startedAt: clock.now, purpose: purpose)
+        return purpose
+    }
 
-        // Existing installs predate this marker. They already have a real
-        // child profile, so migrate quietly instead of interrupting the child.
-        try await repository.markCompleted(
-            profileID: existingProfiles[0].id,
-            completedAt: clock.now
-        )
-        return false
+    private func onboardingPurpose(
+        for existingProfiles: [KidProfile]
+    ) -> FirstRunOnboardingPurpose {
+        existingProfiles.isEmpty ? .fullSetup : .consentRefresh
     }
 
     private func recoverPendingProfileDeletions(
@@ -317,6 +348,8 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             selectedWorld: defaultProfile.selectedWorld,
             starterWorld: defaultProfile.starterWorld,
             guardianUnlockedWorlds: defaultProfile.guardianUnlockedWorlds,
+            selectedCartoonIconAssetID: defaultProfile.selectedCartoonIconAssetID,
+            selectedTreasureAvatar: defaultProfile.selectedTreasureAvatar,
             schoolGrade: defaultProfile.schoolGrade,
             ageYears: defaultProfile.ageYears,
             voiceprintStatus: .notEnrolled,
@@ -686,7 +719,9 @@ struct UnavailableApplicationBootstrapper: ApplicationBootstrapping {
 private struct UnavailableApplicationBootstrapError: Error {}
 
 actor LocalOnlyFamilySyncTransport: FamilySyncTransport {
-    func availability() async -> FamilySyncAvailability { .noAccount }
+    nonisolated let capability = FamilySyncCapability.deviceOnly
+
+    func availability() async -> FamilySyncAvailability { .deviceOnly }
 
     func prepareProfileZone(_ profileID: ProfileID) async throws {
         _ = profileID

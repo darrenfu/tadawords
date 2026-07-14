@@ -11,6 +11,13 @@ public struct KidProfile: Codable, Hashable, Sendable {
     /// Guardian overrides are additive; earned unlocks are derived from Today
     /// completions and never need mutable counters.
     public let guardianUnlockedWorlds: Set<WorldTheme>
+    /// A child-selected earned icon. The source `avatar` remains untouched so
+    /// choosing a cartoon never discards an embedded family photo.
+    public let selectedCartoonIconAssetID: String?
+    /// A collected treasure chosen as the child-facing avatar. Selection is
+    /// validated against the profile's reward collection before persistence.
+    /// The source photo or starter animal remains untouched.
+    public let selectedTreasureAvatar: TreasureAvatarSelection?
     public let schoolGrade: ProfileSchoolGrade
     public let ageYears: Int?
     public let voiceprintStatus: VoiceprintEnrollmentStatus
@@ -26,6 +33,8 @@ public struct KidProfile: Codable, Hashable, Sendable {
         selectedWorld: WorldTheme,
         starterWorld: WorldTheme? = nil,
         guardianUnlockedWorlds: Set<WorldTheme> = [],
+        selectedCartoonIconAssetID: String? = nil,
+        selectedTreasureAvatar: TreasureAvatarSelection? = nil,
         schoolGrade: ProfileSchoolGrade = .preK,
         ageYears: Int? = nil,
         voiceprintStatus: VoiceprintEnrollmentStatus = .notEnrolled,
@@ -38,6 +47,11 @@ public struct KidProfile: Codable, Hashable, Sendable {
         self.selectedWorld = selectedWorld
         self.starterWorld = starterWorld ?? selectedWorld
         self.guardianUnlockedWorlds = guardianUnlockedWorlds
+        self.selectedCartoonIconAssetID =
+            selectedTreasureAvatar == nil
+            ? selectedCartoonIconAssetID
+            : nil
+        self.selectedTreasureAvatar = selectedTreasureAvatar
         self.schoolGrade = schoolGrade
         self.ageYears = ageYears.map { min(18, max(2, $0)) }
         self.voiceprintStatus = voiceprintStatus
@@ -52,6 +66,8 @@ public struct KidProfile: Codable, Hashable, Sendable {
         case selectedWorld
         case starterWorld
         case guardianUnlockedWorlds
+        case selectedCartoonIconAssetID
+        case selectedTreasureAvatar
         case schoolGrade
         case ageYears
         case voiceprintStatus
@@ -82,6 +98,14 @@ public struct KidProfile: Codable, Hashable, Sendable {
                 Set<WorldTheme>.self,
                 forKey: .guardianUnlockedWorlds
             ) ?? [],
+            selectedCartoonIconAssetID: try container.decodeIfPresent(
+                String.self,
+                forKey: .selectedCartoonIconAssetID
+            ),
+            selectedTreasureAvatar: try container.decodeIfPresent(
+                TreasureAvatarSelection.self,
+                forKey: .selectedTreasureAvatar
+            ),
             schoolGrade: try container.decodeIfPresent(
                 ProfileSchoolGrade.self,
                 forKey: .schoolGrade
@@ -95,6 +119,35 @@ public struct KidProfile: Codable, Hashable, Sendable {
             updatedAt: try container.decodeIfPresent(Date.self, forKey: .updatedAt)
                 ?? createdAt
         )
+    }
+
+    /// Kid-facing views use this projection. Guardian editing continues to
+    /// operate on `avatar`, which is the durable source photo or starter icon.
+    public var displayAvatar: ProfileAvatar {
+        if let selectedTreasureAvatar {
+            return .treasure(
+                rewardItemID: selectedTreasureAvatar.rewardItemID,
+                iconAssetID: selectedTreasureAvatar.iconAssetID
+            )
+        }
+        guard let selectedCartoonIconAssetID else { return avatar }
+        return .cartoonAnimal(assetID: selectedCartoonIconAssetID)
+    }
+}
+
+public struct TreasureAvatarSelection: Codable, Hashable, Sendable {
+    public let rewardItemID: RewardItemID
+    public let iconAssetID: String
+
+    public init(rewardItemID: RewardItemID, iconAssetID: String) {
+        self.rewardItemID = rewardItemID
+        let normalizedIconAssetID = iconAssetID.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        self.iconAssetID =
+            normalizedIconAssetID.isEmpty
+            ? "sparkles"
+            : normalizedIconAssetID
     }
 }
 
@@ -124,6 +177,7 @@ public enum ProfileSchoolGrade: String, Codable, CaseIterable, Hashable, Sendabl
 public enum ProfileAvatar: Codable, Hashable, Sendable {
     case cartoonAnimal(assetID: String)
     case photo(assetID: String, source: PhotoSource)
+    case treasure(rewardItemID: RewardItemID, iconAssetID: String)
 
     public enum PhotoSource: String, Codable, Hashable, Sendable {
         case camera

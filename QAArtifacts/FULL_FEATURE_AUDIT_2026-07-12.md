@@ -1,12 +1,23 @@
 # Tada Words full feature audit follow-up
 
-This follow-up replaces the stale gap list from the initial 2026-07-12 audit. Confirmed learning behaviors have production paths. CloudKit still needs a persisted guardian consent gate and remote record erasure. Other blockers require Apple service configuration, physical devices, representative child samples, or human listening.
+This follow-up replaces the stale gap list from the initial 2026-07-12 audit.
+Confirmed learning behaviors have production paths. CloudKit has a persisted,
+default-off guardian consent gate; remote record erasure is still a release
+blocker. Other blockers require Apple service configuration, physical devices,
+representative child samples, or human listening.
+
+> **v0.2 supersession:** The 367-test result is retained below only as the
+> accepted V1 historical baseline. The active `v0.2` branch has since completed
+> a branch-wide **480/480** Swift test run and LocalQA simulator builds for iPhone
+> 17 Pro Max and iPad Pro 13-inch (M5). Physical-device rotation, child input,
+> accessibility, and audible prosody remain open. The authoritative change
+> history is `FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md`.
 
 ## Verdict
 
 Tada Words is a local-first V1 candidate for iPhone and iPad. It implements separate Read and Write quests, adaptive review, Profiles, Worlds, rewards, reports, notifications, device-local voice setup, and a CloudKit sync transport.
 
-Do not label the release Device Alpha accepted yet. CloudKit consent and remote erasure need implementation. CloudKit runtime behavior, voiceprint accuracy, handwriting, Pencil, VoiceOver, landscape rotation, Camera, notifications, and audio quality still need physical-device evidence.
+Do not label the release Device Alpha accepted yet. Persisted, default-off CloudKit consent is implemented, but remote record erasure remains a release blocker. CloudKit runtime behavior, voiceprint accuracy, handwriting, Pencil, VoiceOver, route rotation, Camera, notifications, and audio quality still need physical-device evidence.
 
 ## Evidence states
 
@@ -17,7 +28,7 @@ Do not label the release Device Alpha accepted yet. CloudKit consent and remote 
 
 ## Consolidated quality gate
 
-The final consolidated run used:
+The current v0.2 consolidated run used:
 
 ```sh
 make generate
@@ -28,15 +39,20 @@ make check
 | Gate | Result |
 |---|---|
 | Strict Swift formatter check | Pass |
-| Swift unit and integration suite | 367 tests passed, 0 failures |
-| iPhone 17 Pro Max Release simulator build | Pass |
-| iPad Pro 13-inch Release simulator build | Pass |
-| iPhone and iPad simulator install, launch, and first-run capture | Pass; see `QAArtifacts/Final-2026-07-12` |
-| Built-product orientation declarations | iPhone and iPad contain Landscape Left and Landscape Right only; `UIRequiresFullScreen` is true |
+| Swift unit and integration suite | 480 tests passed, 0 failures |
+| iPhone 17 Pro Max LocalQA simulator build | Pass |
+| iPad Pro 13-inch (M5) LocalQA simulator build | Pass |
+| Built-product orientation declarations | iPhone contains Portrait plus both Landscapes; iPad contains all four; `UIRequiresFullScreen` is true and runtime policy restricts child routes to Landscape |
+| Route-orientation policy tests | Pass; Parents is flexible and child routes restore Landscape |
+| iPad simulator visual evidence | The Parent launch uses a tall/portrait window and child Read uses a landscape window. The fresh Phase 1 set covers Profile, Lobby, Read, and Result under `QAArtifacts/v0.2-phase1-2026-07-13/`; the older route-shape evidence remains under `QAArtifacts/v0.2-2026-07-12/`. |
+| iPhone child visual evidence | Rotated, readable landscape captures under `QAArtifacts/v0.2-phase1-2026-07-13/` show the last-played Profile emphasis, compact Lobby utility dock, enlarged Read hierarchy, and enlarged Result hierarchy. These are UI evidence, not raw rotation-policy evidence. |
+| iPhone simulator orientation capture | Inconclusive because raw framebuffer captures can appear rotated or letterboxed; physical rotation remains required |
 | Built-product CloudKit sharing declaration | `CKSharingSupported` is true |
 | Child-speech fixture integrity and Apple transcription | Pass; checksum valid and output is `Bye.` |
 
-The original audit's 292-test count is obsolete. The expanded suite has 367 tests.
+The original audit's 292-test count and the accepted V1 baseline's 367-test
+count are both superseded for `v0.2` by the 480-test run. The older counts remain
+in historical cleanup notes only.
 
 ## Requirements traceability
 
@@ -45,17 +61,17 @@ The original audit's 292-test count is obsolete. The expanded suite has 367 test
 | Requirement | Status | Current implementation |
 |---|---|---|
 | Separate Read and Write pools and Today Quest buttons | Code complete | Mode-keyed pools, plans, settings, attempts, and lobby entrances |
-| Guardian manually types words | Code complete | Quick Add supports common separators and import reporting |
+| Guardian supplies every word | v0.2 code complete; device acceptance open | One-word Return-to-add plus local Camera/Photo OCR review, newest-first queue, dedupe, single/bulk delete, and Undo |
 | Normalize and de-duplicate | Code complete | Stable normalized identity with case-preserving display text |
 | Parent words have priority | Code complete | Today entries queue first; older pool entries fill shortages |
-| Automatic recommendation | Code complete | Parent-only, parent plus smart fill, and Grade automatic modes |
+| Automatic recommendation | Removed in v0.2 | V1 never inserts Grade/catalog/smart-fill words; undersized Pools remain undersized |
 | Daily plan survives restart | Code complete | Profile, mode, and local-day keyed snapshots |
 | New-first or Review-first | Code complete | Stored independently for Read and Write |
 | Problem New replacement | Code complete | New-first can replace the lowest Review while preserving review debt |
-| Multiple Profiles and last-profile restore | Code complete | Local selection clears stale or deleted IDs |
-| Child nickname-only Profile creation | Code complete | Kid-facing New Player route assigns safe defaults |
+| Multiple Profiles and last-profile confirmation | v0.2 code complete | Cold launch highlights the last valid Profile in the Picker; the child still taps to enter, and stale IDs are cleared |
+| Child nickname-only Profile creation | Code complete | Kid-facing New Kid route assigns safe defaults |
 | Avatar, Grade, age, and starter World | Code complete | Camera, Photo Library, animals, editable school level, and age |
-| First-run Guardian onboarding | Code complete; device layout follow-up open | Versioned consent and timestamp, Profile, Grade, starter World, optional Read and Write starter words, de-duplication, and deferred system permissions |
+| First-run Guardian onboarding | v0.2 code complete; device layout follow-up open | Versioned consent and timestamp, Profile, Grade, starter World, no word-entry interruption, and deferred system permissions |
 
 ### Review, evidence, and mastery
 
@@ -80,6 +96,7 @@ The original audit's 292-test count is obsolete. The expanded suite has 367 test
 | Automatic endpointing and voice processing | Code complete; device acceptance open | Voice-processing audio session and partial-transcript stability |
 | Apple transcript punctuation | Fixed and fixture checked | Target `bye` accepts Apple output `Bye.` without weakening exact spelling |
 | Per-Profile voiceprint match | Device Alpha code complete | Enrollment, Keychain template, on-device feature extraction, conservative match policy, and speech integration |
+| Theme-safe word color | v0.2 code complete; visual acceptance open | Stable per-item selection from each World's high-contrast palette; retries and Help do not flicker or encode correctness. Readable iPhone evidence: `QAArtifacts/v0.2-2026-07-12/iPhone17ProMax-moonpetal-read.jpg` |
 
 The voiceprint route treats mismatch as a technical retry. It does not prove that only the child was recorded. Validate same-child, different-speaker, noise, distance, and device variation before tuning its thresholds.
 
@@ -94,6 +111,7 @@ The voiceprint route treats mismatch as a technical retry. It does not prove tha
 | Technical retry stays neutral | Code complete | It does not consume the guided rewrite or accuracy |
 | Apple Pencil and palm filtering | Code complete; device acceptance open | Input-method classification, pressure capture, and major-radius filtering |
 | Left-handed controls | Code complete; device acceptance open | Write action rails swap according to Profile settings |
+| Four pens, 12 colors, and local eraser | v0.2 code complete; device acceptance open | Pencil, Crayon, Chalk, and Brush preserve per-stroke style/color; gentle throttled sounds; Undo replaced by a 2.5× local eraser; Clear is immediate |
 
 ### Score, timer, Worlds, and rewards
 
@@ -104,10 +122,11 @@ The voiceprint route treats mismatch as a technical retry. It does not prove tha
 | Whole-Quest upward timer | Code complete | Pauses for background, playback, Help, and recognition |
 | Configurable Rescue threshold | Code complete | Crossing it changes presentation and audio without failure or score loss |
 | Calm Rescue and Reduced Sound | Code complete | Essential feedback remains; optional decoration and Rescue layer can stop |
-| Three separate original Worlds | Code complete | Independent scenes, palettes, ambient motion, and procedural scores |
+| Eight separate original Worlds | v0.2 code complete | Independent scenes, pose-aware mascots, palettes, ambient motion, and procedural scores; new Dinosaur, Rescue, Block, Frost, and Coaster themes do not reuse protected IP |
 | Theme-safe rewards | Code complete | Reward keys and Collection stay inside the selected World |
-| 20 small plus five milestone rewards per World | Code complete | Stable catalog items and completion-derived milestones |
-| Unlock at 3 and 8 Today Quests | Code complete | Starter World remains available; earned and guardian unlocks are additive |
+| 20 small plus five milestone rewards per World | v0.2 code complete | 200 stable catalog items; every World uses 25 distinct relevant icons; locked cards retain gray artwork plus a lock |
+| Double Quest next-day unlock | v0.2 code complete | Same-day Read+Write Today completion unlocks one unearned World and animal icon only on a later local day; replay/partial days do not count |
+| Collected treasure avatar | v0.2 code complete | Only collected treasure can be selected; original photo and Profile isolation remain intact |
 | Practice Again does not duplicate rewards | Code complete | It records completion without granting the same daily collectible again |
 
 ### Guardian, calendar, reports, and deletion
@@ -121,31 +140,32 @@ The voiceprint route treats mismatch as a technical retry. It does not prove tha
 | Guardian correction | Code complete | Correction events rebuild current learning progress |
 | CSV export | Code complete | Sensitive-action authorization precedes ShareLink access |
 | Delete Profile | Code complete | Crash-resumable tombstone clears repositories; app also clears reminders, last session, and device voiceprint |
-| Parent gate and sensitive actions | Code complete; device acceptance open | One-second entry hold, math challenge, and LocalAuthentication for delete, export, and family sync |
+| Parent gate and sensitive actions | v0.2 code complete; device acceptance open | Normal single tap opens the math challenge; LocalAuthentication protects delete, export, and family sync |
 
 ### Data, sync, notifications, and privacy
 
 | Requirement | Status | Current implementation |
 |---|---|---|
 | Offline local persistence | Code complete | Atomic JSON snapshots under Application Support |
-| CloudKit multi-device sync | Transport code complete; consent gap and external setup remain | Private and shared databases, profile zones, conflict resolution, retry status, and local-first coordinator; signed-device V1 auto-starts sync without a separate persisted opt-in |
+| CloudKit multi-device sync | Persisted opt-in and transport code complete; external setup remains | Private/shared databases, profile zones, conflict resolution, retry status, and local-first coordinator run only after explicit parent opt-in |
 | Family invitation across Apple IDs | Code complete; external setup required | CKShare URL creation, ShareLink, paste-to-accept flow, and shared database reads |
 | Profile deletion propagation | Partial; privacy release blocker | A syncable tombstone prevents resurrection, but the transport does not erase existing CloudKit records |
 | Local notifications | Code complete; device acceptance open | Daily, Pool low, completion, sync failure, weekly summary, editable times, and quiet hours |
 | No raw child recordings persisted or uploaded | Code complete; dynamic audit open | Speech and enrollment buffers stay in memory; voiceprint template stays in this-device-only Keychain |
-| No app-owned server database | Code complete | Core data stays local; a configured signed build can copy records to CloudKit, and the missing guardian opt-in gate blocks family deployment |
+| No app-owned server database | Code complete | Core data stays local; a configured signed build can copy records to CloudKit only after persisted guardian opt-in; missing remote erasure still blocks family-data release |
 
 ### Accessibility and presentation
 
 | Requirement | Status | Current implementation |
 |---|---|---|
-| Landscape-only iPhone and iPad | Code and plist complete; device acceptance open | Left and Right orientations only, with full-screen requirement |
+| Route-based iPhone and iPad orientation | v0.2 automated pass; device acceptance open | Code, plist, and policy tests pass. iPad simulator window shapes support the expected Parent/child split; iPhone raw framebuffer evidence is inconclusive. Child routes use Left/Right Landscape; Parents uses all-but-upside-down on iPhone and all orientations on iPad, then restores Landscape on exit |
 | iPhone 17 Pro Max support | Release simulator passed; physical-device acceptance open | Release build, install, launch, and onboarding capture passed; signed physical-device checks remain |
+| Lobby `Badge` relocation | v0.2 automated pass; device tap open | The readable iPhone landscape capture at `QAArtifacts/v0.2-2026-07-12/iPhone17ProMax-moonpetal-lobby.jpg` shows the four-item header fits and the old bottom Collection strip is absent; tap-through still needs physical phone/tablet confirmation |
 | Light appearance | Code complete | App-root policy covers bootstrap, child, and Guardian routes |
 | 44-point targets and compact layouts | Code complete | Shared tokens, scroll fallbacks, and compact landscape variants |
 | VoiceOver feedback and focus | Code complete; device acceptance open | Transient announcements, result summary, and modal saving focus |
 | Reduce Motion | Code complete; device acceptance open | Ambient, feedback, reward, and route transitions adapt |
-| Young energetic female English voice | Code complete; listening acceptance open | Prefers installed premium or enhanced female US English voices with tuned delivery |
+| Young energetic female English voice | Code complete; listening acceptance open | Prefers the installed youthful US-English persona (Sandy on this Mac), then deterministic natural female fallbacks. Launch uses one continuous `tah-DAH` SSML phrase, a 105ms pause, and a lower landing on `words`; target is `tā-'dá, wòrds!` / `它达，沃尔子`, pending human device listening |
 
 ## Real child-speech fixture
 
@@ -173,7 +193,9 @@ This fixture does not test microphone permission, voice processing, household no
 
 The repository now keeps only the canonical `TadaWords.xcodeproj`, `Apps/TadaWordsApp/Info.plist`, and `project.yml`.
 
-After the canonical 367-test check and both Release simulator builds passed, these stale artifacts were removed:
+At the accepted V1 baseline, after the canonical 367-test check and both Release
+simulator builds passed, these stale artifacts were removed. That historical
+coverage is superseded by the current 480-test v0.2 run:
 
 - `TadaWords 2.xcodeproj`
 - `TadaWords 3.xcodeproj`

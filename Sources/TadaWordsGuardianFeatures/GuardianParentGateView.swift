@@ -53,7 +53,7 @@ struct GuardianParentGateView: View {
 
     private var heading: some View {
         VStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
-            Text("Grown-ups only")
+            Text("Parents only")
                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
             Text("Solve this to manage word pools and daily settings.")
                 .font(.system(.body, design: .rounded, weight: .medium))

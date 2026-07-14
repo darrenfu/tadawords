@@ -2,7 +2,11 @@ import TadaWordsDomain
 
 extension RewardCatalogItem {
     var presentationSymbol: String {
-        switch id.rawValue.split(separator: ".").last.map(String.init) {
+        guard iconAssetID == "sparkles" else { return iconAssetID }
+
+        // Rewards granted by an older app version decode without an icon ID.
+        // Preserve the legacy artwork for those stable item identifiers.
+        return switch id.rawValue.split(separator: ".").last.map(String.init) {
         case "starlight-tiara":
             "crown.fill"
         case "cloud-carriage":
