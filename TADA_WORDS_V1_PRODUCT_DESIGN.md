@@ -1,6 +1,6 @@
 # Tada Words — V1 产品与交互设计
 
-> 状态：真机第一轮反馈与追加需求已纳入；修复后等待 iPhone / iPad 回归验收
+> 状态：v0.3.1 已完成 iPhone production Vision 真机测试，以及 iPad production/UI 真机自动化回归；儿童手写、音频听感、布局与辅助功能仍待人工验收
 >
 > 项目名称：**Tada Words**
 >
@@ -70,6 +70,12 @@ V1 是 Universal iOS App。
 - iPhone 17 Pro Max
 
 其他 iPhone 使用响应式布局尽力兼容，但不作为 V1 发布阻塞项。
+
+### 当前真机自动化证据
+
+2026-07-14，Team `6S245NCUPQ` 签名的 `Tada Words QA` v0.3.1 (`2026071403`) 已在 Darren iPad Air 13-inch (M4)、iPadOS 26.5 安装并启动。Production DeviceTests 2/2 通过，覆盖 wrong-word rejection 与 `of/go` case variants；LocalQA Critical XCUITest 7/7 通过，覆盖 OCR Add All、Delete All/restore、明确批准 Preset、连续删除/排序、Photo picker/排序及 Read/Write 完成反馈消失。
+
+这些证据验证 production 识别链路和关键交互可以在 iPad 真机运行，但不替代儿童真实手写、发音听感、横竖屏布局、Apple Pencil、VoiceOver 与 Dynamic Type 验收。
 
 ### 方向规则
 
@@ -777,7 +783,7 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 1. 4 岁儿童单词识别、声纹过滤和家庭噪声下的本地准确率。
 2. 4 岁儿童手写在目标词约束下的正确 / 错误 / 不确定三态阈值。
 3. 不同 Apple ID 的 `CKShare`、ProfileKey 分发、撤销和密钥轮换。
-4. iPhone 17 Pro Max 与目标 iPad 的横屏书写可用性。
+4. 4 岁儿童在 iPhone 17 Pro Max 与目标 iPad 上的横屏手写、听感、布局与辅助功能可用性；iPad 自动化链路已通过，人工验收仍未完成。
 
 ## 24. V2
 

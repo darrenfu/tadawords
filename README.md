@@ -20,7 +20,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** PR #2 merged v0.3 to `main` at `cc42e17`. Branch `v0.3.1` fixes the real production Vision failures reported for `of`, `go`, and case variants. The full Swift suite passes **588/588**, all seven critical XCUITest flows pass **7/7**, and a physical-iPhone production-service target passes all six `of/go` case variants plus four negative controls. Fresh LocalQA simulator builds pass on iPhone 17 Pro Max and iPad Pro 13-inch (M5), and signed v0.3.1 is installed on the connected iPhone 17 Pro Max. These automated handwriting fixtures are synthetic; child handwriting, pronunciation listening, accessibility, physical-iPad, and live CloudKit acceptance remain open. Family Sync is persisted, default-off, and requires explicit parent opt-in; CloudKit convergence and remote erasure remain release blockers. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** PR #2 merged v0.3 to `main` at `cc42e17`. Branch `v0.3.1` fixes the real production Vision failures reported for `of`, `go`, and case variants. The full Swift suite passes **588/588**, and all seven critical XCUITest flows pass **7/7** on both the iPhone simulator and physical iPad. Production physical-device tests also pass **2/2** on the iPad for wrong-word rejection and `of/go` case variants. Signed v0.3.1 is installed and launches on the connected iPhone 17 Pro Max and iPad Air 13-inch (M4). These automated handwriting fixtures are synthetic; child handwriting, pronunciation listening, layout, accessibility, and live CloudKit acceptance remain open. Family Sync is persisted, default-off, and requires explicit parent opt-in; CloudKit convergence and remote erasure remain release blockers. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -160,10 +160,12 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 | Swift tests | v0.3.1 full run: 588 passed, 0 failures; focused actual-Vision suite 15/15 |
 | Critical XCUITest flows | 7 passed, 0 failures on iPhone 17 Pro Max simulator |
 | Physical iPhone production Vision | 2/2 device tests passed: 6/6 `of/go` case variants and 4/4 negative controls; synthetic vectors only |
+| Physical iPad production Vision | 2/2 device tests passed: wrong-word rejection and `of/go` case variants; synthetic vectors only |
+| Physical iPad critical XCUITest | 7/7 passed: OCR Add All, Delete All/restore, explicit Preset approval, sequential deletes/sort, Photos picker/sort, and Read/Write completion dismissal |
 | iPhone 17 Pro Max LocalQA simulator | Fresh v0.3.1 build passed |
 | iPad Pro 13-inch (M5) LocalQA simulator | Fresh v0.3.1 build passed |
 | Connected iPhone 17 Pro Max | Signed `Tada Words QA` v0.3.1 (`2026071402`) installed and launched; child 12-attempt handwriting gate, audio, rotation, and accessibility remain |
-| Connected iPad Air 13-inch (M4) | v0.3.1 build `2026071403` is the latest deployment target; physical installation and testing have not run yet |
+| Darren iPad Air 13-inch (M4), iPadOS 26.5 | Team `6S245NCUPQ` signed `Tada Words QA` v0.3.1 (`2026071403`), installed and launched; child handwriting, audio, layout, rotation, and accessibility remain |
 | Pre-K visual hierarchy | v0.2 Profile, Lobby, Read, and Result captures pass on both simulators; physical child, VoiceOver, and Dynamic Type acceptance remain open |
 | Route-based orientation | v0.2 Plist and runtime-policy checks passed. iPad simulator window shapes show Parents rotating while child routes remain landscape. Raw iPhone simulator framebuffer captures are inconclusive, so physical rotation remains open. |
 | Persisted, default-off CloudKit guardian opt-in | Implemented; live-device acceptance open |

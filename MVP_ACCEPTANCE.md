@@ -40,9 +40,12 @@ PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当�
 | Swift 单元与组合测试 | v0.3.1 全量 588/588 通过，0 failure；其中 actual-Vision 手写识别 focused suite 为 15/15 |
 | Critical XCUITest | iPhone 17 Pro Max 模拟器 7/7 通过：Read/Write 连续反馈、两次删除/Undo、Delete All/完整恢复、Preset 明确批准后才加入、Photos 退出后排序、OCR Review → Add All → Pool → Sort |
 | iPhone 17 Pro Max production Vision 真机测试 | iOS 26.5.1 上 2/2 XCTest 通过：`of/go` 六种大小写正例 6/6，错词与 literal `90` 负例 4/4；使用匿名合成 vector 和真实 production service，不使用 mock/demo |
+| iPad Air 13-inch (M4) production Vision 真机测试 | iPadOS 26.5 上 2/2 DeviceTests 通过：wrong-word rejection 与 `of/go` case variants；使用真实 production service 与匿名合成 vector |
+| iPad Air 13-inch (M4) Critical XCUITest | LocalQA 配置下 7/7 通过：OCR Add All、Delete All/完整恢复、Preset 明确批准、连续删除/排序、Photo picker/排序、Read 与 Write 完成反馈消失 |
 | iPhone 17 Pro Max LocalQA 模拟器构建 | v0.3.1 fresh build 通过 |
 | iPad Pro 13-inch (M5) LocalQA 模拟器构建 | v0.3.1 fresh build 通过 |
 | iPhone 17 Pro Max 真机安装 | `Tada Words QA` v0.3.1 (`2026071402`) 签名构建已覆盖安装并启动；儿童真实书写、发音听感和辅助功能仍需人工验收 |
+| iPad Air 13-inch (M4) 真机安装 | Darren iPad、iPadOS 26.5；Team `6S245NCUPQ` 签名的 `Tada Words QA` v0.3.1 (`2026071403`) 已安装并启动；儿童真实书写、发音听感、布局、旋转和辅助功能仍需人工验收 |
 | 两个 built product 的方向声明 | v0.2 基线：iPhone 为 Portrait + 两个 Landscape；iPad 为四向；`UIRequiresFullScreen` 为 true；运行时 Parents 可旋转，child route 只允许横屏 |
 | 模拟器方向证据 | v0.2 基线：iPad 的 Parent 与 child 窗口形态符合路由策略；iPhone raw framebuffer 截图方向不可靠，仍需真机旋转确认 |
 | Release CloudKit 分享声明 | v0.2 基线：iPhone 与 iPad Release built product 的 `CKSharingSupported` 为 true |
@@ -50,6 +53,8 @@ PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当�
 | 儿童语音 fixture | v0.2 基线：SHA-256 通过，Apple 转写为 `Bye.`，App policy 对目标 `bye` 判定为匹配 |
 
 `CKSharingSupported` 是构建声明，不代表模拟器正在运行 CloudKit。模拟器刻意使用 local/device-only transport；真实 CloudKit transport 只能在配置 Team、container 与 iCloud 的签名真机上验收。
+
+iPad 的 DeviceTests 与 Critical XCUITest 证明 production 识别链路和七条关键交互能在真机运行。它们不替代儿童真实手写、标准发音听感、各方向布局、Apple Pencil、VoiceOver 或 Dynamic Type 的人工验收。
 
 编号的 `.xcodeproj` 副本已经删除。只打开 `TadaWords.xcodeproj`，也不要使用方向或能力变更之前的 Derived Data。
 
