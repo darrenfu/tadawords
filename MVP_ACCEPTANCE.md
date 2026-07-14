@@ -87,7 +87,7 @@ iPad 的 DeviceTests 与 Critical XCUITest 证明 production 识别链路和七�
 | 1 分钟声纹注册与 Read 匹配 | v0.3 跟读流程完成，需要儿童样本校准 | 随机短句逐句播放、儿童跟读、拒绝样本可重录；声纹只存本机 Keychain，原始录音不保存或同步 |
 | Apple Pencil 与掌触过滤 | 代码已完成，需要真机验收 | iPhone 用手指，iPad 分别测试手指与 Pencil |
 | VoiceOver、Reduce Motion、动态字体 | 代码已完成，需要真机验收 | 完整走查反馈播报、焦点、横屏紧凑高度 |
-| 单一教师音色与主题音乐 | 单一 teacher contract/清晰 fallback 为 v0.3；启动发音与主题音乐为已合并 v0.2；需要人工听感批准 | 不再提供 Profile voice style；远端只允许安全 HTTPS endpoint，客户端不存 provider key；离线采用清晰度优先的美式 Apple voice；连续启动短句 `tā-'dá, wòrds!`；Moonpetal 彩虹/独角兽与欢快音乐 |
+| 单一教师契约与主题音乐 | Katie/Aurora 离线包已实现并通过 bundle/转写检查；需要真机人工听感批准 | 不提供 Profile voice style；500 词以 Katie Read 0.90× / Write 0.82× 双版本为 canonical，`bun` 使用 manifest 记录的 Aurora 质量例外，包外词使用 Apple fallback；Aurora 负责连续启动短句 `Ta-dá↗ woooords↘!`、六条答对微庆祝和 Quest 完成；客户端不存 provider key；Moonpetal 彩虹/独角兽与欢快音乐 |
 | 八个原创 World | v0.2 代码完成，待真机视听回归 | 新增 Dino、Firehouse、Brickwork、Frostlight、Coaster；每个拥有隔离场景、吉祥物、颜色、奖励与音乐 |
 | Write 笔盒与稳定画布 | v0.2 笔盒基础已合并；v0.3 增强完成，待真机书写回归 | Pencil/Chalk/Brush 三种黑色笔、每 Profile 持久化、流畅笔触音效、4× 局部擦除、空白点击恢复原笔、画布加宽 10%；root Quest transition identity 保持稳定，切词/反馈时坐标不移动 |
 | 具体词图片提示 | v0.3 代码完成，待真机网络/离线回归 | 入 Pool 后异步缓存固定 Twemoji 资源；Write 首次真实错答显示可点击图片；`the` 等抽象/功能词不请求图片 |
@@ -162,7 +162,7 @@ iPad 的 DeviceTests 与 Critical XCUITest 证明 production 识别链路和七�
 
 1. 点独立的 **Write Today's Quest**
 2. 对 New 与 Review 词都确认只播放发音，不预先显示任何拼写；只有点 `?` 后才显示目标词
-3. 试听 `of`、`at`、`cat`、`come`、`look`，确认约为系统默认的 1.5× slower 节奏，同时仍是一段连续、清晰的发音；`f`、`t`、`k` 等尾音没有被背景音乐、外部音频或 audio session 吞掉，播放结束后音乐平滑恢复
+3. 试听 Katie Write 版 `of`、`at`、`cat`、`come`、`look`，确认使用 0.82× 离线录音且仍是一段连续、清晰的发音；`f`、`t`、`k` 等尾音没有被背景音乐、外部音频或 audio session 吞掉，播放结束后音乐平滑恢复。再输入一个 500 词 manifest 外的词，确认 Apple fallback 可用
 4. 在加宽后的横线区独立手写整个单词，再点 **Done**；确认 App 不会因停笔自动提交
 5. 分别写 `i` 的点、三字母词的最后一个字母，以及连笔 `vv`/`w`；确认短点、后续笔画和连笔都留下
 6. 分别用首字母大写、全大写和全小写书写同一个词；确认大小写差异不导致失败
@@ -265,18 +265,19 @@ Release 的 Family Sync 默认关闭并持久保存。Onboarding 的隐私确认
 ## 验收声音与辅助功能
 
 1. 在八个 World 中分别预览 Lobby、Read、Write、结果与 Collection；每个至少完成一轮，重点抽查五个新增 World 的两轮 Quest
-2. 冷启动试听单个连续 SSML 短句 `tā-'dá, wòrds!`（近似“它达，沃尔子”）：按 `tah-DAH` 连读并重读第二音节，逗号停顿约 105ms，`words` 下落；确认没有三段排队造成的接缝。当前只验证了 SSML 构造，真机听感仍需人工批准
+2. 冷启动试听 Aurora 的单个连续离线短句 `Ta-dá↗ woooords↘!`（近似“它达，沃尔子”）：`da` 略拉长上扬并直接连入明显拉长、下落的 `wor`，不得有刻意逗号停顿或合成接缝；后台短暂返回不重播，Voice 关闭时不播口白。自动转写与连接时序已通过，音高和听感仍需真机人工批准
 3. 确认 Parent settings 不再有 voice style picker；所有 Profile 使用同一个 canonical teacher contract
 4. 在未配置远端 endpoint 及缺少可选高质量 voice 的设备上测试，确认 App 选用已安装的清晰兼容 fallback 而不是静音；客户端和日志都不得包含 provider API key
-5. 在 Write 试听 `of`、`at`、`cat`、`come`、`look`；在 Read 两错后点按 Hear 试听同一标准。确认每个词只形成一个连续 utterance、音高自然、速度不过慢，`f`、`t`、`k` 等尾音清楚
-6. 在 Moonpetal 检查两侧彩虹/独角兽；在新增 World 分别检查恐龙、消防救援、原创积木、冰雪极光和过山车元素；确认中央任务安全区清晰且元素不跨主题泄漏
-7. 确认语音提示时音乐降低，Read 录音时音乐和非必要音效停止
-8. 分别测试 Voice、Music、Sound effects、Reduced Sound 和 Calm Rescue
-9. 测试扬声器、耳机、来电打断、后台恢复和音量变化
-10. 开启 VoiceOver，走完 Profile、Lobby、Read、Write、结果和 Guardian
-11. 开启 Reduce Motion 与较大动态字体，检查横屏紧凑布局
+5. 在 Write 试听 Katie 0.82× 的 `of`、`at`、`cat`、`come`、`look`；在 Read 两错后点按 Hear 试听 Katie 0.90× 版本。另试听 manifest 记录的 `bun` Aurora quality override。确认每个词只形成一个连续 clip、音高自然、速度不过慢，`f`、`t`、`k`、`n` 等尾音清楚
+6. 连续答对至少七个词，确认每次都有当前 World 的即时正确音效，Aurora 六条短庆祝不会连续重复；第七次才循环。完成 Quest 后只追加一次 `Quest complete! Ta-da!`，进入录音时任何未结束口播都会停止
+7. 在 Moonpetal 检查两侧彩虹/独角兽；在新增 World 分别检查恐龙、消防救援、原创积木、冰雪极光和过山车元素；确认中央任务安全区清晰且元素不跨主题泄漏
+8. 确认语音提示时音乐降低，Read 录音时音乐和非必要音效停止
+9. 分别测试 Voice、Music、Sound effects、Reduced Sound 和 Calm Rescue
+10. 测试扬声器、耳机、来电打断、后台恢复和音量变化
+11. 开启 VoiceOver，走完 Profile、Lobby、Read、Write、结果和 Guardian
+12. 开启 Reduce Motion 与较大动态字体，检查横屏紧凑布局
 
-通过标准：Reduced Sound 保留正确、重试和技术提示，但关闭装饰性 click、star、reward 与 launch 音。Calm Rescue 不播放紧急节奏层。人工批准响度、疲劳感、爆音和女声音色。
+通过标准：Reduced Sound 保留必要的正确、重试和技术非语言提示，但关闭装饰性 click、star、reward 与 Aurora transition 口播；Voice 单独控制 Katie/Aurora/Apple 口播。Calm Rescue 不播放紧急节奏层。人工批准响度、疲劳感、爆音和女声音色。
 
 ## 验收方向切换和本地数据
 

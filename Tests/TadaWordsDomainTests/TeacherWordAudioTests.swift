@@ -11,8 +11,18 @@ final class TeacherWordAudioTests: XCTestCase {
 
         XCTAssertEqual(request.spokenText, "Dog")
         XCTAssertNil(request.pronunciationKey)
-        XCTAssertEqual(request.speed, 0.7, accuracy: 0.000_1)
-        XCTAssertEqual(request.voiceContractVersion, "canonical-teacher-v1")
+        XCTAssertEqual(request.usage, .readHint)
+        XCTAssertEqual(request.speed, 0.90, accuracy: 0.000_1)
+        XCTAssertEqual(request.voiceContractVersion, "canonical-teacher-v2")
+    }
+
+    func testWritePromptUsesTheSlowerBundledVariant() throws {
+        let prompt = try WordPrompt(learningMode: .write, text: "at")
+
+        let request = TeacherWordAudioRequest(prompt: prompt)
+
+        XCTAssertEqual(request.usage, .writePrompt)
+        XCTAssertEqual(request.speed, 0.82, accuracy: 0.000_1)
     }
 
     func testContextAndPronunciationKeyArePreserved() throws {
@@ -29,6 +39,7 @@ final class TeacherWordAudioTests: XCTestCase {
 
         XCTAssertEqual(request.spokenText, "I read every day.")
         XCTAssertEqual(request.pronunciationKey, "present-tense")
+        XCTAssertEqual(request.usage, .readHint)
     }
 
     func testEmptyRequestsAndClipsFailExplicitly() {

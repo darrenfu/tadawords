@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "pack_version": "1.0.0",
+  "created_on": "2026-07-14",
+  "locale": "en-US",
+  "vendor": "Cartesia",
+  "model": "sonic-3.5",
+  "voice": {
+    "name": "Aurora",
+    "id": "8f091740-3df1-4795-8bd9-dc62d88e5131",
+    "role": "Tada Words launch and celebratory transition guide"
+  },
+  "pronunciation_dictionary_id": "pdict_c9NqwHzBahfJACMUG4N2PR",
+  "emotion": "excited",
+  "launch": {
+    "id": "launch",
+    "text": "Ta-da woooords!",
+    "speed": 0.94,
+    "prosody": "da rises and leads directly into a long falling wor",
+    "file": "launch.m4a"
+  },
+  "correct": [
+    {"id": "ta-da", "text": "Ta-da!", "speed": 1.02, "file": "correct/ta-da.m4a"},
+    {"id": "yes", "text": "Yes!", "speed": 1.04, "file": "correct/yes.m4a"},
+    {"id": "you-did-it", "text": "You did it!", "speed": 1.02, "file": "correct/you-did-it.m4a"},
+    {"id": "nice-one", "text": "Nice one!", "speed": 1.02, "file": "correct/nice-one.m4a"},
+    {"id": "amazing", "text": "Amazing!", "speed": 1.0, "file": "correct/amazing.m4a"},
+    {"id": "woo-hoo", "text": "Woo-hoo!", "speed": 1.02, "file": "correct/woo-hoo.m4a"}
+  ],
+  "quest_complete": {
+    "id": "quest-complete",
+    "text": "Quest complete! Ta-da!",
+    "speed": 0.98,
+    "file": "quest-complete.m4a"
+  }
+}

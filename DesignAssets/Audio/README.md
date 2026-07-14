@@ -1,4 +1,24 @@
-# Tada Words original audio provenance
+# Tada Words audio provenance
+
+## Bundled spoken audio v1 — 2026-07-14
+
+- Vendor/model: Cartesia Sonic 3.5 under the project's paid commercial plan.
+- Teacher role: Katie leads 500 unique words with separate Read hint (0.90×)
+  and Write prompt (0.82×) recordings. `bun` uses a manifest-documented Aurora
+  override because two recognizers rejected Katie's isolated rendering.
+- Brand/transition role: Aurora, one launch line, six rotating correct-answer
+  micro-celebrations, and one Quest-complete line.
+- Delivery: 1,008 mono 44.1 kHz AAC-LC files, approximately 6.8 MB total.
+- Runtime behavior: bundled and offline-first. No Cartesia key or runtime vendor
+  request is shipped in the App. Apple en-US speech remains the fallback for a
+  missing asset or a guardian-entered word outside the 500-word manifest.
+- Reproduction: `Tools/Audio/generate_cartesia_offline_pack.sh` reads the two
+  versioned manifests, limits Pro concurrency to three, retries transient API
+  failures, and resumes without regenerating valid clips.
+
+The generated voice output is not presented as a human performer or a celebrity
+imitation. Musical World scores and functional non-verbal effects remain original
+Tada Words synthesis code as documented below.
 
 ## License and source
 
@@ -60,30 +80,33 @@ older fade if another world, rescue-state, recording, or app-state transition
 supersedes it.
 
 The launch mark is an original bright ascending gesture and sonic tail paired
-with system text-to-speech saying “Tada Words!”. Correct, star, and reward cues
-use quicker upward movement and a little more harmonic lift, while valid retry
+with the bundled continuous Aurora “Ta-dá↗ woooords↘!” line. Correct, star, and reward cues use
+quicker upward movement and a little more harmonic lift, while valid retry
 remains gentle and technical retry remains a neutral two-pulse cue. Functional
 cues share stable meanings while their oscillator timbre follows the selected
-world.
+world. Correct and Quest-complete transitions can add brief Aurora speech after
+the immediate synthesized cue.
 
 ## Spoken-voice design
 
-All spoken audio uses Apple system text-to-speech; the app does not contain a
-recording, celebrity imitation, or third-party voice model. The direction is an
-original young-adult female sound: bright, confident American English with an
-energetic pop-host cadence, expressive rise and fall, and a warm learning tone.
-A deterministic policy prefers an American-English female voice, choosing
-Premium or Enhanced quality when the family has installed one. The current Mac development runtime
-exposes Samantha as its only explicitly female `en-US` voice and reports it as
-standard quality. This is an expected fallback, not an error: if a higher
+Canonical covered words use the bundled Katie voice, while brand and decorative
+transition lines use Aurora. Both are pre-generated; no child text or usage data
+is sent to Cartesia at runtime. The direction is bright, confident American
+English with an energetic game-guide cadence and a warm teacher tone. It does
+not imitate a celebrity or identify the output as a human performer.
+
+Apple system text-to-speech is the resilient fallback. A deterministic policy
+prefers an American-English female voice, choosing Premium or Enhanced quality
+when installed. The current Mac development runtime exposes Samantha as its only
+explicitly female `en-US` voice and reports it as standard quality. If a higher
 quality voice is absent, Tada Words selects the best available female voice,
 then a natural `en-US` voice, then Apple's language default.
 
-The brand line is delivered with a faster, brighter, upward-feeling cadence and
-the original roughly 1.2-second sonic mark. Learning prompts are warmer and
-slightly slower so letter sounds and sight words remain clear. Styling changes
-rate, pitch, volume, and timing only; the target word or guardian-provided
-spoken context is passed to the synthesizer unchanged.
+The Aurora brand line lands over the original roughly 1.2-second sonic mark;
+`da` rises into a connected, lengthened, falling `wor` with no deliberate pause.
+Katie Read prompts use 0.90× and Write prompts use 0.82× to keep short vowels and
+final consonants clear. Words outside the versioned manifest pass unchanged to
+Apple fallback synthesis.
 
 ## Safety mix
 
