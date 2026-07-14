@@ -33,6 +33,7 @@ struct GuardianWordManagerView: View {
     @State private var isSelecting = false
     @State private var selectedWordIDs = Set<WordPromptID>()
     @State private var pendingRemoval: [WordPrompt] = []
+    @State private var pendingRemovalIsEntirePool = false
     @State private var showsRemovalConfirmation = false
     @State private var ocrWords: [GuardianEditableOCRWord] = []
     @State private var showsOCRPreview = false
@@ -148,14 +149,17 @@ struct GuardianWordManagerView: View {
         .onChange(of: selectedMode) {
             isSelecting = false
             selectedWordIDs = []
+            pendingRemoval = []
+            pendingRemovalIsEntirePool = false
             feedback = nil
             poolSearchText = ""
         }
         .alert(removalTitle, isPresented: $showsRemovalConfirmation) {
             Button("Cancel", role: .cancel) {
                 pendingRemoval = []
+                pendingRemovalIsEntirePool = false
             }
-            Button("Remove", role: .destructive) {
+            Button(removalActionTitle, role: .destructive) {
                 removePendingWords()
             }
         } message: {
@@ -390,6 +394,24 @@ struct GuardianWordManagerView: View {
                 }
 
                 poolSearchAndSortControls
+
+                if !currentWords.isEmpty {
+                    Button(role: .destructive) {
+                        requestDeleteAll()
+                    } label: {
+                        Label(
+                            "Delete all \(currentWords.count) \(selectedMode.guardianTitle) words",
+                            systemImage: "trash.fill"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .disabled(isUpdatingWordPool)
+                    .accessibilityHint(
+                        "Removes every word from this pool after confirmation. You can undo the change."
+                    )
+                }
 
                 if !undoWords.isEmpty {
                     HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
@@ -778,6 +800,7 @@ struct GuardianWordManagerView: View {
 
     private func requestRemoval(_ prompts: [WordPrompt]) {
         guard !prompts.isEmpty else { return }
+        pendingRemovalIsEntirePool = false
         pendingRemoval = prompts
         if hasConfirmedRemovalThisSession {
             removePendingWords()
@@ -786,10 +809,20 @@ struct GuardianWordManagerView: View {
         }
     }
 
+    private func requestDeleteAll() {
+        guard !currentWords.isEmpty else { return }
+        pendingRemoval = currentWords
+        pendingRemovalIsEntirePool = true
+        // Deleting an entire pool is high impact, so it always requires its own
+        // explicit confirmation even after a parent confirmed a smaller removal.
+        showsRemovalConfirmation = true
+    }
+
     private func removePendingWords() {
         hasConfirmedRemovalThisSession = true
         let prompts = pendingRemoval
         pendingRemoval = []
+        pendingRemovalIsEntirePool = false
         Task {
             guard await onSetWordsActive(prompts, false) else { return }
             selectedWordIDs = []
@@ -805,11 +838,24 @@ struct GuardianWordManagerView: View {
     }
 
     private var removalTitle: String {
-        pendingRemoval.count == 1 ? "Remove this word?" : "Remove selected words?"
+        if pendingRemovalIsEntirePool {
+            return "Delete all \(pendingRemoval.count) \(selectedMode.guardianTitle) words?"
+        }
+        return pendingRemoval.count == 1
+            ? "Remove this word?"
+            : "Remove selected words?"
+    }
+
+    private var removalActionTitle: String {
+        pendingRemovalIsEntirePool ? "Delete all" : "Remove"
     }
 
     private var removalMessage: String {
         let count = pendingRemoval.count
+        if pendingRemovalIsEntirePool {
+            return
+                "All \(count) words will leave the \(selectedMode.guardianTitle) pool and future practice. Learning history stays available. You can undo this change."
+        }
         return count == 1
             ? "It will leave future practice. Learning history stays available."
             : "These \(count) words will leave future practice. Learning history stays available."

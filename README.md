@@ -18,9 +18,9 @@ Tada Words gives children two separate daily quests for sight words:
 - **Read:** See a word and say it aloud.
 - **Write:** Hear a word and write the whole word by hand.
 
-Parents add every practice word by typing it or scanning a school list with the camera or photo library. Tada Words schedules only those parent-provided words; V1 never grows a Pool from a grade catalog or smart fill. The review scheduler brings words back based on recall strength, errors, help use, replays, and each child's response pace.
+Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** PR #2 merged v0.3 to `main` at `cc42e17`. Branch `v0.3.1` fixes the real production Vision failures reported for `of`, `go`, and case variants. The full Swift suite passes **552/552**, the five critical XCUITest flows pass **5/5**, and a new physical-iPhone production-service target passes all six `of/go` case variants plus four negative controls. Fresh LocalQA simulator builds pass on iPhone 17 Pro Max and iPad Pro 13-inch (M5), and signed v0.3.1 is installed on the connected iPhone 17 Pro Max. These automated handwriting fixtures are synthetic; child handwriting, pronunciation listening, accessibility, iPad, and live CloudKit acceptance remain open. Family Sync is persisted, default-off, and requires explicit parent opt-in; CloudKit convergence and remote erasure remain release blockers. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** PR #2 merged v0.3 to `main` at `cc42e17`. Branch `v0.3.1` fixes the real production Vision failures reported for `of`, `go`, and case variants. The full Swift suite passes **588/588**, all seven critical XCUITest flows pass **7/7**, and a physical-iPhone production-service target passes all six `of/go` case variants plus four negative controls. Fresh LocalQA simulator builds pass on iPhone 17 Pro Max and iPad Pro 13-inch (M5), and signed v0.3.1 is installed on the connected iPhone 17 Pro Max. These automated handwriting fixtures are synthetic; child handwriting, pronunciation listening, accessibility, physical-iPad, and live CloudKit acceptance remain open. Family Sync is persisted, default-off, and requires explicit parent opt-in; CloudKit convergence and remote erasure remain release blockers. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -37,7 +37,7 @@ music, sound cues, and 25-item reward collection.
 
 Read never speaks the target before the child's first independent response. After two valid wrong readings it reveals only child-triggered **Hear it**; technical retries never reveal help early. Each World owns one coordinated, high-contrast word color, so every Read word stays visually consistent until the child changes Worlds.
 
-Write prioritizes clear, fluent pronunciation rather than an extreme slowdown and never pre-shows the spelling. The offline fallback uses one uninterrupted utterance, a clarity-ranked American-English system voice, neutral pitch, and enough release time to preserve final consonants. The `?` control reveals the word on demand. After the first genuine mismatch, a concrete word such as `dog` can show a tappable picture hint; abstract and function words such as `the` receive no image. Children can choose Pencil, Chalk, or Brush; ink is always black and the selected tool persists per Profile. The 4× local eraser restores the prior pen after a blank-canvas tap. The canvas is 10% wider, keeps fixed coordinates during feedback and word transitions, and preserves dots, later letters, and connected strokes. Vision uses two bounded raster passes, target-informed alternatives, and exact case-normalized matching, so `of/Of/OF` and `go/Go/GO` share one spelling decision while neighboring words and literal `90` remain rejected. Technical speech or recognition failures do not reduce the child's score.
+Write plays each isolated word about 1.5× slower than the default system speech rate and never pre-shows the spelling. The offline fallback uses one uninterrupted utterance, a clarity-ranked American-English system voice, neutral pitch, and enough release time to preserve final consonants. The `?` control reveals the word on demand. After the first genuine mismatch, a concrete word such as `dog` can show a tappable picture hint; abstract and function words such as `the` receive no image. Children can choose Pencil, Chalk, or Brush; ink is always black and the selected tool persists per Profile. The 4× local eraser restores the prior pen after a blank-canvas tap. The canvas is 10% wider, keeps fixed coordinates during feedback and word transitions, and preserves dots, later letters, and connected strokes. Vision uses two bounded raster passes, target-informed alternatives, and exact case-normalized matching, so `of/Of/OF` and `go/Go/GO` share one spelling decision while neighboring words and literal `90` remain rejected. Technical speech or recognition failures do not reduce the child's score.
 
 Child-facing stars reward completion, accurate retrieval, and a comfortable personal pace. One immediate unaided recovery can still earn the Accuracy Star, calibration can earn Pace, and the post-calibration slow side gets 50% grace. Guardian accuracy and mastery evidence stay strict.
 
@@ -59,13 +59,27 @@ Parents only enter the school word. Every newly added word uses the canonical is
 
 The scheduler uses an Ebbinghaus-style recall model. A word reaches Mastered after independent success on three local dates and a predicted 14-day recall rate above the configured threshold.
 
+### Parent-controlled word sources
+
+Parents choose every word that enters a Read or Write Pool:
+
+- **Typing:** Press Return after each word to add it to the selected Pool
+- **Camera or photo OCR:** Review recognized words before adding them
+- **Offline presets:** Review age- and grade-ranked suggestions or browse by topic, select individual words, choose Read, Write, or Both, then tap **Add**
+
+Parents record an age from 3 through 8 when they create a Profile. Tada Words uses age and grade only to rank preset lists; it never adds words from them. The bundled catalog contains 34 leaf presets with 1,365 word references and 1,166 unique normalized words. Each leaf contains 30–50 words. See the [preset word catalog](Docs/TADA_WORDS_PRESET_CATALOG.md) for the hierarchy, complete lists, and source notes. The [catalog export script](Scripts/export_preset_catalog.py) generates the same Obsidian-ready Markdown from the App JSON.
+
+Each Pool also has **Delete All**. Parents confirm the exact count and destination, then can restore the complete Pool with **Undo**. Delete confirmation and Undo state stay isolated to the initiating Profile, so switching children cannot expose or apply another child's operation.
+
+Preset imports also stay bound to the initiating Profile. An import to **Both** completes for both Pools or compensates the current request. Compensation reverses only memberships inserted or reactivated by that request and never deactivates a word that was already active.
+
 ## V1 features
 
 | Area | Included |
 |---|---|
 | Practice | Separate Read and Write pools, independent Today Quest buttons, New and Review ordering, timer, Rescue state, score, stars, and mastery |
-| Word setup | One-word Return-to-add; multi-photo Camera/Photo OCR; numbered review; 500 words per image; added-order, A-Z, and most-practiced sort; type-ahead search with Hear/Delete; de-duplication; session-scoped delete confirmation; bulk delete and Undo; no automatic additions |
-| Profiles | Profile-first launch, multiple children, nickname entry, last-profile highlight, animal/photo/collected-treasure avatar, earned icon, grade, age, and preferred world |
+| Word setup | One-word Return-to-add; multi-photo Camera/Photo OCR; 34 offline preset lists with explicit word selection; numbered review; 500 words per image; added-order, A-Z, and most-practiced sort; type-ahead search with Hear/Delete; de-duplication; session-scoped delete confirmation; bulk delete; per-Pool Delete All and Undo; no automatic additions |
+| Profiles | Profile-first launch, multiple children, nickname entry, age capture from 3 through 8, last-profile highlight, animal/photo/collected-treasure avatar, earned icon, grade, and preferred world |
 | Motivation | Eight original worlds, 20 small rewards and five milestones per world, 200 distinct treasure icons, Double-Quest next-day Theme/Icon unlocks, My Collection, and a monthly calendar |
 | Guardian tools | Single-tap `Parents` → auto-checking math Parent Gate, Today dashboard, Word Manager, reports, corrections, settings, CSV export, and Lock-to-Kid-selection navigation |
 | Accessibility | Landscape child routes plus rotatable parent routes, shared 44-point minimum targets, VoiceOver labels and announcements, Reduce Motion, left-handed writing, Reduced Sound, and Calm Rescue; physical accessibility acceptance remains open |
@@ -110,7 +124,7 @@ make check
 open TadaWords.xcodeproj
 ```
 
-`make check` runs strict Swift formatting checks and the Swift package test suite. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, and merged v0.3 contained **548**. The current v0.3.1 aggregate contains **552 tests with zero failures**. The Xcode UI target adds five critical end-to-end flows for Read/Write completion, repeated delete/Undo, Photos-picker dismissal, and OCR Review → Add All → Pool → Sort. A separate physical-device target calls the public production handwriting service with six positive case variants and four negative controls; it does not use the demo recognizer.
+`make check` runs strict Swift formatting checks and the Swift package test suite. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, and merged v0.3 contained **548**. The current v0.3.1 aggregate contains **588 tests with zero failures**. The Xcode UI target adds seven critical end-to-end flows for Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, and OCR Review → Add All → Pool → Sort. A separate physical-device target calls the public production handwriting service with six positive case variants and four negative controls; it does not use the demo recognizer.
 
 Run the device-readiness script before installing on an iPhone or iPad:
 
@@ -143,12 +157,13 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Swift tests | v0.3.1 full run: 552 passed, 0 failures; focused actual-Vision suite 15/15 |
-| Critical XCUITest flows | 5 passed, 0 failures on iPhone 17 Pro Max simulator |
+| Swift tests | v0.3.1 full run: 588 passed, 0 failures; focused actual-Vision suite 15/15 |
+| Critical XCUITest flows | 7 passed, 0 failures on iPhone 17 Pro Max simulator |
 | Physical iPhone production Vision | 2/2 device tests passed: 6/6 `of/go` case variants and 4/4 negative controls; synthetic vectors only |
 | iPhone 17 Pro Max LocalQA simulator | Fresh v0.3.1 build passed |
 | iPad Pro 13-inch (M5) LocalQA simulator | Fresh v0.3.1 build passed |
 | Connected iPhone 17 Pro Max | Signed `Tada Words QA` v0.3.1 (`2026071402`) installed and launched; child 12-attempt handwriting gate, audio, rotation, and accessibility remain |
+| Connected iPad Air 13-inch (M4) | v0.3.1 build `2026071403` is the latest deployment target; physical installation and testing have not run yet |
 | Pre-K visual hierarchy | v0.2 Profile, Lobby, Read, and Result captures pass on both simulators; physical child, VoiceOver, and Dynamic Type acceptance remain open |
 | Route-based orientation | v0.2 Plist and runtime-policy checks passed. iPad simulator window shapes show Parents rotating while child routes remain landscape. Raw iPhone simulator framebuffer captures are inconclusive, so physical rotation remains open. |
 | Persisted, default-off CloudKit guardian opt-in | Implemented; live-device acceptance open |
@@ -169,6 +184,7 @@ The repository includes one unmodified child-speech fixture from [OpenSLR SLR101
 - [V1 acceptance checklist](MVP_ACCEPTANCE.md)
 - [Physical-device deployment](DEVICE_DEPLOYMENT.md)
 - [Voiceprint Device Alpha plan](VOICEPRINT_DEVICE_ALPHA.md)
+- [Preset word catalog](Docs/TADA_WORDS_PRESET_CATALOG.md)
 - [Visual and accessibility audit](QAArtifacts/DESIGN_AUDIT_2026-07-12.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 

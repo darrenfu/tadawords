@@ -100,7 +100,7 @@ final class LocalJSONWordPoolRepositoryTests: XCTestCase {
         XCTAssertEqual(restoredOtherProfile.map(\.normalizedText), ["owl"])
     }
 
-    func testRestartedRepositoryDeduplicatesAndRequeuesExistingEntry()
+    func testRestartedRepositoryClassifiesAndRequeuesActiveDuplicate()
         async throws
     {
         let snapshotURL = try makeSnapshotURL()
@@ -125,17 +125,22 @@ final class LocalJSONWordPoolRepositoryTests: XCTestCase {
         let duplicateResult = try await ManualWordPoolImporter(
             repository: restartedRepository
         ).importBatch(
-            "ＣＡＴ",
+            "123 ＣＡＴ",
             profileID: ContentTestFixture.profileID,
             learningMode: .read,
             addedAt: secondDate
         )
-        let requeued = try XCTUnwrap(duplicateResult.requeuedExisting.first)
+        let requeued = try XCTUnwrap(duplicateResult.alreadyActive.first)
 
         XCTAssertEqual(requeued.id, original.id)
         XCTAssertEqual(requeued.prompt.id, original.prompt.id)
-        XCTAssertEqual(requeued.addedAt, firstDate)
+        XCTAssertEqual(requeued.addedAt, original.addedAt)
+        XCTAssertEqual(requeued.source, original.source)
         XCTAssertEqual(requeued.lastQueuedAt, secondDate)
+        XCTAssertEqual(requeued.positionInLastBatch, 1)
+        XCTAssertTrue(requeued.isActive)
+        XCTAssertTrue(duplicateResult.inserted.isEmpty)
+        XCTAssertTrue(duplicateResult.reactivated.isEmpty)
 
         let secondRestart = LocalJSONWordPoolRepository(
             snapshotURL: snapshotURL
@@ -148,14 +153,67 @@ final class LocalJSONWordPoolRepositoryTests: XCTestCase {
         XCTAssertEqual(entries, [requeued])
     }
 
+    func testRestartedRepositoryReactivatesInactiveEntryWithExactIdentity()
+        async throws
+    {
+        let snapshotURL = try makeSnapshotURL()
+        let firstDate = ContentTestFixture.day.addingTimeInterval(-86_400)
+        let secondDate = ContentTestFixture.day
+        let firstRepository = LocalJSONWordPoolRepository(
+            snapshotURL: snapshotURL
+        )
+        let originalResult = try await ManualWordPoolImporter(
+            repository: firstRepository
+        ).importBatch(
+            "Cat",
+            profileID: ContentTestFixture.profileID,
+            learningMode: .read,
+            addedAt: firstDate
+        )
+        let original = try XCTUnwrap(originalResult.inserted.first)
+        _ = try await firstRepository.setActive(false, entryID: original.id)
+
+        let restartedRepository = LocalJSONWordPoolRepository(
+            snapshotURL: snapshotURL
+        )
+        let restoredResult = try await ManualWordPoolImporter(
+            repository: restartedRepository
+        ).importBatch(
+            "cat",
+            profileID: ContentTestFixture.profileID,
+            learningMode: .read,
+            addedAt: secondDate
+        )
+        let restored = try XCTUnwrap(restoredResult.reactivated.first)
+
+        XCTAssertEqual(restored.id, original.id)
+        XCTAssertEqual(restored.prompt.id, original.prompt.id)
+        XCTAssertEqual(restored.addedAt, original.addedAt)
+        XCTAssertEqual(restored.source, original.source)
+        XCTAssertEqual(restored.lastQueuedAt, secondDate)
+        XCTAssertTrue(restored.isActive)
+        XCTAssertTrue(restoredResult.inserted.isEmpty)
+        XCTAssertTrue(restoredResult.alreadyActive.isEmpty)
+
+        let secondRestart = LocalJSONWordPoolRepository(
+            snapshotURL: snapshotURL
+        )
+        let entries = try await secondRestart.entries(
+            for: ContentTestFixture.profileID,
+            learningMode: .read,
+            includingInactive: true
+        )
+        XCTAssertEqual(entries, [restored])
+    }
+
     func testConcurrentWritesRemainDeduplicatedAndRestartable() async throws {
         let snapshotURL = try makeSnapshotURL()
         let repository = LocalJSONWordPoolRepository(snapshotURL: snapshotURL)
         let importer = ManualWordPoolImporter(repository: repository)
 
-        let returnedIDs = await withTaskGroup(
-            of: WordPoolEntryID?.self,
-            returning: [WordPoolEntryID].self
+        let results = await withTaskGroup(
+            of: ManualWordPoolImportResult?.self,
+            returning: [ManualWordPoolImportResult].self
         ) { group in
             for offset in 0..<24 {
                 group.addTask {
@@ -167,20 +225,25 @@ final class LocalJSONWordPoolRepositoryTests: XCTestCase {
                             Double(offset)
                         )
                     )
-                    return result?.inserted.first?.id
-                        ?? result?.requeuedExisting.first?.id
+                    return result
                 }
             }
 
-            var ids: [WordPoolEntryID] = []
-            for await id in group {
-                if let id { ids.append(id) }
+            var results: [ManualWordPoolImportResult] = []
+            for await result in group {
+                if let result { results.append(result) }
             }
-            return ids
+            return results
         }
 
-        XCTAssertEqual(returnedIDs.count, 24)
-        XCTAssertEqual(Set(returnedIDs).count, 1)
+        let inserted = results.flatMap(\.inserted)
+        let reactivated = results.flatMap(\.reactivated)
+        let alreadyActive = results.flatMap(\.alreadyActive)
+        XCTAssertEqual(results.count, 24)
+        XCTAssertEqual(inserted.count, 1)
+        XCTAssertTrue(reactivated.isEmpty)
+        XCTAssertEqual(alreadyActive.count, 23)
+        XCTAssertEqual(Set((inserted + alreadyActive).map(\.id)).count, 1)
         let restartedRepository = LocalJSONWordPoolRepository(
             snapshotURL: snapshotURL
         )
@@ -190,6 +253,7 @@ final class LocalJSONWordPoolRepositoryTests: XCTestCase {
             includingInactive: true
         )
         XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.id, inserted.first?.id)
         XCTAssertEqual(
             entries.first?.lastQueuedAt,
             ContentTestFixture.day.addingTimeInterval(23)

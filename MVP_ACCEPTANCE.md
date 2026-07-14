@@ -32,13 +32,13 @@ make check
 
 通过标准：格式检查、单元与组合测试、iPhone 17 Pro Max LocalQA 模拟器构建、iPad Pro 13-inch (M5) LocalQA 模拟器构建全部通过。设备准备脚本可以在未配置签名 Team 时报告签名阻塞。
 
-PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当前 v0.3.1 修复证据如下。V1 的 367 项、v0.2 的 480 项和 v0.3 的 548 项测试保留为历史基线；v0.3.1 全量为 552/552：
+PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当前 v0.3.1 修复证据如下。V1 的 367 项、v0.2 的 480 项和 v0.3 的 548 项测试保留为历史基线；v0.3.1 全量为 588/588：
 
 | 检查 | 结果 |
 |---|---|
 | Swift formatter 严格检查 | 通过 |
-| Swift 单元与组合测试 | v0.3.1 全量 552/552 通过，0 failure；其中 actual-Vision 手写识别 focused suite 为 15/15 |
-| Critical XCUITest | iPhone 17 Pro Max 模拟器 5/5 通过：Read/Write 连续反馈、两次删除/Undo、Photos 退出后排序、OCR Review → Add All → Pool → Sort |
+| Swift 单元与组合测试 | v0.3.1 全量 588/588 通过，0 failure；其中 actual-Vision 手写识别 focused suite 为 15/15 |
+| Critical XCUITest | iPhone 17 Pro Max 模拟器 7/7 通过：Read/Write 连续反馈、两次删除/Undo、Delete All/完整恢复、Preset 明确批准后才加入、Photos 退出后排序、OCR Review → Add All → Pool → Sort |
 | iPhone 17 Pro Max production Vision 真机测试 | iOS 26.5.1 上 2/2 XCTest 通过：`of/go` 六种大小写正例 6/6，错词与 literal `90` 负例 4/4；使用匿名合成 vector 和真实 production service，不使用 mock/demo |
 | iPhone 17 Pro Max LocalQA 模拟器构建 | v0.3.1 fresh build 通过 |
 | iPad Pro 13-inch (M5) LocalQA 模拟器构建 | v0.3.1 fresh build 通过 |
@@ -58,8 +58,9 @@ PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当�
 | 需求 | 当前状态 | 人工验收重点 |
 |---|---|---|
 | Read 与 Write 两条独立路线 | 代码已完成 | 两个 Today Quest 按钮不合并，数据与设置互不覆盖 |
-| Parent Word Manager | v0.2 基础已合并；v0.3 增强完成，待真机回归 | 单词 Return 即时加入；多照片 Camera/Photo OCR；逐词编号；单图 500 词上限；added/A-Z/most practiced 排序；频次；type-ahead 搜索；Hear/Delete；单删/批删/Undo；两组独立去重 |
-| 仅使用家长录入词 | v0.2 代码完成 | 无 smart fill / Grade 自动加入；Pool 不足时不补词 |
+| Parent Word Manager | v0.2 基础已合并；v0.3/v0.3.1 增强完成，待真机回归 | 单词 Return 即时加入；多照片 Camera/Photo OCR；逐词编号；单图 500 词上限；added/A-Z/most practiced 排序；频次；type-ahead 搜索；Hear/Delete；单删/批删/整组清空；删除确认与 Undo 按 Profile 隔离；两组独立去重 |
+| 仅使用家长批准词 | v0.3.1 代码完成 | 无 smart fill / Grade 自动加入；typing、OCR 或 Preset 都必须由家长明确提交，Pool 不足时不补词 |
+| 按年龄/年级的 Preset Words | v0.3.1 代码与内容审计完成，待真机布局回归 | 3–8 岁 / Pre-K–Grade 3；34 组、每组 40–45 词；最多 6 组推荐后按层级浏览；搜索、逐词/全选、Read/Write/Both；打开或推荐绝不自动加入 |
 | New 与 Review 顺序可交换 | 代码已完成 | 每条路线独立保存顺序 |
 | 艾宾浩斯复习与补弱 | 代码已完成 | 到期、错误、相对慢、重播和 Help 影响排序与记忆参数 |
 | Write 不预显答案与一次引导重写 | v0.3 代码完成，待真机回归 | 每个词开始时只播发音，不显示拼写；只有点 `?` 才显示答案；第一次真实错答可出现具体词图片按钮 |
@@ -69,8 +70,8 @@ PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当�
 | 八个独立主题世界 | v0.2 代码完成，待真机视听回归 | 公主、工程车、动物、恐龙、消防救援、原创积木、冰雪与过山车的场景/奖励不混用 |
 | 每个世界 20 个小奖励与 5 个里程碑 | v0.2 代码完成，待真机视觉回归 | 共 200 件不同图标；永久收藏品不因 Practice Again 重发 |
 | Double Quest 次日 Theme / Icon | v0.2 代码完成，待真机回归 | 同日 Read+Write 的 Today run 次日解锁；partial/replay 不算；My Collection 可选择已获得项目 |
-| 多 Kid Profile 与上次 Profile | v0.2 代码完成，待真机回归 | 冷启动先到 Picker并突出上次 Profile；每个 Profile 数据、声纹、设置与 cosmetics 隔离 |
-| Profile-first 首次流程 | v0.2 代码完成，待真机布局复验 | 无 Profile 直接 New Kid；首次流程无单词输入 |
+| 多 Kid Profile、年龄与上次 Profile | v0.3.1 代码完成，待真机回归 | 冷启动先到 Picker 并突出上次 Profile；首次/Kid/Parent 新建均采集 3–8 岁年龄；每个 Profile 数据、声纹、设置与 cosmetics 隔离 |
+| Profile-first 首次流程 | v0.3.1 代码完成，待真机布局复验 | 无 Profile 直接 New Kid；先录昵称和年龄，首次流程无单词输入 |
 | Pre-K 儿童端视觉层级 | v0.2 模拟器已检查，待儿童与辅助功能验收 | 上次 Profile 静态突出；iPhone Lobby 图标 dock 保留 72 pt 触控区；Read 主词与 Result 奖励更醒目；iPad 保留文字工具入口 |
 | 自拍、照片、动物头像 | 代码已完成 | 真机检查 Camera 与 Photo Library 权限 |
 | 月度打卡 Calendar | 代码已完成 | 每日显示准确 Quest 次数，Practice Again 也计数 |
@@ -100,20 +101,20 @@ PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当�
 | Points | 正确率最多 80 分，速度最多 20 分 |
 | Perfect first try | 无论是否已有速度基线，固定 100 分和 3 星 |
 
-家长只输入学校发下来的单词。手输与照片批量导入的新词统一使用 canonical isolated teacher pronunciation；Parent UI 不提供语境句或多发音编辑入口。旧版本中已经保存的 contextual audio metadata 仍可被读取，避免升级时损坏数据。
+家长可以手输、照片批量导入，或从本地 Preset Catalog 明确选择单词。所有新词统一使用 canonical isolated teacher pronunciation；Parent UI 不提供语境句或多发音编辑入口。年龄/年级只排序推荐，不会自动加入。旧版本中已经保存的 contextual audio metadata 仍可被读取，避免升级时损坏数据。
 
 ## 验收 Kid Profile 与 Guardian
 
 1. 清空 LocalQA 数据后启动；第一屏必须是 `New Kid`，且不出现单词输入
-2. 阅读并接受版本化隐私说明，创建昵称、动物头像、Grade 和起始 World
+2. 阅读并接受版本化隐私说明，创建昵称、3–8 岁年龄、动物头像、Grade 和起始 World
 3. 强制退出并重启；Profile Picker 必须突出上次有效 Profile，孩子点击后才进入 Lobby
 4. 新建第二个 Profile，为两者输入不同单词与设置，再验证 Picker 和隔离
 5. 普通单击 **Parents**，确认随机算术 Parent Gate 立即出现；输入完整位数后无需点 Unlock 即自动判题。错误答案自动清空，但错误提示保持可见，直到家长开始输入下一次答案
-6. 进入 Parents 编辑 Profile，再从 Camera 自拍、Photo Library 和动物图标各测试一次头像来源与年龄设置
+6. 让孩子在 Picker 自建第二个 Profile，输入昵称与年龄；确认建议 Grade 合理。再进入 Parents 编辑 Profile，验证家长改变年龄不会静默覆盖明确选择的 Grade，并从 Camera 自拍、Photo Library 和动物图标各测试一次头像来源
 7. 从 Parent dashboard 点 **Lock**，确认立即锁定并返回 Kids Profile Picker
 8. 删除上次使用的非唯一 Profile；重启后必须回到合法 Picker，不猜测身份或复活数据
 
-通过标准：每个 Profile 隔离单词、设置、学习记录、日历、奖励和声纹。孩子可以只输入昵称建档，敏感操作需要系统设备认证。App 必须保留至少一个 Profile。Onboarding 不请求麦克风、Speech、Camera、Photo Library 或通知权限；相关权限只在对应功能首次使用时请求。
+通过标准：每个 Profile 隔离单词、设置、学习记录、日历、奖励和声纹。所有新 Profile 都保存有效年龄；旧版缺年龄 Profile 仍可读取。敏感操作需要系统设备认证。App 必须保留至少一个 Profile。Onboarding 不请求麦克风、Speech、Camera、Photo Library 或通知权限；相关权限只在对应功能首次使用时请求。
 
 ## 验收 Parent Word Manager
 
@@ -126,10 +127,14 @@ PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当�
 7. 滚动长预览，验证顶部返回/到顶按钮与到底按钮；点 **Add all N to Read/Write**，确认按钮不会被键盘遮住、只提交一次，并显示保存进度或明确错误
 8. 在 Pool 切换 Added order、A-Z、Most practiced，核对每行频次数字；用 type-ahead 搜索并直接点该行的 Hear 与 Delete
 9. 第一次删除时确认弹窗出现；确认后继续单删和批删，确认本 Parent session 不再重复弹窗且 Undo 仍可用
-10. 在 typing、search 和 OCR 文字编辑框中输入文字，再点空白处；确认键盘收起；整个流程不出现 pronunciation/context section
-11. 清空或缩小 Pool，重启并准备 Quest；确认不会出现 Grade、catalog 或 smart-fill 新词
+10. 分别在 Read 和 Write 点 `Delete all N words`：取消一次，再确认一次；核对明确数量/模式、另一 Pool 不变、学习历史不删，并用 Undo 完整恢复
+11. 在 Profile A 删除或清空后切换到 Profile B；确认 B 不继承 A 的首次删除确认状态或 Undo，且 B 的操作不能还原或修改 A 的 Pool
+12. 从 Today 打开 Preset Words；核对最多 6 个年龄/年级匹配推荐，再逐层浏览 Sight Words、Phonics、动物/恐龙/车辆/城市/国家、动作和 Emotions。打开列表时 Pool 不变；逐词选择或 Select all，分别提交到 Read、Write、Both 并核对去重
+13. 对 Both 导入核对事务边界：正常时两个 Pool 都更新；任一 Pool 保存失败、部分成功或返回数量不符时，只回滚本次插入或重新启用的 membership，既有 active word 与另一 Profile 不变
+14. 在 typing、search 和 OCR 文字编辑框中输入文字，再点空白处；确认键盘收起；整个流程不出现 pronunciation/context section
+15. 清空或缩小 Pool，重启并准备 Quest；确认不会出现未经家长点击 Add 的 catalog 或 smart-fill 新词
 
-通过标准：所有 Pool 新增项均能追溯到 typing 或 OCR；原始 school-list 图片只在本机识别且不保存。每张图片独立执行 500 词上限。键盘、OCR sheet、sticky Add All 和选择工具栏在 iPhone/iPad 横屏不裁切。
+通过标准：所有 Pool 新增项均能追溯到 typing、OCR 或家长明确批准的 Preset selection；原始 school-list 图片只在本机识别且不保存。每张图片独立执行 500 词上限。Preset 与删除操作绑定发起它的 Profile，Both 导入不会留下半完成状态。键盘、OCR sheet、sticky Add All、Preset 层级和选择工具栏在 iPhone/iPad 横竖屏 Parent route 均不裁切。
 
 ## 验收 Read Quest
 
@@ -152,7 +157,7 @@ PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当�
 
 1. 点独立的 **Write Today's Quest**
 2. 对 New 与 Review 词都确认只播放发音，不预先显示任何拼写；只有点 `?` 后才显示目标词
-3. 试听 `of`、`at`、`cat`、`come`、`look`，确认是一段连续、清晰、不过度拖慢的发音，`f`、`t`、`k` 等尾音没有被背景音乐或 audio session 吞掉
+3. 试听 `of`、`at`、`cat`、`come`、`look`，确认约为系统默认的 1.5× slower 节奏，同时仍是一段连续、清晰的发音；`f`、`t`、`k` 等尾音没有被背景音乐、外部音频或 audio session 吞掉，播放结束后音乐平滑恢复
 4. 在加宽后的横线区独立手写整个单词，再点 **Done**；确认 App 不会因停笔自动提交
 5. 分别写 `i` 的点、三字母词的最后一个字母，以及连笔 `vv`/`w`；确认短点、后续笔画和连笔都留下
 6. 分别用首字母大写、全大写和全小写书写同一个词；确认大小写差异不导致失败

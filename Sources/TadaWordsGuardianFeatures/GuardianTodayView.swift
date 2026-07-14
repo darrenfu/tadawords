@@ -6,6 +6,7 @@ struct GuardianTodayView: View {
     let snapshot: GuardianDashboardSnapshot
     let onLock: () -> Void
     let onQuickAdd: () -> Void
+    let onOpenPresets: () -> Void
     let onOpenPool: (LearningMode) -> Void
     let onOpenSettings: () -> Void
     let onOpenProfiles: () -> Void
@@ -21,6 +22,7 @@ struct GuardianTodayView: View {
                 todayStatusSection
                 poolSection
                 quickAddButton
+                presetWordsButton
                 needsAttentionSection
                 questCalendarSection
                 reportsButton
@@ -261,6 +263,39 @@ struct GuardianTodayView: View {
         .buttonStyle(GuardianPrimaryButtonStyle())
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens Read and Write word management")
+    }
+
+    private var presetWordsButton: some View {
+        Button(action: onOpenPresets) {
+            HStack(spacing: GuardianPrimitiveTokens.Spacing.medium) {
+                Image(systemName: "books.vertical.fill")
+                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .foregroundStyle(GuardianSemanticTokens.primary)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Choose preset words")
+                        .font(.system(.headline, design: .rounded, weight: .bold))
+                    Text("Browse by age, grade, and category")
+                        .font(.system(.subheadline, design: .rounded, weight: .medium))
+                        .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    .accessibilityHidden(true)
+            }
+            .padding(GuardianPrimitiveTokens.Spacing.medium)
+            .background(
+                GuardianSemanticTokens.surface,
+                in: RoundedRectangle(
+                    cornerRadius: GuardianPrimitiveTokens.Radius.medium,
+                    style: .continuous
+                )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens preset lists without adding words automatically")
     }
 
     private var needsAttentionSection: some View {

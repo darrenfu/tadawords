@@ -24,6 +24,7 @@ struct FirstRunParentOnboardingView: View {
     @State private var displayName: String
     @State private var avatarAssetID: String
     @State private var schoolGrade: ProfileSchoolGrade
+    @State private var ageYears: Int?
     @State private var selectedWorld: WorldTheme
     @State private var hasAcceptedConsent = false
     @State private var isSaving = false
@@ -49,6 +50,9 @@ struct FirstRunParentOnboardingView: View {
             initialValue: initialProfile.avatar.cartoonAnimalAssetID ?? "hare"
         )
         _schoolGrade = State(initialValue: initialProfile.schoolGrade)
+        _ageYears = State(
+            initialValue: purpose == .fullSetup ? nil : initialProfile.ageYears
+        )
         _selectedWorld = State(initialValue: initialProfile.selectedWorld)
     }
 
@@ -127,6 +131,7 @@ struct FirstRunParentOnboardingView: View {
         return !normalizedName.isEmpty
             && normalizedName.count
                 <= FirstRunOnboardingCoordinator.maximumDisplayNameCharacterCount
+            && ageYears.map(ProfileAgePolicy.isSupported) == true
     }
 
     private var header: some View {
@@ -211,6 +216,19 @@ struct FirstRunParentOnboardingView: View {
                             }
                         }
                         .pickerStyle(.menu)
+
+                        TadaAgePicker(
+                            selection: $ageYears,
+                            ages: ProfileAgePolicy.supportedAges,
+                            prompt: "How old is your child?",
+                            tint: theme.primary
+                        )
+
+                        Text(
+                            "Age helps Tada Words show suitable preset lists. School level stays under your control."
+                        )
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .foregroundStyle(theme.ink.opacity(0.68))
 
                         LazyVGrid(
                             columns: [
@@ -398,7 +416,9 @@ struct FirstRunParentOnboardingView: View {
                     ? ""
                     : purpose == .fullSetup && normalizedName.isEmpty
                         ? "Enter a nickname and accept the privacy summary"
-                        : "Accept the privacy summary to continue"
+                        : purpose == .fullSetup && ageYears == nil
+                            ? "Choose your child’s age and accept the privacy summary"
+                            : "Accept the privacy summary to continue"
             )
         }
         .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
@@ -450,7 +470,7 @@ struct FirstRunParentOnboardingView: View {
                     avatar: .cartoonAnimal(assetID: avatarAssetID),
                     selectedWorld: selectedWorld,
                     schoolGrade: schoolGrade,
-                    ageYears: initialProfile.ageYears ?? schoolGrade.suggestedAge,
+                    ageYears: ageYears,
                     guardianUnlockedWorlds: [selectedWorld]
                 )
             )
@@ -465,6 +485,8 @@ struct FirstRunParentOnboardingView: View {
             "Enter a nickname, then try again."
         case FirstRunOnboardingError.displayNameTooLong(let maximum):
             "Use a nickname with \(maximum) characters or fewer."
+        case FirstRunOnboardingError.invalidAge:
+            "Choose your child’s age, then try again."
         default:
             "Your child’s setup is still here. Check that storage is available, then try again."
         }
@@ -525,23 +547,6 @@ extension WorldTheme {
             "Frostlight"
         case .coasterCarnival:
             "Coaster"
-        }
-    }
-}
-
-extension ProfileSchoolGrade {
-    fileprivate var suggestedAge: Int {
-        switch self {
-        case .preK:
-            4
-        case .kindergarten:
-            5
-        case .grade1:
-            6
-        case .grade2:
-            7
-        case .grade3:
-            8
         }
     }
 }

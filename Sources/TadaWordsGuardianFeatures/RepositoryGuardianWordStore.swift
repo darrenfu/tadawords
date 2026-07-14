@@ -53,6 +53,7 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
         )
         return GuardianWordImportReportMapper.report(
             from: result,
+            profileID: profile.id,
             learningMode: request.learningMode
         )
     }
@@ -75,7 +76,7 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
     ) async throws -> GuardianDashboardSnapshot {
         let uniqueIDs = Array(Set(ids))
         guard !uniqueIDs.isEmpty else { return try await makeSnapshot() }
-        let currentSnapshot = try await makeSnapshot()
+        let preflightSnapshot = try await makeSnapshot()
         let entries = try await wordPoolRepository.entries(
             for: profile.id,
             learningMode: learningMode,
@@ -88,37 +89,42 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             throw GuardianWordStoreError.wordNotFound(missingID)
         }
         let selectedEntries = uniqueIDs.compactMap { entriesByPromptID[$0] }
+        return try await applyMembershipState(
+            selectedEntries,
+            isActive: isActive,
+            preflightSnapshot: preflightSnapshot
+        )
+    }
+
+    /// Applies a preset transaction to the exact membership identities returned
+    /// by its import report. No text lookup or selected-profile pointer is used.
+    public func setMembershipsActive(
+        ids: [WordPoolEntryID],
+        learningMode: LearningMode,
+        isActive: Bool
+    ) async throws {
+        let uniqueIDs = Array(Set(ids))
+        guard !uniqueIDs.isEmpty else { return }
+        let entries = try await wordPoolRepository.entries(
+            for: profile.id,
+            learningMode: learningMode,
+            includingInactive: true
+        )
+        let manualEntriesByID = Dictionary(
+            uniqueKeysWithValues: entries.compactMap { entry in
+                entry.source == .guardianManual ? (entry.id, entry) : nil
+            }
+        )
+        if let missingID = uniqueIDs.first(where: { manualEntriesByID[$0] == nil }) {
+            throw GuardianWordStoreError.membershipNotFound(missingID)
+        }
+        let changedIDs = uniqueIDs.filter {
+            manualEntriesByID[$0]?.isActive != isActive
+        }
+        guard !changedIDs.isEmpty else { return }
         _ = try await wordPoolRepository.setActive(
             isActive,
-            entryIDs: selectedEntries.map(\.id)
-        )
-
-        let selectedIDSet = Set(uniqueIDs)
-        let updatedModePool = entries.compactMap { entry -> WordPrompt? in
-            let active =
-                selectedIDSet.contains(entry.prompt.id)
-                ? isActive
-                : entry.isActive
-            return active ? entry.prompt : nil
-        }
-        return GuardianDashboardSnapshot(
-            profile: currentSnapshot.profile,
-            readPool: learningMode == .read
-                ? updatedModePool
-                : currentSnapshot.readPool,
-            writePool: learningMode == .write
-                ? updatedModePool
-                : currentSnapshot.writePool,
-            needsAttention: currentSnapshot.needsAttention.filter {
-                isActive || !selectedIDSet.contains($0.prompt.id)
-            },
-            practiceSettings: currentSnapshot.practiceSettings,
-            questCalendar: currentSnapshot.questCalendar,
-            today: currentSnapshot.today,
-            todaySummary: currentSnapshot.todaySummary,
-            worldProgression: currentSnapshot.worldProgression,
-            collections: currentSnapshot.collections,
-            practiceFrequencyByWordID: currentSnapshot.practiceFrequencyByWordID
+            entryIDs: changedIDs
         )
     }
 
@@ -449,20 +455,54 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             )
         }
     }
+
+    private func applyMembershipState(
+        _ selectedEntries: [WordPoolEntry],
+        isActive: Bool,
+        preflightSnapshot: GuardianDashboardSnapshot
+    ) async throws -> GuardianDashboardSnapshot {
+        let changedEntries = selectedEntries.filter { $0.isActive != isActive }
+        guard !changedEntries.isEmpty else { return preflightSnapshot }
+        let changedIDs = changedEntries.map(\.id)
+        _ = try await wordPoolRepository.setActive(
+            isActive,
+            entryIDs: changedIDs
+        )
+
+        do {
+            // A successful mutation must publish the same canonical dashboard
+            // shape as a normal refresh, including attention and waiting counts.
+            return try await makeSnapshot()
+        } catch {
+            // Snapshot publication is part of this operation's contract. Restore
+            // every membership changed above before reporting the read failure,
+            // so Delete All can never persist without a matching Undo state.
+            do {
+                _ = try await wordPoolRepository.setActive(
+                    !isActive,
+                    entryIDs: changedIDs
+                )
+            } catch {
+                throw GuardianWordStoreError.membershipCompensationFailed
+            }
+            throw error
+        }
+    }
 }
 
 private enum GuardianWordImportReportMapper {
     static func report(
         from result: ManualWordPoolImportResult,
+        profileID: ProfileID,
         learningMode: LearningMode
     ) -> GuardianWordImportReport {
-        var duplicates = result.requeuedExisting.map(\.normalizedText)
+        var duplicateInputWords: [String] = []
         var rejected: [GuardianRejectedWord] = []
 
         for rejection in result.rejected {
             switch rejection.reason {
             case .duplicateInBatch(let normalizedText):
-                duplicates.append(normalizedText)
+                duplicateInputWords.append(normalizedText)
             default:
                 rejected.append(
                     GuardianRejectedWord(
@@ -474,9 +514,16 @@ private enum GuardianWordImportReportMapper {
         }
 
         return GuardianWordImportReport(
+            profileID: profileID,
             learningMode: learningMode,
-            accepted: result.inserted.map(\.normalizedText),
-            duplicates: duplicates,
+            insertedMemberships: result.inserted.map(GuardianWordPoolMembership.init),
+            reactivatedMemberships: result.reactivated.map(
+                GuardianWordPoolMembership.init
+            ),
+            alreadyActiveMemberships: result.alreadyActive.map(
+                GuardianWordPoolMembership.init
+            ),
+            duplicateInputWords: duplicateInputWords,
             rejected: rejected
         )
     }

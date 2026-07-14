@@ -202,11 +202,22 @@ Target release: `v0.3.1`
 
 Branch: `v0.3.1`
 Baseline: `main` at `cc42e17`, which merged v0.3 through PR #2.
-Overall state: production fix, automated regression, physical-iPhone synthetic Vision tests, and fresh LocalQA installation pass; child handwriting acceptance remains open.
+Overall state: production fix, automated regression, physical-iPhone synthetic Vision tests, and historical iPhone LocalQA installation pass. Physical-iPad installation and child handwriting acceptance remain open.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
 | V031-BUG-001 | Bug | Write recognition | Real handwriting recognition must accept `of` and `go` independent of lowercase, initial-cap, or all-caps input. Tests must exercise the production renderer and Vision service rather than fabricated OCR candidates or the demo recognizer. Literal `90` and neighboring words must not pass as `go` or `of`. | Automated and physical-device synthetic pass; child handwriting pending | On a physical iPhone, run production `AppleHandwritingRecognitionService` for six positive case variants and explicit negative controls. Then have the child write `of`, `Of`, `OF`, `go`, `Go`, and `GO` twice each without Help; require 12/12 or capture a privacy-safe failure diagnostic. |
+| V031-IMP-001 | Improvement | Learning audio | Read `Hear it`, Write reference speech, and Parent preview use one canonical isolated-word contract at approximately 1.5× slower delivery. The Apple fallback uses the system default rate divided by 1.5; remote teacher audio keeps its provider-supported slowest value. Spoken prompts temporarily use a spoken-audio playback session, duck App music and external audio, then restore the normal mix without interrupting recording. | Automated pass; physical listening pending | On the target iPhone, listen to `of`, `at`, `cat`, `come`, and `look` in Read, Write, and Parent preview. Confirm one clear utterance, audible final consonants, no clipped start/end, and smooth music duck/recovery. |
+| V031-FEAT-001 | Feature | Profiles and preset words | Every new Profile path requires an explicit age from 3 through 8. Parent setup retains explicit grade control; Kid self-create derives the currently supported grade suggestion from age. Parents may browse an offline, versioned catalog ranked by age/grade, search or navigate its hierarchy, select individual/all words, and explicitly add to Read, Write, or Both. No recommendation auto-adds. Each import remains bound to the Profile that initiated it. A Both import compensates if either Pool fails, returns a partial result, or returns mismatched membership IDs. Compensation reverses only memberships inserted or reactivated by that request and preserves already-active words. | Automated pass; device layout pending | Create Profiles through first-run, Kid self-create, and Parents; verify saved age and grade. Browse all roots, search a word, open one list without any Pool mutation, then explicitly add to each destination and confirm normalized de-duplication. Exercise failure, partial-result, mismatch, refresh-failure, concurrent activation, and cross-Profile cases for Both. |
+| V031-FEAT-002 | Feature | Preset catalog content | Ship an independently curated 3–8 / Pre-K–Grade 3 catalog with 34 leaf presets, 1,365 word references, and 1,166 normalized unique words. Each leaf contains 40–45 valid single words across sight vocabulary, phonics/spelling, fine noun topics, verbs, emotions, and concepts. Keep one generated Obsidian Markdown catalog aligned with the App JSON and disclose methodology sources. | Automated content audit pass | Run the bundled-catalog auditor, verify every leaf remains within 30–50 words and every source ID resolves, then sample review age/grade fit, child safety, spelling, category relevance, and the generated Obsidian note. |
+| V031-FEAT-003 | Feature | Parent word deletion | Read and Write each expose `Delete all N words`. The action always confirms the exact count/mode, deactivates the Pool without erasing learning history, leaves the other mode untouched, and offers full Undo. First-delete confirmation and Undo state remain isolated per Profile. A snapshot failure compensates the membership mutation before reporting failure. | Automated pass; device interaction pending | Clear each mode with mixed history, cancel once, confirm once, Undo once, then switch Profiles. Verify the other mode/Profile plus historical reports are unchanged and a failed post-mutation snapshot leaves no hidden Pool change. |
+
+### 2026-07-14 v0.3.1 notes
+
+- Added the offline 3–8 / Pre-K–Grade 3 Preset Catalog, explicit age capture, and generated Obsidian catalog. Age and grade rank suggestions but never add words.
+- Bound preset imports to the initiating Profile. Both imports now compensate exact inserted/reactivated memberships after failure, partial success, mismatched results, or refresh errors while preserving already-active words.
+- Added per-Pool Delete All with exact confirmation and complete Undo. Confirmation and Undo state now stay isolated per Profile, and snapshot failures compensate the Pool mutation.
+- Expanded regression coverage to 588 Swift tests and seven critical XCUITest flows. Physical-iPad installation and human acceptance remain pending.
 
 ### What the earlier tests missed
 
@@ -236,7 +247,7 @@ Overall state: production fix, automated regression, physical-iPhone synthetic V
 
 ### Verification
 
-- Strict Swift formatting and the full Swift suite pass: 552/552, zero failures.
+- Strict Swift formatting and the full Swift suite pass: 588/588, zero failures.
 - The focused macOS actual-Vision suite passes 15/15, including six `of`/`go`
   case variants and real rendered negatives `on`, `if`, `off`, `do`, `no`, and
   literal `90`.
@@ -244,7 +255,7 @@ Overall state: production fix, automated regression, physical-iPhone synthetic V
   device target: 2/2 XCTest cases, covering 6/6 positive variants and 4/4 negative
   controls. Fixtures are anonymous synthetic vectors; no child strokes are stored
   or committed.
-- The five critical UI flows pass 5/5 on the iPhone 17 Pro Max simulator. They
+- The seven critical UI flows pass 7/7 on the iPhone 17 Pro Max simulator. They
   remain lifecycle/navigation evidence and are not counted as Vision accuracy.
 - Fresh LocalQA simulator builds pass for iPhone 17 Pro Max and iPad Pro 13-inch
   (M5). Signed `Tada Words QA` v0.3.1 (`2026071402`) was installed and launched on
@@ -255,4 +266,4 @@ Overall state: production fix, automated regression, physical-iPhone synthetic V
 | Date | Device | Build/version | Tester | Result | Notes/evidence |
 |---|---|---|---|---|---|
 | 2026-07-14 | iPhone 17 Pro Max, iOS 26.5.1 | `v0.3.1` (`2026071402`) LocalQA | Codex automated device test; Parent + child acceptance pending | Installed; synthetic production Vision pass | 6/6 positive case variants and 4/4 negative controls passed through the production service. Child manual `of`/`go` 12-attempt gate remains. |
-| Pending | iPad Pro 13-inch (M5) | `v0.3.1` candidate | Parent + child | Pending | Repeat the child handwriting gate with finger and Apple Pencil. |
+| Pending | iPad Air 13-inch (M4), iPadOS 26.5 | `v0.3.1` candidate | Parent + child | Not installed or tested | Install the signed candidate, then repeat the child handwriting gate with finger and Apple Pencil. |

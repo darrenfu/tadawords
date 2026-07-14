@@ -28,6 +28,59 @@ struct WritingCueThrottle {
     }
 }
 
+struct AppAudioSessionPolicy: Equatable, Sendable {
+    enum Category: Equatable, Sendable {
+        case ambient
+        case playback
+    }
+
+    enum Mode: Equatable, Sendable {
+        case defaultMode
+        case spokenAudio
+    }
+
+    struct Options: OptionSet, Sendable {
+        let rawValue: Int
+
+        static let mixesWithOthers = Options(rawValue: 1 << 0)
+        static let ducksOthers = Options(rawValue: 1 << 1)
+    }
+
+    let category: Category
+    let mode: Mode
+    let options: Options
+
+    static let ambientMix = AppAudioSessionPolicy(
+        category: .ambient,
+        mode: .defaultMode,
+        options: [.mixesWithOthers]
+    )
+
+    static let spokenPrompt = AppAudioSessionPolicy(
+        category: .playback,
+        mode: .spokenAudio,
+        options: [.mixesWithOthers, .ducksOthers]
+    )
+}
+
+struct VoicePromptAudioSessionState {
+    private(set) var depth = 0
+
+    var isActive: Bool { depth > 0 }
+
+    mutating func begin() -> AppAudioSessionPolicy? {
+        let policy = depth == 0 ? AppAudioSessionPolicy.spokenPrompt : nil
+        depth += 1
+        return policy
+    }
+
+    mutating func finish() -> AppAudioSessionPolicy? {
+        guard depth > 0 else { return nil }
+        depth -= 1
+        return depth == 0 ? .ambientMix : nil
+    }
+}
+
 /// Original, programmatic sound layer. It uses no sampled or downloaded audio.
 /// Every world score and effect is synthesized in memory.
 public actor AppleAudioExperienceService: AudioExperienceService {
@@ -47,7 +100,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     private var isApplicationActive = true
     private var wantsAmbientAudio = false
     private var isEmergencyMode = false
-    private var voicePromptDepth = 0
+    private var voicePromptAudioSessionState = VoicePromptAudioSessionState()
     private var recordingDepth = 0
     private var activeAmbientIndex = 0
     private var ambientMixFactors: [Float] = [0, 0]
@@ -98,8 +151,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         }
 
         if shouldSpeakLaunchVoice {
-            voicePromptDepth += 1
-            applyAmbientVolume()
+            beginVoicePrompt()
             let design = LaunchVoiceDesignPolicy.utterance
             let utterance =
                 AVSpeechUtterance(
@@ -116,8 +168,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
 
         try? await Task.sleep(for: .milliseconds(1_600))
         if shouldSpeakLaunchVoice {
-            voicePromptDepth = max(0, voicePromptDepth - 1)
-            applyAmbientVolume()
+            endVoicePrompt()
         }
     }
 
@@ -219,14 +270,12 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     public func prepareForVoicePrompt() async -> Bool {
         guard preferences.voiceEnabled else { return false }
         stopWritingAudio()
-        voicePromptDepth += 1
-        applyAmbientVolume()
+        beginVoicePrompt()
         return true
     }
 
     public func finishVoicePrompt() async {
-        voicePromptDepth = max(0, voicePromptDepth - 1)
-        applyAmbientVolume()
+        endVoicePrompt()
     }
 
     public func prepareForRecording() async {
@@ -365,7 +414,9 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         let baseVolume =
             shouldPlayAmbient
             ? adjustedVolume(
-                AmbientMixPolicy.baseVolume(isVoicePromptActive: voicePromptDepth > 0)
+                AmbientMixPolicy.baseVolume(
+                    isVoicePromptActive: voicePromptAudioSessionState.isActive
+                )
             )
             : 0
         for index in ambientPlayers.indices {
@@ -411,7 +462,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     }
 
     private func playWritingCue(for tool: HandwritingTool) {
-        guard voicePromptDepth == 0 else { return }
+        guard !voicePromptAudioSessionState.isActive else { return }
         guard
             writingCueThrottle.accepts(
                 at: ProcessInfo.processInfo.systemUptime
@@ -447,6 +498,27 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         preferences.reducedSoundEnabled ? volume * 0.55 : volume
     }
 
+    private func beginVoicePrompt() {
+        let policy = voicePromptAudioSessionState.begin()
+        applyAmbientVolume()
+        if let policy, recordingDepth == 0 {
+            // A route or category failure must never prevent the prompt from
+            // reaching AVSpeechSynthesizer or AVAudioPlayer.
+            try? applyAudioSessionPolicy(policy)
+        }
+    }
+
+    private func endVoicePrompt() {
+        let policy = voicePromptAudioSessionState.finish()
+        if let policy, recordingDepth == 0 {
+            // Restore the app's normal mixable score only after the outermost
+            // prompt. An active recorder owns the session until it finishes.
+            // Keep teardown best-effort for the same reason as setup.
+            try? applyAudioSessionPolicy(policy)
+        }
+        applyAmbientVolume()
+    }
+
     private func startEngineIfNeeded() -> Bool {
         guard !engine.isRunning else { return true }
         do {
@@ -464,10 +536,35 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     }
 
     private func activateAudioSession() throws {
+        let policy: AppAudioSessionPolicy =
+            voicePromptAudioSessionState.isActive ? .spokenPrompt : .ambientMix
+        try applyAudioSessionPolicy(policy)
+    }
+
+    private func applyAudioSessionPolicy(_ policy: AppAudioSessionPolicy) throws {
         #if os(iOS)
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+            let category: AVAudioSession.Category =
+                switch policy.category {
+                case .ambient: .ambient
+                case .playback: .playback
+                }
+            let mode: AVAudioSession.Mode =
+                switch policy.mode {
+                case .defaultMode: .default
+                case .spokenAudio: .spokenAudio
+                }
+            var options: AVAudioSession.CategoryOptions = []
+            if policy.options.contains(.mixesWithOthers) {
+                options.insert(.mixWithOthers)
+            }
+            if policy.options.contains(.ducksOthers) {
+                options.insert(.duckOthers)
+            }
+            try session.setCategory(category, mode: mode, options: options)
             try session.setActive(true)
+        #else
+            _ = policy
         #endif
     }
 

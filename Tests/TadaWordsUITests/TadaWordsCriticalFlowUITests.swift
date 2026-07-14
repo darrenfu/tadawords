@@ -90,6 +90,77 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         )
     }
 
+    /// Delete All always names the affected mode and current count, requires a
+    /// dedicated destructive confirmation, and leaves a full-pool Undo.
+    func testParentDeleteAllConfirmsCountAndRestoresEntireReadPool() throws {
+        launchParentWordManager()
+
+        let deleteAll = app.buttons["Delete all 5 Read words"]
+        XCTAssertTrue(deleteAll.waitForExistence(timeout: 5))
+        deleteAll.tap()
+
+        let confirmation = app.alerts["Delete all 5 Read words?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
+        XCTAssertTrue(
+            confirmation.staticTexts[
+                "All 5 words will leave the Read pool and future practice. Learning history stays available. You can undo this change."
+            ].exists
+        )
+        confirmation.buttons["Delete all"].tap()
+
+        XCTAssertTrue(app.staticTexts["No read words yet"].waitForExistence(timeout: 5))
+        let undo = app.buttons["Undo"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5))
+        undo.tap()
+
+        XCTAssertTrue(app.buttons["Remove the"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Delete all 5 Read words"].exists)
+    }
+
+    /// Presets remain parent-controlled: opening a suggested list is read-only,
+    /// and one explicit Add action de-duplicates independently into both pools.
+    func testParentPresetSelectionAddsOnlyAfterExplicitApproval() throws {
+        launchDemo()
+        unlockParentArea()
+
+        let openPresets = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Choose preset words")
+        ).firstMatch
+        XCTAssertTrue(openPresets.waitForExistence(timeout: 8))
+        openPresets.tap()
+
+        XCTAssertTrue(app.staticTexts["Preset words"].waitForExistence(timeout: 5))
+        let starterList = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Pre-K Starters")
+        ).firstMatch
+        XCTAssertTrue(starterList.waitForExistence(timeout: 5))
+        starterList.tap()
+
+        let selectAll = app.buttons["Select all"]
+        XCTAssertTrue(selectAll.waitForExistence(timeout: 5))
+        XCTAssertFalse(
+            app.buttons["Add 40 selected words"].exists,
+            "Opening a preset must not preselect or add its words."
+        )
+        selectAll.tap()
+
+        let both = app.buttons["Both"]
+        XCTAssertTrue(both.waitForExistence(timeout: 3))
+        both.tap()
+
+        let add = app.buttons["Add 40 selected words"]
+        XCTAssertTrue(add.waitForExistence(timeout: 3))
+        add.tap()
+
+        XCTAssertTrue(
+            app.staticTexts[
+                "Added 73 pool entries. 7 already exist in the selected pool or pools."
+            ]
+            .waitForExistence(timeout: 8),
+            "The two pools should be updated only after the parent's final Add."
+        )
+    }
+
     /// Exercises the system sheet boundary implicated by the report that sort
     /// stopped responding after leaving bulk import. Presenting and dismissing
     /// the same PhotosPicker guards against a stuck modal or hit-testing layer.
@@ -134,6 +205,14 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         )
 
         let fixtureImport = app.buttons["guardian.ocr-fixture"]
+        // On an iPhone in landscape, the debug-only import control sits just
+        // below the visible part of the input card. Bring it into the viewport
+        // before querying it so XCTest does not spend minutes snapshotting an
+        // off-screen SwiftUI hierarchy after a failed lookup.
+        let managerScrollView = app.scrollViews.firstMatch
+        for _ in 0..<3 where !fixtureImport.exists {
+            managerScrollView.swipeUp()
+        }
         XCTAssertTrue(fixtureImport.waitForExistence(timeout: 5))
         fixtureImport.tap()
 

@@ -124,6 +124,7 @@ enum FirstRunOnboardingError: Error, Equatable {
     case profileNotFound
     case emptyDisplayName
     case displayNameTooLong(maximumCharacterCount: Int)
+    case invalidAge
     case unsupportedAvatar
 }
 
@@ -261,6 +262,11 @@ actor FirstRunOnboardingCoordinator {
                 maximumCharacterCount: Self.maximumDisplayNameCharacterCount
             )
         }
+        guard let ageYears = draft.ageYears,
+            ProfileAgePolicy.isSupported(ageYears)
+        else {
+            throw FirstRunOnboardingError.invalidAge
+        }
         guard case .cartoonAnimal(let assetID) = draft.avatar,
             GuardianAnimalAvatar.option(for: assetID) != nil
         else {
@@ -277,7 +283,7 @@ actor FirstRunOnboardingCoordinator {
             starterWorld: draft.selectedWorld,
             guardianUnlockedWorlds: [draft.selectedWorld],
             schoolGrade: draft.schoolGrade,
-            ageYears: draft.ageYears,
+            ageYears: ageYears,
             voiceprintStatus: existing.voiceprintStatus,
             createdAt: existing.createdAt,
             updatedAt: clock.now

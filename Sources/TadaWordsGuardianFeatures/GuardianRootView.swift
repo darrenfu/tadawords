@@ -1,4 +1,5 @@
 import SwiftUI
+import TadaWordsContent
 import TadaWordsDesignSystem
 import TadaWordsDomain
 
@@ -8,11 +9,13 @@ public struct GuardianRootView: View {
     @AccessibilityFocusState private var loadingOverlayIsFocused: Bool
     private let onExit: () -> Void
     private let imageTextRecognitionService: any ImageTextRecognizing
+    private let presetWordCatalog: PresetWordCatalog
 
     /// Preview convenience. Production composition must use `init(store:onExit:)`.
     public init(onExit: @escaping () -> Void = {}) {
         self.onExit = onExit
         imageTextRecognitionService = NoImageTextRecognitionService()
+        presetWordCatalog = BundledPresetWordCatalog.catalog
         _model = StateObject(
             wrappedValue: GuardianDashboardViewModel(
                 store: DemoGuardianFamilyStore(),
@@ -30,6 +33,7 @@ public struct GuardianRootView: View {
     ) {
         self.onExit = onExit
         imageTextRecognitionService = NoImageTextRecognitionService()
+        presetWordCatalog = BundledPresetWordCatalog.catalog
         _model = StateObject(
             wrappedValue: GuardianDashboardViewModel(
                 store: DemoGuardianFamilyStore(),
@@ -41,10 +45,12 @@ public struct GuardianRootView: View {
 
     public init(
         store: any GuardianFamilyStore,
+        presetWordCatalog: PresetWordCatalog = BundledPresetWordCatalog.catalog,
         onExit: @escaping () -> Void = {}
     ) {
         self.onExit = onExit
         imageTextRecognitionService = NoImageTextRecognitionService()
+        self.presetWordCatalog = presetWordCatalog
         _model = StateObject(
             wrappedValue: GuardianDashboardViewModel(
                 store: store,
@@ -68,12 +74,14 @@ public struct GuardianRootView: View {
             NoImageTextRecognitionService(),
         pictureHintProvider: any WordPictureHintProviding =
             NoWordPictureHintProvider(),
+        presetWordCatalog: PresetWordCatalog = BundledPresetWordCatalog.catalog,
         sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing =
             AllowSensitiveGuardianActions(),
         onExit: @escaping () -> Void = {}
     ) {
         self.onExit = onExit
         self.imageTextRecognitionService = imageTextRecognitionService
+        self.presetWordCatalog = presetWordCatalog
         _model = StateObject(
             wrappedValue: GuardianDashboardViewModel(
                 store: store,
@@ -143,6 +151,7 @@ public struct GuardianRootView: View {
                     snapshot: snapshot,
                     onLock: lockAndReturnToKids,
                     onQuickAdd: model.showQuickAdd,
+                    onOpenPresets: model.showPresetWords,
                     onOpenPool: model.showPool,
                     onOpenSettings: model.showSettings,
                     onOpenProfiles: model.showProfiles,
@@ -194,7 +203,7 @@ public struct GuardianRootView: View {
                 imageTextRecognitionService: imageTextRecognitionService,
                 hasConfirmedRemovalThisSession: Binding(
                     get: { model.hasConfirmedWordRemovalThisSession },
-                    set: { model.hasConfirmedWordRemovalThisSession = $0 }
+                    set: { model.setWordRemovalConfirmation($0) }
                 ),
                 onBack: model.showDashboard,
                 onSubmit: model.addWords,
@@ -203,6 +212,23 @@ public struct GuardianRootView: View {
                     await model.setWordsActive(prompts, isActive: isActive)
                 }
             )
+
+        case .presetWords:
+            if let snapshot = model.snapshot {
+                GuardianPresetWordsView(
+                    profile: snapshot.profile,
+                    catalog: presetWordCatalog,
+                    readWords: snapshot.readPool,
+                    writeWords: snapshot.writePool,
+                    onBack: model.showDashboard,
+                    onSubmit: { profileID, request in
+                        await model.addPresetWords(request, for: profileID)
+                    },
+                    onRollback: model.rollbackPresetAdditions
+                )
+            } else {
+                GuardianLoadingView(onRetry: model.refresh)
+            }
 
         case .pool(let mode):
             GuardianWordManagerView(
@@ -215,7 +241,7 @@ public struct GuardianRootView: View {
                 imageTextRecognitionService: imageTextRecognitionService,
                 hasConfirmedRemovalThisSession: Binding(
                     get: { model.hasConfirmedWordRemovalThisSession },
-                    set: { model.hasConfirmedWordRemovalThisSession = $0 }
+                    set: { model.setWordRemovalConfirmation($0) }
                 ),
                 onBack: model.showDashboard,
                 onSubmit: model.addWords,

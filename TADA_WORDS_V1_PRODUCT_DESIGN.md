@@ -8,7 +8,7 @@
 
 ## 1. 产品定义
 
-Tada Words 是一款面向学前儿童的英语 sight-word 学习 App。Guardian 每天分别输入需要“会读”和“会写”的单词；孩子通过两个彼此独立的主题闯关，最终做到：
+Tada Words 是一款面向学前儿童的英语 sight-word 学习 App。Guardian 每天分别录入或选择需要“会读”和“会写”的单词；孩子通过两个彼此独立的主题闯关，最终做到：
 
 - **Read**：看见单词后，可以独立读出来。
 - **Write**：只听见标准发音，可以独立手写完整单词。
@@ -27,7 +27,7 @@ Tada Words 是一款面向学前儿童的英语 sight-word 学习 App。Guardian
 
 ### V1 不做
 
-- 不内置 Pre-K / Kindergarten / Grade 1 自动课程词库；该功能进入 V2。
+- 不按年级自动填充 Read 或 Write Pool。V1 的离线 Preset Catalog 只提供排序、浏览和搜索，必须由 Guardian 明确选择并提交；自动课程模式进入 V2。
 - 不做 Read 配对、听音找词等额外小游戏。
 - 不做社交、儿童排行榜、广告、抽卡或随机宝箱。
 - 不保存或上传任何原始练习录音。
@@ -39,7 +39,7 @@ Tada Words 是一款面向学前儿童的英语 sight-word 学习 App。Guardian
 | 角色 | 能力 |
 |---|---|
 | Owner Guardian | 创建家庭、邀请 Guardian、创建和删除 Kid Profile、管理所有数据 |
-| Guardian | 输入单词、调整设置、查看报告、管理声纹与主题 |
+| Guardian | 手输、OCR 或选择 Preset 单词，调整设置、查看报告、管理声纹与主题 |
 | Kid Profile | 选择自己的头像、完成 Quest、查看收藏与世界 |
 
 V1 的 Kid 是 App 内 Profile，而不是必须拥有独立 Apple ID 的 CloudKit 成员。孩子在 Guardian 已登录 iCloud 的设备上使用；不同 Guardian 可以通过邀请共享同一个 Kid Profile。
@@ -49,7 +49,7 @@ V1 的 Kid 是 App 内 Profile，而不是必须拥有独立 Apple ID 的 CloudK
 - 昵称
 - 头像
 - 当前年级
-- 可选年龄
+- 年龄；新建 Profile 必须明确选择 3–8 岁，旧版缺失年龄仍可读取
 - 儿童声纹模板
 
 不收集真实姓名、完整生日、学校或老师信息。
@@ -86,7 +86,7 @@ Write 支持手指；Apple Pencil 仅在兼容设备上启用，并使用防误�
 ```text
 App Launch
 ├── Profile Picker
-│   ├── New Kid（没有 Profile 时直接展开；孩子只输入昵称）
+│   ├── New Kid（没有 Profile 时直接展开；孩子输入昵称与年龄）
 │   ├── 上次 Profile（有 Profile 时突出显示，孩子点击确认）
 │   └── World Lobby
 │       ├── Read Today’s Quest
@@ -100,6 +100,7 @@ App Launch
     ├── Words
     │   ├── Read Pool：Type / Camera / Photo / Select / Delete
     │   └── Write Pool：Type / Camera / Photo / Select / Delete
+    ├── Preset Words（按年龄、年级与精细分类浏览；家长明确选择后才加入）
     ├── Reports
     ├── Profiles & Family
     ├── Worlds
@@ -112,14 +113,14 @@ App Launch
 2. 今天 Read 还是 Write？
 3. 在哪个已解锁世界冒险？
 
-App 只从 Guardian 已经录入的 Pool 中编排 New、Review、难词回流和计时；不得从年级词库、内置 catalog 或生成模型自动添加练习词。
+App 只从 Guardian 已明确批准进入 Pool 的词中编排 New、Review、难词回流和计时。来源可以是手输、OCR，或家长在内置 Preset Catalog 中主动选择的词；年龄和年级只改变推荐排序，任何 catalog 或生成模型都不得自动添加练习词。
 
 ## 5. 首次设置
 
 首次启动必须先处理 Profile，不先要求输入单词：
 
 1. 已有 Profile：显示 Picker，并突出上次使用的有效 Profile；孩子点击后进入。
-2. 没有 Profile：直接显示 `New Kid`，输入昵称并选择头像、年级和 Starter World。
+2. 没有 Profile：直接显示 `New Kid`，输入昵称和年龄，并选择头像、年级和 Starter World。V1 新建范围为 3–8 岁，对应 Pre-K–Grade 3；旧 Profile 缺少年龄仍可兼容读取。
 3. 阅读并同意儿童声纹、同步与删除规则。
 4. 声纹注册、单词录入和通知均可稍后在 Parents 中完成，不阻塞第一次进入 Kid Lobby。
 
@@ -152,7 +153,7 @@ App 只从 Guardian 已经录入的 Pool 中编排 New、Review、难词回流�
 - 孩子先点击自己的头像；App 不依赖声纹自动切换 Profile。
 - App 记住最后使用的有效 Profile；下次冷启动在 Picker 中突出该 Profile，但仍由孩子点击确认。若该 Profile 已不存在，则显示普通 Picker，不猜测其他身份。
 - 上次 Profile 使用静态 1.03× 尺寸与更高叠放层级突出；其他 Profile 不降透明度，也不使用持续动画。
-- Picker 提供 `New Kid` 卡片。孩子只输入昵称，App 自动分配内置动物头像与 Starter World；完整编辑仍由 Guardian 完成。
+- Picker 提供 `New Kid` 卡片。孩子输入昵称并明确选择 3–8 岁年龄；App 按年龄给出当前支持的 Grade 建议，并自动分配内置动物头像与 Starter World。完整编辑仍由 Guardian 完成。
 - Read 录音时，才用选中 Profile 的声纹过滤其他说话人。
 - `Parents` 入口放在稳定的右上角，普通单击后立即进入随机算术 Parent Gate，不与 Quest 主入口争夺注意力。
 
@@ -194,7 +195,7 @@ App 只从 Guardian 已经录入的 Pool 中编排 New、Review、难词回流�
 
 ## 8. 单词池与每日编排
 
-Guardian 每天直接向两个独立 Pool 输入：
+Guardian 每天向两个独立 Pool 录入或选择单词：
 
 - `Read New Words Pool`
 - `Write New Words Pool`
@@ -208,10 +209,13 @@ Guardian 每天直接向两个独立 Pool 输入：
 - 默认显示为小写；Guardian 可为个别单词保留指定大小写。
 - Read 与 Write 之间不跨组去重；同一个词可以拥有两套独立记录。
 - 同 Pool 重复输入时不创建副本，而是把已有词移动到队列最前面并保留学习历史。
-- 支持单条删除、选择模式与批量删除；批量删除需要确认，并提供短时 Undo。
+- `Preset Words` 按 Profile 的年龄与年级排序，支持分层浏览、搜索、逐词选择或全选；只有点击 Add 才写入 Read、Write 或 Both。
+- Preset 导入绑定发起操作的 Profile。Both 必须全部完成；任一 Pool 失败、部分成功或返回不一致时，只撤销本次插入或重新启用的 membership，不得停用导入前已 active 的词。
+- 支持单条删除、选择模式与批量删除；第一次删除确认与 Undo 状态按 Profile 隔离。
+- Read 与 Write 各自支持 `Delete all N words`；每次明确确认数量与 Pool，保留学习历史和另一 Pool，并可完整 Undo。
 - 自动生成标准美式英语发音，允许 Guardian 试听。
 - 不提供多读音选择，也不要求 Guardian 自己录音。
-- 所有新增词必须来自 Guardian typing 或 OCR；Pool 不足时只练已有词，绝不自动补词。
+- 所有新增词必须来自 Guardian typing、OCR 或明确批准的 Preset selection；Pool 不足时只练已有词，绝不自动补词。
 
 ### 默认题量
 
@@ -438,14 +442,19 @@ V1 当前实现八个完整 World Pack：
 - 需要关注的词
 - 同步状态
 - `Manage Words`
+- `Choose preset words`
 
 ### Words
 
 - Read / Write 两个明确 Tab。
 - 顶部单词输入栏：每次一个词，Return 即时加入。
 - 本机 `Take Photo` / `Choose Photo` OCR、可编辑导入预览和 `Add All`。
-- 下方 newest-first 队列、单条删除、选择模式、批量删除确认与 Undo。
-- 布局在 iPhone / iPad 横屏均保持 44 pt 触控目标、键盘不遮挡操作。
+- 下方 newest-first 队列、单条删除、选择模式、批量删除确认与 Undo；首次删除确认和 Undo 状态按 Profile 隔离。
+- Read / Write 各自提供 `Delete all N words`；高影响操作每次都明确确认数量和目标 Pool，完成后仍可完整 Undo，且不删除学习历史或修改另一 Pool。
+- 独立的 Preset Words 浏览器提供 3–8 岁 / Pre-K–Grade 3 推荐；先显示最多 6 组匹配内容，再按“基础词/拼读/名词主题/动词/形容词与概念”逐层浏览或搜索。
+- Preset Catalog 的每个叶子词组为 30–50 个原创编排的单词；家长可逐词选择或 Select all，并明确加入 Read、Write 或 Both。打开列表、年龄匹配或推荐排序均不会自动写入 Pool；目标 Pool 内按标准化拼写去重。
+- Preset 导入始终写入发起操作的 Profile。Both 导入按补偿事务处理；失败时只撤销本次插入或重新启用的 membership，保留已有 active word。
+- 布局在 iPhone / iPad 的 Parent 横竖屏均保持 44 pt 触控目标、键盘不遮挡操作。
 - 状态：`Queued`、`Learning`、`Review Due`、`Strong`。
 - 单词详情：编辑大小写、试听、查看历史、删除。
 
@@ -474,6 +483,7 @@ Guardian 可以纠正一次明显的语音或手写误判。系统修正该 Atte
 ### Profiles & Family
 
 - 创建、编辑、删除 Kid Profile。
+- 所有新建入口都必须采集 3–8 岁年龄；孩子自建时由年龄给出当前支持范围内的年级建议，首次设置与 Parent 编辑仍由家长明确选择年级，修改年龄不静默覆盖家长选择。
 - 邀请或移除 Guardian。
 - 查看同步状态、待同步修改数和最近一次成功时间；每台设备分别显示是否需要重新注册声纹。
 - 在当前设备重新注册或删除声纹；声纹模板不跨设备复制。
@@ -660,6 +670,7 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 - 正常状态使用轻快但低密度的循环，不与 TTS、孩子朗读或书写节奏争夺注意力。
 - 紧急状态使用同一原创主题的加速或加层版本，平滑切换；不突然增大音量、不加入警报声。
 - TTS、Help 和标准发音播放时，背景乐自动 ducking。
+- Read `Hear it`、Write 自动提示和 Parent 试听统一使用约 1.5× slower 的孤立单词节奏；本机回退以系统默认语速除以 1.5，远端 canonical teacher 使用服务商允许的最慢稳定速度。播放期间切到 spoken-audio session 并同时压低 App 音乐与外部音频，结束后再恢复混音。
 - Read 开始录音前快速淡出背景乐和非必要环境音；录音结束后再平滑恢复，避免影响降噪和识别。
 
 #### 功能音效
@@ -741,9 +752,11 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 
 ### Guardian
 
-- 可在 30 秒内通过逐词 typing 或 Camera / Photo OCR 向任一 Pool 加词并试听。
-- 新词即时出现在队列最前；可单删、多选批量删除并 Undo。
-- App 不会在空 Pool 或数量不足时自动生成、推荐或补充单词。
+- 可在 30 秒内通过逐词 typing、Camera / Photo OCR 或明确批准的 Preset selection 向任一 Pool 加词并试听。
+- 新词即时出现在队列最前；可单删、多选批量删除、整组清空并 Undo，删除状态不会跨 Profile。
+- 新建 Profile 必须明确选择 3–8 岁年龄；年龄与 Grade 只排序 Preset 建议。
+- App 不会在空 Pool 或数量不足时自动生成、加入推荐词或补充单词。
+- Both Preset 导入要么更新两个 Pool，要么只回滚本次变更，不影响既有 active word 或其他 Profile。
 - 自动去重不会删除另一路线的同名词。
 - 报告能解释某词为何进入 Review。
 - 可以纠正自动识别误判。

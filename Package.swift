@@ -30,7 +30,8 @@ let package = Package(
             dependencies: [
                 "TadaWordsDomain",
                 "TadaWordsLearning",
-            ]
+            ],
+            resources: [.process("Resources")]
         ),
         .target(name: "TadaWordsDesignSystem"),
         .target(
