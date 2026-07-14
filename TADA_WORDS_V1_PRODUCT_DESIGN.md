@@ -333,7 +333,7 @@ Show Word
 - `confidentIncorrect`：温和提示重写；具体词可出现可点图片，但不自动显示拼写。
 - `uncertain`：不直接判错或显示答案；作为技术重试允许再次提交。
 - 第二次仍不能确认：标记为需要复习并继续，不让识别引擎阻塞 Quest。
-- 匹配忽略大小写；Vision 使用目标词的 lower/Initial-cap/ALL-CAPS 词表并检查前五个候选与分段字母。只允许目标对齐的 `0` → `o` 字形归一化，不做会接受 `if/on/or/off` 等邻词的模糊编辑距离。
+- 匹配忽略大小写；Vision 使用目标词的 lower/Initial-cap/ALL-CAPS 词表、语言修正和前五个候选。生产识别最多使用两个彼此独立的有界栅格（默认 26-point 与 36-point fallback），每个 pass 都必须独立得到完整目标，不跨 pass 拼接或投票。只允许完整目标对齐时的 `0` → `o`；`9` → `g` 还必须由同一 Vision fragment 的同长度候选在相同位置明确给出 `g`。不使用会接受 `if/on/or/off/do/no/90` 等邻词或数字的模糊编辑距离。
 - 只保存笔画/识别结果所需的数据；Guardian 报告不展示孩子原始手写轨迹回放。
 
 ### 用时

@@ -126,7 +126,7 @@ Target release: `v0.3.0`
 
 Branch: `v0.3`
 Baseline: `main` at `7728f28`, which merged v0.2 through PR #1.
-Overall state: implementation, automated regression, and signed iPhone installation pass; human physical-device acceptance remains open.
+Overall state: merged to `main` by PR #2 at merge commit `cc42e17`; human physical-device acceptance remains open.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
@@ -195,3 +195,64 @@ Installation evidence is recorded here; human child/parent acceptance remains se
 |---|---|---|---|---|---|
 | 2026-07-14 | iPhone 17 Pro Max | `v0.3.0` (`2026071401`) LocalQA | Codex install; Parent + child acceptance pending | Installed | Signed build installed successfully. Human `of`, pronunciation, speech, handwriting, rotation, and accessibility checks remain. |
 | Pending | iPad Pro 13-inch (M5) | `v0.3.0` candidate | Parent + child | Pending | Full v0.3 checklist above. |
+
+## v0.3.1 — 2026-07-14
+
+Target release: `v0.3.1`
+
+Branch: `v0.3.1`
+Baseline: `main` at `cc42e17`, which merged v0.3 through PR #2.
+Overall state: production fix, automated regression, physical-iPhone synthetic Vision tests, and fresh LocalQA installation pass; child handwriting acceptance remains open.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V031-BUG-001 | Bug | Write recognition | Real handwriting recognition must accept `of` and `go` independent of lowercase, initial-cap, or all-caps input. Tests must exercise the production renderer and Vision service rather than fabricated OCR candidates or the demo recognizer. Literal `90` and neighboring words must not pass as `go` or `of`. | Automated and physical-device synthetic pass; child handwriting pending | On a physical iPhone, run production `AppleHandwritingRecognitionService` for six positive case variants and explicit negative controls. Then have the child write `of`, `Of`, `OF`, `go`, `Go`, and `GO` twice each without Help; require 12/12 or capture a privacy-safe failure diagnostic. |
+
+### What the earlier tests missed
+
+- The earlier case tests began after Vision by injecting strings such as `of`,
+  `Of`, and `OF`. They proved case normalization only when OCR had already
+  emitted the right letters.
+- The critical Write XCUITest intentionally uses a deterministic demo
+  recognizer. It proves feedback dismissal and navigation, not handwriting
+  accuracy.
+- Before v0.3.1, no asserted test sent nonempty strokes through the production
+  renderer, Apple Vision, transcript resolver, and final decision together.
+
+### Root cause and bounded fix
+
+- Actual production-chain probes showed lowercase `of` produced no Vision
+  observation at the default 26-point raster width. A 36-point fallback raster
+  returned exact `of`.
+- Lowercase `go` produced top candidate `90` plus lower candidate `g0`; a
+  separately drawn literal `90` did not contain any corroborating `g` candidate.
+- Production now runs at most two independent raster passes (26 and 36 points),
+  enables target-word language correction, and supplies lower, Initial-cap, and
+  ALL-CAPS vocabulary. Each pass must independently resolve the complete target.
+- Matching remains exact after case normalization. `0` may normalize to `o` only
+  inside a complete target match. `9` may normalize to `g` only when another
+  same-length Vision candidate explicitly contains `g` in that position. There
+  is no edit-distance or accept-any-ink fallback, and literal `90` stays rejected.
+
+### Verification
+
+- Strict Swift formatting and the full Swift suite pass: 552/552, zero failures.
+- The focused macOS actual-Vision suite passes 15/15, including six `of`/`go`
+  case variants and real rendered negatives `on`, `if`, `off`, `do`, `no`, and
+  literal `90`.
+- The connected iPhone 17 Pro Max on iOS 26.5.1 passes the new production-service
+  device target: 2/2 XCTest cases, covering 6/6 positive variants and 4/4 negative
+  controls. Fixtures are anonymous synthetic vectors; no child strokes are stored
+  or committed.
+- The five critical UI flows pass 5/5 on the iPhone 17 Pro Max simulator. They
+  remain lifecycle/navigation evidence and are not counted as Vision accuracy.
+- Fresh LocalQA simulator builds pass for iPhone 17 Pro Max and iPad Pro 13-inch
+  (M5). Signed `Tada Words QA` v0.3.1 (`2026071402`) was installed and launched on
+  the connected iPhone.
+
+## v0.3.1 device acceptance record
+
+| Date | Device | Build/version | Tester | Result | Notes/evidence |
+|---|---|---|---|---|---|
+| 2026-07-14 | iPhone 17 Pro Max, iOS 26.5.1 | `v0.3.1` (`2026071402`) LocalQA | Codex automated device test; Parent + child acceptance pending | Installed; synthetic production Vision pass | 6/6 positive case variants and 4/4 negative controls passed through the production service. Child manual `of`/`go` 12-attempt gate remains. |
+| Pending | iPad Pro 13-inch (M5) | `v0.3.1` candidate | Parent + child | Pending | Repeat the child handwriting gate with finger and Apple Pencil. |

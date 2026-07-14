@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.3%20device%20QA-6D48D7" alt="v0.3 device QA">
+  <img src="https://img.shields.io/badge/status-v0.3.1%20device%20QA-6D48D7" alt="v0.3.1 device QA">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
@@ -20,7 +20,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing it or scanning a school list with the camera or photo library. Tada Words schedules only those parent-provided words; V1 never grows a Pool from a grade catalog or smart fill. The review scheduler brings words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** PR #1 merged v0.2 to `main` at `7728f28`. Branch `v0.3` contains the Parent/OCR, voice setup, Read scoring/replay, Write canvas, and recognition follow-ups described below. The v0.3 Swift suite passes **548/548** and the five critical XCUITest flows pass **5/5**. Fresh LocalQA simulator builds pass on iPhone 17 Pro Max and iPad Pro 13-inch (M5), and the signed candidate is installed on the connected iPhone 17 Pro Max. Child speech/handwriting, pronunciation listening, accessibility, iPad, and live CloudKit acceptance remain open. Family Sync is persisted, default-off, and requires explicit parent opt-in; CloudKit convergence and remote erasure remain release blockers. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** PR #2 merged v0.3 to `main` at `cc42e17`. Branch `v0.3.1` fixes the real production Vision failures reported for `of`, `go`, and case variants. The full Swift suite passes **552/552**, the five critical XCUITest flows pass **5/5**, and a new physical-iPhone production-service target passes all six `of/go` case variants plus four negative controls. Fresh LocalQA simulator builds pass on iPhone 17 Pro Max and iPad Pro 13-inch (M5), and signed v0.3.1 is installed on the connected iPhone 17 Pro Max. These automated handwriting fixtures are synthetic; child handwriting, pronunciation listening, accessibility, iPad, and live CloudKit acceptance remain open. Family Sync is persisted, default-off, and requires explicit parent opt-in; CloudKit convergence and remote erasure remain release blockers. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -37,7 +37,7 @@ music, sound cues, and 25-item reward collection.
 
 Read never speaks the target before the child's first independent response. After two valid wrong readings it reveals only child-triggered **Hear it**; technical retries never reveal help early. Each World owns one coordinated, high-contrast word color, so every Read word stays visually consistent until the child changes Worlds.
 
-Write prioritizes clear, fluent pronunciation rather than an extreme slowdown and never pre-shows the spelling. The offline fallback uses one uninterrupted utterance, a clarity-ranked American-English system voice, neutral pitch, and enough release time to preserve final consonants. The `?` control reveals the word on demand. After the first genuine mismatch, a concrete word such as `dog` can show a tappable picture hint; abstract and function words such as `the` receive no image. Children can choose Pencil, Chalk, or Brush; ink is always black and the selected tool persists per Profile. The 4× local eraser restores the prior pen after a blank-canvas tap. The canvas is 10% wider, keeps fixed coordinates during feedback and word transitions, and preserves dots, later letters, and connected strokes. Vision evaluates target-informed alternatives and ignores case, so forms such as `of`, `Of`, and `OF` share one exact-spelling decision without accepting neighboring words. Technical speech or recognition failures do not reduce the child's score.
+Write prioritizes clear, fluent pronunciation rather than an extreme slowdown and never pre-shows the spelling. The offline fallback uses one uninterrupted utterance, a clarity-ranked American-English system voice, neutral pitch, and enough release time to preserve final consonants. The `?` control reveals the word on demand. After the first genuine mismatch, a concrete word such as `dog` can show a tappable picture hint; abstract and function words such as `the` receive no image. Children can choose Pencil, Chalk, or Brush; ink is always black and the selected tool persists per Profile. The 4× local eraser restores the prior pen after a blank-canvas tap. The canvas is 10% wider, keeps fixed coordinates during feedback and word transitions, and preserves dots, later letters, and connected strokes. Vision uses two bounded raster passes, target-informed alternatives, and exact case-normalized matching, so `of/Of/OF` and `go/Go/GO` share one spelling decision while neighboring words and literal `90` remain rejected. Technical speech or recognition failures do not reduce the child's score.
 
 Child-facing stars reward completion, accurate retrieval, and a comfortable personal pace. One immediate unaided recovery can still earn the Accuracy Star, calibration can earn Pace, and the post-calibration slow side gets 50% grace. Guardian accuracy and mastery evidence stay strict.
 
@@ -96,7 +96,7 @@ The iOS target depends on `TadaWordsAppShell`, `TadaWordsApplePlatform`, and `Ta
 - A free Apple Account for direct LocalQA installation on personal devices
 - A paid Apple Developer Program team for TestFlight and CloudKit acceptance
 
-The current v0.3 automated run uses Xcode 26.6. Fresh LocalQA builds pass on iPhone 17 Pro Max and iPad Pro 13-inch (M5) simulators.
+The current v0.3.1 automated run uses Xcode 26.6. Fresh LocalQA builds pass on iPhone 17 Pro Max and iPad Pro 13-inch (M5) simulators.
 
 ## Build and test
 
@@ -110,7 +110,7 @@ make check
 open TadaWords.xcodeproj
 ```
 
-`make check` runs strict Swift formatting checks and the Swift package test suite. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**. The current v0.3 aggregate contains **548 tests with zero failures**. The Xcode UI target adds five critical end-to-end flows for Read/Write completion, repeated delete/Undo, Photos-picker dismissal, and OCR Review → Add All → Pool → Sort.
+`make check` runs strict Swift formatting checks and the Swift package test suite. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, and merged v0.3 contained **548**. The current v0.3.1 aggregate contains **552 tests with zero failures**. The Xcode UI target adds five critical end-to-end flows for Read/Write completion, repeated delete/Undo, Photos-picker dismissal, and OCR Review → Add All → Pool → Sort. A separate physical-device target calls the public production handwriting service with six positive case variants and four negative controls; it does not use the demo recognizer.
 
 Run the device-readiness script before installing on an iPhone or iPad:
 
@@ -143,18 +143,19 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Swift tests | v0.3 full run: 548 passed, 0 failures; supersedes the merged v0.2 count of 480 |
+| Swift tests | v0.3.1 full run: 552 passed, 0 failures; focused actual-Vision suite 15/15 |
 | Critical XCUITest flows | 5 passed, 0 failures on iPhone 17 Pro Max simulator |
-| iPhone 17 Pro Max LocalQA simulator | Fresh v0.3 build passed |
-| iPad Pro 13-inch (M5) LocalQA simulator | Fresh v0.3 build passed |
-| Connected iPhone 17 Pro Max | Signed `Tada Words QA` v0.3 candidate installed; human `of`, audio, child handwriting, rotation, and accessibility checks remain |
+| Physical iPhone production Vision | 2/2 device tests passed: 6/6 `of/go` case variants and 4/4 negative controls; synthetic vectors only |
+| iPhone 17 Pro Max LocalQA simulator | Fresh v0.3.1 build passed |
+| iPad Pro 13-inch (M5) LocalQA simulator | Fresh v0.3.1 build passed |
+| Connected iPhone 17 Pro Max | Signed `Tada Words QA` v0.3.1 (`2026071402`) installed and launched; child 12-attempt handwriting gate, audio, rotation, and accessibility remain |
 | Pre-K visual hierarchy | v0.2 Profile, Lobby, Read, and Result captures pass on both simulators; physical child, VoiceOver, and Dynamic Type acceptance remain open |
 | Route-based orientation | v0.2 Plist and runtime-policy checks passed. iPad simulator window shapes show Parents rotating while child routes remain landscape. Raw iPhone simulator framebuffer captures are inconclusive, so physical rotation remains open. |
 | Persisted, default-off CloudKit guardian opt-in | Implemented; live-device acceptance open |
 | CloudKit remote erasure | Implementation required |
 | Physical child speech, handwriting, audio, accessibility, and CloudKit | Acceptance open |
 
-The [feature audit](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md) records the merged v0.2 implementation evidence. The [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md) records the active v0.3 changes, and the [V1 backlog](V1_BACKLOG.md) lists the remaining device and human acceptance work.
+The [feature audit](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md) records the merged v0.2 implementation evidence. The [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md) records v0.3 and the active v0.3.1 patch, and the [V1 backlog](V1_BACKLOG.md) lists the remaining device and human acceptance work.
 
 ## Test fixture attribution
 

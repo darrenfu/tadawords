@@ -32,16 +32,17 @@ make check
 
 通过标准：格式检查、单元与组合测试、iPhone 17 Pro Max LocalQA 模拟器构建、iPad Pro 13-inch (M5) LocalQA 模拟器构建全部通过。设备准备脚本可以在未配置签名 Team 时报告签名阻塞。
 
-PR #1 已在 merge commit `7728f28` 把 v0.2 合入 `main`。2026-07-14 的当前 v0.3 自动化证据如下。V1 的 367 项与 v0.2 的 480 项测试保留为历史基线；v0.3 全量为 548/548：
+PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当前 v0.3.1 修复证据如下。V1 的 367 项、v0.2 的 480 项和 v0.3 的 548 项测试保留为历史基线；v0.3.1 全量为 552/552：
 
 | 检查 | 结果 |
 |---|---|
 | Swift formatter 严格检查 | 通过 |
-| Swift 单元与组合测试 | v0.3 全量 548/548 通过，0 failure；取代已合并 v0.2 的 480 项计数 |
+| Swift 单元与组合测试 | v0.3.1 全量 552/552 通过，0 failure；其中 actual-Vision 手写识别 focused suite 为 15/15 |
 | Critical XCUITest | iPhone 17 Pro Max 模拟器 5/5 通过：Read/Write 连续反馈、两次删除/Undo、Photos 退出后排序、OCR Review → Add All → Pool → Sort |
-| iPhone 17 Pro Max LocalQA 模拟器构建 | v0.3 fresh build 通过 |
-| iPad Pro 13-inch (M5) LocalQA 模拟器构建 | v0.3 fresh build 通过 |
-| iPhone 17 Pro Max 真机安装 | `Tada Words QA` v0.3.0 (`2026071401`) 签名构建已覆盖安装；儿童书写、发音听感和辅助功能仍需人工验收 |
+| iPhone 17 Pro Max production Vision 真机测试 | iOS 26.5.1 上 2/2 XCTest 通过：`of/go` 六种大小写正例 6/6，错词与 literal `90` 负例 4/4；使用匿名合成 vector 和真实 production service，不使用 mock/demo |
+| iPhone 17 Pro Max LocalQA 模拟器构建 | v0.3.1 fresh build 通过 |
+| iPad Pro 13-inch (M5) LocalQA 模拟器构建 | v0.3.1 fresh build 通过 |
+| iPhone 17 Pro Max 真机安装 | `Tada Words QA` v0.3.1 (`2026071402`) 签名构建已覆盖安装并启动；儿童真实书写、发音听感和辅助功能仍需人工验收 |
 | 两个 built product 的方向声明 | v0.2 基线：iPhone 为 Portrait + 两个 Landscape；iPad 为四向；`UIRequiresFullScreen` 为 true；运行时 Parents 可旋转，child route 只允许横屏 |
 | 模拟器方向证据 | v0.2 基线：iPad 的 Parent 与 child 窗口形态符合路由策略；iPhone raw framebuffer 截图方向不可靠，仍需真机旋转确认 |
 | Release CloudKit 分享声明 | v0.2 基线：iPhone 与 iPad Release built product 的 `CKSharingSupported` 为 true |
@@ -164,11 +165,11 @@ PR #1 已在 merge commit `7728f28` 把 v0.2 合入 `main`。2026-07-14 的当�
 13. 切换到一个 Profile 选择笔型，重启并切换 Profile；确认每个 Profile 保留自己的选择，直到再次修改；旧版 Crayon/彩色设置安全迁移为黑色 Pencil
 14. 逐笔书写并试听三种短促书写音；确认快速连续移动没有爆音、卡顿或频繁重启音，发音播放和 Reduced Sound 时不叠加
 15. 确认页面没有 Undo；用 Eraser 对每种笔做局部擦除，擦除宽度约为当前笔宽 4 倍。擦完后点旁边空白，确认自动恢复之前的笔
-16. 分别写 `of`、`Of`、`OF` 与分开的 `O` + `F`，确认大小写被忽略且可通过；`if`、`on`、`or`、`ot`、`off` 不能误过
+16. 不使用 Help，分别写 `of`、`Of`、`OF`、`go`、`Go`、`GO`，每种写法重复两次并要求 12/12 通过；再确认 `if`、`on`、`or`、`ot`、`off`、`do`、`no` 与数字 `90` 不能误过
 17. 在错误反馈出现及切换下一个词时录屏，逐帧确认书写区域的尺寸、中心和坐标不移动；确认整轮 Quest 的 root transition identity 不随 prompt 改变；完成反馈至少停留 830 ms，不再闪过
 18. 完成一轮并故意留下 tricky word；在 Result 点 Replay，确认只重练该词
 
-通过标准：Hear、`?`、识别等待和技术重试时间不污染独立作答速度。三种笔的视觉和声音可区分但不盖住发音。图片只服务具体词并使用私有缓存。iPhone 只提示手指，iPad 可以区分 Pencil 与手指，并过滤明显掌触。
+通过标准：Hear、`?`、识别等待和技术重试时间不污染独立作答速度。三种笔的视觉和声音可区分但不盖住发音。图片只服务具体词并使用私有缓存。iPhone 只提示手指，iPad 可以区分 Pencil 与手指，并过滤明显掌触。合成笔画的 production Vision 真机测试只证明修复链路与已知字形，不能替代上述孩子 12 次真实书写。
 
 ## 验收 Review、Mastered 与今日计划
 

@@ -39,15 +39,18 @@ public struct AppleHandwritingRecognitionService:
     HandwritingRecognitionService,
     Sendable
 {
-    private let configuration: AppleHandwritingRecognitionConfiguration
-    private let renderer: HandwritingSampleRenderer
+    private let rasterPassConfigurations: [AppleHandwritingRecognitionConfiguration]
+    private let visionRecognizer: AppleHandwritingVisionRecognizer
     private let resultResolver: AppleHandwritingRecognitionResultResolver
 
     public init(
         configuration: AppleHandwritingRecognitionConfiguration = .default
     ) {
-        self.configuration = configuration
-        self.renderer = HandwritingSampleRenderer(configuration: configuration)
+        self.rasterPassConfigurations =
+            AppleHandwritingRasterPassPolicy.configurations(
+                startingWith: configuration
+            )
+        self.visionRecognizer = AppleHandwritingVisionRecognizer()
         self.resultResolver = AppleHandwritingRecognitionResultResolver(
             thresholds: configuration.decisionThresholds
         )
@@ -61,40 +64,110 @@ public struct AppleHandwritingRecognitionService:
         _ = profileID
         try Task.checkCancellation()
 
-        let image: CGImage
+        let images: [CGImage]
         do {
-            image = try renderer.render(sample)
+            images = try rasterPassConfigurations.map {
+                try HandwritingSampleRenderer(configuration: $0).render(sample)
+            }
         } catch {
             return resultResolver.technicalFailure(.corruptedInput)
         }
 
         do {
-            var request = RecognizeTextRequest()
-            request.recognitionLevel = .accurate
-            request.recognitionLanguages = [Locale.Language(identifier: "en-US")]
-            request.automaticallyDetectsLanguage = false
-            request.usesLanguageCorrection = false
-            request.customWords = AppleHandwritingRecognitionVocabulary.words(
-                for: prompt
-            )
-            request.minimumTextHeightFraction =
-                configuration.minimumTextHeightFraction
+            var firstResult: RecognitionResult?
+            for (image, passConfiguration) in zip(
+                images,
+                rasterPassConfigurations
+            ) {
+                let fragments = try await visionRecognizer.recognize(
+                    image: image,
+                    prompt: prompt,
+                    minimumTextHeightFraction:
+                        passConfiguration.minimumTextHeightFraction
+                )
+                try Task.checkCancellation()
 
-            let observations = try await request.perform(on: image, orientation: .up)
-            try Task.checkCancellation()
-
-            let fragments = observations.compactMap(
-                AppleRecognizedTextFragment.init(observation:)
-            )
-            return resultResolver.resolve(
-                fragments: fragments,
-                target: prompt
-            )
+                let result = resultResolver.resolve(
+                    fragments: fragments,
+                    target: prompt
+                )
+                if result.decision == .matched {
+                    return result
+                }
+                if firstResult == nil {
+                    firstResult = result
+                }
+            }
+            return firstResult
+                ?? resultResolver.resolve(fragments: [], target: prompt)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
             return resultResolver.technicalFailure(.serviceUnavailable)
         }
+    }
+}
+
+enum AppleHandwritingRasterPassPolicy {
+    /// One alternate raster is enough to recover thin, short lowercase words
+    /// that produce no Vision observation at the primary operating point. The
+    /// passes never vote or fuzzy-match: either pass must independently produce
+    /// the complete target spelling.
+    static func configurations(
+        startingWith primary: AppleHandwritingRecognitionConfiguration
+    ) -> [AppleHandwritingRecognitionConfiguration] {
+        let fallbackLineWidth = max(Self.fallbackLineWidth, primary.lineWidth)
+        if fallbackLineWidth != primary.lineWidth {
+            return [
+                primary,
+                configuration(primary, lineWidth: fallbackLineWidth),
+            ]
+        }
+        guard primary.canvasPadding != fallbackCanvasPadding else { return [primary] }
+        return [
+            primary,
+            configuration(primary, canvasPadding: fallbackCanvasPadding),
+        ]
+    }
+
+    private static let fallbackLineWidth: CGFloat = 36
+    private static let fallbackCanvasPadding: CGFloat = 20
+
+    private static func configuration(
+        _ source: AppleHandwritingRecognitionConfiguration,
+        lineWidth: CGFloat? = nil,
+        canvasPadding: CGFloat? = nil
+    ) -> AppleHandwritingRecognitionConfiguration {
+        AppleHandwritingRecognitionConfiguration(
+            canvasWidth: source.canvasWidth,
+            canvasHeight: source.canvasHeight,
+            lineWidth: lineWidth ?? source.lineWidth,
+            canvasPadding: canvasPadding ?? source.canvasPadding,
+            minimumTextHeightFraction: source.minimumTextHeightFraction,
+            decisionThresholds: source.decisionThresholds
+        )
+    }
+}
+
+struct AppleHandwritingVisionRecognizer: Sendable {
+    func recognize(
+        image: CGImage,
+        prompt: WordPrompt,
+        minimumTextHeightFraction: Float
+    ) async throws -> [AppleRecognizedTextFragment] {
+        var request = RecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = [Locale.Language(identifier: "en-US")]
+        request.automaticallyDetectsLanguage = false
+        request.usesLanguageCorrection = true
+        request.customWords = AppleHandwritingRecognitionVocabulary.words(
+            for: prompt
+        )
+        request.minimumTextHeightFraction = minimumTextHeightFraction
+
+        return try await request.perform(on: image, orientation: .up).compactMap(
+            AppleRecognizedTextFragment.init(observation:)
+        )
     }
 }
 
@@ -227,7 +300,8 @@ enum AppleHandwritingTranscriptResolver {
                     guard
                         let normalizedCandidate =
                             AppleHandwritingCandidateNormalizer.normalize(
-                                candidate.text
+                                candidate.text,
+                                corroborating: fragment.candidates
                             )
                     else { continue }
 
@@ -263,22 +337,56 @@ private struct AppleHandwritingPartialTranscript: Sendable {
     let confidence: RecognitionConfidence
 }
 
-/// Vision occasionally emits the digit zero for a handwritten lowercase or
-/// uppercase O. This is the only glyph substitution allowed here; the final
-/// sequence must still equal the complete target exactly, so neighboring words
-/// such as `on`, `or`, `ot`, and `off` remain mismatches.
+/// Vision can emit `0` for a handwritten O and `9` for a single-storey g. Zero
+/// is shape-equivalent to O. Nine is accepted as g only when another candidate
+/// of the same length contains a literal g at that position. The final sequence
+/// must still equal the complete target, so neighboring words and literal `90`
+/// remain mismatches.
 private enum AppleHandwritingCandidateNormalizer {
-    static func normalize(_ candidate: String) -> String? {
+    static func normalize(
+        _ candidate: String,
+        corroborating candidates: [AppleRecognizedTextCandidate]
+    ) -> String? {
         let compact = candidate.components(
             separatedBy: .whitespacesAndNewlines
         ).joined()
         if let normalized = try? EnglishWordNormalizer.normalize(compact) {
             return normalized
         }
-        guard compact.contains("0") else { return nil }
+        var glyphs = Array(compact)
+        guard glyphs.contains("0") || glyphs.contains("9") else { return nil }
+        for index in glyphs.indices {
+            if glyphs[index] == "0" {
+                glyphs[index] = "o"
+            } else if glyphs[index] == "9" {
+                guard
+                    hasLiteralGCorroboration(
+                        at: index,
+                        candidateLength: glyphs.count,
+                        candidates: candidates
+                    )
+                else { return nil }
+                glyphs[index] = "g"
+            }
+        }
         return try? EnglishWordNormalizer.normalize(
-            compact.replacingOccurrences(of: "0", with: "o")
+            String(glyphs)
         )
+    }
+
+    private static func hasLiteralGCorroboration(
+        at index: Int,
+        candidateLength: Int,
+        candidates: [AppleRecognizedTextCandidate]
+    ) -> Bool {
+        candidates.contains { candidate in
+            let compact = candidate.text.components(
+                separatedBy: .whitespacesAndNewlines
+            ).joined().lowercased(with: Locale(identifier: "en_US_POSIX"))
+            let characters = Array(compact)
+            return characters.count == candidateLength
+                && characters[index] == "g"
+        }
     }
 }
 
