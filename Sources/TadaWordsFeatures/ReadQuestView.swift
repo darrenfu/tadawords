@@ -26,12 +26,15 @@ struct ReadQuestView: View {
     @State private var completionTask: Task<Void, Never>?
     @State private var answerPlaybackTask: Task<Void, Never>?
     @State private var hintPlaybackTask: Task<Void, Never>?
-    @State private var pendingCompletion: QuestAttemptSummary?
+    @State private var completionFeedbackLifecycle:
+        QuestItemFeedbackLifecycle<
+            WordPromptID,
+            QuestAttemptSummary
+        >
     @State private var responseClock: AttemptResponseClock
     @State private var pendingAttemptTiming = AttemptTiming.unmeasured
     @State private var replayCountSinceLastAttempt = 0
     @State private var isPlayingPronunciationHint = false
-    @State private var isShowingPictureHint = false
 
     init(
         session: QuestSession,
@@ -63,6 +66,11 @@ struct ReadQuestView: View {
                 startingAt: questTimer.elapsedSeconds
             )
         )
+        _completionFeedbackLifecycle = State(
+            initialValue: QuestItemFeedbackLifecycle(
+                itemID: session.prompt.id
+            )
+        )
     }
 
     var body: some View {
@@ -88,7 +96,10 @@ struct ReadQuestView: View {
 
                 TadaEmergencyAtmosphere(theme: theme, isActive: questTimer.isEmergency)
 
-                if let pendingCompletion {
+                if let pendingCompletion =
+                    completionFeedbackLifecycle
+                    .visibleFeedback(for: session.prompt.id)
+                {
                     completionFeedback(for: pendingCompletion)
                         .transition(.scale(scale: 0.88).combined(with: .opacity))
                         .zIndex(2)
@@ -108,6 +119,9 @@ struct ReadQuestView: View {
             Task {
                 await audioExperienceService.setEmergencyMode(false)
             }
+        }
+        .task(id: session.prompt.id) {
+            resetForCurrentWordIfNeeded()
         }
         .task(id: questTimer.isEmergency) {
             await audioExperienceService.setEmergencyMode(questTimer.isEmergency)
@@ -179,10 +193,6 @@ struct ReadQuestView: View {
                     .foregroundStyle(readWordColor.color)
                     .accessibilityHidden(true)
 
-                if isShowingPictureHint {
-                    pictureHint
-                        .transition(.scale(scale: 0.90).combined(with: .opacity))
-                }
             }
             .padding(.horizontal, 20)
 
@@ -231,12 +241,7 @@ struct ReadQuestView: View {
     }
 
     private var readWordColor: TadaReadWordColorToken {
-        ReadWordColorPolicy.token(
-            worldID: theme.id,
-            questID: session.id,
-            promptID: session.prompt.id,
-            currentItem: session.currentItem
-        )
+        ReadWordColorPolicy.token(worldID: theme.id)
     }
 
     private var showsAssistance: Bool {
@@ -256,24 +261,15 @@ struct ReadQuestView: View {
     }
 
     private var assistanceControls: some View {
-        HStack(spacing: 12) {
-            assistanceButton(
-                title: isPlayingPronunciationHint ? "Playing…" : "Hear it",
-                symbol: isPlayingPronunciationHint
-                    ? "speaker.wave.3.fill"
-                    : "speaker.wave.2.fill",
-                isDisabled: isPlayingPronunciationHint,
-                action: playPronunciationHint
-            )
-            assistanceButton(
-                title: isShowingPictureHint ? "Hide picture" : "See it",
-                symbol: isShowingPictureHint ? "eye.slash.fill" : "eye.fill",
-                isDisabled: false,
-                action: togglePictureHint
-            )
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Help after two tries")
+        assistanceButton(
+            title: isPlayingPronunciationHint ? "Playing…" : "Hear it",
+            symbol: isPlayingPronunciationHint
+                ? "speaker.wave.3.fill"
+                : "speaker.wave.2.fill",
+            isDisabled: isPlayingPronunciationHint,
+            action: playPronunciationHint
+        )
+        .accessibilityLabel("Hear the word after two tries")
     }
 
     private func assistanceButton(
@@ -296,23 +292,6 @@ struct ReadQuestView: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled || isPaused || isListening)
-    }
-
-    @ViewBuilder
-    private var pictureHint: some View {
-        if let hint = WordPictureHintCatalog.hint(for: session.prompt.displayText) {
-            Text(hint.glyph)
-                .font(.system(size: verticalSizeClass == .compact ? 54 : 72))
-                .frame(minWidth: 100, minHeight: verticalSizeClass == .compact ? 64 : 84)
-                .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 18))
-                .accessibilityLabel("Picture hint: \(hint.accessibilityLabel)")
-        } else {
-            Label("No picture for this word", systemImage: "photo.badge.exclamationmark")
-                .font(.system(.caption, design: .rounded, weight: .semibold))
-                .foregroundStyle(theme.ink.opacity(0.72))
-                .frame(minHeight: 44)
-                .accessibilityLabel("No picture hint is available for this word")
-        }
     }
 
     private var microphoneButton: some View {
@@ -469,8 +448,6 @@ struct ReadQuestView: View {
             return
         }
 
-        closePictureHint()
-
         let shouldResetResponseClock =
             ReadPermissionTimingPolicy.shouldResetResponseClock(
                 hasRequestedPermission: didRequestPermission,
@@ -620,7 +597,6 @@ struct ReadQuestView: View {
 
     private func playPronunciationHint() {
         guard showsAssistance, !isPlayingPronunciationHint else { return }
-        closePictureHint()
         attemptState.useGuidance()
         replayCountSinceLastAttempt += 1
         isPlayingPronunciationHint = true
@@ -633,25 +609,6 @@ struct ReadQuestView: View {
             if !isPaused {
                 questTimer.resume(from: .promptPlayback)
             }
-        }
-    }
-
-    private func togglePictureHint() {
-        guard showsAssistance else { return }
-        attemptState.useGuidance()
-        isShowingPictureHint.toggle()
-        if isShowingPictureHint {
-            questTimer.suspend(for: .promptPlayback)
-        } else if !isPaused {
-            questTimer.resume(from: .promptPlayback)
-        }
-    }
-
-    private func closePictureHint() {
-        guard isShowingPictureHint else { return }
-        isShowingPictureHint = false
-        if !isPaused {
-            questTimer.resume(from: .promptPlayback)
         }
     }
 
@@ -725,23 +682,34 @@ struct ReadQuestView: View {
     }
 
     private func showCompletion(_ summary: QuestAttemptSummary) {
+        let completedItemID = session.prompt.id
         let announcement =
             summary.completion == .needsPractice
             ? "We’ll practice this one again."
             : "You got it!"
-        announceForAccessibility(announcement)
+        var didPresent = false
         withAnimation(
             .spring(
                 response: reduceMotion ? 0.01 : TadaPrimitiveTokens.Motion.reaction,
                 dampingFraction: 0.70
             )
         ) {
-            pendingCompletion = summary
+            didPresent = completionFeedbackLifecycle.present(
+                summary,
+                for: completedItemID
+            )
         }
+        guard didPresent else { return }
+        announceForAccessibility(announcement)
         completionTask?.cancel()
         completionTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(reduceMotion ? 40 : 430))
-            guard !Task.isCancelled else { return }
+            do {
+                try await Task.sleep(for: .milliseconds(reduceMotion ? 40 : 430))
+            } catch {
+                return
+            }
+            guard completionFeedbackLifecycle.requestAdvance(for: completedItemID)
+            else { return }
             onComplete(summary)
         }
     }
@@ -756,8 +724,41 @@ struct ReadQuestView: View {
     }
 
     private var successFeedbackTrigger: Bool {
-        guard let pendingCompletion else { return false }
+        guard
+            let pendingCompletion =
+                completionFeedbackLifecycle
+                .visibleFeedback(for: session.prompt.id)
+        else { return false }
         return pendingCompletion.completion != .needsPractice
+    }
+
+    /// Clears word-scoped state while preserving the quest shell's identity.
+    /// The previous word's feedback must never cover or disable the next word
+    /// when SwiftUI coalesces the model's short saving route.
+    private func resetForCurrentWordIfNeeded() {
+        guard completionFeedbackLifecycle.transition(to: session.prompt.id) else {
+            return
+        }
+
+        listeningTask?.cancel()
+        completionTask?.cancel()
+        answerPlaybackTask?.cancel()
+        hintPlaybackTask?.cancel()
+        listeningTask = nil
+        completionTask = nil
+        answerPlaybackTask = nil
+        hintPlaybackTask = nil
+
+        attemptState = QuestAttemptStateMachine(policy: .read)
+        isListening = false
+        isPaused = false
+        isRequestingPermission = false
+        pendingAttemptTiming = .unmeasured
+        replayCountSinceLastAttempt = 0
+        isPlayingPronunciationHint = false
+        responseClock.reset(at: questTimer.elapsedSeconds)
+        questTimer.resume(from: .speechRecognition)
+        questTimer.resume(from: .promptPlayback)
     }
 
     private func pause() {
@@ -767,7 +768,6 @@ struct ReadQuestView: View {
         isListening = false
         isRequestingPermission = false
         isPlayingPronunciationHint = false
-        isShowingPictureHint = false
         questTimer.suspend(for: .userPause)
         questTimer.resume(from: .speechRecognition)
         questTimer.resume(from: .promptPlayback)

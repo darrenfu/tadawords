@@ -1,6 +1,13 @@
 import Foundation
 import TadaWordsDomain
 
+/// Removes device-local handwriting choices that belong to a deleted profile.
+/// The concrete UserDefaults-backed implementation lives in Features, while
+/// profile lifecycle coordinators depend only on this narrow cleanup contract.
+public protocol HandwritingPreferenceRemoving: Sendable {
+    func remove(for profileID: ProfileID)
+}
+
 public protocol ProfileDeletionTombstoneRepository: Sendable {
     func tombstones() async throws -> [ProfileDeletionTombstone]
     func pendingTombstones() async throws -> [ProfileDeletionTombstone]

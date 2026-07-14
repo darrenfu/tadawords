@@ -163,17 +163,20 @@ struct QuestResultViewState {
     let score: QuestScore
     let runKind: DailyQuestRunKind
     let rewardGrant: RewardGrant?
+    let replayWordCount: Int
 
     init(
         mode: LearningMode,
         score: QuestScore,
         runKind: DailyQuestRunKind = .today,
-        rewardGrant: RewardGrant? = nil
+        rewardGrant: RewardGrant? = nil,
+        replayWordCount: Int = 0
     ) {
         self.mode = mode
         self.score = score
         self.runKind = runKind
         self.rewardGrant = rewardGrant
+        self.replayWordCount = max(0, replayWordCount)
     }
 
     var earnedStarCount: Int {
@@ -189,7 +192,12 @@ struct QuestResultViewState {
     }
 
     var showsReplayAction: Bool {
-        !showsNewCollectible
+        replayWordCount > 0
+    }
+
+    var replayActionLabel: String {
+        let noun = replayWordCount == 1 ? "word" : "words"
+        return "Replay \(replayWordCount) tricky \(noun)"
     }
 
     var firstTryAccuracyPercentage: Int? {
@@ -199,7 +207,17 @@ struct QuestResultViewState {
     }
 
     var paceLabel: String {
-        switch score.personalPaceAssessment {
+        if score.firstIndependentAccuracy == 1,
+            score.stars.contains(.personalPace)
+        {
+            switch score.personalPaceAssessment {
+            case .unavailable, .outsidePersonalBand:
+                return "Perfect first try"
+            case .withinPersonalBand, .calibrating:
+                break
+            }
+        }
+        return switch score.personalPaceAssessment {
         case .withinPersonalBand:
             "Your pace"
         case .calibrating:

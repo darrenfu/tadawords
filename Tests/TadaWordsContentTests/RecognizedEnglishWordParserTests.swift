@@ -21,4 +21,14 @@ final class RecognizedEnglishWordParserTests: XCTestCase {
 
         XCTAssertEqual(words, ["we", "go"])
     }
+
+    func testParseResultCountsValidOccurrencesBeforeDeduplication() {
+        let result = RecognizedEnglishWordParser().parseResult([
+            "cat cat CAT",
+            "dog 123 dog!",
+        ])
+
+        XCTAssertEqual(result.uniqueWords, ["cat", "dog"])
+        XCTAssertEqual(result.recognizedWordCount, 5)
+    }
 }

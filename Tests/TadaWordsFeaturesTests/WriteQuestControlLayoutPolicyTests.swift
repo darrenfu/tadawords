@@ -1,3 +1,4 @@
+import TadaWordsDesignSystem
 import TadaWordsDomain
 import XCTest
 
@@ -19,6 +20,82 @@ final class WriteQuestControlLayoutPolicyTests: XCTestCase {
                 leftHandedLayoutEnabled: true
             ),
             WriteQuestSideRailLayout(leading: .actions, trailing: .prompt)
+        )
+    }
+
+    func testRegularCanvasIsTenPercentWiderThanPreviousLayout() {
+        let availableWidth: CGFloat = 1_318
+        let originalWidth =
+            availableWidth
+            - (TadaLayoutTokens.standardActionRailWidth * 2)
+            - (22 * 2)
+
+        let metrics = WriteQuestControlLayoutPolicy.metrics(
+            availableWidth: availableWidth,
+            isCompact: false
+        )
+
+        XCTAssertEqual(
+            metrics.canvasWidth,
+            originalWidth * WriteQuestControlLayoutPolicy.canvasWidthScale,
+            accuracy: 0.001
+        )
+    }
+
+    func testCompactCanvasIsTenPercentWiderThanPreviousLayout() {
+        let availableWidth: CGFloat = 912
+        let originalWidth =
+            availableWidth
+            - (TadaLayoutTokens.compactActionRailWidth * 2)
+            - (10 * 2)
+
+        let metrics = WriteQuestControlLayoutPolicy.metrics(
+            availableWidth: availableWidth,
+            isCompact: true
+        )
+
+        XCTAssertEqual(
+            metrics.canvasWidth,
+            originalWidth * WriteQuestControlLayoutPolicy.canvasWidthScale,
+            accuracy: 0.001
+        )
+    }
+
+    func testCompletionFeedbackRemainsVisibleLongerThanFourTenthsOfASecond() {
+        XCTAssertGreaterThanOrEqual(
+            WriteQuestTimingPolicy.completionFeedbackVisibility,
+            Duration.milliseconds(400)
+        )
+    }
+
+    func testPictureHintIsRequestedOnlyForFirstIndependentMismatch() {
+        XCTAssertTrue(
+            WritePictureHintRequestPolicy.shouldRequest(
+                decision: .notMatched,
+                validAttemptCount: 0,
+                usedGuidance: false
+            )
+        )
+        XCTAssertFalse(
+            WritePictureHintRequestPolicy.shouldRequest(
+                decision: .uncertain,
+                validAttemptCount: 0,
+                usedGuidance: false
+            )
+        )
+        XCTAssertFalse(
+            WritePictureHintRequestPolicy.shouldRequest(
+                decision: .notMatched,
+                validAttemptCount: 1,
+                usedGuidance: false
+            )
+        )
+        XCTAssertFalse(
+            WritePictureHintRequestPolicy.shouldRequest(
+                decision: .notMatched,
+                validAttemptCount: 0,
+                usedGuidance: true
+            )
         )
     }
 

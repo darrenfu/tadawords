@@ -34,8 +34,8 @@ The first executable milestone must validate the learning loop before the other 
 ### Ambiguous prompts
 
 - An isolated sound is not always a unique spelling prompt (`right/write`, `one/won`, `sea/see`).
-- Ambiguous Write words require a short spoken context or must be rejected in V1.
-- Heteronyms (`read`, `lead`, `wind`) require an explicit pronunciation choice or must be rejected; the app must not silently select one pronunciation.
+- Parent input stays deliberately simple: every newly added word uses the canonical isolated teacher pronunciation, including homophones and heteronyms.
+- The Parent UI does not offer a pronunciation picker or contextual-sentence editor. Legacy contextual metadata remains readable only for snapshot compatibility.
 
 ### Timing and stars
 
@@ -75,7 +75,7 @@ Technical states must always have a finite escape path; voice matching cannot cr
 ## Phase 2 — Refinement
 
 - Produce independent iPhone 17 Pro Max landscape layouts; do not shrink the iPad layout.
-- On Write, the canvas owns the center, audio and one-tap `?` use the prompt rail, Done uses the action edge, and a compact tool box selects four pens plus 12 colors. Undo is replaced by a 2.5× local eraser; Clear is immediate because the child explicitly chose a whole-canvas action.
+- On Write, the canvas owns the center, audio and one-tap `?` use the prompt rail, Done uses the action edge, and a compact tool box selects Pencil, Chalk, Brush, or Eraser. Ink stays black, Undo is omitted, the local eraser is 4× the active pen width, and Clear is immediate because the child explicitly chose a whole-canvas action.
 - Reduce Guardian Today to profile switch, Read/Write cards, Manage Words, and one Needs Attention summary.
 - Manage Words uses one-word Return-to-add, local Camera/Photo OCR review, a newest-first queue, and single/bulk delete with Undo. V1 never auto-adds Grade or smart-fill words.
 - Unify terms: `Guardian`, `Read`, `Write`, and one public memory-state vocabulary.

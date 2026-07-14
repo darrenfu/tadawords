@@ -139,6 +139,12 @@ struct GuardianPracticeSettingsView: View {
 
                 Toggle("Voice", isOn: $voiceEnabled)
                     .accessibilityHint("Controls word pronunciation and the startup voice")
+                if voiceEnabled {
+                    Text("Word practice uses one consistent teacher voice.")
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                        .padding(.leading, 4)
+                }
                 Divider()
                 Toggle("Music", isOn: $musicEnabled)
                     .accessibilityHint("Controls the current world’s background music")

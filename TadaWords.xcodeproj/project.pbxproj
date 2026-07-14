@@ -13,14 +13,27 @@
 		6E9734C12B875E773F50C8C4 /* TadaWordsApplePlatform in Frameworks */ = {isa = PBXBuildFile; productRef = BE11A3E6BECC4D3FF3315ABA /* TadaWordsApplePlatform */; };
 		71D25A238F262C7EAEEF2CD7 /* TadaWordsAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBEA4AF2C697B1FD9197C0CF /* TadaWordsAppDelegate.swift */; };
 		87FF374D64B99F185D27E08D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B08D5E6984A29CBBE4D69349 /* PrivacyInfo.xcprivacy */; };
+		B6CD79B2280D54EDB144D04A /* TadaWordsCriticalFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 812EA8534B10F69E4E2169FF /* TadaWordsCriticalFlowUITests.swift */; };
 		F241D33536B52C343A929BDC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 48AC9F95D72A19D6CCCB9EDB /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		045782E932C72847E8CED580 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2B03CDCD07C11B0354BBDB13 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7324B700CEC4BF219B75AA40;
+			remoteInfo = TadaWords;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		2D38641F28EC2496EB5E8069 /* TadaWordsUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = TadaWordsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3A11FC68477E8CECE3D539C9 /* TadaWords.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TadaWords.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		48AC9F95D72A19D6CCCB9EDB /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5FC096A7EC9928A79B370330 /* TadaWordsLocalQA.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TadaWordsLocalQA.entitlements; sourceTree = "<group>"; };
 		7E606E231BC91D0F6148BB0C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		812EA8534B10F69E4E2169FF /* TadaWordsCriticalFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TadaWordsCriticalFlowUITests.swift; sourceTree = "<group>"; };
 		8FC055EE962E853CEC0DFBEC /* TadaWords.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TadaWords.entitlements; sourceTree = "<group>"; };
 		ADF5058F6A89AE36C0B071D8 /* Tada Words */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "Tada Words"; path = .; sourceTree = SOURCE_ROOT; };
 		B08D5E6984A29CBBE4D69349 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -62,6 +75,7 @@
 			children = (
 				80F2871A72E2C2076D0A5FF6 /* Packages */,
 				1E447743871AA4789AB2E151 /* TadaWordsApp */,
+				B99B740C2F8957534C287BEB /* TadaWordsUITests */,
 				F2ED07A44CDD7719E72669AC /* Products */,
 			);
 			sourceTree = "<group>";
@@ -74,10 +88,20 @@
 			name = Packages;
 			sourceTree = "<group>";
 		};
+		B99B740C2F8957534C287BEB /* TadaWordsUITests */ = {
+			isa = PBXGroup;
+			children = (
+				812EA8534B10F69E4E2169FF /* TadaWordsCriticalFlowUITests.swift */,
+			);
+			name = TadaWordsUITests;
+			path = Tests/TadaWordsUITests;
+			sourceTree = "<group>";
+		};
 		F2ED07A44CDD7719E72669AC /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				3A11FC68477E8CECE3D539C9 /* TadaWords.app */,
+				2D38641F28EC2496EB5E8069 /* TadaWordsUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -85,6 +109,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		55403B90D55E4C888DCC9B0A /* TadaWordsUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7C06697389E09F42DE9C5453 /* Build configuration list for PBXNativeTarget "TadaWordsUITests" */;
+			buildPhases = (
+				E3AD012AAF20F2E88D8483D7 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				36BADC1F5D3F054D05C4C9A9 /* PBXTargetDependency */,
+			);
+			name = TadaWordsUITests;
+			packageProductDependencies = (
+			);
+			productName = TadaWordsUITests;
+			productReference = 2D38641F28EC2496EB5E8069 /* TadaWordsUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		7324B700CEC4BF219B75AA40 /* TadaWords */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 7B549D270D7DCBA25402D384 /* Build configuration list for PBXNativeTarget "TadaWords" */;
@@ -116,6 +158,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					55403B90D55E4C888DCC9B0A = {
+						TestTargetID = 7324B700CEC4BF219B75AA40;
+					};
 					7324B700CEC4BF219B75AA40 = {
 						ProvisioningStyle = Automatic;
 					};
@@ -139,6 +184,7 @@
 			projectRoot = "";
 			targets = (
 				7324B700CEC4BF219B75AA40 /* TadaWords */,
+				55403B90D55E4C888DCC9B0A /* TadaWordsUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -165,9 +211,42 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E3AD012AAF20F2E88D8483D7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B6CD79B2280D54EDB144D04A /* TadaWordsCriticalFlowUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		36BADC1F5D3F054D05C4C9A9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7324B700CEC4BF219B75AA40 /* TadaWords */;
+			targetProxy = 045782E932C72847E8CED580 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		0092FE4D5D02E288E0A53499 /* LocalQA */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TadaWords;
+			};
+			name = LocalQA;
+		};
 		179F9C16784ED641CA7B56ED /* LocalQA */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -296,6 +375,23 @@
 			};
 			name = Debug;
 		};
+		54EC51120D362C47ABC336BC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TadaWords;
+			};
+			name = Debug;
+		};
 		81C302AC485C1CAE7B87DC04 /* LocalQA */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -304,11 +400,13 @@
 				CODE_SIGN_ENTITLEMENTS = Apps/TadaWordsApp/TadaWordsLocalQA.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2026071401;
 				INFOPLIST_FILE = Apps/TadaWordsApp/InfoLocalQA.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app.localqa;
 				PRODUCT_NAME = "Tada Words QA";
 				SDKROOT = iphoneos;
@@ -319,6 +417,23 @@
 			};
 			name = LocalQA;
 		};
+		88E470B5C3B1B11AF5D1C373 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TadaWords;
+			};
+			name = Release;
+		};
 		960924C43AC52D0920D362BC /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -327,11 +442,13 @@
 				CODE_SIGN_ENTITLEMENTS = Apps/TadaWordsApp/TadaWords.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2026071401;
 				INFOPLIST_FILE = Apps/TadaWordsApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app;
 				PRODUCT_NAME = "Tada Words";
 				SDKROOT = iphoneos;
@@ -349,11 +466,13 @@
 				CODE_SIGN_ENTITLEMENTS = Apps/TadaWordsApp/TadaWords.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2026071401;
 				INFOPLIST_FILE = Apps/TadaWordsApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app;
 				PRODUCT_NAME = "Tada Words";
 				SDKROOT = iphoneos;
@@ -439,6 +558,16 @@
 				B51FCDF510BBCE9DEFEC32A9 /* Debug */,
 				81C302AC485C1CAE7B87DC04 /* LocalQA */,
 				960924C43AC52D0920D362BC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7C06697389E09F42DE9C5453 /* Build configuration list for PBXNativeTarget "TadaWordsUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				54EC51120D362C47ABC336BC /* Debug */,
+				0092FE4D5D02E288E0A53499 /* LocalQA */,
+				88E470B5C3B1B11AF5D1C373 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

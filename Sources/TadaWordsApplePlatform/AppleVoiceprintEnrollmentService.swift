@@ -9,13 +9,32 @@ public enum AppleVoiceprintEnrollmentError: Error, Equatable, Sendable {
     case audioUnavailable
 }
 
+struct VoiceprintRecordingAudioCoordinator: Sendable {
+    let audioExperienceService: any AudioExperienceService
+
+    func capture<Value: Sendable>(
+        _ operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        await audioExperienceService.prepareForRecording()
+        do {
+            let value = try await operation()
+            await audioExperienceService.finishRecording()
+            return value
+        } catch {
+            await audioExperienceService.finishRecording()
+            throw error
+        }
+    }
+}
+
 public actor AppleVoiceprintEnrollmentService: DeviceVoiceprintEnrolling {
-    private static let captureDuration: Duration = .milliseconds(2_700)
+    private static let captureDuration: Duration = .milliseconds(3_400)
 
     private let repository: any DeviceVoiceprintRepository
     private let extractor: any VoiceprintEmbeddingExtracting
     private let permissionChecker: any AppleSpeechPermissionChecking
     private let clock: any AppClock
+    private let recordingAudioCoordinator: VoiceprintRecordingAudioCoordinator
 
     private var session: VoiceprintEnrollmentSession?
 
@@ -24,12 +43,17 @@ public actor AppleVoiceprintEnrollmentService: DeviceVoiceprintEnrolling {
         extractor: any VoiceprintEmbeddingExtracting = AppleVoiceprintFeatureExtractor(),
         permissionChecker: any AppleSpeechPermissionChecking =
             SystemAppleSpeechPermissionChecker(),
-        clock: any AppClock = SystemAppClock()
+        clock: any AppClock = SystemAppClock(),
+        audioExperienceService: any AudioExperienceService =
+            SilentAudioExperienceService()
     ) {
         self.repository = repository
         self.extractor = extractor
         self.permissionChecker = permissionChecker
         self.clock = clock
+        recordingAudioCoordinator = VoiceprintRecordingAudioCoordinator(
+            audioExperienceService: audioExperienceService
+        )
     }
 
     public func begin(
@@ -52,7 +76,17 @@ public actor AppleVoiceprintEnrollmentService: DeviceVoiceprintEnrolling {
             throw AppleVoiceprintEnrollmentError.sessionNotStarted
         }
 
-        let captured = try await captureAudio()
+        let captured: SpeechCapturedAudio
+        do {
+            captured = try await recordingAudioCoordinator.capture {
+                try await self.captureAudio()
+            }
+        } catch {
+            if error is CancellationError {
+                throw error
+            }
+            throw AppleVoiceprintEnrollmentError.audioUnavailable
+        }
         let duration = ElapsedTime(
             seconds: Double(captured.samples.count) / captured.sampleRate
         )
@@ -96,26 +130,47 @@ public actor AppleVoiceprintEnrollmentService: DeviceVoiceprintEnrolling {
     }
 
     private func captureAudio() async throws -> SpeechCapturedAudio {
+        #if os(iOS)
+            // Configure and activate the session before asking AVAudioEngine
+            // for an input format. Reversing this order can yield a zero-rate
+            // format after ambient music or TTS owned the previous session.
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(
+                .playAndRecord,
+                mode: .voiceChat,
+                options: [.duckOthers, .allowBluetoothHFP, .defaultToSpeaker]
+            )
+            try audioSession.setPreferredSampleRate(44_100)
+            try audioSession.setPreferredIOBufferDuration(0.012)
+            try audioSession.setActive(true)
+        #endif
+
         let engine = AVAudioEngine()
         let input = engine.inputNode
+        var voiceProcessingEnabled = false
+        #if os(iOS)
+            do {
+                try input.setVoiceProcessingEnabled(true)
+                voiceProcessingEnabled = input.isVoiceProcessingEnabled
+            } catch {
+                // Some Bluetooth routes do not expose the voice-processing
+                // input unit. Enrollment can still use their raw PCM.
+            }
+        #endif
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {
+            #if os(iOS)
+                try? AVAudioSession.sharedInstance().setActive(
+                    false,
+                    options: .notifyOthersOnDeactivation
+                )
+            #endif
             throw AppleVoiceprintEnrollmentError.audioUnavailable
         }
         let collector = VoiceprintPCMCollector(
             sampleRate: format.sampleRate,
             maximumDuration: 5
         )
-
-        #if os(iOS)
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(
-                .record,
-                mode: .measurement,
-                options: [.duckOthers]
-            )
-            try audioSession.setActive(true)
-        #endif
 
         input.installTap(
             onBus: 0,
@@ -128,6 +183,9 @@ public actor AppleVoiceprintEnrollmentService: DeviceVoiceprintEnrolling {
             input.removeTap(onBus: 0)
             engine.stop()
             #if os(iOS)
+                if voiceProcessingEnabled {
+                    try? input.setVoiceProcessingEnabled(false)
+                }
                 try? AVAudioSession.sharedInstance().setActive(
                     false,
                     options: .notifyOthersOnDeactivation

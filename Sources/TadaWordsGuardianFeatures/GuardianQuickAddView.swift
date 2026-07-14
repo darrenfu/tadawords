@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import TadaWordsContent
 import TadaWordsDesignSystem
@@ -12,6 +13,9 @@ import TadaWordsDomain
 struct GuardianWordManagerView: View {
     let readWords: [WordPrompt]
     let writeWords: [WordPrompt]
+    let practiceFrequencyByWordID: [WordPromptID: Int]
+    let undoWordsByMode: [LearningMode: [WordPrompt]]
+    let isUpdatingWordPool: Bool
     let imageTextRecognitionService: any ImageTextRecognizing
     let onBack: () -> Void
     let onSubmit:
@@ -19,11 +23,10 @@ struct GuardianWordManagerView: View {
             -> GuardianWordImportReport?
     let onPlay: (WordPrompt) -> Void
     let onSetWordsActive: @MainActor ([WordPrompt], Bool) async -> Bool
+    @Binding var hasConfirmedRemovalThisSession: Bool
 
     @State private var selectedMode: LearningMode
     @State private var typedWord = ""
-    @State private var typedContextWord: String?
-    @State private var typedSpokenContext = ""
     @State private var feedback: GuardianWordManagerFeedback?
     @State private var isSubmitting = false
     @State private var isRecognizing = false
@@ -31,22 +34,28 @@ struct GuardianWordManagerView: View {
     @State private var selectedWordIDs = Set<WordPromptID>()
     @State private var pendingRemoval: [WordPrompt] = []
     @State private var showsRemovalConfirmation = false
-    @State private var undoWords: [WordPrompt] = []
     @State private var ocrWords: [GuardianEditableOCRWord] = []
-    @State private var ocrSpokenContexts: [String: String] = [:]
     @State private var showsOCRPreview = false
-    @FocusState private var typedWordIsFocused: Bool
+    @State private var poolSearchText = ""
+    @State private var poolSortOrder: GuardianWordSortOrder = .addedOrder
+    @FocusState private var managerInputIsFocused: Bool
 
     #if os(iOS)
-        @State private var selectedPhotoItem: PhotosPickerItem?
+        @State private var selectedPhotoItems: [PhotosPickerItem] = []
+        @State private var additionalPhotoItems: [PhotosPickerItem] = []
         @State private var isCameraPresented = false
+        @State private var appendsNextCameraPhoto = false
     #endif
 
     init(
         initialMode: LearningMode,
         readWords: [WordPrompt],
         writeWords: [WordPrompt],
+        practiceFrequencyByWordID: [WordPromptID: Int],
+        undoWordsByMode: [LearningMode: [WordPrompt]],
+        isUpdatingWordPool: Bool,
         imageTextRecognitionService: any ImageTextRecognizing,
+        hasConfirmedRemovalThisSession: Binding<Bool>,
         onBack: @escaping () -> Void,
         onSubmit:
             @escaping @MainActor (GuardianWordImportRequest) async
@@ -56,17 +65,54 @@ struct GuardianWordManagerView: View {
     ) {
         self.readWords = readWords
         self.writeWords = writeWords
+        self.practiceFrequencyByWordID = practiceFrequencyByWordID
+        self.undoWordsByMode = undoWordsByMode
+        self.isUpdatingWordPool = isUpdatingWordPool
         self.imageTextRecognitionService = imageTextRecognitionService
         self.onBack = onBack
         self.onSubmit = onSubmit
         self.onPlay = onPlay
         self.onSetWordsActive = onSetWordsActive
+        _hasConfirmedRemovalThisSession = hasConfirmedRemovalThisSession
         _selectedMode = State(initialValue: initialMode)
     }
 
     private var currentWords: [WordPrompt] {
         selectedMode == .read ? readWords : writeWords
     }
+
+    private var presentedWords: [WordPrompt] {
+        GuardianWordListPresentation.prompts(
+            currentWords,
+            sortOrder: poolSortOrder,
+            searchText: poolSearchText,
+            practiceFrequencyByWordID: practiceFrequencyByWordID
+        )
+    }
+
+    private var practiceFrequencyByNormalizedWord: [String: Int] {
+        Dictionary(
+            uniqueKeysWithValues: currentWords.map { prompt in
+                (
+                    prompt.normalizedText,
+                    practiceFrequencyByWordID[prompt.id, default: 0]
+                )
+            }
+        )
+    }
+
+    private var undoWords: [WordPrompt] {
+        undoWordsByMode[selectedMode, default: []]
+    }
+
+    #if DEBUG
+        private var isDebugOCRFixtureEnabled: Bool {
+            let arguments = ProcessInfo.processInfo.arguments
+            return arguments.contains("--demo-mode")
+                && arguments.contains("--ui-testing")
+                && arguments.contains("--ui-testing-ocr-fixture")
+        }
+    #endif
 
     var body: some View {
         GeometryReader { proxy in
@@ -97,15 +143,13 @@ struct GuardianWordManagerView: View {
                 .padding(.vertical, GuardianPrimitiveTokens.Spacing.medium)
                 .frame(maxWidth: .infinity)
             }
-            .scrollDismissesKeyboard(.interactively)
+            .scrollDismissesKeyboard(.immediately)
         }
         .onChange(of: selectedMode) {
             isSelecting = false
             selectedWordIDs = []
-            typedContextWord = nil
-            typedSpokenContext = ""
             feedback = nil
-            undoWords = []
+            poolSearchText = ""
         }
         .alert(removalTitle, isPresented: $showsRemovalConfirmation) {
             Button("Cancel", role: .cancel) {
@@ -118,35 +162,67 @@ struct GuardianWordManagerView: View {
             Text(removalMessage)
         }
         .sheet(isPresented: $showsOCRPreview) {
-            GuardianOCRPreviewView(
-                mode: selectedMode,
-                existingWords: currentWords,
-                words: $ocrWords,
-                spokenContexts: $ocrSpokenContexts,
-                onCancel: { showsOCRPreview = false },
-                onAdd: addOCRWords
-            )
+            ocrPreview
         }
         #if os(iOS)
-            .onChange(of: selectedPhotoItem) { _, item in
-                guard let item else { return }
+            .onChange(of: selectedPhotoItems) { _, items in
+                guard !items.isEmpty else { return }
                 Task {
-                    defer { selectedPhotoItem = nil }
-                    guard let data = try? await item.loadTransferable(type: Data.self) else {
-                        feedback = .error("That photo could not be opened. Try another one.")
-                        return
-                    }
-                    await recognizeWords(in: data)
+                    await recognizeWords(in: items, appending: false)
+                    selectedPhotoItems = []
+                }
+            }
+            .onChange(of: additionalPhotoItems) { _, items in
+                guard !items.isEmpty else { return }
+                Task {
+                    await recognizeWords(in: items, appending: true)
+                    additionalPhotoItems = []
                 }
             }
             .fullScreenCover(isPresented: $isCameraPresented) {
                 GuardianWordSheetCameraPicker { data in
                     isCameraPresented = false
-                    Task { await recognizeWords(in: data) }
+                    let appending = appendsNextCameraPhoto
+                    appendsNextCameraPhoto = false
+                    Task { await recognizeWords(in: [data], appending: appending) }
                 } onCancel: {
                     isCameraPresented = false
+                    if appendsNextCameraPhoto {
+                        appendsNextCameraPhoto = false
+                        showsOCRPreview = true
+                    }
                 }
             }
+        #endif
+    }
+
+    @ViewBuilder
+    private var ocrPreview: some View {
+        #if os(iOS)
+            GuardianOCRPreviewView(
+                mode: selectedMode,
+                existingWords: currentWords,
+                practiceFrequencyByNormalizedWord: practiceFrequencyByNormalizedWord,
+                words: $ocrWords,
+                isRecognizingAdditionalPhotos: isRecognizing,
+                recognitionFeedbackMessage: feedback?.message,
+                additionalPhotoItems: $additionalPhotoItems,
+                onCancel: { showsOCRPreview = false },
+                onTakeAnotherPhoto: prepareToTakeAnotherPhoto,
+                onAdd: addOCRWords
+            )
+        #else
+            GuardianOCRPreviewView(
+                mode: selectedMode,
+                existingWords: currentWords,
+                practiceFrequencyByNormalizedWord: practiceFrequencyByNormalizedWord,
+                words: $ocrWords,
+                isRecognizingAdditionalPhotos: isRecognizing,
+                recognitionFeedbackMessage: feedback?.message,
+                onCancel: { showsOCRPreview = false },
+                onTakeAnotherPhoto: prepareToTakeAnotherPhoto,
+                onAdd: addOCRWords
+            )
         #endif
     }
 
@@ -177,7 +253,7 @@ struct GuardianWordManagerView: View {
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.title3, design: .rounded, weight: .semibold))
                         .submitLabel(.done)
-                        .focused($typedWordIsFocused)
+                        .focused($managerInputIsFocused)
                         .onSubmit(commitTypedWord)
                         .accessibilityHint("Press Return to add this word immediately")
 
@@ -192,10 +268,6 @@ struct GuardianWordManagerView: View {
                     .tint(GuardianSemanticTokens.accent(for: selectedMode))
                     .disabled(typedWord.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityLabel("Add word")
-                }
-
-                if let contextWord = typedContextWord {
-                    typedContextEditor(for: contextWord)
                 }
 
                 if let feedback {
@@ -240,6 +312,25 @@ struct GuardianWordManagerView: View {
                     cameraButton
                 }
             }
+
+            #if DEBUG
+                if isDebugOCRFixtureEnabled {
+                    Button {
+                        Task {
+                            await recognizeWords(
+                                in: [Data("ui-testing-ocr-fixture".utf8)],
+                                appending: false
+                            )
+                        }
+                    } label: {
+                        Label("Import test word sheet", systemImage: "doc.text.viewfinder")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isRecognizing)
+                    .accessibilityIdentifier("guardian.ocr-fixture")
+                }
+            #endif
         #else
             Text("Photo import is available on iPhone and iPad.")
                 .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
@@ -248,8 +339,12 @@ struct GuardianWordManagerView: View {
 
     #if os(iOS)
         private var photoLibraryButton: some View {
-            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                Label("Choose Photo", systemImage: "photo.on.rectangle")
+            PhotosPicker(
+                selection: $selectedPhotoItems,
+                maxSelectionCount: nil,
+                matching: .images
+            ) {
+                Label("Choose Photos", systemImage: "photo.on.rectangle.angled")
                     .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.bordered)
@@ -258,9 +353,10 @@ struct GuardianWordManagerView: View {
 
         private var cameraButton: some View {
             Button {
+                appendsNextCameraPhoto = false
                 isCameraPresented = true
             } label: {
-                Label("Camera", systemImage: "camera.fill")
+                Label("Take Photo", systemImage: "camera.fill")
                     .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.bordered)
@@ -293,6 +389,8 @@ struct GuardianWordManagerView: View {
                     }
                 }
 
+                poolSearchAndSortControls
+
                 if !undoWords.isEmpty {
                     HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
                         Label(
@@ -304,6 +402,7 @@ struct GuardianWordManagerView: View {
                         Button("Undo") { restoreLastRemoval() }
                             .frame(minHeight: 44)
                             .buttonStyle(.borderedProminent)
+                            .disabled(isUpdatingWordPool)
                     }
                     .padding(.horizontal, 12)
                     .background(
@@ -327,11 +426,23 @@ struct GuardianWordManagerView: View {
                             .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
                     }
                     .frame(maxWidth: .infinity, minHeight: 150)
+                } else if presentedWords.isEmpty {
+                    VStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                        Text("No matching words")
+                            .font(.system(.headline, design: .rounded, weight: .bold))
+                        Text("Try another spelling or clear the search.")
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                            .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 120)
                 } else {
                     LazyVStack(spacing: 0) {
-                        ForEach(currentWords, id: \.id) { prompt in
+                        ForEach(presentedWords, id: \.id) { prompt in
                             managerRow(prompt)
-                            if prompt.id != currentWords.last?.id { Divider() }
+                            if prompt.id != presentedWords.last?.id { Divider() }
                         }
                     }
                 }
@@ -349,9 +460,69 @@ struct GuardianWordManagerView: View {
                         .frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(isUpdatingWordPool)
                 }
             }
         }
+    }
+
+    private var poolSearchAndSortControls: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                poolSearchField
+                poolSortMenu
+            }
+            VStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                poolSearchField
+                poolSortMenu
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+    }
+
+    private var poolSearchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+            TextField("Search words", text: $poolSearchText)
+                .autocorrectionDisabled()
+                .focused($managerInputIsFocused)
+            if !poolSearchText.isEmpty {
+                Button {
+                    poolSearchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear word search")
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 44)
+        .background(
+            GuardianSemanticTokens.background,
+            in: RoundedRectangle(
+                cornerRadius: GuardianPrimitiveTokens.Radius.small,
+                style: .continuous
+            )
+        )
+    }
+
+    private var poolSortMenu: some View {
+        Menu {
+            Picker("Sort words", selection: $poolSortOrder) {
+                ForEach(GuardianWordSortOrder.allCases, id: \.self) { order in
+                    Label(order.title, systemImage: order.symbol)
+                        .tag(order)
+                }
+            }
+        } label: {
+            Label(poolSortOrder.title, systemImage: "arrow.up.arrow.down")
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityLabel("Sort words by \(poolSortOrder.title)")
     }
 
     private func managerRow(_ prompt: WordPrompt) -> some View {
@@ -380,6 +551,10 @@ struct GuardianWordManagerView: View {
             Text(prompt.displayText)
                 .font(.system(.title3, design: .rounded, weight: .bold))
                 .lineLimit(1)
+
+            practiceFrequencyBadge(
+                practiceFrequencyByWordID[prompt.id, default: 0]
+            )
             Spacer()
 
             Button {
@@ -401,27 +576,24 @@ struct GuardianWordManagerView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.red)
+                .disabled(isUpdatingWordPool)
                 .accessibilityLabel("Remove \(prompt.displayText)")
             }
         }
         .padding(.vertical, 6)
     }
 
-    private func typedContextEditor(for word: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Add a short sentence so “\(word)” is spoken clearly.")
-                .font(.system(.caption, design: .rounded, weight: .semibold))
-            TextField(
-                "Use “\(word)” in a sentence",
-                text: $typedSpokenContext,
-                axis: .vertical
+    private func practiceFrequencyBadge(_ count: Int) -> some View {
+        Label("\(count)", systemImage: "repeat")
+            .font(.system(.caption2, design: .rounded, weight: .bold))
+            .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(
+                GuardianSemanticTokens.background,
+                in: Capsule()
             )
-            .textFieldStyle(.roundedBorder)
-            Button("Add word") { commitTypedContextWord(word) }
-                .frame(minHeight: 44)
-                .buttonStyle(.borderedProminent)
-                .disabled(!contextIsValid(word, context: typedSpokenContext))
-        }
+            .accessibilityLabel("Practiced \(count) \(count == 1 ? "time" : "times")")
     }
 
     private func commitTypedWord() {
@@ -442,33 +614,10 @@ struct GuardianWordManagerView: View {
             feedback = .error("Enter one word at a time, then press Return.")
             return
         }
-        if let contextWord = parsed.rejected.compactMap(\.requiredContextWord).first {
-            typedContextWord = contextWord
-            typedSpokenContext = ""
-            feedback = nil
-            return
-        }
-
         submit(
             GuardianWordImportRequest(
                 rawText: source,
                 learningMode: selectedMode
-            ),
-            clearsTypedWordOnSuccess: true
-        )
-    }
-
-    private func commitTypedContextWord(_ word: String) {
-        guard contextIsValid(word, context: typedSpokenContext) else { return }
-        submit(
-            GuardianWordImportRequest(
-                rawText: word,
-                learningMode: selectedMode,
-                spokenContextsByNormalizedWord: [
-                    word: typedSpokenContext.trimmingCharacters(
-                        in: .whitespacesAndNewlines
-                    )
-                ]
             ),
             clearsTypedWordOnSuccess: true
         )
@@ -486,51 +635,132 @@ struct GuardianWordManagerView: View {
             feedback = GuardianWordManagerFeedback(report: report)
             if clearsTypedWordOnSuccess, !report.accepted.isEmpty || !report.duplicates.isEmpty {
                 typedWord = ""
-                typedContextWord = nil
-                typedSpokenContext = ""
-                typedWordIsFocused = true
+                managerInputIsFocused = true
             }
         }
     }
 
-    private func recognizeWords(in imageData: Data) async {
+    #if os(iOS)
+        private func recognizeWords(
+            in photoItems: [PhotosPickerItem],
+            appending: Bool
+        ) async {
+            var imageData: [Data] = []
+            for item in photoItems {
+                guard let data = try? await item.loadTransferable(type: Data.self) else {
+                    feedback = .error(
+                        "One selected photo could not be opened. Choose the photos again."
+                    )
+                    return
+                }
+                imageData.append(data)
+            }
+            await recognizeWords(in: imageData, appending: appending)
+        }
+    #endif
+
+    private func recognizeWords(in imageData: [Data], appending: Bool) async {
         guard !isRecognizing else { return }
         isRecognizing = true
-        feedback = .progress("Reading the photo…")
+        feedback = .progress(
+            imageData.count == 1
+                ? "Reading the photo…"
+                : "Reading \(imageData.count) photos…"
+        )
         defer { isRecognizing = false }
 
         do {
-            let fragments = try await imageTextRecognitionService.recognizeText(
-                in: imageData
-            )
-            let parsedWords = RecognizedEnglishWordParser().parse(fragments)
-            guard !parsedWords.isEmpty else {
+            var additions: [GuardianEditableOCRWord] = []
+            for (photoIndex, data) in imageData.enumerated() {
+                let fragments = try await imageTextRecognitionService.recognizeText(
+                    in: data
+                )
+                let parseResult = RecognizedEnglishWordParser().parseResult(fragments)
+                do {
+                    try GuardianOCRPhotoWordLimitPolicy().validate(
+                        recognizedWordCount: parseResult.recognizedWordCount
+                    )
+                } catch let error as GuardianOCRPhotoWordLimitError {
+                    guard
+                        case .tooManyWords(let recognizedCount, let maximum) = error
+                    else { throw error }
+                    let photoName =
+                        imageData.count == 1
+                        ? "This photo"
+                        : "Photo \(photoIndex + 1)"
+                    feedback = .error(
+                        "\(photoName) contains \(recognizedCount) words. Each photo can contain at most \(maximum). Choose a shorter word sheet."
+                    )
+                    if appending { showsOCRPreview = true }
+                    return
+                }
+                let parsedWords = parseResult.uniqueWords
+                guard !parsedWords.isEmpty else {
+                    feedback = .error(
+                        imageData.count == 1
+                            ? "No English words were found. Try a clearer photo."
+                            : "Photo \(photoIndex + 1) has no English words. Replace that photo and try again."
+                    )
+                    if appending { showsOCRPreview = true }
+                    return
+                }
+                additions = GuardianOCRBatchAccumulator.appending(
+                    parsedWords,
+                    to: additions
+                )
+            }
+            guard !additions.isEmpty else {
                 feedback = .error("No English words were found. Try a clearer photo.")
+                if appending { showsOCRPreview = true }
                 return
             }
-            ocrWords = parsedWords.map { GuardianEditableOCRWord(text: $0) }
-            ocrSpokenContexts = [:]
+            ocrWords = GuardianOCRBatchAccumulator.appending(
+                additions.map(\.text),
+                to: appending ? ocrWords : []
+            )
             feedback = nil
             showsOCRPreview = true
         } catch is CancellationError {
             feedback = nil
+            if appending { showsOCRPreview = true }
+        } catch let error as GuardianOCRPhotoWordLimitError {
+            switch error {
+            case .tooManyWords(let recognizedCount, let maximum):
+                feedback = .error(
+                    "This photo contains \(recognizedCount) words. Each photo can contain at most \(maximum). Choose a shorter word sheet."
+                )
+            }
+            if appending { showsOCRPreview = true }
         } catch {
-            feedback = .error("The words could not be read. Try a brighter, flatter photo.")
+            feedback = .error(
+                "The words could not be read. Try a brighter, flatter photo."
+            )
+            if appending { showsOCRPreview = true }
         }
     }
 
+    private func prepareToTakeAnotherPhoto() {
+        #if os(iOS)
+            guard !isRecognizing else { return }
+            appendsNextCameraPhoto = true
+            showsOCRPreview = false
+            Task { @MainActor in
+                // Let the review sheet finish dismissing before presenting the camera again.
+                // Presenting two sheets in the same run-loop turn is unreliable on device.
+                try? await Task.sleep(for: .milliseconds(350))
+                isCameraPresented = true
+            }
+        #endif
+    }
+
     @MainActor
-    private func addOCRWords(
-        _ words: [String],
-        contexts: [String: String]
-    ) async -> Bool {
+    private func addOCRWords(_ words: [String]) async -> Bool {
         guard !words.isEmpty else { return false }
         guard
             let report = await onSubmit(
                 GuardianWordImportRequest(
                     rawText: words.joined(separator: "\n"),
-                    learningMode: selectedMode,
-                    spokenContextsByNormalizedWord: contexts
+                    learningMode: selectedMode
                 )
             )
         else {
@@ -549,15 +779,19 @@ struct GuardianWordManagerView: View {
     private func requestRemoval(_ prompts: [WordPrompt]) {
         guard !prompts.isEmpty else { return }
         pendingRemoval = prompts
-        showsRemovalConfirmation = true
+        if hasConfirmedRemovalThisSession {
+            removePendingWords()
+        } else {
+            showsRemovalConfirmation = true
+        }
     }
 
     private func removePendingWords() {
+        hasConfirmedRemovalThisSession = true
         let prompts = pendingRemoval
         pendingRemoval = []
         Task {
             guard await onSetWordsActive(prompts, false) else { return }
-            undoWords = prompts
             selectedWordIDs = []
             isSelecting = false
         }
@@ -566,8 +800,7 @@ struct GuardianWordManagerView: View {
     private func restoreLastRemoval() {
         let prompts = undoWords
         Task {
-            guard await onSetWordsActive(prompts, true) else { return }
-            undoWords = []
+            _ = await onSetWordsActive(prompts, true)
         }
     }
 
@@ -582,24 +815,29 @@ struct GuardianWordManagerView: View {
             : "These \(count) words will leave future practice. Learning history stays available."
     }
 
-    private func contextIsValid(_ word: String, context: String) -> Bool {
-        (try? WordPrompt(
-            learningMode: selectedMode,
-            text: word,
-            audioCue: .contextual(context)
-        )) != nil
-    }
 }
 
 private struct GuardianOCRPreviewView: View {
     let mode: LearningMode
     let existingWords: [WordPrompt]
+    let practiceFrequencyByNormalizedWord: [String: Int]
     @Binding var words: [GuardianEditableOCRWord]
-    @Binding var spokenContexts: [String: String]
+    let isRecognizingAdditionalPhotos: Bool
+    let recognitionFeedbackMessage: String?
+    #if os(iOS)
+        @Binding var additionalPhotoItems: [PhotosPickerItem]
+    #endif
     let onCancel: () -> Void
-    let onAdd: @MainActor ([String], [String: String]) async -> Bool
+    let onTakeAnotherPhoto: () -> Void
+    let onAdd: @MainActor ([String]) async -> Bool
 
     @State private var isAdding = false
+    @State private var sortOrder: GuardianWordSortOrder = .addedOrder
+    @State private var submissionError: String?
+    @FocusState private var inputIsFocused: Bool
+
+    private let topAnchor = "guardian-ocr-top"
+    private let bottomAnchor = "guardian-ocr-bottom"
 
     private var analysis: GuardianOCRPreviewAnalysis {
         GuardianOCRPreviewAnalysis(
@@ -608,98 +846,246 @@ private struct GuardianOCRPreviewView: View {
         )
     }
 
-    private var requiredContextWords: [String] {
-        ManualWordBatchParser().parse(
-            analysis.addableWords.joined(separator: "\n"),
-            learningMode: mode
-        ).rejected.compactMap(\.requiredContextWord)
-    }
-
-    private var contextsAreValid: Bool {
-        requiredContextWords.allSatisfy { word in
-            guard let context = spokenContexts[word] else { return false }
-            return
-                (try? WordPrompt(
-                    learningMode: mode,
-                    text: word,
-                    audioCue: .contextual(context)
-                )) != nil
-        }
+    private var presentedWords: [GuardianEditableOCRWord] {
+        GuardianWordListPresentation.recognizedWords(
+            words,
+            sortOrder: sortOrder,
+            practiceFrequencyByNormalizedWord: practiceFrequencyByNormalizedWord
+        )
     }
 
     var body: some View {
-        ZStack {
-            GuardianSemanticTokens.background.ignoresSafeArea()
-            ScrollView {
-                VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.medium) {
-                    HStack {
-                        Button("Cancel", action: onCancel)
-                            .frame(minWidth: 72, minHeight: 44)
-                        Spacer()
-                        Text("Review scanned words")
-                            .font(.system(.title2, design: .rounded, weight: .bold))
-                        Spacer()
-                        Color.clear.frame(width: 72, height: 44)
-                    }
+        ScrollViewReader { proxy in
+            ZStack {
+                GuardianSemanticTokens.background.ignoresSafeArea()
+                ScrollView {
+                    VStack(
+                        alignment: .leading,
+                        spacing: GuardianPrimitiveTokens.Spacing.medium
+                    ) {
+                        Color.clear
+                            .frame(height: 1)
+                            .id(topAnchor)
 
-                    Text(
-                        "Edit mistakes or remove anything that is not part of the school list. Duplicates are skipped automatically."
-                    )
-                    .font(.system(.subheadline, design: .rounded, weight: .medium))
-                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                        Text(
+                            "Edit mistakes or remove anything that is not part of the school list. Duplicates are skipped automatically."
+                        )
+                        .font(.system(.subheadline, design: .rounded, weight: .medium))
+                        .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
 
-                    GuardianCard {
-                        LazyVStack(spacing: 0) {
-                            ForEach($words) { $word in
-                                HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
-                                    TextField("Word", text: $word.text)
-                                        .textFieldStyle(.roundedBorder)
-                                        .font(.system(.body, design: .rounded, weight: .semibold))
-                                    previewState(for: word)
-                                    Button(role: .destructive) {
-                                        words.removeAll { $0.id == word.id }
-                                    } label: {
-                                        Image(systemName: "trash")
-                                            .frame(width: 44, height: 44)
+                        reviewControls
+
+                        if isRecognizingAdditionalPhotos {
+                            Label("Reading the additional photos…", systemImage: "text.viewfinder")
+                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                        } else if let recognitionFeedbackMessage {
+                            Label(
+                                recognitionFeedbackMessage,
+                                systemImage: "exclamationmark.triangle.fill"
+                            )
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                            .foregroundStyle(.red)
+                        }
+
+                        GuardianCard {
+                            LazyVStack(spacing: 0) {
+                                ForEach(presentedWords) { word in
+                                    HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                                        Text("\(word.sourceOrdinal).")
+                                            .font(
+                                                .system(
+                                                    .caption,
+                                                    design: .rounded,
+                                                    weight: .bold
+                                                )
+                                            )
+                                            .foregroundStyle(
+                                                GuardianSemanticTokens.secondaryForeground
+                                            )
+                                            .frame(width: 34, alignment: .trailing)
+                                            .monospacedDigit()
+
+                                        TextField("Word", text: textBinding(for: word.id))
+                                            .textFieldStyle(.roundedBorder)
+                                            .font(
+                                                .system(.body, design: .rounded, weight: .semibold)
+                                            )
+                                            .focused($inputIsFocused)
+                                        previewState(for: word)
+                                        practiceFrequencyBadge(for: word)
+                                        Button(role: .destructive) {
+                                            words.removeAll { $0.id == word.id }
+                                        } label: {
+                                            Image(systemName: "trash")
+                                                .frame(width: 44, height: 44)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundStyle(.red)
+                                        .accessibilityLabel("Remove \(word.text)")
                                     }
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(.red)
-                                    .accessibilityLabel("Remove \(word.text)")
+                                    .padding(.vertical, 6)
+                                    if word.id != presentedWords.last?.id { Divider() }
                                 }
-                                .padding(.vertical, 6)
-                                if word.id != words.last?.id { Divider() }
                             }
                         }
-                    }
 
-                    if !requiredContextWords.isEmpty {
-                        contextEditors
+                        Color.clear
+                            .frame(height: 1)
+                            .id(bottomAnchor)
                     }
-
-                    Button {
-                        addAll()
-                    } label: {
-                        Label(
-                            "Add all \(analysis.addableWords.count) to \(mode.guardianTitle)",
-                            systemImage: "plus.circle.fill"
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .buttonStyle(
-                        GuardianPrimaryButtonStyle(
-                            tint: GuardianSemanticTokens.accent(for: mode)
-                        )
-                    )
-                    .disabled(
-                        isAdding || analysis.addableWords.isEmpty || !contextsAreValid
-                    )
+                    .frame(maxWidth: 820, alignment: .leading)
+                    .padding(GuardianPrimitiveTokens.Spacing.large)
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: 820, alignment: .leading)
-                .padding(GuardianPrimitiveTokens.Spacing.large)
-                .frame(maxWidth: .infinity)
+                .scrollDismissesKeyboard(.immediately)
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                navigationBar(proxy: proxy)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                addAllBar
             }
         }
         .foregroundStyle(GuardianSemanticTokens.foreground)
+    }
+
+    private func navigationBar(proxy: ScrollViewProxy) -> some View {
+        HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+            Button(action: onCancel) {
+                Label("Back", systemImage: "chevron.left")
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+
+            Spacer()
+            Text("Review scanned words")
+                .font(.system(.title3, design: .rounded, weight: .bold))
+                .lineLimit(1)
+            Spacer()
+
+            Button {
+                inputIsFocused = false
+                withAnimation { proxy.scrollTo(topAnchor, anchor: .top) }
+            } label: {
+                Image(systemName: "arrow.up")
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Scroll to top")
+
+            Button {
+                inputIsFocused = false
+                withAnimation { proxy.scrollTo(bottomAnchor, anchor: .bottom) }
+            } label: {
+                Image(systemName: "arrow.down")
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Scroll to bottom")
+        }
+        .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
+        .padding(.vertical, GuardianPrimitiveTokens.Spacing.small)
+        .background(.regularMaterial)
+    }
+
+    private var reviewControls: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                sortMenu
+                Spacer()
+                photoButtons
+            }
+            VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.small) {
+                sortMenu
+                photoButtons
+            }
+        }
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort scanned words", selection: $sortOrder) {
+                ForEach(GuardianWordSortOrder.allCases, id: \.self) { order in
+                    Label(order.title, systemImage: order.symbol)
+                        .tag(order)
+                }
+            }
+        } label: {
+            Label(sortOrder.title, systemImage: "arrow.up.arrow.down")
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+    }
+
+    @ViewBuilder
+    private var photoButtons: some View {
+        #if os(iOS)
+            HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                PhotosPicker(
+                    selection: $additionalPhotoItems,
+                    maxSelectionCount: nil,
+                    matching: .images
+                ) {
+                    Label("Add photos", systemImage: "photo.badge.plus")
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isAdding || isRecognizingAdditionalPhotos)
+
+                Button(action: onTakeAnotherPhoto) {
+                    Label("Take another", systemImage: "camera.fill")
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .disabled(
+                    isAdding
+                        || isRecognizingAdditionalPhotos
+                        || !UIImagePickerController.isSourceTypeAvailable(.camera)
+                )
+            }
+        #else
+            EmptyView()
+        #endif
+    }
+
+    private var addAllBar: some View {
+        VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.small) {
+            if let submissionError {
+                Label(submissionError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.red)
+            }
+            Button {
+                inputIsFocused = false
+                addAll()
+            } label: {
+                Label(
+                    "Add all \(analysis.addableWords.count) to \(mode.guardianTitle)",
+                    systemImage: "plus.circle.fill"
+                )
+                .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(
+                GuardianPrimaryButtonStyle(
+                    tint: GuardianSemanticTokens.accent(for: mode)
+                )
+            )
+            .disabled(
+                !GuardianOCRSubmissionPolicy.canSubmit(
+                    addableWords: analysis.addableWords,
+                    isAdding: isAdding,
+                    isRecognizingAdditionalPhotos: isRecognizingAdditionalPhotos
+                )
+            )
+        }
+        .frame(maxWidth: 820)
+        .padding(.horizontal, GuardianPrimitiveTokens.Spacing.large)
+        .padding(.vertical, GuardianPrimitiveTokens.Spacing.small)
+        .frame(maxWidth: .infinity)
+        .background(.regularMaterial)
     }
 
     @ViewBuilder
@@ -724,39 +1110,42 @@ private struct GuardianOCRPreviewView: View {
         }
     }
 
-    private var contextEditors: some View {
-        GuardianCard {
-            VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.small) {
-                Text("Help with pronunciation")
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                ForEach(requiredContextWords, id: \.self) { word in
-                    TextField(
-                        "Use “\(word)” in a short sentence",
-                        text: Binding(
-                            get: { spokenContexts[word, default: ""] },
-                            set: { spokenContexts[word] = $0 }
-                        ),
-                        axis: .vertical
-                    )
-                    .textFieldStyle(.roundedBorder)
+    private func practiceFrequencyBadge(for word: GuardianEditableOCRWord) -> some View {
+        let count = GuardianWordListPresentation.recognizedFrequency(
+            for: word,
+            in: practiceFrequencyByNormalizedWord
+        )
+        return Label("\(count)", systemImage: "repeat")
+            .font(.system(.caption2, design: .rounded, weight: .bold))
+            .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+            .accessibilityLabel("Practiced \(count) \(count == 1 ? "time" : "times")")
+    }
+
+    private func textBinding(for id: UUID) -> Binding<String> {
+        Binding(
+            get: {
+                words.first(where: { $0.id == id })?.text ?? ""
+            },
+            set: { newValue in
+                guard let index = words.firstIndex(where: { $0.id == id }) else {
+                    return
                 }
+                words[index].text = newValue
             }
-        }
+        )
     }
 
     private func addAll() {
         guard !isAdding else { return }
         isAdding = true
-        let contexts: [String: String] = Dictionary(
-            uniqueKeysWithValues: requiredContextWords.compactMap { word in
-                guard let context = spokenContexts[word] else { return nil }
-                return (word, context.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
-        )
+        submissionError = nil
         Task {
             defer { isAdding = false }
-            if await onAdd(analysis.addableWords, contexts) {
+            if await onAdd(analysis.addableWords) {
                 onCancel()
+            } else {
+                submissionError =
+                    "The words were not added. Check the highlighted entries and try again."
             }
         }
     }
@@ -799,15 +1188,6 @@ private enum GuardianWordManagerFeedback: Equatable {
         case .error: .red
         case .progress: GuardianSemanticTokens.secondaryForeground
         }
-    }
-}
-
-extension ManualWordRejection {
-    fileprivate var requiredContextWord: String? {
-        guard case .invalidPrompt(.contextRequired(let word, _)) = reason else {
-            return nil
-        }
-        return word
     }
 }
 

@@ -196,21 +196,18 @@ public enum EnglishPromptSafetyPolicy {
         learningMode: LearningMode,
         audioCue: WordAudioCue
     ) throws {
-        let ambiguityReason: PromptAmbiguityReason?
-        if heteronyms.contains(normalizedWord) {
-            ambiguityReason = .heteronym
-        } else if learningMode == .write, audioAmbiguousWords.contains(normalizedWord) {
-            ambiguityReason = .homophone
-        } else {
-            ambiguityReason = nil
-        }
+        guard
+            ambiguityReason(
+                for: normalizedWord,
+                learningMode: learningMode
+            ) != nil
+        else { return }
 
-        guard let ambiguityReason else { return }
+        // Canonical teacher pronunciation is the default. Context is optional
+        // metadata a parent can add when they want a specific reading; it must
+        // never prevent an otherwise valid school word from entering a pool.
         guard let context = audioCue.spokenContext, !context.isEmpty else {
-            throw WordPromptValidationError.contextRequired(
-                word: normalizedWord,
-                reason: ambiguityReason
-            )
+            return
         }
         guard context.count <= maximumContextCharacterCount else {
             throw WordPromptValidationError.contextTooLong(
@@ -219,6 +216,19 @@ public enum EnglishPromptSafetyPolicy {
         }
         guard contextContainsTarget(context, normalizedTarget: normalizedWord) else {
             throw WordPromptValidationError.contextMustContainTarget(word: normalizedWord)
+        }
+    }
+
+    public static func ambiguityReason(
+        for normalizedWord: String,
+        learningMode: LearningMode
+    ) -> PromptAmbiguityReason? {
+        if heteronyms.contains(normalizedWord) {
+            return .heteronym
+        } else if learningMode == .write, audioAmbiguousWords.contains(normalizedWord) {
+            return .homophone
+        } else {
+            return nil
         }
     }
 

@@ -8,18 +8,20 @@ public struct QuestScoringPolicy: Equatable, Sendable {
     public let requiredPaceBaselineSampleCount: Int
     public let slowerPaceGraceRatio: Double
     public let maximumUnaidedRecoveryCount: Int
+    public let unaidedRecoveryRewardAccuracyFloor: Double
 
     public init(
-        accuracyStarThreshold: Double = 0.8,
+        accuracyStarThreshold: Double = 0.75,
         accuracyPointMaximum: Int = 80,
         pacePointMaximum: Int = 20,
         requiredPaceBaselineSampleCount: Int = 3,
-        slowerPaceGraceRatio: Double = 0.25,
-        maximumUnaidedRecoveryCount: Int = 1
+        slowerPaceGraceRatio: Double = 0.5,
+        maximumUnaidedRecoveryCount: Int = 1,
+        unaidedRecoveryRewardAccuracyFloor: Double = 0.8
     ) {
         self.accuracyStarThreshold =
             accuracyStarThreshold
-            .finiteOr(0.8)
+            .finiteOr(0.75)
             .clamped(to: 0...1)
         self.accuracyPointMaximum = max(0, accuracyPointMaximum)
         self.pacePointMaximum = max(0, pacePointMaximum)
@@ -31,13 +33,17 @@ public struct QuestScoringPolicy: Equatable, Sendable {
             1,
             max(
                 0,
-                slowerPaceGraceRatio.isFinite ? slowerPaceGraceRatio : 0.25
+                slowerPaceGraceRatio.isFinite ? slowerPaceGraceRatio : 0.5
             )
         )
         self.maximumUnaidedRecoveryCount = max(
             0,
             maximumUnaidedRecoveryCount
         )
+        self.unaidedRecoveryRewardAccuracyFloor =
+            unaidedRecoveryRewardAccuracyFloor
+            .finiteOr(0.8)
+            .clamped(to: 0...1)
     }
 
     public static let `default` = QuestScoringPolicy()
@@ -99,10 +105,24 @@ public struct QuestScorer: Sendable {
             )
         let rewardAccuracy =
             receivesUnaidedRecoveryGrace
-            ? max(accuracy, policy.accuracyStarThreshold)
+            ? max(
+                accuracy,
+                max(
+                    policy.accuracyStarThreshold,
+                    policy.unaidedRecoveryRewardAccuracyFloor
+                )
+            )
             : accuracy
         let meetsAccuracyStarRule =
             meetsFirstTryAccuracyThreshold || receivesUnaidedRecoveryGrace
+        let completedPlannedWordIDs = Set(
+            input.plan.reviewWordIDs + input.plan.newWordIDs
+        )
+        let isPerfectFirstTry =
+            !completedPlannedWordIDs.isEmpty
+            && completedPlannedWordIDs.isSubset(of: input.completedWordIDs)
+            && attemptCount == completedPlannedWordIDs.count
+            && correctCount == attemptCount
         let paceEligibleAttempts = paceEligibleCorrectAttempts(
             firstIndependentAttempts: firstIndependentAttempts,
             questAttempts: questAttempts
@@ -116,10 +136,12 @@ public struct QuestScorer: Sendable {
         let stars = stars(
             for: input,
             meetsAccuracyStarRule: meetsAccuracyStarRule,
+            isPerfectFirstTry: isPerfectFirstTry,
             paceAssessment: paceAssessment
         )
         let points = points(
             accuracy: rewardAccuracy,
+            isPerfectFirstTry: isPerfectFirstTry,
             paceAssessment: paceAssessment
         )
 
@@ -285,6 +307,7 @@ public struct QuestScorer: Sendable {
     private func stars(
         for input: QuestScoringInput,
         meetsAccuracyStarRule: Bool,
+        isPerfectFirstTry: Bool,
         paceAssessment: PersonalPaceAssessment
     ) -> QuestStars {
         var earned = Set<QuestStar>()
@@ -301,7 +324,7 @@ public struct QuestScorer: Sendable {
             earned.insert(.accuracy)
         }
         if meetsAccuracyStarRule,
-            earnsPaceStar(paceAssessment)
+            isPerfectFirstTry || earnsPaceStar(paceAssessment)
         {
             earned.insert(.personalPace)
         }
@@ -323,6 +346,7 @@ public struct QuestScorer: Sendable {
 
     private func points(
         accuracy: Double,
+        isPerfectFirstTry: Bool,
         paceAssessment: PersonalPaceAssessment
     ) -> Int {
         let accuracyPoints = Int(
@@ -330,16 +354,22 @@ public struct QuestScorer: Sendable {
         )
         let pacePoints: Int
 
-        switch paceAssessment {
-        case .withinPersonalBand:
+        switch (isPerfectFirstTry, paceAssessment) {
+        case (true, _):
+            // A fully correct first try is the clearest child-facing success
+            // signal. It receives the pace component even while a personal
+            // baseline is still missing or a timing sample is unavailable.
+            // Guardian accuracy remains the strict first-independent metric.
             pacePoints = policy.pacePointMaximum
-        case .calibrating:
+        case (false, .withinPersonalBand):
+            pacePoints = policy.pacePointMaximum
+        case (false, .calibrating):
             // Calibration is neutral: the unavailable pace component follows
             // accuracy instead of penalizing the child for limited history.
             pacePoints = Int(
                 (accuracy * Double(policy.pacePointMaximum)).rounded()
             )
-        case .unavailable, .outsidePersonalBand:
+        case (false, .unavailable), (false, .outsidePersonalBand):
             pacePoints = 0
         }
 

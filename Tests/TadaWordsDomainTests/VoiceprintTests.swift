@@ -157,4 +157,16 @@ final class VoiceprintTests: XCTestCase {
         )
         XCTAssertTrue(signals.allSatisfy { !$0.canBlockLearning })
     }
+
+    func testEnrollmentScriptHasSixUniqueShortSentences() {
+        let sentences = VoiceprintEnrollmentScript.sentences
+
+        XCTAssertEqual(sentences.count, 6)
+        XCTAssertEqual(Set(sentences).count, sentences.count)
+        XCTAssertTrue(sentences.allSatisfy { !$0.isEmpty && $0.count <= 32 })
+        XCTAssertEqual(
+            Set(VoiceprintEnrollmentScript.randomizedSentences()),
+            Set(sentences)
+        )
+    }
 }

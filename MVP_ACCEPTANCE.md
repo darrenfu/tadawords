@@ -32,19 +32,21 @@ make check
 
 通过标准：格式检查、单元与组合测试、iPhone 17 Pro Max LocalQA 模拟器构建、iPad Pro 13-inch (M5) LocalQA 模拟器构建全部通过。设备准备脚本可以在未配置签名 Team 时报告签名阻塞。
 
-2026-07-13 的 v0.2 自动化证据如下。V1 的 367 项测试只保留为历史基线，已被本轮 480 项全量结果取代：
+PR #1 已在 merge commit `7728f28` 把 v0.2 合入 `main`。2026-07-14 的当前 v0.3 自动化证据如下。V1 的 367 项与 v0.2 的 480 项测试保留为历史基线；v0.3 全量为 548/548：
 
 | 检查 | 结果 |
 |---|---|
 | Swift formatter 严格检查 | 通过 |
-| Swift 单元与组合测试 | v0.2 全量 480/480 通过，0 failure；取代 V1 的 367 项基线 |
-| iPhone 17 Pro Max LocalQA 模拟器构建 | 通过 |
-| iPad Pro 13-inch (M5) LocalQA 模拟器构建 | 通过 |
-| 两个 built product 的方向声明 | iPhone 为 Portrait + 两个 Landscape；iPad 为四向；`UIRequiresFullScreen` 为 true；运行时 Parents 可旋转，child route 只允许横屏 |
-| 模拟器方向证据 | iPad 的 Parent 与 child 窗口形态符合路由策略；iPhone raw framebuffer 截图方向不可靠，仍需真机旋转确认 |
-| Release CloudKit 分享声明 | iPhone 与 iPad Release built product 的 `CKSharingSupported` 为 true |
-| LocalQA 隔离声明 | `Tada Words QA` 使用独立 bundle ID、空 iCloud entitlement，且 `CKSharingSupported` 为 false |
-| 儿童语音 fixture | SHA-256 通过，Apple 转写为 `Bye.`，App policy 对目标 `bye` 判定为匹配 |
+| Swift 单元与组合测试 | v0.3 全量 548/548 通过，0 failure；取代已合并 v0.2 的 480 项计数 |
+| Critical XCUITest | iPhone 17 Pro Max 模拟器 5/5 通过：Read/Write 连续反馈、两次删除/Undo、Photos 退出后排序、OCR Review → Add All → Pool → Sort |
+| iPhone 17 Pro Max LocalQA 模拟器构建 | v0.3 fresh build 通过 |
+| iPad Pro 13-inch (M5) LocalQA 模拟器构建 | v0.3 fresh build 通过 |
+| iPhone 17 Pro Max 真机安装 | `Tada Words QA` v0.3.0 (`2026071401`) 签名构建已覆盖安装；儿童书写、发音听感和辅助功能仍需人工验收 |
+| 两个 built product 的方向声明 | v0.2 基线：iPhone 为 Portrait + 两个 Landscape；iPad 为四向；`UIRequiresFullScreen` 为 true；运行时 Parents 可旋转，child route 只允许横屏 |
+| 模拟器方向证据 | v0.2 基线：iPad 的 Parent 与 child 窗口形态符合路由策略；iPhone raw framebuffer 截图方向不可靠，仍需真机旋转确认 |
+| Release CloudKit 分享声明 | v0.2 基线：iPhone 与 iPad Release built product 的 `CKSharingSupported` 为 true |
+| LocalQA 隔离声明 | v0.2 基线：`Tada Words QA` 使用独立 bundle ID、空 iCloud entitlement，且 `CKSharingSupported` 为 false |
+| 儿童语音 fixture | v0.2 基线：SHA-256 通过，Apple 转写为 `Bye.`，App policy 对目标 `bye` 判定为匹配 |
 
 `CKSharingSupported` 是构建声明，不代表模拟器正在运行 CloudKit。模拟器刻意使用 local/device-only transport；真实 CloudKit transport 只能在配置 Team、container 与 iCloud 的签名真机上验收。
 
@@ -55,14 +57,14 @@ make check
 | 需求 | 当前状态 | 人工验收重点 |
 |---|---|---|
 | Read 与 Write 两条独立路线 | 代码已完成 | 两个 Today Quest 按钮不合并，数据与设置互不覆盖 |
-| Parent Word Manager | v0.2 代码完成，待真机回归 | 单词 Return 即时加入、Camera/Photo OCR 预览、newest-first、单删/批删/Undo、两组独立去重 |
+| Parent Word Manager | v0.2 基础已合并；v0.3 增强完成，待真机回归 | 单词 Return 即时加入；多照片 Camera/Photo OCR；逐词编号；单图 500 词上限；added/A-Z/most practiced 排序；频次；type-ahead 搜索；Hear/Delete；单删/批删/Undo；两组独立去重 |
 | 仅使用家长录入词 | v0.2 代码完成 | 无 smart fill / Grade 自动加入；Pool 不足时不补词 |
 | New 与 Review 顺序可交换 | 代码已完成 | 每条路线独立保存顺序 |
 | 艾宾浩斯复习与补弱 | 代码已完成 | 到期、错误、相对慢、重播和 Help 影响排序与记忆参数 |
-| Write 新词示范与一次引导重写 | 代码已完成 | 先短暂显示答案，错误后显示答案，只提供一次引导重写 |
-| Read 安静首答与两错后 Help | v0.2 代码完成，待真机回归 | 首答前不播答案；两次有效错答后才出现 Hear/See；技术失败不解锁也不耗次数 |
+| Write 不预显答案与一次引导重写 | v0.3 代码完成，待真机回归 | 每个词开始时只播发音，不显示拼写；只有点 `?` 才显示答案；第一次真实错答可出现具体词图片按钮 |
+| Read 安静首答与两错后 Help | v0.3 代码完成，待真机回归 | 首答前不播答案；两次有效错答后只出现 Hear it；没有图片提示；技术失败不解锁也不耗次数 |
 | 真正 Mastered 判定 | 代码已完成 | 三个不同本地日期独立成功，且未来 14 天预计回忆率达标 |
-| 分数、宽松三颗星、严格 Guardian 证据 | v0.2 代码完成 | 一次无辅助立即恢复、校准 Pace、慢侧 25% 宽限；技术性 Move On 显示 Not scored |
+| 分数、宽松三颗星、严格 Guardian 证据 | v0.3 代码完成 | Accuracy 门槛 75%；一次无辅助立即恢复；校准 Pace；慢侧 50% 宽限；完美首答固定 100 分/3 星；技术性 Move On 显示 Not scored |
 | 八个独立主题世界 | v0.2 代码完成，待真机视听回归 | 公主、工程车、动物、恐龙、消防救援、原创积木、冰雪与过山车的场景/奖励不混用 |
 | 每个世界 20 个小奖励与 5 个里程碑 | v0.2 代码完成，待真机视觉回归 | 共 200 件不同图标；永久收藏品不因 Practice Again 重发 |
 | Double Quest 次日 Theme / Icon | v0.2 代码完成，待真机回归 | 同日 Read+Write 的 Today run 次日解锁；partial/replay 不算；My Collection 可选择已获得项目 |
@@ -75,13 +77,29 @@ make check
 | Crash-resumable Profile 删除 | 代码已完成 | 删除本地资料、单词、历史、奖励、提醒和本机声纹 |
 | 本地通知与安静时段 | 代码已完成 | 每日、Pool low、完成、同步失败、周报与时间设置 |
 | CloudKit 同步与家庭邀请 | 持久、默认关闭的家长 opt-in 已完成；远端删除未完成 | 用 Developer Team、iCloud container 与两个 Apple 账号验收 opt-in、关闭和邀请；远端擦除完成前不可发布 |
-| 1 分钟声纹注册与 Read 匹配 | Device Alpha 代码已完成，需要儿童样本校准 | 声纹只存本机 Keychain，原始录音不保存或同步 |
+| 1 分钟声纹注册与 Read 匹配 | v0.3 跟读流程完成，需要儿童样本校准 | 随机短句逐句播放、儿童跟读、拒绝样本可重录；声纹只存本机 Keychain，原始录音不保存或同步 |
 | Apple Pencil 与掌触过滤 | 代码已完成，需要真机验收 | iPhone 用手指，iPad 分别测试手指与 Pencil |
 | VoiceOver、Reduce Motion、动态字体 | 代码已完成，需要真机验收 | 完整走查反馈播报、焦点、横屏紧凑高度 |
-| 年轻、有活力的女声与主题音乐 | v0.2 代码完成，需要人工听感批准 | 优先年轻美式女声；连续 SSML 短句 `tā-'dá, wòrds!`；Write 慢速尾音；Moonpetal 彩虹/独角兽与欢快音乐 |
+| 单一教师音色与主题音乐 | 单一 teacher contract/清晰 fallback 为 v0.3；启动发音与主题音乐为已合并 v0.2；需要人工听感批准 | 不再提供 Profile voice style；远端只允许安全 HTTPS endpoint，客户端不存 provider key；离线采用清晰度优先的美式 Apple voice；连续启动短句 `tā-'dá, wòrds!`；Moonpetal 彩虹/独角兽与欢快音乐 |
 | 八个原创 World | v0.2 代码完成，待真机视听回归 | 新增 Dino、Firehouse、Brickwork、Frostlight、Coaster；每个拥有隔离场景、吉祥物、颜色、奖励与音乐 |
-| Write 笔盒与局部橡皮擦 | v0.2 代码完成，待真机书写回归 | 四种笔、12 色、笔触音效、2.5× 局部擦除；无 Undo；Clear 立即执行；`?` 立即显示词 |
+| Write 笔盒与稳定画布 | v0.2 笔盒基础已合并；v0.3 增强完成，待真机书写回归 | Pencil/Chalk/Brush 三种黑色笔、每 Profile 持久化、流畅笔触音效、4× 局部擦除、空白点击恢复原笔、画布加宽 10%；root Quest transition identity 保持稳定，切词/反馈时坐标不移动 |
+| 具体词图片提示 | v0.3 代码完成，待真机网络/离线回归 | 入 Pool 后异步缓存固定 Twemoji 资源；Write 首次真实错答显示可点击图片；`the` 等抽象/功能词不请求图片 |
+| Parent Gate 与 Lock | v0.3 代码完成，待真机回归 | 输入完整位数后自动判题；错误时立即重置但反馈保持到下一次输入；Parents 的 Lock 直接返回 Kids 页面 |
 | Treasure 图标与头像 | v0.2 代码完成，待真机回归 | 8×25 个相关图标；locked 保留灰色图标加锁；collected treasure 可选为头像且保留原照片 |
+
+## 理解分数与单词发音
+
+儿童结果页使用以下规则。Guardian 报告仍显示严格的第一次独立作答，不把补答改写成首答正确。
+
+| 项目 | 规则 |
+|---|---|
+| Completion Star | 完成计划中的全部单词 |
+| Accuracy Star | 第一次独立作答正确率达到 75%，或整轮只错一个词且紧接着在无提示情况下答对 |
+| Personal Pace Star | 已获得 Accuracy，且速度落在个人区间、仍处于有效校准期，或整轮完美首答 |
+| Points | 正确率最多 80 分，速度最多 20 分 |
+| Perfect first try | 无论是否已有速度基线，固定 100 分和 3 星 |
+
+家长只输入学校发下来的单词。手输与照片批量导入的新词统一使用 canonical isolated teacher pronunciation；Parent UI 不提供语境句或多发音编辑入口。旧版本中已经保存的 contextual audio metadata 仍可被读取，避免升级时损坏数据。
 
 ## 验收 Kid Profile 与 Guardian
 
@@ -89,9 +107,10 @@ make check
 2. 阅读并接受版本化隐私说明，创建昵称、动物头像、Grade 和起始 World
 3. 强制退出并重启；Profile Picker 必须突出上次有效 Profile，孩子点击后才进入 Lobby
 4. 新建第二个 Profile，为两者输入不同单词与设置，再验证 Picker 和隔离
-5. 普通单击 **Parents**，确认随机算术 Parent Gate 立即出现
+5. 普通单击 **Parents**，确认随机算术 Parent Gate 立即出现；输入完整位数后无需点 Unlock 即自动判题。错误答案自动清空，但错误提示保持可见，直到家长开始输入下一次答案
 6. 进入 Parents 编辑 Profile，再从 Camera 自拍、Photo Library 和动物图标各测试一次头像来源与年龄设置
-7. 删除上次使用的非唯一 Profile；重启后必须回到合法 Picker，不猜测身份或复活数据
+7. 从 Parent dashboard 点 **Lock**，确认立即锁定并返回 Kids Profile Picker
+8. 删除上次使用的非唯一 Profile；重启后必须回到合法 Picker，不猜测身份或复活数据
 
 通过标准：每个 Profile 隔离单词、设置、学习记录、日历、奖励和声纹。孩子可以只输入昵称建档，敏感操作需要系统设备认证。App 必须保留至少一个 Profile。Onboarding 不请求麦克风、Speech、Camera、Photo Library 或通知权限；相关权限只在对应功能首次使用时请求。
 
@@ -100,12 +119,16 @@ make check
 1. 切到 Read Tab，输入 `the` 并按 Return；确认立即保存、输入框清空且 `the` 出现在最顶部
 2. 依次输入 `look`、`play`；确认始终 newest-first，同 Pool 再输 `the` 不复制历史而是前移
 3. 切到 Write Tab 输入 `the`；确认 Read/Write 两组可以各有同名词
-4. 从 Photo Library 选择一张多词 school list；编辑 OCR 结果、删除误识别项、Add All，并核对批次顺序与去重
-5. 用 Camera 拍另一张 word sheet，重复预览与导入
-6. 单独删除一个词；进入 Select 后批量删除至少两个词；分别验证确认和 Undo
-7. 清空或缩小 Pool，重启并准备 Quest；确认不会出现 Grade、catalog 或 smart-fill 新词
+4. 从 Photo Library 一次选择至少两张 school list；再用 **Add photos** 和 **Take another** 追加图片，确认识别结果合并到同一预览
+5. 核对每个 OCR 词从 1 开始编号；编辑或删除误识别项，并分别切换 Added order、A-Z、Most practiced
+6. 准备一张超过 500 个识别词的单图，确认该图片被明确拒绝并提示更换图片；其他未超限图片的结果不丢失
+7. 滚动长预览，验证顶部返回/到顶按钮与到底按钮；点 **Add all N to Read/Write**，确认按钮不会被键盘遮住、只提交一次，并显示保存进度或明确错误
+8. 在 Pool 切换 Added order、A-Z、Most practiced，核对每行频次数字；用 type-ahead 搜索并直接点该行的 Hear 与 Delete
+9. 第一次删除时确认弹窗出现；确认后继续单删和批删，确认本 Parent session 不再重复弹窗且 Undo 仍可用
+10. 在 typing、search 和 OCR 文字编辑框中输入文字，再点空白处；确认键盘收起；整个流程不出现 pronunciation/context section
+11. 清空或缩小 Pool，重启并准备 Quest；确认不会出现 Grade、catalog 或 smart-fill 新词
 
-通过标准：所有 Pool 新增项均能追溯到 typing 或 OCR；图片只在本机处理且不保存。键盘、OCR sheet 和选择工具栏在 iPhone/iPad 横屏不裁切。
+通过标准：所有 Pool 新增项均能追溯到 typing 或 OCR；原始 school-list 图片只在本机识别且不保存。每张图片独立执行 500 词上限。键盘、OCR sheet、sticky Add All 和选择工具栏在 iPhone/iPad 横屏不裁切。
 
 ## 验收 Read Quest
 
@@ -113,33 +136,39 @@ make check
 2. 用全新 Profile/新词进入；确认目标出现时完全不播放发音
 3. 首次点 Mic 时允许 Microphone 与 Speech Recognition；权限等待不算孩子速度
 4. 读出目标词，确认正确反馈与结果记录
-5. 第一次读错后确认 Hear/See 均隐藏；第二次有效读错后确认两个按钮出现
-6. 点 Hear，确认只因孩子点按才播放；点 See，确认 `dog` 的图片直接显示在单词旁；未知词不猜图
+5. 第一次读错后确认 **Hear it** 隐藏；第二次有效读错后确认只出现 **Hear it**，没有图片按钮
+6. 点 **Hear it**，确认只因孩子点按才播放；发音必须清晰、连贯且不吃尾音，切换到下一个词后帮助重新隐藏
 7. 制造无声、噪声、技术失败，确认不耗有效尝试、不扣正确率、不提前解锁 Help；连续三次技术失败可中性 Move On
 8. 测试 `a`、`I`、`go`、`look`、`bye`（包括 Apple 句末标点转写）和 0.8 秒自然停顿
 9. 测试目标 `come` 的儿童近音 `kum/cum` 可通过，同时 `some`、`home`、`came`、`cat/cap` 不被误放宽
 10. 建立声纹后，让目标儿童和另一位说话者分别测试
-11. 连续切换多个词，确认大字颜色来自当前 World 且会适度变化；同一题错误、Help、重绘时颜色不闪变，并始终清晰可读
+11. 连续切换多个词，确认大字始终使用当前 World 对应的同一种深色；只有切换 World 才改变颜色，并始终清晰可读
+12. 完成一轮，其中故意答错或使用帮助；在 Result 点 Replay，确认只重练本轮 tricky words。完美一轮不显示空 Replay 按钮
 
 通过标准：技术失败不进入学习证据。声纹不匹配走技术重试，不把另一位说话者记成孩子答错。真实家庭噪声、自动停录、回声消除与识别准确率只能在真机验收。
 
 ## 验收 Write Quest
 
 1. 点独立的 **Write Today's Quest**
-2. 对 New 词确认先显示拼写并播放，然后隐藏答案
-3. 在横线上独立手写整个单词，再点 **Done**
-4. 确认 App 不会因停笔自动提交
-5. 测试 **Hear**、单独的 **?**、**Clear** 与 **Done**；`?` 必须立即显示单词且没有三选一，Clear 不弹确认
-6. 试听 `at`、`cat` 等短词，确认速度更慢且末尾 `t` 没有被背景音乐或音频 session 吞掉
-7. 写错一个词，确认答案立即出现，并且只提供一次引导重写
-8. 制造识别不确定，确认不计成孩子答错
-9. 在 iPad 分别用手指与 Apple Pencil 书写，并把手掌放到屏幕上
-10. 开启 Left-handed writing，确认主操作栏换边
-11. 打开笔盒，逐一选择 Pencil、Crayon、Chalk、Brush 与 12 种基础色；换笔/换色后旧笔画保持原来的视觉
-12. 逐笔书写并试听四种短促书写音；确认快速移动没有爆音，发音播放和 Reduced Sound 时不叠加
-13. 确认页面没有 Undo；用 Eraser 对每种笔做局部擦除，擦除宽度约为当前笔宽 2.5 倍，再确认剩余笔画仍可提交识别
+2. 对 New 与 Review 词都确认只播放发音，不预先显示任何拼写；只有点 `?` 后才显示目标词
+3. 试听 `of`、`at`、`cat`、`come`、`look`，确认是一段连续、清晰、不过度拖慢的发音，`f`、`t`、`k` 等尾音没有被背景音乐或 audio session 吞掉
+4. 在加宽后的横线区独立手写整个单词，再点 **Done**；确认 App 不会因停笔自动提交
+5. 分别写 `i` 的点、三字母词的最后一个字母，以及连笔 `vv`/`w`；确认短点、后续笔画和连笔都留下
+6. 分别用首字母大写、全大写和全小写书写同一个词；确认大小写差异不导致失败
+7. 测试 **Hear**、单独的 **?**、**Clear** 与 **Done**；`?` 必须立即显示单词且没有三选一，Clear 不弹确认
+8. 第一次真实写错 `dog`，确认出现可点击图片按钮且不会自动显示拼写；点图片后显示狗。对 `the` 写错时不显示图片，也不发起图片请求
+9. 制造识别不确定和技术失败，确认不计成孩子答错，也不会错误触发图片
+10. 在 iPad 分别用手指与 Apple Pencil 书写，并把手掌放到屏幕上
+11. 开启 Left-handed writing，确认主操作栏换边
+12. 打开笔盒，确认只有 Pencil、Chalk、Brush 与 Eraser；没有 Crayon 或颜色选择，所有新笔画均为黑色
+13. 切换到一个 Profile 选择笔型，重启并切换 Profile；确认每个 Profile 保留自己的选择，直到再次修改；旧版 Crayon/彩色设置安全迁移为黑色 Pencil
+14. 逐笔书写并试听三种短促书写音；确认快速连续移动没有爆音、卡顿或频繁重启音，发音播放和 Reduced Sound 时不叠加
+15. 确认页面没有 Undo；用 Eraser 对每种笔做局部擦除，擦除宽度约为当前笔宽 4 倍。擦完后点旁边空白，确认自动恢复之前的笔
+16. 分别写 `of`、`Of`、`OF` 与分开的 `O` + `F`，确认大小写被忽略且可通过；`if`、`on`、`or`、`ot`、`off` 不能误过
+17. 在错误反馈出现及切换下一个词时录屏，逐帧确认书写区域的尺寸、中心和坐标不移动；确认整轮 Quest 的 root transition identity 不随 prompt 改变；完成反馈至少停留 830 ms，不再闪过
+18. 完成一轮并故意留下 tricky word；在 Result 点 Replay，确认只重练该词
 
-通过标准：Hear、`?`、识别等待和技术重试时间不污染独立作答速度。四种笔的视觉和声音可区分但不盖住发音。iPhone 只提示手指，iPad 可以区分 Pencil 与手指，并过滤明显掌触。
+通过标准：Hear、`?`、识别等待和技术重试时间不污染独立作答速度。三种笔的视觉和声音可区分但不盖住发音。图片只服务具体词并使用私有缓存。iPhone 只提示手指，iPad 可以区分 Pencil 与手指，并过滤明显掌触。
 
 ## 验收 Review、Mastered 与今日计划
 
@@ -155,16 +184,19 @@ make check
 ## 验收奖励、世界与 Calendar
 
 1. 分别完成 Read 与 Write Today Quest
-2. 确认结果页显示分数、星星、正确率、个人速度和当前世界奖励
-3. 完成 Practice Again，确认 Calendar 次数增加，但不重复发当天永久奖励
-4. 第一天只完成 Read，确认当天和第二天均不解锁 Theme/Icon
-5. 同一本地日完成 Read 与 Write Today Quest；当天仍锁定，跨到第二天或用可控时钟重启后各解锁一个未获得 Theme 与 Icon
-6. 完成 Practice Again 与重复完成，确认不触发或重复解锁；测试月末到次月的跨日
-7. 打开 My Collection，分别选择已获得 Theme 与 Icon，重启后保留；locked 项只可预览
-8. 核对 8 个 World 各自的 20 个小奖励与 5 个里程碑；每件图标相关且同 World 不重复，locked 时仍显示灰色原图标并叠加锁
-9. 选择一个已收集 Treasure 作为 Profile 头像，确认 Picker/Lobby 一致；点击未收集 Treasure 不生效
-10. 若 Profile 原头像为照片，依次切换动物 Icon、Treasure 头像和原照片，确认照片数据始终保留可恢复
-11. 在同一天完成多次 Quest，确认儿童 Calendar 与 Guardian Today 显示相同数量
+2. 完成一次所有词均首答正确的 Quest；确认结果为 100 分和 3 星，即使 Profile 尚无速度基线
+3. 制造 75% 第一次独立正确率，确认仍有 Accuracy Star；再制造整轮仅一次错答并立即无提示答对，确认儿童奖励可获宽限，而 Guardian 仍显示原始首答正确率
+4. 在已有个人速度区间后，验证慢侧最多 50% 宽限；过快或超过宽限不获得 Pace Star
+5. 确认结果页显示分数、星星、正确率、个人速度和当前世界奖励
+6. 完成 Practice Again，确认 Calendar 次数增加，但不重复发当天永久奖励
+7. 第一天只完成 Read，确认当天和第二天均不解锁 Theme/Icon
+8. 同一本地日完成 Read 与 Write Today Quest；当天仍锁定，跨到第二天或用可控时钟重启后各解锁一个未获得 Theme 与 Icon
+9. 完成 Practice Again 与重复完成，确认不触发或重复解锁；测试月末到次月的跨日
+10. 打开 My Collection，分别选择已获得 Theme 与 Icon，重启后保留；locked 项只可预览
+11. 核对 8 个 World 各自的 20 个小奖励与 5 个里程碑；每件图标相关且同 World 不重复，locked 时仍显示灰色原图标并叠加锁
+12. 选择一个已收集 Treasure 作为 Profile 头像，确认 Picker/Lobby 一致；点击未收集 Treasure 不生效
+13. 若 Profile 原头像为照片，依次切换动物 Icon、Treasure 头像和原照片，确认照片数据始终保留可恢复
+14. 在同一天完成多次 Quest，确认儿童 Calendar 与 Guardian Today 显示相同数量
 
 通过标准：每个 World 只出现自己的奖励。世界解锁与收藏进度按 Profile 隔离并在重启后保留。
 
@@ -208,18 +240,30 @@ Release 的 Family Sync 默认关闭并持久保存。Onboarding 的隐私确认
 
 通过标准：Quest 提交不等待 CloudKit。同步失败显示状态并保留本地数据。声纹模板不进入 CloudKit；每台设备单独注册声纹。
 
+## 验收 Voice setup
+
+1. 在一个 Kid Profile 中打开 **Voice setup**，确认出现一条短英文句子并自动播放，孩子可以再次点 Hear
+2. 让孩子跟读并录制；确认成功样本增加进度，再用静音、太短和明显噪声制造拒绝，确认显示可重试原因且已接受进度不丢失
+3. 完成至少六个有效片段与最低有效语音时长；确认 **Finish setup** 只在条件满足后可用，并能保存后退出
+4. 中断录音、锁屏或切到后台后返回；确认不会出现永久灰色 Finish、零采样率或通用错误循环
+5. 新开一次 setup，确认句子顺序会洗牌；在第二个 Profile 独立完成，确认两个声纹互不覆盖
+6. 检查 App 沙盒与同步数据，确认不保存原始录音或句子，只在本机 Keychain 保存声纹模板
+
+通过标准：必须用真实儿童声音在真机完成。本机音频 session 应先配置再读取输入格式，并在录音时启用可用的语音处理与降噪；拒绝样本不计入模板。
+
 ## 验收声音与辅助功能
 
 1. 在八个 World 中分别预览 Lobby、Read、Write、结果与 Collection；每个至少完成一轮，重点抽查五个新增 World 的两轮 Quest
 2. 冷启动试听单个连续 SSML 短句 `tā-'dá, wòrds!`（近似“它达，沃尔子”）：按 `tah-DAH` 连读并重读第二音节，逗号停顿约 105ms，`words` 下落；确认没有三段排队造成的接缝。当前只验证了 SSML 构造，真机听感仍需人工批准
-3. 确认优先选择年轻美式女声；目标 persona 不可用时仍有自然回退而不是静音
-4. 在 Write 试听短词尾音；在 Read 两错后点按 Hear 试听标准发音
-5. 在 Moonpetal 检查两侧彩虹/独角兽；在新增 World 分别检查恐龙、消防救援、原创积木、冰雪极光和过山车元素；确认中央任务安全区清晰且元素不跨主题泄漏
-6. 确认语音提示时音乐降低，Read 录音时音乐和非必要音效停止
-7. 分别测试 Voice、Music、Sound effects、Reduced Sound 和 Calm Rescue
-8. 测试扬声器、耳机、来电打断、后台恢复和音量变化
-9. 开启 VoiceOver，走完 Profile、Lobby、Read、Write、结果和 Guardian
-10. 开启 Reduce Motion 与较大动态字体，检查横屏紧凑布局
+3. 确认 Parent settings 不再有 voice style picker；所有 Profile 使用同一个 canonical teacher contract
+4. 在未配置远端 endpoint 及缺少可选高质量 voice 的设备上测试，确认 App 选用已安装的清晰兼容 fallback 而不是静音；客户端和日志都不得包含 provider API key
+5. 在 Write 试听 `of`、`at`、`cat`、`come`、`look`；在 Read 两错后点按 Hear 试听同一标准。确认每个词只形成一个连续 utterance、音高自然、速度不过慢，`f`、`t`、`k` 等尾音清楚
+6. 在 Moonpetal 检查两侧彩虹/独角兽；在新增 World 分别检查恐龙、消防救援、原创积木、冰雪极光和过山车元素；确认中央任务安全区清晰且元素不跨主题泄漏
+7. 确认语音提示时音乐降低，Read 录音时音乐和非必要音效停止
+8. 分别测试 Voice、Music、Sound effects、Reduced Sound 和 Calm Rescue
+9. 测试扬声器、耳机、来电打断、后台恢复和音量变化
+10. 开启 VoiceOver，走完 Profile、Lobby、Read、Write、结果和 Guardian
+11. 开启 Reduce Motion 与较大动态字体，检查横屏紧凑布局
 
 通过标准：Reduced Sound 保留正确、重试和技术提示，但关闭装饰性 click、star、reward 与 launch 音。Calm Rescue 不播放紧急节奏层。人工批准响度、疲劳感、爆音和女声音色。
 
@@ -236,6 +280,8 @@ Release 的 Family Sync 默认关闭并持久保存。Onboarding 的隐私确认
 
 `Contents.json` 只描述 Xcode 资产。运行数据位于 App 沙盒的 Application Support 目录。App 没有自建服务器数据库。`TadaWordsLocalQA` 安装为独立的 **Tada Words QA**，没有 iCloud 能力且数据不跨设备；正常 Release 也只有在家长明确开启后才会同步。
 
+具体词图片使用固定版本的 Twemoji 17.0.3 PNG，并缓存到 App 私有目录。请求只包含内置 catalog 的 Unicode asset filename，不包含孩子姓名、Profile ID、学习记录或家长输入的原词。`the`、`come`、`kind` 等不在具体词 catalog 中的词必须直接返回无图片且不联网。许可证与来源记录在 `THIRD_PARTY_NOTICES.md`。
+
 ## 完成真机发布验收
 
 最终发布前必须在一台 iPhone 17 Pro Max 与一台 iPad 上通过以下项目：
@@ -244,10 +290,12 @@ Release 的 Family Sync 默认关闭并持久保存。Onboarding 的隐私确认
 - 真实儿童语音、家庭噪声、自动停录、声纹同人与异人样本
 - 手指、Apple Pencil、掌触和四岁儿童字形
 - Camera 与 Photo Library 权限
-- Camera / Photo Library 的头像与 word-sheet OCR 两种用途
+- Camera / Photo Library 的头像与多图片 word-sheet OCR 两种用途，包括单图 500 词上限、编号和 sticky Add All
 - VoiceOver、Reduce Motion 与动态字体
-- 每个 World 的女声、音乐、ducking、响度和疲劳感
-- `FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md` 中 v0.2 全部 device evidence
+- 单一 canonical teacher voice/fallback、每个 World 的音乐、ducking、响度和疲劳感
+- Voice setup 的随机句跟读、拒绝样本、完成保存和每设备独立声纹
+- Write 的短点/连笔/后续笔画、4× 橡皮、空白点击恢复笔、画布固定坐标和无卡顿笔触音
+- `FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md` 中 v0.3 全部 device evidence，并保留已合并 v0.2 的未完成真机证据
 - 两个 Apple ID 的 CloudKit 邀请、冲突、离线恢复和删除传播
 - Family Sync 默认关闭、家长 opt-in 持久化、关闭后停止未来同步
 - CloudKit 远端 records 擦除

@@ -203,6 +203,7 @@ final class TadaWordsAppModelTests: XCTestCase {
         await fixture.model.prepareQuestAndWait(.read)
 
         let firstSession = try questSession(from: fixture.model.destination)
+        let stableQuestTransitionKey = fixture.model.transitionKey
         XCTAssertEqual(firstSession.profileID, fixture.profile.id)
         XCTAssertEqual(firstSession.currentItem, 1)
         XCTAssertEqual(firstSession.totalItems, 2)
@@ -212,6 +213,7 @@ final class TadaWordsAppModelTests: XCTestCase {
         )
 
         let secondSession = try questSession(from: fixture.model.destination)
+        XCTAssertEqual(fixture.model.transitionKey, stableQuestTransitionKey)
         XCTAssertEqual(secondSession.currentItem, 2)
         XCTAssertEqual(secondSession.source, .review)
         XCTAssertEqual(secondSession.prompt.id, fixture.prompts[1].id)
@@ -236,8 +238,11 @@ final class TadaWordsAppModelTests: XCTestCase {
         XCTAssertTrue(firstSession.timer.isFinished)
         XCTAssertEqual(result.score.firstIndependentAttemptCount, 2)
         XCTAssertEqual(result.score.firstIndependentCorrectCount, 2)
-        XCTAssertEqual(result.score.points, 80)
-        XCTAssertEqual(result.score.stars.earned, [.completion, .accuracy])
+        XCTAssertEqual(result.score.points, 100)
+        XCTAssertEqual(
+            result.score.stars.earned,
+            [.completion, .accuracy, .personalPace]
+        )
         let allAttempts = try await fixture.records.attempts(
             for: fixture.profile.id,
             wordPromptID: nil
@@ -453,6 +458,61 @@ final class TadaWordsAppModelTests: XCTestCase {
         let savedAttempt = try XCTUnwrap(savedAttempts.first)
         XCTAssertEqual(savedAttempt.paceContext, context)
         XCTAssertEqual(savedAttempt.timing.speechOnsetLatency?.seconds, 2)
+    }
+
+    func testResultReplayContainsOnlyWordsMissedOnFirstIndependentTry()
+        async throws
+    {
+        let fixture = try ModelFixture(wordCount: 2)
+        await fixture.model.prepareQuestAndWait(.read)
+
+        let correctSession = try questSession(from: fixture.model.destination)
+        await fixture.model.finishItemAndWait(
+            correctSession,
+            summary: try TestFixture.summary(decisions: [.matched])
+        )
+        let missedSession = try questSession(from: fixture.model.destination)
+        await fixture.model.finishItemAndWait(
+            missedSession,
+            summary: try TestFixture.summary(decisions: [.notMatched, .matched])
+        )
+
+        let firstResult = try resultState(from: fixture.model.destination)
+        XCTAssertEqual(firstResult.replayWordCount, 1)
+        XCTAssertTrue(firstResult.showsReplayAction)
+
+        await fixture.model.replayMissedWordsAndWait()
+
+        let replaySession = try questSession(from: fixture.model.destination)
+        XCTAssertEqual(replaySession.prompt.id, missedSession.prompt.id)
+        XCTAssertEqual(replaySession.totalItems, 1)
+        XCTAssertNotEqual(replaySession.id, missedSession.id)
+
+        await fixture.model.finishItemAndWait(
+            replaySession,
+            summary: try TestFixture.summary(decisions: [.matched])
+        )
+        let replayResult = try resultState(from: fixture.model.destination)
+        XCTAssertEqual(replayResult.runKind, .practiceAgain)
+        XCTAssertEqual(replayResult.replayWordCount, 0)
+        XCTAssertFalse(replayResult.showsReplayAction)
+    }
+
+    func testPerfectQuestOffersNoReplayAndStillKeepsResultVisible() async throws {
+        let fixture = try ModelFixture(wordCount: 1)
+        await fixture.model.prepareQuestAndWait(.read)
+        let session = try questSession(from: fixture.model.destination)
+        await fixture.model.finishItemAndWait(
+            session,
+            summary: try TestFixture.summary(decisions: [.matched])
+        )
+
+        let result = try resultState(from: fixture.model.destination)
+        XCTAssertEqual(result.replayWordCount, 0)
+        XCTAssertFalse(result.showsReplayAction)
+
+        await fixture.model.replayMissedWordsAndWait()
+        _ = try resultState(from: fixture.model.destination)
     }
 
     func testPartialAppendFailureBlocksWithoutRewardAndRetryUsesSameEventIDs()

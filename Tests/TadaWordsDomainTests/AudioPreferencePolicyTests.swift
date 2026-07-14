@@ -1,3 +1,4 @@
+import Foundation
 import TadaWordsDomain
 import XCTest
 
@@ -85,5 +86,30 @@ final class AudioPreferencePolicyTests: XCTestCase {
                 preferences: AudioPreferences(calmEmergencyEnabled: false)
             )
         )
+    }
+
+    func testLegacyVoiceStyleIsIgnoredDuringCanonicalVoiceMigration() throws {
+        let legacy = Data(
+            #"{"voiceEnabled":true,"musicEnabled":false,"soundEffectsEnabled":true,"reducedSoundEnabled":false,"calmEmergencyEnabled":false,"spokenVoiceStyle":"brightMan"}"#
+                .utf8
+        )
+
+        let decoded = try JSONDecoder().decode(AudioPreferences.self, from: legacy)
+
+        XCTAssertTrue(decoded.voiceEnabled)
+        XCTAssertFalse(decoded.musicEnabled)
+        XCTAssertEqual(
+            decoded,
+            AudioPreferences(musicEnabled: false)
+        )
+    }
+
+    func testSavingPreferencesDropsLegacyVoiceStyleField() throws {
+        let encoded = try JSONEncoder().encode(AudioPreferences())
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+
+        XCTAssertNil(object["spokenVoiceStyle"])
     }
 }

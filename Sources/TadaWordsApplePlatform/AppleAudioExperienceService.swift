@@ -3,7 +3,9 @@ import Foundation
 import TadaWordsDomain
 
 struct WritingCueThrottle {
-    static let minimumInterval: TimeInterval = 0.075
+    /// Longer than the longest writing texture, so accepted cues never queue
+    /// or cut one another off while a finger is moving quickly.
+    static let minimumInterval: TimeInterval = 0.11
 
     private(set) var lastAcceptedTime: TimeInterval?
 
@@ -53,6 +55,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     private var transitionGate = AmbientTransitionGate()
     private var ambientBufferCache = AmbientBufferCache<AVAudioPCMBuffer>()
     private var writingCueThrottle = WritingCueThrottle()
+    private var writingBuffers: [HandwritingTool: AVAudioPCMBuffer] = [:]
 
     public init() {
         engine.attach(ambientPlayerA)
@@ -416,19 +419,28 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         else { return }
         guard startEngineIfNeeded() else { return }
 
-        writingPlayer.stop()
         writingPlayer.volume = adjustedVolume(0.18)
-        writingPlayer.scheduleBuffer(
-            ProceduralAudioFactory.writingEffect(
+        let buffer: AVAudioPCMBuffer
+        if let cached = writingBuffers[tool] {
+            buffer = cached
+        } else {
+            let rendered = ProceduralAudioFactory.writingEffect(
                 tool: tool,
                 sampleRate: Self.sampleRate
-            ),
+            )
+            writingBuffers[tool] = rendered
+            buffer = rendered
+        }
+        writingPlayer.scheduleBuffer(
+            buffer,
             at: nil,
             options: [],
             completionCallbackType: .dataConsumed,
             completionHandler: nil
         )
-        writingPlayer.play()
+        if !writingPlayer.isPlaying {
+            writingPlayer.play()
+        }
     }
 
     private func adjustedVolume(_ volume: Float) -> Float {

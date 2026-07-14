@@ -31,6 +31,15 @@ final class GuardianDashboardViewModel: ObservableObject {
     @Published var shareURLText = ""
     @Published private(set) var voiceprintProgress: VoiceprintEnrollmentProgress?
     @Published private(set) var isCapturingVoiceprint = false
+    @Published private(set) var currentVoiceprintSentence: String?
+    @Published private(set) var currentVoiceprintSampleNumber = 0
+    @Published private(set) var voiceprintSampleCount =
+        VoiceprintEnrollmentScript.sentences.count
+    @Published private(set) var isPlayingVoiceprintPrompt = false
+    @Published private(set) var voiceprintGuidanceMessage: String?
+    @Published var hasConfirmedWordRemovalThisSession = false
+    @Published private(set) var undoWordsByMode: [LearningMode: [WordPrompt]] = [:]
+    @Published private(set) var isUpdatingWordPool = false
 
     private let store: any GuardianFamilyStore
     private let audioPromptService: any AudioPromptService
@@ -41,7 +50,9 @@ final class GuardianDashboardViewModel: ObservableObject {
     private let voiceprintRepository: (any DeviceVoiceprintRepository)?
     private let requestSpeechAuthorization: @Sendable () async -> Bool
     private let sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing
-    private var isUpdatingWordPool = false
+    private let pictureHintProvider: any WordPictureHintProviding
+    private var voiceprintSentences: [String] = []
+    private var voiceprintPromptTask: Task<Void, Never>?
 
     init(
         store: any GuardianFamilyStore,
@@ -53,6 +64,8 @@ final class GuardianDashboardViewModel: ObservableObject {
         voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)? = nil,
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
         requestSpeechAuthorization: @escaping @Sendable () async -> Bool = { false },
+        pictureHintProvider: any WordPictureHintProviding =
+            NoWordPictureHintProvider(),
         sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing =
             AllowSensitiveGuardianActions()
     ) {
@@ -64,6 +77,7 @@ final class GuardianDashboardViewModel: ObservableObject {
         self.voiceprintEnrollmentService = voiceprintEnrollmentService
         self.voiceprintRepository = voiceprintRepository
         self.requestSpeechAuthorization = requestSpeechAuthorization
+        self.pictureHintProvider = pictureHintProvider
         self.sensitiveActionAuthorizer = sensitiveActionAuthorizer
     }
 
@@ -95,11 +109,15 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func unlockGuardianArea() {
+        hasConfirmedWordRemovalThisSession = false
+        undoWordsByMode = [:]
         destination = .dashboard
         refresh()
     }
 
     func lockGuardianArea() {
+        hasConfirmedWordRemovalThisSession = false
+        undoWordsByMode = [:]
         destination = .parentGate
     }
 
@@ -146,7 +164,12 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func showVoiceprint(_ profile: KidProfile) {
+        voiceprintPromptTask?.cancel()
         voiceprintProgress = nil
+        currentVoiceprintSentence = nil
+        currentVoiceprintSampleNumber = 0
+        voiceprintGuidanceMessage = nil
+        voiceprintSentences = []
         destination = .voiceprint(profile)
     }
 
@@ -285,6 +308,8 @@ final class GuardianDashboardViewModel: ObservableObject {
                 return
             }
 
+            prefetchPictures(for: report)
+
             do {
                 snapshot = try await store.dashboardSnapshot()
                 destination = .importReport(report)
@@ -311,6 +336,8 @@ final class GuardianDashboardViewModel: ObservableObject {
             return nil
         }
 
+        prefetchPictures(for: report)
+
         do {
             snapshot = try await store.dashboardSnapshot()
         } catch {
@@ -318,6 +345,15 @@ final class GuardianDashboardViewModel: ObservableObject {
                 "The words were added, but the list could not refresh. Reopen Manage Words to try again."
         }
         return report
+    }
+
+    private func prefetchPictures(for report: GuardianWordImportReport) {
+        let words = report.accepted + report.duplicates
+        guard !words.isEmpty else { return }
+        let provider = pictureHintProvider
+        Task {
+            await provider.prefetch(words)
+        }
     }
 
     func play(_ prompt: WordPrompt) {
@@ -370,6 +406,14 @@ final class GuardianDashboardViewModel: ObservableObject {
                 learningMode: mode,
                 isActive: isActive
             )
+            if isActive {
+                undoWordsByMode[mode] = nil
+            } else {
+                // Keep the latest successful removal in the long-lived model.
+                // A dashboard snapshot publish can rebuild the manager view, so
+                // view-local state is not a reliable home for a usable Undo.
+                undoWordsByMode[mode] = prompts
+            }
             return true
         } catch {
             errorMessage =
@@ -493,14 +537,19 @@ final class GuardianDashboardViewModel: ObservableObject {
             return
         }
         Task {
+            voiceprintGuidanceMessage = nil
             guard await requestSpeechAuthorization() else {
                 errorMessage = "Microphone and speech access are needed for voice setup."
                 return
             }
             do {
+                voiceprintSentences = VoiceprintEnrollmentScript.randomizedSentences()
+                voiceprintSampleCount = voiceprintSentences.count
                 voiceprintProgress = try await voiceprintEnrollmentService.begin(
                     profileID: profile.id
                 )
+                selectVoiceprintSentence(forAcceptedSampleCount: 0)
+                await playCurrentVoiceprintSentence(for: profile.id)
             } catch {
                 errorMessage = "Voice setup could not start. Please try again."
             }
@@ -508,19 +557,44 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func captureVoiceprintSegment() {
-        guard let voiceprintEnrollmentService, !isCapturingVoiceprint else { return }
+        guard let voiceprintEnrollmentService,
+            !isCapturingVoiceprint,
+            !isPlayingVoiceprintPrompt
+        else { return }
         isCapturingVoiceprint = true
+        voiceprintGuidanceMessage = "Listening… repeat the sentence now."
         Task {
             defer { isCapturingVoiceprint = false }
             do {
                 let result = try await voiceprintEnrollmentService.captureSegment()
                 voiceprintProgress = result.progress
-                if result.rejectionReason != nil {
-                    errorMessage = "That sample was not clear enough. Try again in a quiet spot."
+                if let reason = result.rejectionReason {
+                    voiceprintGuidanceMessage = voiceprintGuidance(for: reason)
+                } else if result.progress.isReadyToFinalize {
+                    currentVoiceprintSentence = nil
+                    currentVoiceprintSampleNumber = voiceprintSampleCount
+                    voiceprintGuidanceMessage = "Voice setup is ready to finish."
+                } else {
+                    voiceprintGuidanceMessage = "Great sample! Here is the next sentence."
+                    selectVoiceprintSentence(
+                        forAcceptedSampleCount: result.progress.acceptedSegmentCount
+                    )
+                    if case .voiceprint(let profile) = destination {
+                        await playCurrentVoiceprintSentence(for: profile.id)
+                    }
                 }
             } catch {
-                errorMessage = "That voice sample could not be recorded. Please try again."
+                voiceprintGuidanceMessage =
+                    "The microphone did not start. Keep the device unlocked, check microphone access, and try this sentence again."
             }
+        }
+    }
+
+    func replayVoiceprintSentence(for profile: KidProfile) {
+        guard !isCapturingVoiceprint, !isPlayingVoiceprintPrompt else { return }
+        voiceprintPromptTask?.cancel()
+        voiceprintPromptTask = Task {
+            await playCurrentVoiceprintSentence(for: profile.id)
         }
     }
 
@@ -547,9 +621,60 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func cancelVoiceprint() {
+        voiceprintPromptTask?.cancel()
+        voiceprintPromptTask = nil
         Task { await voiceprintEnrollmentService?.cancel() }
         voiceprintProgress = nil
+        currentVoiceprintSentence = nil
+        currentVoiceprintSampleNumber = 0
+        voiceprintGuidanceMessage = nil
         destination = .profiles
+    }
+
+    private func selectVoiceprintSentence(forAcceptedSampleCount count: Int) {
+        guard !voiceprintSentences.isEmpty else {
+            currentVoiceprintSentence = nil
+            currentVoiceprintSampleNumber = 0
+            return
+        }
+        let index = min(max(0, count), voiceprintSentences.count - 1)
+        currentVoiceprintSentence = voiceprintSentences[index]
+        currentVoiceprintSampleNumber = index + 1
+    }
+
+    private func playCurrentVoiceprintSentence(for profileID: ProfileID) async {
+        guard let sentence = currentVoiceprintSentence else { return }
+        isPlayingVoiceprintPrompt = true
+        voiceprintGuidanceMessage = "Listen, then tap Record and repeat it."
+        defer { isPlayingVoiceprintPrompt = false }
+        do {
+            try await audioPromptService.playVoiceSetupSentence(
+                sentence,
+                for: profileID
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            voiceprintGuidanceMessage =
+                "Read the sentence aloud, or tap Hear sentence to try the audio again."
+        }
+    }
+
+    private func voiceprintGuidance(
+        for reason: VoiceprintSegmentRejectionReason
+    ) -> String {
+        switch reason {
+        case .noSpeech:
+            "We did not hear a voice. Move closer and repeat the sentence."
+        case .tooShort:
+            "Say the whole sentence, a little more slowly."
+        case .tooLong:
+            "Try the sentence once, without extra words."
+        case .tooNoisy, .multipleSpeakers:
+            "Let one child speak in a quieter spot, then try again."
+        case .modelMismatch, .dimensionMismatch, .technicalFailure:
+            "That sample could not be used. Keep the device unlocked and try again."
+        }
     }
 
     private func refreshSyncStatus() {

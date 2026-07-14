@@ -14,6 +14,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     private let dailyQuestRepository: any DailyQuestRepository
     private let tombstoneRepository: (any ProfileDeletionTombstoneRepository)?
     private let childSessionRepository: (any ChildSessionRepository)?
+    private let handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)?
     private let clock: any AppClock
     private let timeZone: TimeZone
     private var selectedProfileID: ProfileID
@@ -29,6 +30,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         dailyQuestRepository: any DailyQuestRepository = InMemoryDailyQuestRepository(),
         tombstoneRepository: (any ProfileDeletionTombstoneRepository)? = nil,
         childSessionRepository: (any ChildSessionRepository)? = nil,
+        handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)? = nil,
         clock: any AppClock,
         timeZone: TimeZone = .current
     ) {
@@ -40,6 +42,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         self.dailyQuestRepository = dailyQuestRepository
         self.tombstoneRepository = tombstoneRepository
         self.childSessionRepository = childSessionRepository
+        self.handwritingPreferenceRemover = handwritingPreferenceRemover
         self.clock = clock
         self.timeZone = timeZone
         self.selectedProfileID =
@@ -249,6 +252,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
             try await history.deleteHistory(for: id)
         }
         try await profileRepository.delete(id: id)
+        handwritingPreferenceRemover?.remove(for: id)
         try await tombstoneRepository?.markCommitted(for: id)
         if let childSessionRepository,
             (try? await childSessionRepository.lastSelectedProfileID()) == id

@@ -488,32 +488,21 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
         XCTAssertEqual(restored.readPool.map(\.normalizedText), ["cat", "dog", "fox"])
     }
 
-    func testContextRequiredWordCanBeResubmittedWithOneSpokenContext()
+    func testAmbiguousWordUsesCanonicalPronunciationWithoutContext()
         async throws
     {
         let repository = InMemoryWordPoolRepository()
         let profile = makeProfile(number: 1, name: "Ava")
         let store = makeStore(profile: profile, repository: repository)
 
-        let rejected = try await store.importWords(
-            GuardianWordImportRequest(rawText: "too", learningMode: .write)
-        )
         let accepted = try await store.importWords(
-            GuardianWordImportRequest(
-                rawText: "too",
-                learningMode: .write,
-                spokenContextsByNormalizedWord: [
-                    "too": "I want to play too."
-                ]
-            )
+            GuardianWordImportRequest(rawText: "too", learningMode: .write)
         )
         let snapshot = try await store.dashboardSnapshot()
         let prompt = try XCTUnwrap(snapshot.writePool.first)
 
-        XCTAssertTrue(rejected.accepted.isEmpty)
-        XCTAssertEqual(rejected.rejected.map(\.sourceText), ["too"])
         XCTAssertEqual(accepted.accepted, ["too"])
-        XCTAssertEqual(prompt.audioCue.spokenContext, "I want to play too.")
+        XCTAssertNil(prompt.audioCue.spokenContext)
         XCTAssertNil(prompt.audioCue.pronunciationKey)
     }
 
@@ -563,6 +552,67 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
             snapshot.needsAttention.first?.whyNow,
             "Missed 2 of 2 first tries."
         )
+    }
+
+    func testDashboardPracticeFrequencyCountsOnlyFirstIndependentEncounters()
+        async throws
+    {
+        let wordRepository = InMemoryWordPoolRepository()
+        let learningRepository = InMemoryLearningRecordRepository()
+        let profile = makeProfile(number: 7, name: "Ava")
+        let store = makeStore(
+            profile: profile,
+            repository: wordRepository,
+            learningRepository: learningRepository
+        )
+        _ = try await store.importWords(
+            GuardianWordImportRequest(rawText: "cat dog", learningMode: .read)
+        )
+        let initial = try await store.dashboardSnapshot()
+        let cat = try XCTUnwrap(
+            initial.readPool.first(where: { $0.normalizedText == "cat" })
+        )
+        let dog = try XCTUnwrap(
+            initial.readPool.first(where: { $0.normalizedText == "dog" })
+        )
+
+        for offset in 0..<2 {
+            try await learningRepository.append(
+                AttemptEvent(
+                    profileID: profile.id,
+                    wordPromptID: cat.id,
+                    learningMode: .read,
+                    evidence: .firstIndependentAttempt,
+                    outcome: .correct,
+                    occurredAt: testDate.addingTimeInterval(TimeInterval(offset))
+                )
+            )
+        }
+        try await learningRepository.append(
+            AttemptEvent(
+                profileID: profile.id,
+                wordPromptID: cat.id,
+                learningMode: .read,
+                evidence: .guidedRetry,
+                outcome: .correct,
+                occurredAt: testDate.addingTimeInterval(3)
+            )
+        )
+        try await learningRepository.append(
+            AttemptEvent(
+                profileID: profile.id,
+                wordPromptID: dog.id,
+                learningMode: .read,
+                evidence: .firstIndependentAttempt,
+                outcome: .incorrect,
+                occurredAt: testDate.addingTimeInterval(4)
+            )
+        )
+
+        let snapshot = try await store.dashboardSnapshot()
+
+        XCTAssertEqual(snapshot.practiceFrequencyByWordID[cat.id], 2)
+        XCTAssertEqual(snapshot.practiceFrequencyByWordID[dog.id], 1)
     }
 
     private let testDate = Date(timeIntervalSince1970: 2_000_000_000)

@@ -5,6 +5,7 @@ import TadaWordsGuardianFeatures
 import XCTest
 
 @testable import TadaWordsAppShell
+@testable import TadaWordsFeatures
 
 @MainActor
 final class ApplicationCompositionTests: XCTestCase {
@@ -671,10 +672,27 @@ final class ApplicationCompositionTests: XCTestCase {
     {
         let applicationSupportDirectory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(applicationSupportDirectory) }
+        let suiteName = "BootstrapHandwritingRecoveryTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let handwritingStore = HandwritingPreferenceStore(
+            userDefaults: defaults,
+            keyPrefix: "selection"
+        )
+        let retainedProfileID = ProfileID()
         let first = try await makeBootstrapper(
-            applicationSupportDirectory: applicationSupportDirectory
+            applicationSupportDirectory: applicationSupportDirectory,
+            handwritingPreferenceRemover: handwritingStore
         ).bootstrap()
         let deletedID = Self.defaultProfile.id
+        handwritingStore.save(
+            HandwritingSelectionState(tool: .chalk),
+            for: deletedID
+        )
+        handwritingStore.save(
+            HandwritingSelectionState(tool: .brush),
+            for: retainedProfileID
+        )
         try await first.childSessionRepository.saveLastSelectedProfileID(deletedID)
         try await first.tombstoneRepository.save(
             ProfileDeletionTombstone(
@@ -684,7 +702,8 @@ final class ApplicationCompositionTests: XCTestCase {
         )
 
         let restarted = try await makeBootstrapper(
-            applicationSupportDirectory: applicationSupportDirectory
+            applicationSupportDirectory: applicationSupportDirectory,
+            handwritingPreferenceRemover: handwritingStore
         ).bootstrap()
         let profiles = try await restarted.profileRepository.profiles()
         let pending = try await restarted.tombstoneRepository.pendingTombstones()
@@ -695,16 +714,68 @@ final class ApplicationCompositionTests: XCTestCase {
         XCTAssertFalse(profiles.contains(where: { $0.id == deletedID }))
         XCTAssertTrue(pending.isEmpty)
         XCTAssertNil(selected)
+        XCTAssertEqual(
+            handwritingStore.selection(for: deletedID),
+            HandwritingSelectionState()
+        )
+        XCTAssertEqual(
+            handwritingStore.selection(for: retainedProfileID),
+            HandwritingSelectionState(tool: .brush)
+        )
+    }
+
+    func testBootstrapRepairsHandwritingResidueForCommittedProfileDeletion()
+        async throws
+    {
+        let applicationSupportDirectory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(applicationSupportDirectory) }
+        let suiteName = "CommittedHandwritingRecoveryTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let handwritingStore = HandwritingPreferenceStore(
+            userDefaults: defaults,
+            keyPrefix: "selection"
+        )
+        let first = try await makeBootstrapper(
+            applicationSupportDirectory: applicationSupportDirectory,
+            handwritingPreferenceRemover: handwritingStore
+        ).bootstrap()
+        let deletedID = Self.defaultProfile.id
+        handwritingStore.save(
+            HandwritingSelectionState(tool: .pencil),
+            for: deletedID
+        )
+        try await first.tombstoneRepository.save(
+            ProfileDeletionTombstone(
+                profileID: deletedID,
+                deletedAt: Self.testDate.addingTimeInterval(10)
+            )
+        )
+        try await first.profileRepository.delete(id: deletedID)
+        try await first.tombstoneRepository.markCommitted(for: deletedID)
+
+        _ = try await makeBootstrapper(
+            applicationSupportDirectory: applicationSupportDirectory,
+            handwritingPreferenceRemover: handwritingStore
+        ).bootstrap()
+
+        XCTAssertEqual(
+            handwritingStore.selection(for: deletedID),
+            HandwritingSelectionState()
+        )
     }
 
     private func makeBootstrapper(
-        applicationSupportDirectory: URL
+        applicationSupportDirectory: URL,
+        handwritingPreferenceRemover: any HandwritingPreferenceRemoving =
+            HandwritingPreferenceStore()
     ) -> ProductionApplicationBootstrapper {
         ProductionApplicationBootstrapper(
             applicationSupportDirectory: { applicationSupportDirectory },
             defaultProfile: Self.defaultProfile,
             clock: FixedAppClock(now: Self.testDate),
-            timeZone: TimeZone(secondsFromGMT: 0) ?? .current
+            timeZone: TimeZone(secondsFromGMT: 0) ?? .current,
+            handwritingPreferenceRemover: handwritingPreferenceRemover
         )
     }
 

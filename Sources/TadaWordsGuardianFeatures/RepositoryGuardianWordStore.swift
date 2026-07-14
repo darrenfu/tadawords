@@ -49,9 +49,7 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             request.rawText,
             profileID: profile.id,
             learningMode: request.learningMode,
-            addedAt: clock.now,
-            audioCuesByNormalizedWord: request.spokenContextsByNormalizedWord
-                .mapValues { WordAudioCue.contextual($0) }
+            addedAt: clock.now
         )
         return GuardianWordImportReportMapper.report(
             from: result,
@@ -119,7 +117,8 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             today: currentSnapshot.today,
             todaySummary: currentSnapshot.todaySummary,
             worldProgression: currentSnapshot.worldProgression,
-            collections: currentSnapshot.collections
+            collections: currentSnapshot.collections,
+            practiceFrequencyByWordID: currentSnapshot.practiceFrequencyByWordID
         )
     }
 
@@ -139,7 +138,8 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             today: currentSnapshot.today,
             todaySummary: currentSnapshot.todaySummary,
             worldProgression: currentSnapshot.worldProgression,
-            collections: currentSnapshot.collections
+            collections: currentSnapshot.collections,
+            practiceFrequencyByWordID: currentSnapshot.practiceFrequencyByWordID
         )
     }
 
@@ -302,14 +302,19 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
                 completions: allCompletions,
                 currentLocalDay: today
             ),
-            collections: collections
+            collections: collections,
+            practiceFrequencyByWordID: learningEvidence.practiceFrequencyByWordID
         )
     }
 
     private func makeLearningEvidence(
         activeEntries: [WordPoolEntry]
-    ) async throws -> (attention: [GuardianAttentionItem], progress: [WordProgress]) {
-        guard let learningRecordRepository else { return ([], []) }
+    ) async throws -> (
+        attention: [GuardianAttentionItem],
+        progress: [WordProgress],
+        practiceFrequencyByWordID: [WordPromptID: Int]
+    ) {
+        guard let learningRecordRepository else { return ([], [], [:]) }
         let profileID = profile.id
 
         async let attempts = learningRecordRepository.attempts(
@@ -344,7 +349,16 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             profileID: profileID,
             now: clock.now
         )
-        return (attention, progress)
+        let activePromptIDs = Set(activeEntries.map(\.prompt.id))
+        let practiceFrequencyByWordID = Dictionary(
+            grouping: loadedAttempts.filter {
+                $0.profileID == profileID
+                    && activePromptIDs.contains($0.wordPromptID)
+                    && $0.evidence == .firstIndependentAttempt
+            },
+            by: \.wordPromptID
+        ).mapValues(\.count)
+        return (attention, progress, practiceFrequencyByWordID)
     }
 
     private func makeTodaySummary(
@@ -492,12 +506,8 @@ private enum GuardianWordImportReportMapper {
             "Add one word per entry."
         case .unsupportedCharacters:
             "Use English letters, hyphens, or apostrophes only."
-        case .contextRequired:
-            "This word needs a spoken context before it can be added."
-        case .contextMustContainTarget:
-            "The spoken context must include the word."
-        case .contextTooLong(let maximumCharacterCount):
-            "Keep the spoken context under \(maximumCharacterCount) characters."
+        case .contextRequired, .contextMustContainTarget, .contextTooLong:
+            "This word could not be added."
         }
     }
 }

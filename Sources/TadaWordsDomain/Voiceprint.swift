@@ -187,6 +187,25 @@ public struct VoiceprintEnrollmentProgress: Equatable, Sendable {
     public let isReadyToFinalize: Bool
 }
 
+/// Short, concrete sentences that a Pre-K child can hear, read, and repeat.
+/// A new setup session shuffles the full set so enrollment does not become a
+/// memorized recording routine. The text is never persisted with the acoustic
+/// template.
+public enum VoiceprintEnrollmentScript {
+    public static let sentences: [String] = [
+        "I see a little dog.",
+        "My red kite flies high.",
+        "We can read together.",
+        "The happy cat can jump.",
+        "I like the blue moon.",
+        "Today is a sunny day.",
+    ]
+
+    public static func randomizedSentences() -> [String] {
+        sentences.shuffled()
+    }
+}
+
 public struct VoiceprintEnrollmentStepResult: Equatable, Sendable {
     public let progress: VoiceprintEnrollmentProgress
     public let rejectionReason: VoiceprintSegmentRejectionReason?

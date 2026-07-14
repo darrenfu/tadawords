@@ -2,6 +2,12 @@ import SwiftUI
 import TadaWordsDesignSystem
 import TadaWordsDomain
 
+#if os(iOS)
+    import UIKit
+#elseif os(macOS)
+    import AppKit
+#endif
+
 enum WriteQuestSideRail: Equatable {
     case prompt
     case actions
@@ -12,7 +18,15 @@ struct WriteQuestSideRailLayout: Equatable {
     let trailing: WriteQuestSideRail
 }
 
+struct WriteQuestLayoutMetrics: Equatable {
+    let railWidth: CGFloat
+    let spacing: CGFloat
+    let canvasWidth: CGFloat
+}
+
 enum WriteQuestControlLayoutPolicy {
+    static let canvasWidthScale: CGFloat = 1.10
+
     static func sideRails(
         leftHandedLayoutEnabled: Bool
     ) -> WriteQuestSideRailLayout {
@@ -21,6 +35,54 @@ enum WriteQuestControlLayoutPolicy {
         } else {
             WriteQuestSideRailLayout(leading: .prompt, trailing: .actions)
         }
+    }
+
+    static func metrics(
+        availableWidth: CGFloat,
+        isCompact: Bool
+    ) -> WriteQuestLayoutMetrics {
+        let baseRailWidth =
+            isCompact
+            ? TadaLayoutTokens.compactActionRailWidth
+            : TadaLayoutTokens.standardActionRailWidth
+        let spacing: CGFloat = isCompact ? 10 : 22
+        let originalCanvasWidth = max(
+            1,
+            availableWidth - (baseRailWidth * 2) - (spacing * 2)
+        )
+        let desiredCanvasWidth = originalCanvasWidth * canvasWidthScale
+        let minimumRailWidth: CGFloat = isCompact ? 68 : 88
+        let maximumCanvasWidth = max(
+            1,
+            availableWidth - (minimumRailWidth * 2) - (spacing * 2)
+        )
+        let canvasWidth = min(desiredCanvasWidth, maximumCanvasWidth)
+        let railWidth = max(
+            minimumRailWidth,
+            (availableWidth - canvasWidth - (spacing * 2)) / 2
+        )
+        return WriteQuestLayoutMetrics(
+            railWidth: railWidth,
+            spacing: spacing,
+            canvasWidth: canvasWidth
+        )
+    }
+}
+
+enum WriteQuestTimingPolicy {
+    /// Keeps the transient completion card readable instead of flashing past.
+    static let completionFeedbackVisibility: Duration = .milliseconds(830)
+}
+
+enum WritePictureHintRequestPolicy {
+    static func shouldRequest(
+        decision: RecognitionDecision,
+        validAttemptCount: Int,
+        usedGuidance: Bool
+    ) -> Bool {
+        decision == .notMatched
+            && validAttemptCount == 0
+            && !usedGuidance
     }
 }
 
@@ -52,6 +114,8 @@ struct WriteQuestView: View {
     let theme: TadaWorldTheme
     let recognitionService: any HandwritingRecognitionService
     let audioExperienceService: any AudioExperienceService
+    let pictureHintProvider: any WordPictureHintProviding
+    let handwritingPreferenceStore: HandwritingPreferenceStore
     let onSpeak: () async -> Void
     let onBack: () -> Void
     let onComplete: (QuestAttemptSummary) -> Void
@@ -67,8 +131,13 @@ struct WriteQuestView: View {
     @State private var didPlayInitialPrompt = false
     @State private var promptPlaybackTask: Task<Void, Never>?
     @State private var recognitionTask: Task<Void, Never>?
+    @State private var pictureHintTask: Task<Void, Never>?
     @State private var completionTask: Task<Void, Never>?
-    @State private var pendingCompletion: QuestAttemptSummary?
+    @State private var completionFeedbackLifecycle:
+        QuestItemFeedbackLifecycle<
+            WordPromptID,
+            QuestAttemptSummary
+        >
     @State private var replayCountSinceLastAttempt = 0
     @State private var promptPauseSeconds: TimeInterval = 0
     @State private var responseClock: AttemptResponseClock
@@ -76,6 +145,8 @@ struct WriteQuestView: View {
     @State private var clearFeedbackTrigger = 0
     @State private var handwritingSelection = HandwritingSelectionState()
     @State private var isShowingToolbox = false
+    @State private var pictureHintAsset: WordPictureHintAsset?
+    @State private var isShowingPictureHint = false
 
     init(
         session: QuestSession,
@@ -84,6 +155,10 @@ struct WriteQuestView: View {
         recognitionService: any HandwritingRecognitionService,
         audioExperienceService: any AudioExperienceService =
             SilentAudioExperienceService(),
+        pictureHintProvider: any WordPictureHintProviding =
+            NoWordPictureHintProvider(),
+        handwritingPreferenceStore: HandwritingPreferenceStore =
+            HandwritingPreferenceStore(),
         onSpeak: @escaping () async -> Void,
         onBack: @escaping () -> Void,
         onComplete: @escaping (QuestAttemptSummary) -> Void
@@ -92,6 +167,8 @@ struct WriteQuestView: View {
         self.theme = theme
         self.recognitionService = recognitionService
         self.audioExperienceService = audioExperienceService
+        self.pictureHintProvider = pictureHintProvider
+        self.handwritingPreferenceStore = handwritingPreferenceStore
         self.onSpeak = onSpeak
         self.onBack = onBack
         self.onComplete = onComplete
@@ -100,6 +177,16 @@ struct WriteQuestView: View {
         )
         _attemptState = State(
             initialValue: QuestAttemptStateMachine(policy: .write)
+        )
+        _completionFeedbackLifecycle = State(
+            initialValue: QuestItemFeedbackLifecycle(
+                itemID: session.prompt.id
+            )
+        )
+        _handwritingSelection = State(
+            initialValue: handwritingPreferenceStore.selection(
+                for: session.profileID
+            )
         )
         _responseClock = State(
             initialValue: AttemptResponseClock(
@@ -124,9 +211,17 @@ struct WriteQuestView: View {
                     )
 
                     GeometryReader { proxy in
-                        writingLayout(isCompact: proxy.size.width < 760)
-                            .padding(.horizontal, proxy.size.width < 760 ? 10 : 24)
-                            .padding(.bottom, 10)
+                        let isCompact = proxy.size.width < 760
+                        let horizontalPadding: CGFloat = isCompact ? 10 : 24
+                        writingLayout(
+                            isCompact: isCompact,
+                            availableWidth: max(
+                                1,
+                                proxy.size.width - (horizontalPadding * 2)
+                            )
+                        )
+                        .padding(.horizontal, horizontalPadding)
+                        .padding(.bottom, 10)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -134,7 +229,10 @@ struct WriteQuestView: View {
 
                 TadaEmergencyAtmosphere(theme: theme, isActive: questTimer.isEmergency)
 
-                if let pendingCompletion {
+                if let pendingCompletion =
+                    completionFeedbackLifecycle
+                    .visibleFeedback(for: session.prompt.id)
+                {
                     completionFeedback(for: pendingCompletion)
                         .transition(.scale(scale: 0.88).combined(with: .opacity))
                         .zIndex(2)
@@ -149,24 +247,19 @@ struct WriteQuestView: View {
                 }
             }
         }
-        .task {
+        .task(id: session.prompt.id) {
+            resetForCurrentWordIfNeeded()
             guard !didPlayInitialPrompt else { return }
             didPlayInitialPrompt = true
-            let isNewWordStudy = session.source == .new
-            if isNewWordStudy {
-                attemptState.markStudyExposure()
-                showGuidedWord = true
-            }
-            playPrompt(
-                countsAsReplay: false,
-                hidesStudyWordAfterPlayback: isNewWordStudy
-            )
+            playPrompt(countsAsReplay: false)
         }
         .onDisappear {
             promptPlaybackTask?.cancel()
             recognitionTask?.cancel()
+            pictureHintTask?.cancel()
             completionTask?.cancel()
             attemptState.cancelAttempt()
+            questTimer.resume(from: .handwritingRecognition)
             Task {
                 await audioExperienceService.setEmergencyMode(false)
             }
@@ -177,29 +270,52 @@ struct WriteQuestView: View {
         .onChange(of: strokes.isEmpty) { _, isEmpty in
             handwritingSelection.reconcileCanvas(hasInk: !isEmpty)
         }
+        .onChange(of: handwritingSelection) { _, selection in
+            handwritingPreferenceStore.save(
+                selection,
+                for: session.profileID
+            )
+        }
         .sensoryFeedback(.success, trigger: successFeedbackTrigger)
         .sensoryFeedback(.impact(weight: .medium), trigger: clearFeedbackTrigger)
     }
 
-    private func writingLayout(isCompact: Bool) -> some View {
+    private func writingLayout(
+        isCompact: Bool,
+        availableWidth: CGFloat
+    ) -> some View {
         let layout = WriteQuestControlLayoutPolicy.sideRails(
             leftHandedLayoutEnabled: session.interfacePreferences
                 .leftHandedLayoutEnabled
         )
-        return HStack(alignment: .center, spacing: isCompact ? 10 : 22) {
-            sideRail(layout.leading, isCompact: isCompact)
+        let metrics = WriteQuestControlLayoutPolicy.metrics(
+            availableWidth: availableWidth,
+            isCompact: isCompact
+        )
+        return HStack(alignment: .center, spacing: metrics.spacing) {
+            sideRail(
+                layout.leading,
+                isCompact: isCompact,
+                width: metrics.railWidth
+            )
 
             writingBoard
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(width: metrics.canvasWidth)
+                .frame(maxHeight: .infinity)
 
-            sideRail(layout.trailing, isCompact: isCompact)
+            sideRail(
+                layout.trailing,
+                isCompact: isCompact,
+                width: metrics.railWidth
+            )
         }
     }
 
     @ViewBuilder
     private func sideRail(
         _ rail: WriteQuestSideRail,
-        isCompact: Bool
+        isCompact: Bool,
+        width: CGFloat
     ) -> some View {
         Group {
             switch rail {
@@ -209,11 +325,7 @@ struct WriteQuestView: View {
                 actionRail(isCompact: isCompact)
             }
         }
-        .frame(
-            width: isCompact
-                ? TadaLayoutTokens.compactActionRailWidth
-                : TadaLayoutTokens.standardActionRailWidth
-        )
+        .frame(width: width)
     }
 
     private func promptRail(isCompact: Bool) -> some View {
@@ -271,64 +383,70 @@ struct WriteQuestView: View {
                 Button {
                     isShowingToolbox.toggle()
                 } label: {
-                    ZStack(alignment: .bottomTrailing) {
-                        Image(
-                            systemName: HandwritingToolPolicy.symbol(
-                                for: handwritingSelection.tool
-                            )
+                    Image(
+                        systemName: HandwritingToolPolicy.symbol(
+                            for: handwritingSelection.tool
                         )
-                        .font(.system(size: 23, weight: .bold))
-                        .foregroundStyle(theme.primary)
-                        .frame(
-                            width: TadaPrimitiveTokens.TouchTarget.minimum,
-                            height: TadaPrimitiveTokens.TouchTarget.minimum
-                        )
-                        .background(theme.surface.opacity(0.94), in: Circle())
-
-                        Circle()
-                            .fill(
-                                handwritingSelection.ink.color(themeInk: theme.ink)
-                            )
-                            .frame(width: 14, height: 14)
-                            .overlay(Circle().stroke(.white, lineWidth: 2))
-                    }
+                    )
+                    .font(.system(size: 23, weight: .bold))
+                    .foregroundStyle(theme.primary)
+                    .frame(
+                        width: TadaPrimitiveTokens.TouchTarget.minimum,
+                        height: TadaPrimitiveTokens.TouchTarget.minimum
+                    )
+                    .background(theme.surface.opacity(0.94), in: Circle())
                     .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Writing tools")
                 .accessibilityValue(
-                    "\(HandwritingToolPolicy.displayName(for: handwritingSelection.tool)), \(handwritingSelection.ink.accessibilityName)"
+                    HandwritingToolPolicy.displayName(for: handwritingSelection.tool)
                 )
-                .accessibilityHint("Choose a pen and ink color")
+                .accessibilityHint("Choose a writing tool")
                 .popover(isPresented: $isShowingToolbox) {
                     HandwritingToolboxView(
                         selection: $handwritingSelection,
-                        themeInk: theme.ink,
                         accentColor: theme.primary
                     )
                     .presentationCompactAdaptation(.popover)
                 }
             }
 
-            if showGuidedWord {
-                Text(session.prompt.displayText)
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-                    .foregroundStyle(theme.primary)
-                    .accessibilityLabel("Example spelling: \(session.prompt.displayText)")
-            }
+            ZStack {
+                HandwritingCanvasView(
+                    strokes: $strokes,
+                    selectedTool: handwritingSelection.tool,
+                    selectedInk: handwritingSelection.ink,
+                    isErasing: handwritingSelection.isErasing,
+                    themeInkColor: theme.ink,
+                    guideColor: theme.primary.opacity(0.34),
+                    elapsedSincePrompt: activeElapsedIncludingPromptPlayback,
+                    onWritingSound: playWritingSound,
+                    onEraserTappedBlank: restorePenAfterBlankEraserTap
+                )
+                .allowsHitTesting(!isPlayingPrompt && !isChecking)
 
-            HandwritingCanvasView(
-                strokes: $strokes,
-                selectedTool: handwritingSelection.tool,
-                selectedInk: handwritingSelection.ink,
-                isErasing: handwritingSelection.isErasing,
-                themeInkColor: theme.ink,
-                guideColor: theme.primary.opacity(0.34),
-                elapsedSincePrompt: activeElapsedIncludingPromptPlayback,
-                onWritingSound: playWritingSound
-            )
-            .allowsHitTesting(!isPlayingPrompt && !isChecking)
+                VStack(spacing: 0) {
+                    if showGuidedWord {
+                        Text(session.prompt.displayText)
+                            .font(.system(.title2, design: .rounded, weight: .bold))
+                            .foregroundStyle(theme.primary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
+                            .background(theme.surface.opacity(0.94), in: Capsule())
+                            .accessibilityLabel(
+                                "Example spelling: \(session.prompt.displayText)"
+                            )
+                    }
+
+                    Spacer(minLength: 0)
+
+                    feedbackView
+                        .padding(.bottom, 8)
+                }
+                .padding(.top, 8)
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
                 Color.white.opacity(0.90),
@@ -354,8 +472,6 @@ struct WriteQuestView: View {
             .shadow(color: theme.ink.opacity(0.10), radius: 10, y: 5)
 
             letterSlots
-
-            feedbackView
         }
     }
 
@@ -445,6 +561,10 @@ struct WriteQuestView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(theme.ink.opacity(0.72))
 
+                if pictureHintAsset != nil {
+                    pictureHintButton
+                }
+
                 if attemptState.canSkipAfterTechnicalIssues {
                     Button("Move On", action: moveOnAfterTechnicalIssues)
                         .buttonStyle(
@@ -477,7 +597,7 @@ struct WriteQuestView: View {
             )
         case .rewriteAfterAnswer:
             return WriteFeedback(
-                message: "Look, then write it one more time.",
+                message: "Try writing it one more time.",
                 symbol: "textformat.abc",
                 kind: .tryAgain
             )
@@ -496,11 +616,46 @@ struct WriteQuestView: View {
         }
     }
 
+    private var pictureHintButton: some View {
+        Button {
+            isShowingPictureHint = true
+        } label: {
+            Image(systemName: "photo.circle.fill")
+                .font(.system(size: 34, weight: .bold))
+                .foregroundStyle(theme.primary)
+                .frame(
+                    width: TadaPrimitiveTokens.TouchTarget.minimum,
+                    height: TadaPrimitiveTokens.TouchTarget.minimum
+                )
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Show a picture hint")
+        .accessibilityHint("Shows a picture for this word")
+        .popover(isPresented: $isShowingPictureHint) {
+            if let pictureHintAsset {
+                WritePictureHintCard(
+                    asset: pictureHintAsset,
+                    accentColor: theme.primary
+                )
+                .presentationCompactAdaptation(.popover)
+            }
+        }
+    }
+
     private func toggleEraser() {
         guard !strokes.isEmpty, !isChecking else { return }
         handwritingSelection.toggleEraser()
         announceForAccessibility(
             handwritingSelection.isErasing ? "Eraser selected." : "Eraser off."
+        )
+    }
+
+    private func restorePenAfterBlankEraserTap() {
+        guard handwritingSelection.isErasing else { return }
+        handwritingSelection.stopErasing()
+        announceForAccessibility(
+            "\(HandwritingToolPolicy.displayName(for: handwritingSelection.tool)) selected."
         )
     }
 
@@ -521,8 +676,7 @@ struct WriteQuestView: View {
     }
 
     private func playPrompt(
-        countsAsReplay: Bool = true,
-        hidesStudyWordAfterPlayback: Bool = false
+        countsAsReplay: Bool = true
     ) {
         guard !isPlayingPrompt else { return }
         questTimer.suspend(for: .promptPlayback)
@@ -540,11 +694,6 @@ struct WriteQuestView: View {
                 0,
                 ProcessInfo.processInfo.systemUptime - playbackStartedAt
             )
-            if hidesStudyWordAfterPlayback {
-                try? await Task.sleep(for: .milliseconds(reduceMotion ? 80 : 700))
-                guard !Task.isCancelled else { return }
-                showGuidedWord = false
-            }
             isPlayingPrompt = false
             if !isPaused {
                 questTimer.resume(from: .promptPlayback)
@@ -615,6 +764,11 @@ struct WriteQuestView: View {
     }
 
     private func receive(_ result: RecognitionResult) {
+        let shouldOfferPictureHint = WritePictureHintRequestPolicy.shouldRequest(
+            decision: result.decision,
+            validAttemptCount: attemptState.validAttemptCount,
+            usedGuidance: attemptState.usedGuidance
+        )
         isChecking = false
         playFeedback(for: result.decision)
         let attemptReplayCount = replayCountSinceLastAttempt
@@ -629,17 +783,13 @@ struct WriteQuestView: View {
         }
 
         if let summary = attemptState.completedSummary {
-            if summary.completion == .needsPractice,
-                summary.records.contains(where: {
-                    $0.outcome == .incorrect || $0.outcome == .recognitionUncertain
-                })
-            {
-                showGuidedWord = true
-            }
             showCompletion(summary)
         } else {
             if case .feedback(.rewriteAfterAnswer) = attemptState.phase {
-                showGuidedWord = true
+                showGuidedWord = false
+                if shouldOfferPictureHint {
+                    loadPictureHint()
+                }
                 strokes.removeAll()
                 handwritingSelection.stopErasing()
                 resetWritingAttemptClock()
@@ -693,6 +843,7 @@ struct WriteQuestView: View {
         )
         handwritingSelection.stopErasing()
         showGuidedWord = true
+        isShowingPictureHint = false
         // The word remains visible while the child writes, so this is active
         // guided-response time. Prompt playback and recognition continue to
         // own their existing named timer suspensions.
@@ -703,6 +854,17 @@ struct WriteQuestView: View {
         }
     }
 
+    private func loadPictureHint() {
+        pictureHintTask?.cancel()
+        pictureHintTask = Task { @MainActor in
+            let asset = await pictureHintProvider.hint(
+                for: session.prompt.normalizedText
+            )
+            guard !Task.isCancelled else { return }
+            pictureHintAsset = asset
+        }
+    }
+
     private func resetWritingAttemptClock() {
         responseClock.reset(at: questTimer.elapsedSeconds)
         promptPauseSeconds = 0
@@ -710,23 +872,37 @@ struct WriteQuestView: View {
     }
 
     private func showCompletion(_ summary: QuestAttemptSummary) {
+        let completedItemID = session.prompt.id
         let announcement =
             summary.completion == .needsPractice
             ? "We’ll practice this one again."
             : "You got it!"
-        announceForAccessibility(announcement)
+        var didPresent = false
         withAnimation(
             .spring(
                 response: reduceMotion ? 0.01 : TadaPrimitiveTokens.Motion.reaction,
                 dampingFraction: 0.70
             )
         ) {
-            pendingCompletion = summary
+            didPresent = completionFeedbackLifecycle.present(
+                summary,
+                for: completedItemID
+            )
         }
+        guard didPresent else { return }
+        announceForAccessibility(announcement)
         completionTask?.cancel()
         completionTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(reduceMotion ? 40 : 430))
-            guard !Task.isCancelled else { return }
+            do {
+                try await Task.sleep(
+                    for: WriteQuestTimingPolicy.completionFeedbackVisibility
+                )
+            } catch {
+                return
+            }
+            guard completionFeedbackLifecycle.requestAdvance(for: completedItemID)
+            else { return }
+            questTimer.resume(from: .handwritingRecognition)
             onComplete(summary)
         }
     }
@@ -738,13 +914,53 @@ struct WriteQuestView: View {
             kind: isSuccess ? .success : .tryAgain,
             message: isSuccess
                 ? "Beautiful writing!"
-                : "It’s \(session.prompt.displayText). We’ll practice it again."
+                : "We’ll practice this one again."
         )
     }
 
     private var successFeedbackTrigger: Bool {
-        guard let pendingCompletion else { return false }
+        guard
+            let pendingCompletion =
+                completionFeedbackLifecycle
+                .visibleFeedback(for: session.prompt.id)
+        else { return false }
         return pendingCompletion.completion != .needsPractice
+    }
+
+    /// Resets only per-word state. The surrounding quest view keeps its stable
+    /// identity so the canvas frame and touch coordinates do not move between
+    /// words even when the model's short saving route is coalesced by SwiftUI.
+    private func resetForCurrentWordIfNeeded() {
+        guard completionFeedbackLifecycle.transition(to: session.prompt.id) else {
+            return
+        }
+
+        promptPlaybackTask?.cancel()
+        recognitionTask?.cancel()
+        pictureHintTask?.cancel()
+        completionTask?.cancel()
+        promptPlaybackTask = nil
+        recognitionTask = nil
+        pictureHintTask = nil
+        completionTask = nil
+
+        attemptState = QuestAttemptStateMachine(policy: .write)
+        strokes.removeAll(keepingCapacity: true)
+        isPaused = false
+        isChecking = false
+        showGuidedWord = false
+        isPlayingPrompt = false
+        didPlayInitialPrompt = false
+        replayCountSinceLastAttempt = 0
+        promptPauseSeconds = 0
+        pendingAttemptTiming = .unmeasured
+        responseClock.reset(at: questTimer.elapsedSeconds)
+        handwritingSelection.stopErasing()
+        isShowingToolbox = false
+        pictureHintAsset = nil
+        isShowingPictureHint = false
+        questTimer.resume(from: .promptPlayback)
+        questTimer.resume(from: .handwritingRecognition)
     }
 
     private func retryMessage(remainingAttempts: Int) -> String {
@@ -769,15 +985,60 @@ struct WriteQuestView: View {
     }
 }
 
-private struct HandwritingToolboxView: View {
-    @Binding var selection: HandwritingSelectionState
-    let themeInk: Color
+private struct WritePictureHintCard: View {
+    let asset: WordPictureHintAsset
     let accentColor: Color
 
-    private let colorColumns = Array(
-        repeating: GridItem(.fixed(46), spacing: 8),
-        count: 6
-    )
+    var body: some View {
+        VStack(spacing: 10) {
+            if let image {
+                image
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 180, height: 150)
+                    .clipShape(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    )
+            } else {
+                Image(systemName: "photo")
+                    .font(.system(size: 54, weight: .bold))
+                    .foregroundStyle(accentColor)
+                    .frame(width: 180, height: 150)
+            }
+
+            Text("Picture hint")
+                .font(.system(.headline, design: .rounded, weight: .bold))
+                .foregroundStyle(accentColor)
+
+            if !asset.attribution.isEmpty {
+                Text(asset.attribution)
+                    .font(.system(size: 9, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(16)
+        .background(Color.white)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Picture hint: \(asset.accessibilityLabel)")
+    }
+
+    private var image: Image? {
+        #if os(iOS)
+            guard let platformImage = UIImage(data: asset.imageData) else { return nil }
+            return Image(uiImage: platformImage)
+        #elseif os(macOS)
+            guard let platformImage = NSImage(data: asset.imageData) else { return nil }
+            return Image(nsImage: platformImage)
+        #else
+            return nil
+        #endif
+    }
+}
+
+private struct HandwritingToolboxView: View {
+    @Binding var selection: HandwritingSelectionState
+    let accentColor: Color
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -785,23 +1046,13 @@ private struct HandwritingToolboxView: View {
                 .font(.system(.headline, design: .rounded, weight: .bold))
 
             HStack(spacing: 10) {
-                ForEach(HandwritingTool.allCases, id: \.self) { tool in
+                ForEach(HandwritingToolPolicy.selectableTools, id: \.self) { tool in
                     toolButton(tool)
-                }
-            }
-
-            Text("Pick a color")
-                .font(.system(.headline, design: .rounded, weight: .bold))
-
-            LazyVGrid(columns: colorColumns, spacing: 8) {
-                inkButton(.theme)
-                ForEach(BasicHandwritingInkColor.allCases, id: \.self) { color in
-                    inkButton(.basic(color))
                 }
             }
         }
         .padding(16)
-        .frame(width: 346)
+        .frame(width: 262)
         .background(Color.white)
         .accessibilityElement(children: .contain)
     }
@@ -833,46 +1084,6 @@ private struct HandwritingToolboxView: View {
         .accessibilityValue(isSelected ? "Selected" : "")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityHint("Uses this pen and turns the eraser off")
-    }
-
-    private func inkButton(_ ink: HandwritingInkChoice) -> some View {
-        let isSelected = selection.ink == ink
-        return Button {
-            selection.selectInk(ink)
-        } label: {
-            ZStack {
-                Circle()
-                    .fill(ink.color(themeInk: themeInk))
-                    .frame(width: 36, height: 36)
-                    .overlay {
-                        Circle()
-                            .stroke(
-                                isSelected ? accentColor : Color.black.opacity(0.16),
-                                lineWidth: isSelected ? 4 : 1
-                            )
-                    }
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 15, weight: .heavy))
-                        .foregroundStyle(contrastingCheckColor(for: ink))
-                }
-            }
-            .frame(
-                width: TadaPrimitiveTokens.TouchTarget.minimum,
-                height: TadaPrimitiveTokens.TouchTarget.minimum
-            )
-            .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(ink.accessibilityName)
-        .accessibilityValue(isSelected ? "Selected" : "")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityHint("Uses this ink color without changing the pen")
-    }
-
-    private func contrastingCheckColor(for ink: HandwritingInkChoice) -> Color {
-        guard case .basic(let basicColor) = ink else { return .white }
-        return basicColor == .yellow ? .black : .white
     }
 }
 

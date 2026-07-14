@@ -12,6 +12,7 @@ public actor DemoGuardianFamilyStore: GuardianFamilyStore {
     private let learningRecordRepository = InMemoryLearningRecordRepository()
     private let clock: any AppClock
     private var store: RepositoryGuardianFamilyStore?
+    private var preparationTask: Task<RepositoryGuardianFamilyStore, Error>?
 
     public init(clock: any AppClock = SystemAppClock()) {
         self.clock = clock
@@ -110,36 +111,63 @@ public actor DemoGuardianFamilyStore: GuardianFamilyStore {
     private func preparedStore() async throws -> RepositoryGuardianFamilyStore {
         if let store { return store }
 
+        if let preparationTask {
+            return try await finishPreparation(preparationTask)
+        }
+
         let profile = KidProfile(
             displayName: "Mia",
             avatar: .cartoonAnimal(assetID: "hare"),
             selectedWorld: .moonpetalKingdom,
             createdAt: Date(timeIntervalSince1970: 0)
         )
-        try await profileRepository.save(profile)
-        let newStore = RepositoryGuardianFamilyStore(
-            profiles: [profile],
-            profileRepository: profileRepository,
-            wordPoolRepository: wordPoolRepository,
-            practiceSettingsRepository: practiceSettingsRepository,
-            learningRecordRepository: learningRecordRepository,
-            dailyQuestRepository: dailyQuestRepository,
-            clock: clock,
-            timeZone: .current
-        )
-        _ = try await newStore.importWords(
-            GuardianWordImportRequest(
-                rawText: "the and is you can",
-                learningMode: .read
+        let profileRepository = profileRepository
+        let wordPoolRepository = wordPoolRepository
+        let practiceSettingsRepository = practiceSettingsRepository
+        let learningRecordRepository = learningRecordRepository
+        let dailyQuestRepository = dailyQuestRepository
+        let clock = clock
+        let task = Task {
+            try await profileRepository.save(profile)
+            let newStore = RepositoryGuardianFamilyStore(
+                profiles: [profile],
+                profileRepository: profileRepository,
+                wordPoolRepository: wordPoolRepository,
+                practiceSettingsRepository: practiceSettingsRepository,
+                learningRecordRepository: learningRecordRepository,
+                dailyQuestRepository: dailyQuestRepository,
+                clock: clock,
+                timeZone: .current
             )
-        )
-        _ = try await newStore.importWords(
-            GuardianWordImportRequest(
-                rawText: "look play go",
-                learningMode: .write
+            _ = try await newStore.importWords(
+                GuardianWordImportRequest(
+                    rawText: "the and is you can",
+                    learningMode: .read
+                )
             )
-        )
-        store = newStore
-        return newStore
+            _ = try await newStore.importWords(
+                GuardianWordImportRequest(
+                    rawText: "look play go",
+                    learningMode: .write
+                )
+            )
+            return newStore
+        }
+        preparationTask = task
+        return try await finishPreparation(task)
+    }
+
+    private func finishPreparation(
+        _ task: Task<RepositoryGuardianFamilyStore, Error>
+    ) async throws -> RepositoryGuardianFamilyStore {
+        do {
+            let preparedStore = try await task.value
+            store = preparedStore
+            preparationTask = nil
+            return preparedStore
+        } catch {
+            preparationTask = nil
+            throw error
+        }
     }
 }

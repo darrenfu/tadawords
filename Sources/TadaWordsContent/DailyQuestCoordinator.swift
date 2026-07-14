@@ -75,11 +75,47 @@ public struct DailyQuestCoordinator: Sendable {
         questID: QuestID = QuestID(),
         startedAt: Date
     ) -> DailyQuestLaunch? {
+        practiceAgainLaunch(
+            from: state,
+            replaying: nil,
+            questID: questID,
+            startedAt: startedAt
+        )
+    }
+
+    /// Creates a focused Practice Again run containing only the requested
+    /// words from Today's persisted plan. Unknown IDs are ignored and an empty
+    /// selection cannot produce a launch.
+    public func practiceAgainLaunch(
+        from state: DailyQuestState,
+        replaying requestedWordIDs: [WordPromptID],
+        questID: QuestID = QuestID(),
+        startedAt: Date
+    ) -> DailyQuestLaunch? {
+        practiceAgainLaunch(
+            from: state,
+            replaying: Set(requestedWordIDs),
+            questID: questID,
+            startedAt: startedAt
+        )
+    }
+
+    private func practiceAgainLaunch(
+        from state: DailyQuestState,
+        replaying requestedWordIDs: Set<WordPromptID>?,
+        questID: QuestID,
+        startedAt: Date
+    ) -> DailyQuestLaunch? {
         guard let dailyPlan = state.plan, state.todayCompletion != nil else {
             return nil
         }
         let original = dailyPlan.questPlan
-        let practicedWordIDs = original.orderedItems.map(\.wordPromptID)
+        let persistedWordIDs = original.orderedItems.map(\.wordPromptID)
+        let practicedWordIDs =
+            requestedWordIDs.map { requested in
+                persistedWordIDs.filter(requested.contains)
+            } ?? persistedWordIDs
+        guard !practicedWordIDs.isEmpty else { return nil }
         let practicePlan = QuestPlan(
             id: questID,
             profileID: original.profileID,

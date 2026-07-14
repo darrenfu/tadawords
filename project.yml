@@ -40,6 +40,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app
         PRODUCT_NAME: Tada Words
+        MARKETING_VERSION: 0.3.0
+        CURRENT_PROJECT_VERSION: 2026071401
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: false
@@ -57,11 +59,11 @@ targets:
       path: Apps/TadaWordsApp/Info.plist
       properties:
         CFBundleDisplayName: Tada Words
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "0.3.0"
+        CFBundleVersion: "2026071401"
         CKSharingSupported: true
         ITSAppUsesNonExemptEncryption: false
-        NSMicrophoneUsageDescription: Tada Words uses the microphone only after the child taps it to check a spoken practice word. Audio is not saved.
+        NSMicrophoneUsageDescription: Tada Words uses the microphone after a child taps Record to check a spoken practice word or capture a voice-setup sample. Raw audio is not saved or uploaded.
         NSFaceIDUsageDescription: Tada Words uses Face ID to protect sensitive parent actions such as sharing or deleting a profile.
         NSCameraUsageDescription: Tada Words uses the camera only when a parent chooses a profile photo or scans a word sheet for on-device text recognition.
         NSPhotoLibraryUsageDescription: Tada Words lets a parent choose a profile photo or a word-sheet photo for on-device text recognition.
@@ -79,6 +81,21 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
 
+  TadaWordsUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/TadaWordsUITests
+        excludes:
+          - README.md
+    dependencies:
+      - target: TadaWords
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app.uitests
+        GENERATE_INFOPLIST_FILE: true
+        TEST_TARGET_NAME: TadaWords
+
 schemes:
   TadaWords:
     build:
@@ -86,6 +103,10 @@ schemes:
         TadaWords: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - name: TadaWordsUITests
     archive:
       config: Release
   TadaWordsLocalQA:

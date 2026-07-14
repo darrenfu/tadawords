@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import TadaWordsContent
 import TadaWordsDomain
+import TadaWordsFeatures
 import TadaWordsGuardianFeatures
 
 struct ApplicationDataPaths: Equatable, Sendable {
@@ -104,6 +105,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
     private let timeZone: TimeZone
     private let familySyncTransport: any FamilySyncTransport
     private let notificationScheduler: (any LearningNotificationScheduling)?
+    private let handwritingPreferenceRemover: any HandwritingPreferenceRemoving
 
     init(
         applicationSupportDirectory: @escaping @Sendable () throws -> URL,
@@ -111,7 +113,9 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         clock: any AppClock,
         timeZone: TimeZone,
         familySyncTransport: any FamilySyncTransport = LocalOnlyFamilySyncTransport(),
-        notificationScheduler: (any LearningNotificationScheduling)? = nil
+        notificationScheduler: (any LearningNotificationScheduling)? = nil,
+        handwritingPreferenceRemover: any HandwritingPreferenceRemoving =
+            HandwritingPreferenceStore()
     ) {
         self.applicationSupportDirectory = applicationSupportDirectory
         self.defaultProfile = defaultProfile
@@ -119,6 +123,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         self.timeZone = timeZone
         self.familySyncTransport = familySyncTransport
         self.notificationScheduler = notificationScheduler
+        self.handwritingPreferenceRemover = handwritingPreferenceRemover
     }
 
     func bootstrap() async throws -> ProductionApplicationEnvironment {
@@ -160,7 +165,8 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             practiceSettingsRepository: practiceSettingsRepository,
             learningRecordRepository: learningRecordRepository,
             dailyQuestRepository: dailyQuestRepository,
-            childSessionRepository: childSessionRepository
+            childSessionRepository: childSessionRepository,
+            handwritingPreferenceRemover: handwritingPreferenceRemover
         )
 
         let existingProfiles = try await profileRepository.profiles()
@@ -219,6 +225,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             dailyQuestRepository: dailyQuestRepository,
             tombstoneRepository: tombstoneRepository,
             childSessionRepository: childSessionRepository,
+            handwritingPreferenceRemover: handwritingPreferenceRemover,
             clock: clock,
             timeZone: timeZone
         )
@@ -229,6 +236,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             learningRepository: learningRecordRepository,
             dailyQuestRepository: dailyQuestRepository,
             tombstoneRepository: tombstoneRepository,
+            handwritingPreferenceRemover: handwritingPreferenceRemover,
             deviceID: try loadOrCreateDeviceID(at: dataPaths.deviceIdentitySnapshot)
         )
         let familySyncCoordinator = LocalFirstFamilySyncCoordinator(
@@ -320,8 +328,15 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         practiceSettingsRepository: any PracticeSettingsRepository,
         learningRecordRepository: any ProfileLearningRecordRepository,
         dailyQuestRepository: any DailyQuestHistoryRepository,
-        childSessionRepository: LocalJSONChildSessionRepository
+        childSessionRepository: LocalJSONChildSessionRepository,
+        handwritingPreferenceRemover: any HandwritingPreferenceRemoving
     ) async throws {
+        // Tombstones created by older builds may already be committed even
+        // though their UserDefaults entry was never cleaned up. Sweeping every
+        // tombstone is idempotent and repairs that historical residue.
+        for tombstone in try await tombstoneRepository.tombstones() {
+            handwritingPreferenceRemover.remove(for: tombstone.profileID)
+        }
         for tombstone in try await tombstoneRepository.pendingTombstones() {
             let profileID = tombstone.profileID
             try await wordPoolRepository.deleteAll(for: profileID)

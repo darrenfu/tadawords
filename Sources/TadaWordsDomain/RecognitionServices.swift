@@ -124,6 +124,22 @@ public struct HandwritingSample: Codable, Hashable, Sendable {
 
 public protocol AudioPromptService: Sendable {
     func play(_ prompt: WordPrompt, for profileID: ProfileID) async throws
+
+    /// Speaks the complete enrollment sentence before a child records it.
+    func playVoiceSetupSentence(
+        _ sentence: String,
+        for profileID: ProfileID
+    ) async throws
+}
+
+extension AudioPromptService {
+    public func playVoiceSetupSentence(
+        _ sentence: String,
+        for profileID: ProfileID
+    ) async throws {
+        _ = sentence
+        _ = profileID
+    }
 }
 
 public protocol SpeechRecognitionService: Sendable {

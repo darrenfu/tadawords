@@ -46,6 +46,7 @@ final class TadaWordsAppModel: ObservableObject {
     private var calendarTask: Task<Void, Never>?
     private var profileSelectionTask: Task<Void, Never>?
     private var worldProgressTask: Task<Void, Never>?
+    private var focusedReplaySeed: FocusedReplaySeed?
     private var isApplicationActive = true
 
     init(
@@ -156,6 +157,7 @@ final class TadaWordsAppModel: ObservableObject {
 
     private func applyProfileSelection(_ profile: KidProfile) {
         abandonActiveQuest()
+        focusedReplaySeed = nil
         routeStatusTask?.cancel()
         calendarTask?.cancel()
         todayRouteStatuses = [:]
@@ -182,6 +184,7 @@ final class TadaWordsAppModel: ObservableObject {
 
     func showProfiles() {
         abandonActiveQuest()
+        focusedReplaySeed = nil
         routeStatusTask?.cancel()
         routeStatusTask = nil
         calendarTask?.cancel()
@@ -200,6 +203,7 @@ final class TadaWordsAppModel: ObservableObject {
 
     func showLobby() {
         abandonActiveQuest()
+        focusedReplaySeed = nil
         destination = .lobby
         refreshCalendar()
         refreshWorldProgress()
@@ -383,6 +387,22 @@ final class TadaWordsAppModel: ObservableObject {
         }
     }
 
+    func replayMissedWords() {
+        guard let request = beginFocusedReplayPreparation() else { return }
+        Task {
+            await audioExperienceService.play(.click)
+        }
+        preparationTask = Task { [weak self] in
+            await self?.loadFocusedReplay(request)
+        }
+    }
+
+    /// Async test/integration seam for the focused replay path.
+    func replayMissedWordsAndWait() async {
+        guard let request = beginFocusedReplayPreparation() else { return }
+        await loadFocusedReplay(request)
+    }
+
     func setApplicationActive(_ isActive: Bool) {
         guard isApplicationActive != isActive else { return }
         isApplicationActive = isActive
@@ -449,6 +469,10 @@ final class TadaWordsAppModel: ObservableObject {
 
     func recoverQuest(_ mode: LearningMode) {
         guard let pendingCompletion, pendingCompletion.mode == mode else {
+            if focusedReplaySeed?.mode == mode {
+                replayMissedWords()
+                return
+            }
             startQuest(mode)
             return
         }
@@ -468,6 +492,10 @@ final class TadaWordsAppModel: ObservableObject {
 
     func recoverQuestAndWait(_ mode: LearningMode) async {
         guard let pendingCompletion, pendingCompletion.mode == mode else {
+            if focusedReplaySeed?.mode == mode {
+                await replayMissedWordsAndWait()
+                return
+            }
             await prepareQuestAndWait(mode)
             return
         }
@@ -500,6 +528,7 @@ final class TadaWordsAppModel: ObservableObject {
         }
 
         abandonActiveQuest()
+        focusedReplaySeed = nil
         let request = QuestPreparationRequest(
             id: UUID(),
             mode: mode,
@@ -508,6 +537,89 @@ final class TadaWordsAppModel: ObservableObject {
         activePreparationID = request.id
         destination = .loading(mode: mode, phase: .preparing)
         return request
+    }
+
+    private func beginFocusedReplayPreparation() -> FocusedReplayRequest? {
+        guard let profile = selectedProfile,
+            let seed = focusedReplaySeed,
+            seed.profileID == profile.id,
+            !seed.prompts.isEmpty
+        else {
+            return nil
+        }
+
+        routeStatusTask?.cancel()
+        routeStatusTask = nil
+        abandonActiveQuest()
+        let request = FocusedReplayRequest(
+            id: UUID(),
+            profile: profile,
+            seed: seed
+        )
+        activePreparationID = request.id
+        destination = .loading(mode: seed.mode, phase: .preparing)
+        return request
+    }
+
+    private func loadFocusedReplay(_ request: FocusedReplayRequest) async {
+        do {
+            let state = try await dailyQuestCoordinator.state(
+                profileID: request.profile.id,
+                learningMode: request.seed.mode,
+                on: clock.now
+            )
+            guard
+                let launch = dailyQuestCoordinator.practiceAgainLaunch(
+                    from: state,
+                    replaying: request.seed.prompts.map(\.id),
+                    startedAt: clock.now
+                )
+            else {
+                throw QuestContentError.inconsistentContent
+            }
+            try Task.checkCancellation()
+            guard activePreparationID == request.id else { return }
+            guard selectedProfile?.id == request.profile.id else { return }
+            guard
+                launch.questPlan.orderedItems.map(\.wordPromptID)
+                    == request.seed.prompts.map(\.id)
+            else {
+                throw QuestContentError.inconsistentContent
+            }
+
+            let timer = questTimerFactory(request.seed.emergencyAfter)
+            activeQuest = ActiveQuest(
+                launch: launch,
+                plan: launch.questPlan,
+                profileID: request.profile.id,
+                world: request.seed.world,
+                mode: request.seed.mode,
+                prompts: request.seed.prompts,
+                deviceClass: request.seed.deviceClass,
+                personalPaceBands: request.seed.personalPaceBands,
+                interfacePreferences: request.seed.interfacePreferences,
+                emergencyAfter: request.seed.emergencyAfter,
+                timer: timer
+            )
+            focusedReplaySeed = nil
+            activePreparationID = nil
+            preparationTask = nil
+            timer.start()
+            if !isApplicationActive {
+                timer.suspend(for: .appInactive)
+            }
+            showCurrentItem()
+        } catch is CancellationError {
+            return
+        } catch {
+            guard activePreparationID == request.id else { return }
+            activePreparationID = nil
+            preparationTask = nil
+            destination = .blocked(
+                mode: request.seed.mode,
+                reason: .storageUnavailable
+            )
+        }
     }
 
     private func loadPreparedQuest(_ request: QuestPreparationRequest) async {
@@ -629,6 +741,7 @@ final class TadaWordsAppModel: ObservableObject {
                 deviceClass: candidate.deviceClass,
                 personalPaceBands: candidate.personalPaceBands,
                 interfacePreferences: candidate.interfacePreferences,
+                emergencyAfter: candidate.emergencyAfter,
                 timer: timer,
                 currentIndex: recovery.nextItemIndex,
                 attempts: recovery.attempts,
@@ -970,15 +1083,65 @@ final class TadaWordsAppModel: ObservableObject {
             rewardGrantID: pending.rewardGrantID,
             completedAt: pending.completionRecordedAt
         )
+        let replayPrompts = focusedReplayPrompts(for: quest)
+        focusedReplaySeed =
+            replayPrompts.isEmpty
+            ? nil
+            : FocusedReplaySeed(
+                profileID: quest.profileID,
+                mode: quest.mode,
+                world: quest.world,
+                prompts: replayPrompts,
+                deviceClass: quest.deviceClass,
+                personalPaceBands: quest.personalPaceBands,
+                interfacePreferences: quest.interfacePreferences,
+                emergencyAfter: quest.emergencyAfter
+            )
         return PersistedQuestResult(
             persistedCompletion: writeResult.completion,
             viewState: QuestResultViewState(
                 mode: quest.mode,
                 score: score,
                 runKind: quest.launch.runKind,
-                rewardGrant: writeResult.rewardGrant
+                rewardGrant: writeResult.rewardGrant,
+                replayWordCount: replayPrompts.count
             )
         )
+    }
+
+    /// A focused replay contains every word that did not have a correct first
+    /// independent response in this run. Technical-only skips are included,
+    /// while a technical retry followed by a correct independent response is
+    /// not treated as a miss.
+    private func focusedReplayPrompts(for quest: ActiveQuest) -> [WordPrompt] {
+        let runAttempts = quest.attempts.filter { $0.questID == quest.id }
+        let independentAttemptsByWordID = Dictionary(
+            grouping: runAttempts.filter {
+                $0.evidence.countsTowardAccuracy
+                    && $0.outcome.isScorableResponse
+            },
+            by: \.wordPromptID
+        )
+
+        return quest.prompts.filter { prompt in
+            guard
+                let attempts = independentAttemptsByWordID[prompt.id],
+                let firstAttempt = attempts.sorted(by: attemptEventSort).first
+            else {
+                return true
+            }
+            return !firstAttempt.outcome.isCorrect
+        }
+    }
+
+    private func attemptEventSort(
+        _ left: AttemptEvent,
+        _ right: AttemptEvent
+    ) -> Bool {
+        if left.occurredAt != right.occurredAt {
+            return left.occurredAt < right.occurredAt
+        }
+        return left.id.rawValue.uuidString < right.id.rawValue.uuidString
     }
 
     private func cancelQuestWork() {
@@ -1172,6 +1335,23 @@ private struct QuestPreparationRequest: Sendable {
     let profile: KidProfile
 }
 
+private struct FocusedReplayRequest: Sendable {
+    let id: UUID
+    let profile: KidProfile
+    let seed: FocusedReplaySeed
+}
+
+private struct FocusedReplaySeed: Sendable {
+    let profileID: ProfileID
+    let mode: LearningMode
+    let world: WorldTheme
+    let prompts: [WordPrompt]
+    let deviceClass: DeviceClass
+    let personalPaceBands: [PersonalPaceBand]
+    let interfacePreferences: PracticeInterfacePreferences
+    let emergencyAfter: TimeInterval
+}
+
 private struct ActiveQuest {
     let launch: DailyQuestLaunch
     var plan: QuestPlan
@@ -1182,6 +1362,7 @@ private struct ActiveQuest {
     let deviceClass: DeviceClass
     let personalPaceBands: [PersonalPaceBand]
     let interfacePreferences: PracticeInterfacePreferences
+    let emergencyAfter: TimeInterval
     let timer: QuestTimerModel
     var currentIndex = 0
     var attempts: [AttemptEvent] = []

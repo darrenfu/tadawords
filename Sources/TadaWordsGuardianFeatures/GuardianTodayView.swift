@@ -87,7 +87,7 @@ struct GuardianTodayView: View {
             }
             .buttonStyle(.bordered)
             .tint(GuardianSemanticTokens.secondaryForeground)
-            .accessibilityHint("Returns to the Parent Gate")
+            .accessibilityHint("Locks parent tools and returns to child profiles")
         }
     }
 

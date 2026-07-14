@@ -39,19 +39,16 @@ final class ManualWordBatchParserTests: XCTestCase {
             learningMode: .write
         )
 
-        XCTAssertEqual(result.accepted.map(\.prompt.normalizedText), ["good"])
+        XCTAssertEqual(result.accepted.map(\.prompt.normalizedText), ["good", "too"])
         XCTAssertEqual(
             result.rejected.map(\.reason),
             [
-                .invalidPrompt(.unsupportedCharacters),
-                .invalidPrompt(
-                    .contextRequired(word: "too", reason: .homophone)
-                ),
+                .invalidPrompt(.unsupportedCharacters)
             ]
         )
     }
 
-    func testContextCueAllowsOtherwiseAmbiguousWriteWord() {
+    func testOptionalContextCueIsKeptForAmbiguousWriteWord() {
         let result = ManualWordBatchParser().parse(
             "too",
             learningMode: .write,

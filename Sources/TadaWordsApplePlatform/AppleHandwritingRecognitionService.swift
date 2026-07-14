@@ -41,14 +41,14 @@ public struct AppleHandwritingRecognitionService:
 {
     private let configuration: AppleHandwritingRecognitionConfiguration
     private let renderer: HandwritingSampleRenderer
-    private let decisionPolicy: AppleRecognitionDecisionPolicy
+    private let resultResolver: AppleHandwritingRecognitionResultResolver
 
     public init(
         configuration: AppleHandwritingRecognitionConfiguration = .default
     ) {
         self.configuration = configuration
         self.renderer = HandwritingSampleRenderer(configuration: configuration)
-        self.decisionPolicy = AppleRecognitionDecisionPolicy(
+        self.resultResolver = AppleHandwritingRecognitionResultResolver(
             thresholds: configuration.decisionThresholds
         )
     }
@@ -65,7 +65,7 @@ public struct AppleHandwritingRecognitionService:
         do {
             image = try renderer.render(sample)
         } catch {
-            return decisionPolicy.technicalFailure(.corruptedInput)
+            return resultResolver.technicalFailure(.corruptedInput)
         }
 
         do {
@@ -74,7 +74,9 @@ public struct AppleHandwritingRecognitionService:
             request.recognitionLanguages = [Locale.Language(identifier: "en-US")]
             request.automaticallyDetectsLanguage = false
             request.usesLanguageCorrection = false
-            request.customWords = []
+            request.customWords = AppleHandwritingRecognitionVocabulary.words(
+                for: prompt
+            )
             request.minimumTextHeightFraction =
                 configuration.minimumTextHeightFraction
 
@@ -84,32 +86,32 @@ public struct AppleHandwritingRecognitionService:
             let fragments = observations.compactMap(
                 AppleRecognizedTextFragment.init(observation:)
             )
-            guard let transcript = AppleHandwritingTranscriptResolver.resolve(fragments) else {
-                return decisionPolicy.evaluate(
-                    transcript: nil,
-                    confidence: nil,
-                    target: prompt
-                )
-            }
-
-            return decisionPolicy.evaluate(
-                transcript: transcript.letterSequence,
-                confidence: transcript.confidence,
+            return resultResolver.resolve(
+                fragments: fragments,
                 target: prompt
             )
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            return decisionPolicy.technicalFailure(.serviceUnavailable)
+            return resultResolver.technicalFailure(.serviceUnavailable)
         }
     }
 }
 
-struct AppleRecognizedTextFragment: Equatable, Sendable {
+struct AppleRecognizedTextCandidate: Equatable, Sendable {
     let text: String
     let confidence: RecognitionConfidence
+}
+
+struct AppleRecognizedTextFragment: Equatable, Sendable {
+    let candidates: [AppleRecognizedTextCandidate]
     let minimumX: CGFloat
     let verticalCenter: CGFloat
+
+    var text: String { candidates.first?.text ?? "" }
+    var confidence: RecognitionConfidence {
+        candidates.first?.confidence ?? RecognitionConfidence(0)
+    }
 
     init(
         text: String,
@@ -117,14 +119,31 @@ struct AppleRecognizedTextFragment: Equatable, Sendable {
         minimumX: CGFloat,
         verticalCenter: CGFloat
     ) {
-        self.text = text
-        self.confidence = confidence
+        self.candidates = [
+            AppleRecognizedTextCandidate(text: text, confidence: confidence)
+        ]
+        self.minimumX = minimumX
+        self.verticalCenter = verticalCenter
+    }
+
+    init(
+        candidates: [AppleRecognizedTextCandidate],
+        minimumX: CGFloat,
+        verticalCenter: CGFloat
+    ) {
+        self.candidates = candidates
         self.minimumX = minimumX
         self.verticalCenter = verticalCenter
     }
 
     init?(observation: RecognizedTextObservation) {
-        guard let candidate = observation.topCandidates(1).first else {
+        let candidates = observation.topCandidates(5).map {
+            AppleRecognizedTextCandidate(
+                text: $0.string,
+                confidence: RecognitionConfidence(Double($0.confidence))
+            )
+        }
+        guard !candidates.isEmpty else {
             return nil
         }
 
@@ -135,8 +154,7 @@ struct AppleRecognizedTextFragment: Equatable, Sendable {
             observation.bottomLeft,
         ]
         self.init(
-            text: candidate.string,
-            confidence: RecognitionConfidence(Double(candidate.confidence)),
+            candidates: candidates,
             minimumX: points.map(\.x).min() ?? 0,
             verticalCenter: points.map(\.y).reduce(0, +) / CGFloat(points.count)
         )
@@ -150,7 +168,8 @@ struct AppleHandwritingTranscript: Equatable, Sendable {
 
 enum AppleHandwritingTranscriptResolver {
     static func resolve(
-        _ fragments: [AppleRecognizedTextFragment]
+        _ fragments: [AppleRecognizedTextFragment],
+        matching normalizedTarget: String? = nil
     ) -> AppleHandwritingTranscript? {
         let readableFragments = fragments.filter {
             !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -163,6 +182,16 @@ enum AppleHandwritingTranscriptResolver {
             }
             return left.verticalCenter > right.verticalCenter
         }
+
+        if let normalizedTarget,
+            let exactTargetTranscript = exactTargetTranscript(
+                from: ordered,
+                normalizedTarget: normalizedTarget
+            )
+        {
+            return exactTargetTranscript
+        }
+
         let letterSequence =
             ordered
             .map(\.text)
@@ -178,6 +207,129 @@ enum AppleHandwritingTranscriptResolver {
             letterSequence: letterSequence,
             confidence: confidence
         )
+    }
+
+    private static func exactTargetTranscript(
+        from fragments: [AppleRecognizedTextFragment],
+        normalizedTarget: String
+    ) -> AppleHandwritingTranscript? {
+        var partials = [
+            "": AppleHandwritingPartialTranscript(
+                normalizedSequence: "",
+                confidence: RecognitionConfidence(1)
+            )
+        ]
+
+        for fragment in fragments {
+            var nextPartials: [String: AppleHandwritingPartialTranscript] = [:]
+            for partial in partials.values {
+                for candidate in fragment.candidates {
+                    guard
+                        let normalizedCandidate =
+                            AppleHandwritingCandidateNormalizer.normalize(
+                                candidate.text
+                            )
+                    else { continue }
+
+                    let combined = partial.normalizedSequence + normalizedCandidate
+                    guard normalizedTarget.hasPrefix(combined) else { continue }
+
+                    let confidence = min(partial.confidence, candidate.confidence)
+                    if let existing = nextPartials[combined],
+                        existing.confidence >= confidence
+                    {
+                        continue
+                    }
+                    nextPartials[combined] = AppleHandwritingPartialTranscript(
+                        normalizedSequence: combined,
+                        confidence: confidence
+                    )
+                }
+            }
+            partials = nextPartials
+            guard !partials.isEmpty else { return nil }
+        }
+
+        guard let match = partials[normalizedTarget] else { return nil }
+        return AppleHandwritingTranscript(
+            letterSequence: match.normalizedSequence,
+            confidence: match.confidence
+        )
+    }
+}
+
+private struct AppleHandwritingPartialTranscript: Sendable {
+    let normalizedSequence: String
+    let confidence: RecognitionConfidence
+}
+
+/// Vision occasionally emits the digit zero for a handwritten lowercase or
+/// uppercase O. This is the only glyph substitution allowed here; the final
+/// sequence must still equal the complete target exactly, so neighboring words
+/// such as `on`, `or`, `ot`, and `off` remain mismatches.
+private enum AppleHandwritingCandidateNormalizer {
+    static func normalize(_ candidate: String) -> String? {
+        let compact = candidate.components(
+            separatedBy: .whitespacesAndNewlines
+        ).joined()
+        if let normalized = try? EnglishWordNormalizer.normalize(compact) {
+            return normalized
+        }
+        guard compact.contains("0") else { return nil }
+        return try? EnglishWordNormalizer.normalize(
+            compact.replacingOccurrences(of: "0", with: "o")
+        )
+    }
+}
+
+enum AppleHandwritingRecognitionVocabulary {
+    static func words(for prompt: WordPrompt) -> [String] {
+        let locale = Locale(identifier: "en_US_POSIX")
+        let candidates = [
+            prompt.normalizedText,
+            prompt.normalizedText.prefix(1).uppercased(with: locale)
+                + prompt.normalizedText.dropFirst(),
+            prompt.normalizedText.uppercased(with: locale),
+        ]
+        var seen = Set<String>()
+        return candidates.filter { seen.insert($0).inserted }
+    }
+}
+
+struct AppleHandwritingRecognitionResultResolver: Sendable {
+    private let decisionPolicy: AppleRecognitionDecisionPolicy
+
+    init(thresholds: AppleRecognitionThresholds) {
+        self.decisionPolicy = AppleRecognitionDecisionPolicy(
+            thresholds: thresholds
+        )
+    }
+
+    func resolve(
+        fragments: [AppleRecognizedTextFragment],
+        target: WordPrompt
+    ) -> RecognitionResult {
+        guard
+            let transcript = AppleHandwritingTranscriptResolver.resolve(
+                fragments,
+                matching: target.normalizedText
+            )
+        else {
+            return decisionPolicy.evaluate(
+                transcript: nil,
+                confidence: nil,
+                target: target
+            )
+        }
+        return decisionPolicy.evaluate(
+            transcript: transcript.letterSequence,
+            confidence: transcript.confidence,
+            target: target
+        )
+    }
+
+    func technicalFailure(_ reason: TechnicalFailureReason) -> RecognitionResult {
+        decisionPolicy.technicalFailure(reason)
     }
 }
 

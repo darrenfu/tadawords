@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import TadaWordsDesignSystem
 import TadaWordsDomain
@@ -54,6 +55,7 @@ public struct TadaWordsApplicationView: View {
     private let speechRecognitionService: any SpeechRecognitionService
     private let handwritingRecognitionService: any HandwritingRecognitionService
     private let imageTextRecognitionService: any ImageTextRecognizing
+    private let pictureHintProvider: any WordPictureHintProviding
     private let speechPermissionActions: SpeechPermissionActions
     private let notificationScheduler: (any LearningNotificationScheduling)?
     private let voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)?
@@ -85,7 +87,8 @@ public struct TadaWordsApplicationView: View {
         self.audioExperienceService = audioExperienceService
         speechRecognitionService = NoSpeechRecognitionService()
         handwritingRecognitionService = NoHandwritingRecognitionService()
-        imageTextRecognitionService = NoImageTextRecognitionService()
+        imageTextRecognitionService = Self.makeDemoImageTextRecognitionService()
+        pictureHintProvider = NoWordPictureHintProvider()
         speechPermissionActions = .unavailable
         notificationScheduler = nil
         voiceprintEnrollmentService = nil
@@ -110,6 +113,8 @@ public struct TadaWordsApplicationView: View {
         handwritingRecognitionService: any HandwritingRecognitionService,
         imageTextRecognitionService: any ImageTextRecognizing =
             NoImageTextRecognitionService(),
+        pictureHintProvider: any WordPictureHintProviding =
+            NoWordPictureHintProvider(),
         requestSpeechAuthorization: @escaping @Sendable () async -> Bool,
         audioExperienceService: any AudioExperienceService =
             SilentAudioExperienceService(),
@@ -138,6 +143,7 @@ public struct TadaWordsApplicationView: View {
         self.speechRecognitionService = speechRecognitionService
         self.handwritingRecognitionService = handwritingRecognitionService
         self.imageTextRecognitionService = imageTextRecognitionService
+        self.pictureHintProvider = pictureHintProvider
         speechPermissionActions = SpeechPermissionActions(
             requestAuthorization: requestSpeechAuthorization
         )
@@ -194,8 +200,10 @@ public struct TadaWordsApplicationView: View {
                 }
             case .guardian:
                 GuardianRootView(
+                    store: DemoGuardianFamilyStore(),
                     audioPromptService: audioPromptService,
                     audioExperienceService: audioExperienceService,
+                    imageTextRecognitionService: imageTextRecognitionService,
                     onExit: showChildArea
                 )
                 .onAppear {
@@ -296,6 +304,7 @@ public struct TadaWordsApplicationView: View {
                             audioExperienceService: audioExperienceService,
                             speechRecognitionService: speechRecognitionService,
                             handwritingRecognitionService: handwritingRecognitionService,
+                            pictureHintProvider: pictureHintProvider,
                             speechPermissionActions: speechPermissionActions,
                             onLearningDataChanged: {
                                 await environment.notificationReconciler?.reconcileAll()
@@ -318,6 +327,7 @@ public struct TadaWordsApplicationView: View {
                             requestSpeechAuthorization:
                                 speechPermissionActions.requestAuthorization,
                             imageTextRecognitionService: imageTextRecognitionService,
+                            pictureHintProvider: pictureHintProvider,
                             sensitiveActionAuthorizer: sensitiveActionAuthorizer,
                             onExit: {
                                 refreshProfilesAndShowChild(environment: environment)
@@ -489,7 +499,40 @@ public struct TadaWordsApplicationView: View {
         }
         return .child
     }
+
+    private static func makeDemoImageTextRecognitionService()
+        -> any ImageTextRecognizing
+    {
+        #if DEBUG
+            if DebugOCRFixtureLaunchPolicy.isEnabled {
+                return DebugOCRFixtureRecognitionService()
+            }
+        #endif
+        return NoImageTextRecognitionService()
+    }
 }
+
+#if DEBUG
+    private enum DebugOCRFixtureLaunchPolicy {
+        static var isEnabled: Bool {
+            let arguments = ProcessInfo.processInfo.arguments
+            return arguments.contains("--demo-mode")
+                && arguments.contains("--ui-testing")
+                && arguments.contains("--ui-testing-ocr-fixture")
+        }
+    }
+
+    /// A deterministic test seam for the Parent OCR review flow. It is absent
+    /// from non-Debug builds and requires both explicit UI-test launch flags.
+    private struct DebugOCRFixtureRecognitionService: ImageTextRecognizing {
+        func recognizeText(in imageData: Data) async throws -> [String] {
+            guard !imageData.isEmpty else {
+                throw ImageTextRecognitionError.invalidImage
+            }
+            return ["cat read bow to"]
+        }
+    }
+#endif
 
 private struct ApplicationLoadingView: View {
     var body: some View {

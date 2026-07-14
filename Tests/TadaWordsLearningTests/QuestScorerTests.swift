@@ -413,7 +413,7 @@ final class QuestScorerTests: XCTestCase {
         )
     }
 
-    func testTooFastResponseDoesNotEarnPaceStar() {
+    func testPerfectFirstTryEarnsFullRewardEvenWhenPaceIsOutsideBand() {
         let attempt = TestFixture.attempt(
             number: 1,
             wordNumber: 1,
@@ -431,12 +431,15 @@ final class QuestScorerTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(score.points, 80)
+        XCTAssertEqual(score.points, 100)
         XCTAssertEqual(score.personalPaceAssessment, .outsidePersonalBand)
-        XCTAssertFalse(score.stars.contains(.personalPace))
+        XCTAssertEqual(
+            score.stars.earned,
+            [.completion, .accuracy, .personalPace]
+        )
     }
 
-    func testResponseBeyondSlowSideGraceDoesNotEarnPaceStar() {
+    func testPerfectFirstTryEarnsFullRewardWithinRelaxedSlowSideGrace() {
         let attempt = TestFixture.attempt(
             number: 1,
             wordNumber: 1,
@@ -460,12 +463,15 @@ final class QuestScorerTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(score.points, 80)
-        XCTAssertEqual(score.personalPaceAssessment, .outsidePersonalBand)
-        XCTAssertEqual(score.stars.earned, [.completion, .accuracy])
+        XCTAssertEqual(score.points, 100)
+        XCTAssertEqual(score.personalPaceAssessment, .withinPersonalBand)
+        XCTAssertEqual(
+            score.stars.earned,
+            [.completion, .accuracy, .personalPace]
+        )
     }
 
-    func testMissingTimingCannotProducePaceStarFromPartialData() {
+    func testPerfectFirstTryIsNotPenalizedForMissingTiming() {
         let timedAttempt = TestFixture.attempt(
             number: 1,
             wordNumber: 1,
@@ -502,8 +508,93 @@ final class QuestScorerTests: XCTestCase {
         )
 
         XCTAssertEqual(score.personalPaceAssessment, .unavailable)
-        XCTAssertFalse(score.stars.contains(.personalPace))
-        XCTAssertEqual(score.points, 80)
+        XCTAssertTrue(score.stars.contains(.personalPace))
+        XCTAssertEqual(score.points, 100)
+    }
+
+    func testPerfectFirstTryEarnsThreeStarsBeforePaceBaselineExists() {
+        let attempt = TestFixture.attempt(
+            number: 1,
+            wordNumber: 1,
+            outcome: .correct,
+            responseSeconds: 2
+        )
+        let context = TestFixture.paceContext()
+        let score = QuestScorer().score(
+            QuestScoringInput(
+                plan: makePlan(wordIDs: [attempt.wordPromptID]),
+                completedWordIDs: [attempt.wordPromptID],
+                attempts: [attempt],
+                paceContextByWordID: [attempt.wordPromptID: context],
+                personalPaceBands: []
+            )
+        )
+
+        XCTAssertEqual(score.firstIndependentAccuracy, 1)
+        XCTAssertEqual(score.points, 100)
+        XCTAssertEqual(
+            score.personalPaceAssessment,
+            .calibrating(sampleCount: 0, requiredSampleCount: 3)
+        )
+        XCTAssertEqual(score.stars.earned, Set(QuestStar.allCases))
+    }
+
+    func testSeventyFivePercentAccuracyMeetsRelaxedAccuracyStarRule() {
+        let wordIDs = (1...4).map(TestFixture.wordID)
+        let attempts = (1...4).map { number in
+            TestFixture.attempt(
+                number: number,
+                wordNumber: number,
+                outcome: number <= 3 ? .correct : .incorrect,
+                at: TestFixture.now.addingTimeInterval(Double(number))
+            )
+        }
+        let score = QuestScorer().score(
+            QuestScoringInput(
+                plan: makePlan(wordIDs: wordIDs),
+                completedWordIDs: Set(wordIDs),
+                attempts: attempts
+            )
+        )
+
+        XCTAssertEqual(score.firstIndependentAccuracy, 0.75)
+        XCTAssertEqual(score.points, 60)
+        XCTAssertTrue(score.stars.contains(.accuracy))
+    }
+
+    func testNonPerfectQuestStillUsesPersonalPaceForThirdStar() {
+        let wordIDs = (1...4).map(TestFixture.wordID)
+        let context = TestFixture.paceContext()
+        let attempts = (1...4).map { number in
+            TestFixture.attempt(
+                number: number,
+                wordNumber: number,
+                outcome: number <= 3 ? .correct : .incorrect,
+                at: TestFixture.now.addingTimeInterval(Double(number)),
+                responseSeconds: 4.6
+            )
+        }
+        let score = QuestScorer().score(
+            QuestScoringInput(
+                plan: makePlan(wordIDs: wordIDs),
+                completedWordIDs: Set(wordIDs),
+                attempts: attempts,
+                paceContextByWordID: Dictionary(
+                    uniqueKeysWithValues: wordIDs.map { ($0, context) }
+                ),
+                personalPaceBands: [
+                    TestFixture.paceBand(
+                        context: context,
+                        lower: 1,
+                        upper: 3
+                    )
+                ]
+            )
+        )
+
+        XCTAssertEqual(score.personalPaceAssessment, .outsidePersonalBand)
+        XCTAssertEqual(score.points, 60)
+        XCTAssertEqual(score.stars.earned, [.completion, .accuracy])
     }
 
     private func makePlan(wordIDs: [WordPromptID]) -> QuestPlan {

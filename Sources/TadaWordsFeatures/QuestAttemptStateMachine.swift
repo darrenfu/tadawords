@@ -336,3 +336,50 @@ struct QuestAttemptStateMachine: Equatable, Sendable {
         return .completedAfterRetry
     }
 }
+
+/// Keeps transient completion feedback scoped to the word that produced it.
+///
+/// A quest deliberately keeps one stable SwiftUI identity while it advances
+/// between words so the writing surface never moves. That also means `@State`
+/// survives a word transition. This value prevents the prior word's overlay or
+/// delayed completion callback from leaking into the next word.
+struct QuestItemFeedbackLifecycle<ItemID: Equatable, Feedback: Equatable>:
+    Equatable
+{
+    private(set) var itemID: ItemID
+    private(set) var pendingFeedback: Feedback?
+    private(set) var didRequestAdvance = false
+
+    init(itemID: ItemID) {
+        self.itemID = itemID
+    }
+
+    func visibleFeedback(for itemID: ItemID) -> Feedback? {
+        self.itemID == itemID ? pendingFeedback : nil
+    }
+
+    @discardableResult
+    mutating func present(_ feedback: Feedback, for itemID: ItemID) -> Bool {
+        guard self.itemID == itemID else { return false }
+        guard pendingFeedback == nil, !didRequestAdvance else { return false }
+        pendingFeedback = feedback
+        return true
+    }
+
+    @discardableResult
+    mutating func requestAdvance(for itemID: ItemID) -> Bool {
+        guard self.itemID == itemID, pendingFeedback != nil else { return false }
+        guard !didRequestAdvance else { return false }
+        didRequestAdvance = true
+        return true
+    }
+
+    @discardableResult
+    mutating func transition(to itemID: ItemID) -> Bool {
+        guard self.itemID != itemID else { return false }
+        self.itemID = itemID
+        pendingFeedback = nil
+        didRequestAdvance = false
+        return true
+    }
+}

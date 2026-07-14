@@ -129,16 +129,8 @@ private struct GuardianWordRow: View {
                 )
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(prompt.displayText)
-                    .font(.system(.body, design: .rounded, weight: .semibold))
-                if let spokenContext = prompt.audioCue.spokenContext {
-                    Text("Says: \(spokenContext)")
-                        .font(.system(.caption, design: .rounded, weight: .medium))
-                        .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
-                        .lineLimit(2)
-                }
-            }
+            Text(prompt.displayText)
+                .font(.system(.body, design: .rounded, weight: .semibold))
 
             Spacer()
 
