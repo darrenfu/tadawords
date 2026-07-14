@@ -47,15 +47,10 @@ final class WordPromptTests: XCTestCase {
         }
     }
 
-    func testAudioOnlyWriteHomophoneRequiresContext() {
-        XCTAssertThrowsError(
+    func testAudioOnlyWriteHomophoneUsesCanonicalPronunciationWithoutContext() {
+        XCTAssertNoThrow(
             try WordPrompt(learningMode: .write, text: "write")
-        ) { error in
-            XCTAssertEqual(
-                error as? WordPromptValidationError,
-                .contextRequired(word: "write", reason: .homophone)
-            )
-        }
+        )
 
         XCTAssertNoThrow(
             try WordPrompt(
@@ -66,15 +61,10 @@ final class WordPromptTests: XCTestCase {
         )
     }
 
-    func testHeteronymRequiresContextInEitherLearningMode() {
-        XCTAssertThrowsError(
+    func testHeteronymUsesCanonicalPronunciationWithoutContext() {
+        XCTAssertNoThrow(
             try WordPrompt(learningMode: .read, text: "read")
-        ) { error in
-            XCTAssertEqual(
-                error as? WordPromptValidationError,
-                .contextRequired(word: "read", reason: .heteronym)
-            )
-        }
+        )
 
         XCTAssertNoThrow(
             try WordPrompt(
@@ -89,6 +79,19 @@ final class WordPromptTests: XCTestCase {
         XCTAssertNoThrow(
             try WordPrompt(learningMode: .read, text: "write")
         )
+    }
+
+    func testLegacyContextualPromptRemainsDecodable() throws {
+        let legacy = try WordPrompt(
+            learningMode: .read,
+            text: "read",
+            audioCue: .contextual("I read a book every day.")
+        )
+
+        let encoded = try JSONEncoder().encode(legacy)
+        let decoded = try JSONDecoder().decode(WordPrompt.self, from: encoded)
+
+        XCTAssertEqual(decoded, legacy)
     }
 
     func testContextMustActuallyContainTarget() {
@@ -107,13 +110,19 @@ final class WordPromptTests: XCTestCase {
     }
 
     func testDecodingCannotBypassPromptSafetyValidation() throws {
-        let valid = try WordPrompt(learningMode: .read, text: "write")
+        let valid = try WordPrompt(
+            learningMode: .write,
+            text: "write",
+            audioCue: .contextual("I write my name.")
+        )
         let encoded = try JSONEncoder().encode(valid)
         let object = try XCTUnwrap(
             JSONSerialization.jsonObject(with: encoded) as? [String: Any]
         )
         var invalidObject = object
-        invalidObject["learningMode"] = "write"
+        invalidObject["audioCue"] = [
+            "spokenContext": "I use a pencil."
+        ]
         let invalidData = try JSONSerialization.data(withJSONObject: invalidObject)
 
         XCTAssertThrowsError(try JSONDecoder().decode(WordPrompt.self, from: invalidData))

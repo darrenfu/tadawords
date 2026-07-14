@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import SwiftUI
+import TadaWordsContent
 import TadaWordsDomain
 
 enum BasicHandwritingInkColor: String, CaseIterable, Hashable {
@@ -92,6 +93,19 @@ struct HandwritingToolAppearance: Equatable {
 }
 
 enum HandwritingToolPolicy {
+    /// The tools offered to children in Write Practice. Crayon remains in the
+    /// shared domain enum so legacy strokes and audio data can still decode,
+    /// but it is no longer selectable for new writing.
+    static let selectableTools: [HandwritingTool] = [
+        .pencil,
+        .chalk,
+        .brush,
+    ]
+
+    static func selectableTool(orPencil tool: HandwritingTool) -> HandwritingTool {
+        selectableTools.contains(tool) ? tool : .pencil
+    }
+
     static func appearance(for tool: HandwritingTool) -> HandwritingToolAppearance {
         switch tool {
         case .pencil:
@@ -126,7 +140,7 @@ enum HandwritingToolPolicy {
     }
 
     static func eraserLineWidth(for tool: HandwritingTool) -> CGFloat {
-        appearance(for: tool).lineWidth * 2.5
+        appearance(for: tool).lineWidth * 4
     }
 
     static func lineWidth(
@@ -166,16 +180,24 @@ enum HandwritingToolPolicy {
 
 struct HandwritingSelectionState: Equatable {
     private(set) var tool: HandwritingTool = .pencil
-    private(set) var ink: HandwritingInkChoice = .theme
     private(set) var isErasing = false
 
-    mutating func selectTool(_ newTool: HandwritingTool) {
-        tool = newTool
-        isErasing = false
+    /// Write Practice intentionally uses one high-contrast ink. Keeping this
+    /// as a computed value prevents hidden or restored state from creating a
+    /// new non-black stroke after the color picker was removed.
+    var ink: HandwritingInkChoice { .basic(.black) }
+
+    init(
+        tool: HandwritingTool = .pencil,
+        isErasing: Bool = false
+    ) {
+        self.tool = HandwritingToolPolicy.selectableTool(orPencil: tool)
+        self.isErasing = isErasing
     }
 
-    mutating func selectInk(_ newInk: HandwritingInkChoice) {
-        ink = newInk
+    mutating func selectTool(_ newTool: HandwritingTool) {
+        tool = HandwritingToolPolicy.selectableTool(orPencil: newTool)
+        isErasing = false
     }
 
     mutating func toggleEraser() {
@@ -190,6 +212,129 @@ struct HandwritingSelectionState: Equatable {
         if !hasInk {
             isErasing = false
         }
+    }
+}
+
+/// Stores only the durable pen choice. The legacy color field remains in the
+/// payload so existing preferences decode safely; all newly stored selections
+/// use black. Eraser mode is deliberately transient so a child always returns
+/// to a drawing tool in a later session.
+public struct HandwritingPreferenceStore: HandwritingPreferenceRemoving, @unchecked Sendable {
+    private let userDefaults: UserDefaults
+    private let keyPrefix: String
+
+    public init(
+        userDefaults: UserDefaults = .standard,
+        keyPrefix: String = "tada.handwriting.selection"
+    ) {
+        self.userDefaults = userDefaults
+        self.keyPrefix = keyPrefix
+    }
+
+    func selection(for profileID: ProfileID) -> HandwritingSelectionState {
+        guard let data = userDefaults.data(forKey: key(for: profileID)) else {
+            return HandwritingSelectionState()
+        }
+        guard let stored = try? JSONDecoder().decode(StoredSelection.self, from: data),
+            let tool = HandwritingTool(rawValue: stored.tool),
+            let color = BasicHandwritingInkColor(rawValue: stored.color),
+            HandwritingToolPolicy.selectableTools.contains(tool),
+            color == .black
+        else {
+            return migrateToDefault(for: profileID)
+        }
+        return HandwritingSelectionState(tool: tool)
+    }
+
+    func save(
+        _ selection: HandwritingSelectionState,
+        for profileID: ProfileID
+    ) {
+        let stored = StoredSelection(
+            tool: HandwritingToolPolicy.selectableTool(orPencil: selection.tool).rawValue,
+            color: BasicHandwritingInkColor.black.rawValue
+        )
+        guard let data = try? JSONEncoder().encode(stored) else { return }
+        userDefaults.set(data, forKey: key(for: profileID))
+    }
+
+    public func remove(for profileID: ProfileID) {
+        userDefaults.removeObject(forKey: key(for: profileID))
+    }
+
+    private func key(for profileID: ProfileID) -> String {
+        "\(keyPrefix).\(profileID.rawValue.uuidString.lowercased())"
+    }
+
+    private func migrateToDefault(for profileID: ProfileID) -> HandwritingSelectionState {
+        let selection = HandwritingSelectionState()
+        save(selection, for: profileID)
+        return selection
+    }
+
+    private struct StoredSelection: Codable {
+        let tool: String
+        let color: String
+    }
+}
+
+enum HandwritingStrokePointCollector {
+    /// Coalesced touch streams can repeat the same location many times. Keeping
+    /// only visible movement reduces redraw work without splitting a connected
+    /// shape (for example, a child drawing "vv" continuously as "w").
+    static func appending(
+        _ candidates: [HandwritingPoint],
+        to existing: [HandwritingPoint],
+        canvasSize: CGSize,
+        minimumCanvasDistance: CGFloat = 0.5
+    ) -> [HandwritingPoint] {
+        var result = existing
+        for candidate in candidates {
+            guard let previous = result.last else {
+                result.append(candidate)
+                continue
+            }
+            let previousPoint = canvasPoint(
+                for: previous,
+                canvasSize: canvasSize
+            )
+            let candidatePoint = canvasPoint(
+                for: candidate,
+                canvasSize: canvasSize
+            )
+            guard
+                hypot(
+                    candidatePoint.x - previousPoint.x,
+                    candidatePoint.y - previousPoint.y
+                ) >= minimumCanvasDistance
+            else { continue }
+            result.append(candidate)
+        }
+        return result
+    }
+
+    /// A tap is a real one-point stroke (the dot over an i, for example), not an
+    /// empty gesture. A moved finger adds the final location once.
+    static func finalizing(
+        _ existing: [HandwritingPoint],
+        with finalPoint: HandwritingPoint,
+        canvasSize: CGSize
+    ) -> [HandwritingPoint] {
+        appending(
+            [finalPoint],
+            to: existing,
+            canvasSize: canvasSize
+        )
+    }
+
+    private static func canvasPoint(
+        for point: HandwritingPoint,
+        canvasSize: CGSize
+    ) -> CGPoint {
+        CGPoint(
+            x: CGFloat(point.location.x) * canvasSize.width,
+            y: CGFloat(point.location.y) * canvasSize.height
+        )
     }
 }
 
@@ -234,7 +379,7 @@ enum InkStrokeEraser {
         var activeFragment: [HandwritingPoint] = []
 
         func finishFragment() {
-            guard activeFragment.count > 1 else {
+            guard !activeFragment.isEmpty else {
                 activeFragment.removeAll(keepingCapacity: true)
                 return
             }

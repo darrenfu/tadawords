@@ -66,6 +66,8 @@ public struct GuardianRootView: View {
         requestSpeechAuthorization: @escaping @Sendable () async -> Bool = { false },
         imageTextRecognitionService: any ImageTextRecognizing =
             NoImageTextRecognitionService(),
+        pictureHintProvider: any WordPictureHintProviding =
+            NoWordPictureHintProvider(),
         sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing =
             AllowSensitiveGuardianActions(),
         onExit: @escaping () -> Void = {}
@@ -82,6 +84,7 @@ public struct GuardianRootView: View {
                 voiceprintEnrollmentService: voiceprintEnrollmentService,
                 voiceprintRepository: voiceprintRepository,
                 requestSpeechAuthorization: requestSpeechAuthorization,
+                pictureHintProvider: pictureHintProvider,
                 sensitiveActionAuthorizer: sensitiveActionAuthorizer
             )
         )
@@ -104,6 +107,7 @@ public struct GuardianRootView: View {
                 loadingOverlay
             }
         }
+        .guardianDismissesKeyboardOnOutsideTap()
         .foregroundStyle(GuardianSemanticTokens.foreground)
         .environment(\.font, .system(.body, design: .rounded))
         .onChange(of: model.isLoading, initial: true) { _, isLoading in
@@ -137,7 +141,7 @@ public struct GuardianRootView: View {
             if let snapshot = model.snapshot {
                 GuardianTodayView(
                     snapshot: snapshot,
-                    onLock: model.lockGuardianArea,
+                    onLock: lockAndReturnToKids,
                     onQuickAdd: model.showQuickAdd,
                     onOpenPool: model.showPool,
                     onOpenSettings: model.showSettings,
@@ -184,7 +188,14 @@ public struct GuardianRootView: View {
                 initialMode: .read,
                 readWords: model.snapshot?.readPool ?? [],
                 writeWords: model.snapshot?.writePool ?? [],
+                practiceFrequencyByWordID: model.snapshot?.practiceFrequencyByWordID ?? [:],
+                undoWordsByMode: model.undoWordsByMode,
+                isUpdatingWordPool: model.isUpdatingWordPool,
                 imageTextRecognitionService: imageTextRecognitionService,
+                hasConfirmedRemovalThisSession: Binding(
+                    get: { model.hasConfirmedWordRemovalThisSession },
+                    set: { model.hasConfirmedWordRemovalThisSession = $0 }
+                ),
                 onBack: model.showDashboard,
                 onSubmit: model.addWords,
                 onPlay: model.play,
@@ -198,7 +209,14 @@ public struct GuardianRootView: View {
                 initialMode: mode,
                 readWords: model.snapshot?.readPool ?? [],
                 writeWords: model.snapshot?.writePool ?? [],
+                practiceFrequencyByWordID: model.snapshot?.practiceFrequencyByWordID ?? [:],
+                undoWordsByMode: model.undoWordsByMode,
+                isUpdatingWordPool: model.isUpdatingWordPool,
                 imageTextRecognitionService: imageTextRecognitionService,
+                hasConfirmedRemovalThisSession: Binding(
+                    get: { model.hasConfirmedWordRemovalThisSession },
+                    set: { model.hasConfirmedWordRemovalThisSession = $0 }
+                ),
                 onBack: model.showDashboard,
                 onSubmit: model.addWords,
                 onPlay: model.play,
@@ -236,8 +254,16 @@ public struct GuardianRootView: View {
                 profile: profile,
                 progress: model.voiceprintProgress,
                 isCapturing: model.isCapturingVoiceprint,
+                currentSentence: model.currentVoiceprintSentence,
+                currentSampleNumber: model.currentVoiceprintSampleNumber,
+                sampleCount: model.voiceprintSampleCount,
+                isPlayingPrompt: model.isPlayingVoiceprintPrompt,
+                guidanceMessage: model.voiceprintGuidanceMessage,
                 onBack: model.cancelVoiceprint,
                 onBegin: { model.beginVoiceprint(for: profile) },
+                onReplaySentence: {
+                    model.replayVoiceprintSentence(for: profile)
+                },
                 onCapture: model.captureVoiceprintSegment,
                 onFinish: { model.finishVoiceprint(for: profile) }
             )
@@ -271,6 +297,11 @@ public struct GuardianRootView: View {
             }
         }
         return settings.route(for: mode)
+    }
+
+    private func lockAndReturnToKids() {
+        model.lockGuardianArea()
+        onExit()
     }
 
     private var loadingOverlay: some View {

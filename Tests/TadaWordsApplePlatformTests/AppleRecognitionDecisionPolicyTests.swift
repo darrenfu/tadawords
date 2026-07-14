@@ -18,6 +18,23 @@ final class AppleRecognitionDecisionPolicyTests: XCTestCase {
         XCTAssertEqual(result.targetSpeakerAssessment, .unavailable)
     }
 
+    func testHandwritingAcceptsLowerInitialCapitalAndAllCaps() throws {
+        let target = try WordPrompt(learningMode: .write, text: "cat")
+        let policy = makePolicy()
+
+        for candidate in ["cat", "Cat", "CAT"] {
+            XCTAssertEqual(
+                policy.evaluate(
+                    transcript: candidate,
+                    confidence: RecognitionConfidence(0.95),
+                    target: target
+                ).decision,
+                .matched,
+                "Expected \(candidate) to match without case sensitivity"
+            )
+        }
+    }
+
     func testDownloadedChildSpeechTranscriptMatchesDespiteApplePunctuation() throws {
         // OpenSLR SLR101 utterance 000010168 is a six-year-old Mandarin-native
         // child saying "BYE". SpeechAnalyzer transcribes the checked-in WAV as

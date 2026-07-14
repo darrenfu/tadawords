@@ -1,29 +1,33 @@
 import AVFoundation
+import TadaWordsDomain
 import XCTest
 
 @testable import TadaWordsApplePlatform
 
 final class SpeechVoiceDesignTests: XCTestCase {
-    private let policy = VoiceSelectionPolicy.youthfulAmericanEnglish
+    private let policy = VoiceSelectionPolicy.canonicalTeacherAmericanEnglish
 
-    func testPrefersYouthfulNamedPersonaBeforeMaturePremiumFallback() {
-        let youthful = candidate(
+    func testPrefersPremiumNaturalTeacherVoiceBeforeCompactCharacterVoice() {
+        let compactCharacter = candidate(
             id: "com.apple.eloquence.en-US.Sandy",
             name: "Sandy",
             gender: .unspecified,
             quality: .standard
         )
-        let maturePremium = candidate(
+        let premiumTeacher = candidate(
             id: "com.apple.voice.premium.en-US.Ava",
             name: "Ava",
             gender: .female,
             quality: .premium
         )
 
-        XCTAssertEqual(policy.select(from: [maturePremium, youthful]), youthful)
+        XCTAssertEqual(
+            policy.select(from: [compactCharacter, premiumTeacher]),
+            premiumTeacher
+        )
     }
 
-    func testPrefersYouthfulFemalePersonaRegardlessOfInputOrder() {
+    func testPrefersHighestQualityCanonicalFemaleVoiceRegardlessOfInputOrder() {
         let standardFemale = candidate(
             id: "samantha-standard",
             name: "Samantha",
@@ -45,12 +49,9 @@ final class SpeechVoiceDesignTests: XCTestCase {
 
         XCTAssertEqual(
             policy.select(from: [standardFemale, premiumFemale, enhancedFemale]),
-            enhancedFemale
+            premiumFemale
         )
-        XCTAssertEqual(
-            policy.select(from: [enhancedFemale, standardFemale, premiumFemale]),
-            enhancedFemale
-        )
+        XCTAssertEqual(policy.select(from: [enhancedFemale, premiumFemale]), premiumFemale)
     }
 
     func testPrefersFemaleStandardOverMalePremiumInTargetLanguage() {
@@ -117,6 +118,23 @@ final class SpeechVoiceDesignTests: XCTestCase {
             identifierChoice
         )
         XCTAssertEqual(tieBreakPolicy.select(from: [other, nameChoice]), nameChoice)
+    }
+
+    func testCompactFallbackUsesClearSamanthaInsteadOfEloquencePersona() {
+        let samantha = candidate(
+            id: "com.apple.voice.compact.en-US.Samantha",
+            name: "Samantha",
+            gender: .female,
+            quality: .standard
+        )
+        let sandy = candidate(
+            id: "com.apple.eloquence.en-US.Sandy",
+            name: "Sandy",
+            gender: .unspecified,
+            quality: .standard
+        )
+
+        XCTAssertEqual(policy.select(from: [sandy, samantha]), samantha)
     }
 
     func testIdentifierProvidesDeterministicFinalTieBreak() {
@@ -203,14 +221,13 @@ final class SpeechVoiceDesignTests: XCTestCase {
 
         XCTAssertGreaterThan(brand.rate, learning.rate)
         XCTAssertGreaterThan(brand.pitchMultiplier, learning.pitchMultiplier)
-        XCTAssertGreaterThan(brand.volume, learning.volume)
-        XCTAssertGreaterThanOrEqual(learning.rate, 0.42)
-        XCTAssertLessThanOrEqual(learning.rate, 0.48)
-        XCTAssertGreaterThanOrEqual(learning.pitchMultiplier, 1.0)
-        XCTAssertLessThanOrEqual(learning.pitchMultiplier, 1.10)
+        XCTAssertLessThan(brand.volume, learning.volume)
+        XCTAssertGreaterThanOrEqual(learning.rate, 0.39)
+        XCTAssertLessThanOrEqual(learning.rate, 0.41)
+        XCTAssertEqual(learning.pitchMultiplier, 1.0, accuracy: 0.001)
     }
 
-    func testWriteDeliveryIsSlowerAndProtectsTheWordEnding() {
+    func testWriteDeliveryUsesClearCadenceAndProtectsTheWordEnding() {
         let read = SpeechUtteranceDesignPolicy.design(
             text: "at",
             role: .learning
@@ -221,9 +238,147 @@ final class SpeechVoiceDesignTests: XCTestCase {
         )
 
         XCTAssertEqual(write.text, "at")
-        XCTAssertLessThan(write.rate, read.rate)
+        XCTAssertEqual(write.rate, read.rate, accuracy: 0.001)
+        XCTAssertGreaterThan(write.volume, read.volume)
         XCTAssertGreaterThan(write.postUtteranceDelay, read.postUtteranceDelay)
-        XCTAssertGreaterThanOrEqual(write.postUtteranceDelay, 0.18)
+        XCTAssertGreaterThanOrEqual(write.postUtteranceDelay, 0.35)
+    }
+
+    func testLocalFallbackAvoidsRatesThatSmearShortWords() {
+        let read = SpeechUtteranceDesignPolicy.design(text: "at", role: .learning)
+        let write = SpeechUtteranceDesignPolicy.design(
+            text: "at",
+            role: .writeLearning
+        )
+
+        XCTAssertEqual(read.rate, 0.40, accuracy: 0.001)
+        XCTAssertEqual(write.rate, 0.40, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(read.postUtteranceDelay, 0.30)
+        XCTAssertGreaterThanOrEqual(write.postUtteranceDelay, 0.38)
+    }
+
+    func testRegressionWordsUseReviewedPronunciationPlan() {
+        let expectedIPA: [String: String?] = [
+            "of": nil,
+            "at": nil,
+            "cat": nil,
+            "come": nil,
+            "look": "lʊk",
+        ]
+
+        for (word, ipa) in expectedIPA {
+            let design = SpeechUtteranceDesignPolicy.design(
+                text: word,
+                role: .writeLearning
+            )
+
+            XCTAssertEqual(design.text, word)
+            XCTAssertEqual(design.ipaPronunciation, ipa)
+            XCTAssertTrue(design.addsSentenceBoundary)
+        }
+    }
+
+    func testContextSentenceIsNeverRewrittenAsAnIsolatedPronunciation() {
+        let design = SpeechUtteranceDesignPolicy.design(
+            text: "Please look at the cat.",
+            role: .writeLearning
+        )
+
+        XCTAssertEqual(design.text, "Please look at the cat.")
+        XCTAssertNil(design.ipaPronunciation)
+        XCTAssertFalse(design.addsSentenceBoundary)
+    }
+
+    func testUtteranceFactoryCarriesIPAAndSilentTerminalBoundary() {
+        let design = SpeechUtteranceDesignPolicy.design(
+            text: "look",
+            role: .writeLearning
+        )
+        let utterance = SpeechUtteranceFactory.make(design: design)
+        let ipaKey = NSAttributedString.Key(AVSpeechSynthesisIPANotationAttribute)
+
+        XCTAssertEqual(utterance.speechString, "look.")
+        XCTAssertEqual(
+            utterance.attributedSpeechString.attribute(
+                ipaKey,
+                at: 0,
+                effectiveRange: nil
+            ) as? String,
+            "lʊk"
+        )
+        XCTAssertNil(
+            utterance.attributedSpeechString.attribute(
+                ipaKey,
+                at: 4,
+                effectiveRange: nil
+            )
+        )
+    }
+
+    func testOfUsesClearSystemLexiconWithoutHarmfulIPAOverride() {
+        let design = SpeechUtteranceDesignPolicy.design(
+            text: "of",
+            role: .writeLearning
+        )
+        let utterance = SpeechUtteranceFactory.make(design: design)
+
+        XCTAssertNil(design.ipaPronunciation)
+        XCTAssertTrue(design.addsSentenceBoundary)
+        XCTAssertEqual(utterance.speechString, "of.")
+    }
+
+    func testOrdinaryIsolatedWordGetsBoundaryWithoutInventedIPA() {
+        let design = SpeechUtteranceDesignPolicy.design(
+            text: "dog",
+            role: .writeLearning
+        )
+        let utterance = SpeechUtteranceFactory.make(design: design)
+
+        XCTAssertNil(design.ipaPronunciation)
+        XCTAssertTrue(design.addsSentenceBoundary)
+        XCTAssertEqual(utterance.speechString, "dog.")
+    }
+
+    func testRegressionWordsEachRemainOneUnsplitUtterance() {
+        for word in ["of", "at", "cat", "come", "look"] {
+            let design = SpeechUtteranceDesignPolicy.design(
+                text: word,
+                role: .writeLearning
+            )
+            let utterance = SpeechUtteranceFactory.make(design: design)
+
+            XCTAssertEqual(utterance.speechString, word + ".")
+            XCTAssertFalse(utterance.speechString.contains(" "))
+        }
+    }
+
+    func testCanonicalSystemFallbackIsDeterministic() {
+        let female = candidate(
+            id: "female",
+            name: "Samantha",
+            gender: .female,
+            quality: .standard
+        )
+        let male = candidate(
+            id: "male",
+            name: "Alex",
+            gender: .male,
+            quality: .standard
+        )
+
+        let selected = policy.select(from: [male, female])
+
+        XCTAssertEqual(selected, female)
+    }
+
+    func testVoiceEnrollmentKeepsItsLocalCadence() {
+        let enrollment = SpeechUtteranceDesignPolicy.design(
+            text: "I see a happy dog.",
+            role: .voiceEnrollment
+        )
+
+        XCTAssertEqual(enrollment.rate, 0.37, accuracy: 0.001)
+        XCTAssertEqual(enrollment.text, "I see a happy dog.")
     }
 
     func testLaunchVoiceKeepsNaturalBrandPhraseInOneUtterance() {

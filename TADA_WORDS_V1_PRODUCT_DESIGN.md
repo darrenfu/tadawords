@@ -272,9 +272,9 @@ Show Word
 
 - 每题只显示一个大号单词。
 - 新 Profile、新词和进入 Read Quest 时都保持安静；第一次独立作答前绝不播放目标发音。
-- 大号目标词从当前 World 的高对比深色 palette 中稳定选择颜色；不同题目可变化，但同一次作答、重绘、错误和 Help 展开期间不闪变，颜色不表示正确或错误。
-- 连续两次有效读错后，才显示两个 Help 按钮：`Hear it` 播放标准发音，`See it` 在单词旁显示本地图片提示。技术重试不解锁 Help。
-- 图片 catalog 没有可靠匹配时明确显示暂无图片，不猜测词义；任一 Help 使用后，后续尝试记录为 guided evidence。
+- 每个 World 通过设计 token 指定唯一、配套且高对比的深色目标词颜色；同一 World 的所有 Read 单词保持一致，只有切换 World 才改变颜色，颜色不表示正确或错误。
+- 连续两次有效读错后，才显示唯一的 Help 按钮：`Hear it` 播放标准发音。Read 不显示图片提示；技术重试不解锁 Help。
+- 使用 `Hear it` 后，后续尝试记录为 guided evidence。
 - 孩子点击一次大麦克风，App 自动开始并检测说完。
 - 进行降噪、回声消除、语音活动检测、静音裁剪和声纹匹配。
 - 原始音频只在本机短暂处理，完成后立即删除。
@@ -309,30 +309,31 @@ Show Word
 │             - - - - - - - - - - - -                    │
 │             ─────────────────────────                    │
 │                                                          │
-│   🔊  [?]   [🖍 Pen + 12 colors]  [Eraser]   Clear [Done]│
+│   🔊  [?]   [✏️ Pencil / Chalk / Brush] [Eraser] Clear [Done]│
 └──────────────────────────────────────────────────────────┘
 ```
 
 ### 行为
 
-- 新词第一次出现时，短暂显示完整拼写并播放发音；随后隐藏。
-- Write 的标准发音使用比 Read 更慢的清晰语速，并保留更长的句尾释放，确保 `at` 等短词的末尾辅音可听见。
+- 每个词开始时只播放发音，绝不预先显示完整拼写；只有孩子主动点 `?` 才显示答案。
+- Read 与 Write 使用同一清晰、连贯的 canonical teacher cadence。离线 fallback 采用适中速度、自然音高、单个不中断的 utterance，并在 Write 保留更长的句尾释放，确保 `of`、`at`、`look` 等短词的末尾辅音可听见。
 - 不建立“拼字 → 描写 → 抄写 → 默写”的强制渐进路线。
 - 正式题目只给发音、三线练字区域和按字母数量显示的淡色空位。
 - 发音按钮可以无限重播；重播不算 Help，但记录次数。
 - 单独的 `?` 图标点击后立即显示正确拼写，不出现三选一菜单；使用后仍可完成，但不计独立成功。
 - 支持手指和兼容设备上的 Apple Pencil。
-- 笔盒提供 Pencil、Crayon、Chalk、Brush 四种笔和 12 种基础色；笔型与颜色独立选择，已写笔画保留落笔时的笔型、颜色与粗细。
-- 四种笔拥有可区分但低刺激的书写音色；只在实际移动落笔时节流播放，发音或录音期间不争夺注意力。
-- 不提供 Undo。固定位置的 Eraser 进行局部擦除，擦除轨迹为当前笔宽的 2.5 倍；`Clear` 单击立即清空，不弹确认。
+- 笔盒只提供 Pencil、Chalk、Brush 三种黑色笔；不显示颜色选择或 Crayon。笔型按 Profile 保存，旧版彩色/Crayon 设置迁移为黑色 Pencil。
+- 三种笔拥有可区分但低刺激的书写音色；只在实际移动落笔时节流播放，发音或录音期间不争夺注意力。
+- 不提供 Undo。固定位置的 Eraser 进行局部擦除，擦除轨迹为当前笔宽的 4 倍；`Clear` 单击立即清空，不弹确认。
 - 保留大号 `Done`，停笔不会自动提交。
 
 ### 识别结果
 
 - `confidentCorrect`：计分并触发奖励。
-- `confidentIncorrect`：显示正确词供对照，然后允许重写一次。
-- `uncertain`：不直接判错；显示正确词并允许重写一次。
+- `confidentIncorrect`：温和提示重写；具体词可出现可点图片，但不自动显示拼写。
+- `uncertain`：不直接判错或显示答案；作为技术重试允许再次提交。
 - 第二次仍不能确认：标记为需要复习并继续，不让识别引擎阻塞 Quest。
+- 匹配忽略大小写；Vision 使用目标词的 lower/Initial-cap/ALL-CAPS 词表并检查前五个候选与分段字母。只允许目标对齐的 `0` → `o` 字形归一化，不做会接受 `if/on/or/off` 等邻词的模糊编辑距离。
 - 只保存笔画/识别结果所需的数据；Guardian 报告不展示孩子原始手写轨迹回放。
 
 ### 用时
@@ -474,8 +475,8 @@ Guardian 可以纠正一次明显的语音或手写误判。系统修正该 Atte
 
 - 创建、编辑、删除 Kid Profile。
 - 邀请或移除 Guardian。
-- 查看每台设备的同步与声纹模型版本。
-- 重新注册或删除声纹。
+- 查看同步状态、待同步修改数和最近一次成功时间；每台设备分别显示是否需要重新注册声纹。
+- 在当前设备重新注册或删除声纹；声纹模板不跨设备复制。
 - 删除 Profile 时向所有设备传播 tombstone，防止离线旧设备把资料重新上传。
 
 ### Settings
@@ -549,17 +550,21 @@ modelVersion, schedulerVersion, deviceID
 
 - Quest 永远先写本地，CloudKit 不得阻塞孩子答题。
 - 离线时可以完成全部核心功能。
-- 恢复网络后增量同步。
+- 本地提交后把 Profile 标记到持久 outbox；恢复网络、App 回到前台或家长点击 `Sync now` 后重试。
 - Attempt、QuestCompletion、RewardGrant 使用不可变 UUID 事件。
-- Settings 使用字段级时间戳和设备 ID 做确定性合并。
-- 重复 Word 在同步后由标准化 key 合并，并迁移关联事件。
+- Profile、Pool membership 和 Settings 使用持久逻辑 revision 与 device ID 做确定性合并，不能只依赖设备时钟。
+- Attempt / Correction 合并后从事件历史重算 WordProgress 与遗忘曲线；竞争的 progress snapshot 不是权威数据。
+- Today completion、Daily Plan 与 Reward 使用 Profile + Mode/World + LocalDay 的稳定业务 key，离线双设备完成也只能计一次 Today 奖励。
+- 重复 Word 在同步后由 `Profile + Mode + normalized word` 合并；Read 与 Write 的同名词仍是两个独立学习对象。
+- 同步状态、待处理数量、最近成功时间和可恢复错误在重启后仍可见；孩子做题页面不弹同步阻塞框。
 
-推荐 SwiftUI + Core Data + `NSPersistentCloudKitContainer`；Apple 提供了跨 iCloud 用户共享 Core Data 对象的官方路径。[Sharing Core Data objects between iCloud users](https://developer.apple.com/documentation/coredata/sharing-core-data-objects-between-icloud-users)
+当前实现保持可检查的本地 JSON snapshot 作为运行真源，通过自定义 CloudKit record adapter 同步，不为 v0.3 再引入 Core Data 或自建服务器。完整 record scope、合并规则、outbox、删除与验收见 [ADR-0001](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md)。
 
 ### 同一 Apple ID
 
 - 使用 CloudKit private database 自动同步 Profile 数据。
-- 同步单词、事件、设置、奖励、头像和加密声纹模板。
+- 家长在每台设备分别 opt in 后，同步 Profile/头像、Read/Write Pool、设置、Attempt/Correction、Calendar completion 和 Reward。
+- 最近使用的 Profile、系统通知实例、声纹、图片提示和教师发音缓存保持设备本地。
 
 ### 不同 Apple ID
 
@@ -568,22 +573,13 @@ modelVersion, schedulerVersion, deviceID
 - Owner Guardian 拥有根 Profile；其他 Guardian 获得读写权限。
 - CloudKit 的原生 participant 权限只有只读/读写，因此 V1 不把独立儿童 Apple ID 加入为可写 participant。[CloudKit sharing](https://developer.apple.com/documentation/cloudkit/sharing-cloudkit-data-with-other-icloud-users)
 
-## 18. 声纹端到端加密
+## 18. 声纹与可重下载资产的设备隔离
 
-跨账号同步只包含声纹特征模板，不包含原始录音。
-
-推荐流程：
-
-1. 每个 Kid Profile 生成独立 `ProfileKey`。
-2. 声纹模板使用 AES-GCM 加密。
-3. 同 Apple ID 的设备通过可同步 Keychain 获得密钥。
-4. 不同 Guardian 接受共享后生成设备公钥。
-5. Owner 使用 HPKE 为新 Guardian 包装 `ProfileKey`。
-6. 私钥只保存在设备 Keychain。
-7. 移除 Guardian 后轮换 `ProfileKey`。
-8. 所有密钥都丢失时，声纹不可恢复，需要重新做 1 分钟注册；学习历史不能因此丢失。
-
-仅依赖 CloudKit encrypted fields 不能在所有家庭配置下保证严格 E2EE，因为共享数据的端到端保护与 Advanced Data Protection 状态有关。[iCloud data security overview](https://support.apple.com/en-lamr/102651) · [CryptoKit HPKE](https://developer.apple.com/documentation/cryptokit/hpke)
+- 原始录音不持久化、不上传。
+- 声纹模板只保存在当前设备 Keychain；Profile 同步时导出 `notEnrolled`，导入时保留接收设备自己的 enrollment 状态。
+- 新 iPhone/iPad 需要为同一个 Kid Profile 单独完成一次声纹注册；声纹不可用不能阻塞学习历史同步。
+- 具体词图片和 canonical teacher audio 只写入 App `Caches`，不进入 CloudKit。新设备在需要时异步重下载，离线时使用无图或本机语音 fallback。
+- Avatar 原图属于家长明确选择的 Profile 数据，不是 cache；Family Sync 开启后可同步，但生产版应使用有大小上限的独立 `CKAsset`。
 
 ## 19. 通知
 
@@ -675,7 +671,7 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 - `technicalRetry`：使用中性提示音，必须与孩子答错的声音明显不同。
 - 三颗星：三段可区分但属于同一声音家族的揭晓音。
 - 永久收藏品：使用当前 World 的专属完成音，不做随机稀有度音效。
-- 四种书写工具使用原创的短促摩擦/颗粒音色，并按实际移动节流；Reduced Sound 关闭这些装饰性书写音，提示发音播放时也不叠加。
+- 三种书写工具使用原创的短促摩擦/颗粒音色，并按实际移动节流；Reduced Sound 关闭这些装饰性书写音，提示发音播放时也不叠加。
 
 #### 首发 World 的声音方向
 
@@ -722,11 +718,11 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 ## 22. Guardian 通知与隐私原则
 
 - 原始音频永不离开设备。
-- 声纹模板属于敏感信息，注册、分享、删除和密钥轮换均记录 Guardian 操作。
-- Avatar 照片和声纹模板使用独立加密对象同步。
+- 声纹模板属于敏感的设备本地信息；注册、重新注册和删除均是 Guardian 操作，但不进入 Family Sync。
+- Family Sync 开启后 Avatar 照片作为 Profile 数据同步；图片提示与教师发音 cache 不同步。
 - 不接入广告 SDK 或第三方儿童行为追踪。
 - Guardian 可以导出学习数据和彻底删除 Profile。
-- 删除操作使用 tombstone，同步到所有设备和共享成员。
+- 删除操作使用不含昵称、照片、单词或学习内容的最小 tombstone，同步到所有设备和共享成员；tombstone 无条件压过任何同 Profile ID 的旧资料，其他 CloudKit records 物理擦除。
 
 ## 23. V1 验收标准
 
@@ -735,10 +731,10 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 - 4 岁孩子不阅读说明文字也能选择 Profile 和进入两个 Quest。
 - 冷启动先显示 Profile；没有 Profile 时直接创建，已有 Profile 时突出上次选择但不跳过孩子确认。
 - Read 与 Write 入口不会被误认为同一个任务。
-- Read 第一次独立作答前保持安静；两次有效错误后才出现发音与图片 Help。
+- Read 第一次独立作答前保持安静；两次有效错误后才出现唯一的 `Hear it` Help。
 - 完成 Read 题时，技术噪声不会被计为发音错误。
 - 完成 Write 题时，停笔不会触发自动提交。
-- Write 的慢速示范不会吞掉短词尾音。
+- Write 的教师发音清晰连贯，不会因过度减速或音频恢复过早而吞掉短词尾音。
 - 孩子可以看见分数、较宽松的三颗星和主题奖励，并从 My Collection 选择已获得 Theme / Icon。
 - 普通单击 Results Replay 会真正开始同模式 Practice Again。
 - 超过阈值后可以继续完成，不出现失败倒计时。
@@ -758,6 +754,8 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 - 离线完成的 Quest 恢复网络后不会丢失或重复计奖。
 - 同 Apple ID 与跨 Apple ID 共享均能同步。
 - 原始儿童录音不写入持久存储或云端。
+- 声纹模板保持每台设备独立；新设备只同步学习资料并重新注册声纹。
+- 图片提示与教师发音 cache 不跨设备复制，必要时可安全重下载。
 - 识别不确定、噪声和错误说话人不影响分数、星星或遗忘模型。
 - 删除 Profile 后，离线旧设备不能把它重新创建出来。
 

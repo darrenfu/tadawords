@@ -133,6 +133,10 @@ final class GuardianCompletionFeaturesTests: XCTestCase {
         XCTAssertTrue(deletedCompletions.isEmpty)
         XCTAssertTrue(deletedRewards.isEmpty)
         XCTAssertEqual(selectedAfterDeletion, deletion.dashboard.profile.id)
+        XCTAssertEqual(
+            fixture.handwritingPreferenceRemover.removedProfileIDs,
+            [fixture.firstProfile.id]
+        )
     }
 
     func testGuardianProfileEditPersistsGradeAgePhotoAndUpdatedAt() async throws {
@@ -186,6 +190,7 @@ final class GuardianCompletionFeaturesTests: XCTestCase {
         let learningRepository: InMemoryLearningRecordRepository
         let dailyRepository: InMemoryDailyQuestRepository
         let childSessionRepository: InMemoryChildSessionRepository
+        let handwritingPreferenceRemover: RecordingHandwritingPreferenceRemover
     }
 
     private func makeFixture(
@@ -197,6 +202,7 @@ final class GuardianCompletionFeaturesTests: XCTestCase {
         let learningRepository = InMemoryLearningRecordRepository()
         let dailyRepository = InMemoryDailyQuestRepository()
         let childSessionRepository = InMemoryChildSessionRepository()
+        let handwritingPreferenceRemover = RecordingHandwritingPreferenceRemover()
         let first = KidProfile(
             id: ProfileID(rawValue: uuid(1)),
             displayName: "Mia",
@@ -226,6 +232,7 @@ final class GuardianCompletionFeaturesTests: XCTestCase {
                 learningRecordRepository: learningRepository,
                 dailyQuestRepository: dailyRepository,
                 childSessionRepository: childSessionRepository,
+                handwritingPreferenceRemover: handwritingPreferenceRemover,
                 clock: CompletionFixedClock(now: now),
                 timeZone: TimeZone(secondsFromGMT: 0)!
             ),
@@ -235,7 +242,8 @@ final class GuardianCompletionFeaturesTests: XCTestCase {
             settingsRepository: settingsRepository,
             learningRepository: learningRepository,
             dailyRepository: dailyRepository,
-            childSessionRepository: childSessionRepository
+            childSessionRepository: childSessionRepository,
+            handwritingPreferenceRemover: handwritingPreferenceRemover
         )
     }
 
@@ -303,6 +311,21 @@ final class GuardianCompletionFeaturesTests: XCTestCase {
                 number
             )
         )!
+    }
+}
+
+private final class RecordingHandwritingPreferenceRemover:
+    HandwritingPreferenceRemoving, @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var profileIDs: [ProfileID] = []
+
+    var removedProfileIDs: [ProfileID] {
+        lock.withLock { profileIDs }
+    }
+
+    func remove(for profileID: ProfileID) {
+        lock.withLock { profileIDs.append(profileID) }
     }
 }
 

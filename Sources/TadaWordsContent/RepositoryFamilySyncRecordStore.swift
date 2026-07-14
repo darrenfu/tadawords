@@ -8,6 +8,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
     private let learningRepository: any ProfileLearningRecordRepository
     private let dailyQuestRepository: any DailyQuestHistoryRepository
     private let tombstoneRepository: any ProfileDeletionTombstoneRepository
+    private let handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)?
     private let deviceID: String
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
@@ -19,6 +20,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         learningRepository: any ProfileLearningRecordRepository,
         dailyQuestRepository: any DailyQuestHistoryRepository,
         tombstoneRepository: any ProfileDeletionTombstoneRepository,
+        handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)? = nil,
         deviceID: String
     ) {
         self.profileRepository = profileRepository
@@ -27,6 +29,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         self.learningRepository = learningRepository
         self.dailyQuestRepository = dailyQuestRepository
         self.tombstoneRepository = tombstoneRepository
+        self.handwritingPreferenceRemover = handwritingPreferenceRemover
         self.deviceID = deviceID
         encoder = InspectableSnapshotJSONCodec.makeEncoder()
         decoder = InspectableSnapshotJSONCodec.makeDecoder()
@@ -287,6 +290,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         try await learningRepository.deleteLearningRecords(for: profileID)
         try await dailyQuestRepository.deleteHistory(for: profileID)
         try await profileRepository.delete(id: profileID)
+        handwritingPreferenceRemover?.remove(for: profileID)
     }
 
     private func syncableProfile(_ profile: KidProfile) -> KidProfile {

@@ -122,8 +122,13 @@ final class RepositoryFamilySyncRecordStoreTests: XCTestCase {
             deletedAt: fixture.now
         )
         let payload = try JSONEncoder.tada.encode(deletion)
+        let handwritingPreferenceRemover =
+            RecordingSyncHandwritingPreferenceRemover()
 
-        try await fixture.makeStore(tombstones: fixture.tombstones).apply(
+        try await fixture.makeStore(
+            tombstones: fixture.tombstones,
+            handwritingPreferenceRemover: handwritingPreferenceRemover
+        ).apply(
             [
                 FamilySyncRecord(
                     recordName: "profile-\(profile.id)",
@@ -146,6 +151,10 @@ final class RepositoryFamilySyncRecordStoreTests: XCTestCase {
         XCTAssertNil(savedSettings)
         XCTAssertEqual(savedTombstone, deletion)
         XCTAssertTrue(pending.isEmpty)
+        XCTAssertEqual(
+            handwritingPreferenceRemover.removedProfileIDs,
+            [profile.id]
+        )
     }
 }
 
@@ -198,7 +207,8 @@ private struct Fixture {
     }
 
     func makeStore(
-        tombstones: any ProfileDeletionTombstoneRepository
+        tombstones: any ProfileDeletionTombstoneRepository,
+        handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)? = nil
     ) -> RepositoryFamilySyncRecordStore {
         RepositoryFamilySyncRecordStore(
             profileRepository: profiles,
@@ -207,12 +217,28 @@ private struct Fixture {
             learningRepository: learning,
             dailyQuestRepository: daily,
             tombstoneRepository: tombstones,
+            handwritingPreferenceRemover: handwritingPreferenceRemover,
             deviceID: "device-a"
         )
     }
 
     func remove() {
         try? FileManager.default.removeItem(at: directory)
+    }
+}
+
+private final class RecordingSyncHandwritingPreferenceRemover:
+    HandwritingPreferenceRemoving, @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var profileIDs: [ProfileID] = []
+
+    var removedProfileIDs: [ProfileID] {
+        lock.withLock { profileIDs }
+    }
+
+    func remove(for profileID: ProfileID) {
+        lock.withLock { profileIDs.append(profileID) }
     }
 }
 

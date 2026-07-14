@@ -65,10 +65,47 @@ final class QuestPresentationTests: XCTestCase {
                 stars: QuestStars(earned: [.completion]),
                 personalPaceAssessment: .withinPersonalBand
             ),
-            runKind: .practiceAgain
+            runKind: .practiceAgain,
+            replayWordCount: 2
         )
 
         XCTAssertFalse(result.showsNewCollectible)
         XCTAssertTrue(result.showsReplayAction)
+        XCTAssertEqual(result.replayActionLabel, "Replay 2 tricky words")
+    }
+
+    func testPerfectResultDoesNotOfferAnEmptyReplay() {
+        let result = QuestResultViewState(
+            mode: .write,
+            score: QuestScore(
+                points: 100,
+                firstIndependentCorrectCount: 3,
+                firstIndependentAttemptCount: 3,
+                stars: QuestStars(earned: Set(QuestStar.allCases)),
+                personalPaceAssessment: .calibrating(
+                    sampleCount: 0,
+                    requiredSampleCount: 3
+                )
+            ),
+            replayWordCount: 0
+        )
+
+        XCTAssertFalse(result.showsReplayAction)
+        XCTAssertEqual(result.paceLabel, "Learning your pace")
+    }
+
+    func testPerfectFirstTryExplainsPaceBonusWhenTimingIsUnavailable() {
+        let result = QuestResultViewState(
+            mode: .read,
+            score: QuestScore(
+                points: 100,
+                firstIndependentCorrectCount: 2,
+                firstIndependentAttemptCount: 2,
+                stars: QuestStars(earned: Set(QuestStar.allCases)),
+                personalPaceAssessment: .unavailable
+            )
+        )
+
+        XCTAssertEqual(result.paceLabel, "Perfect first try")
     }
 }

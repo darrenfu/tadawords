@@ -32,12 +32,4 @@ final class ReadAssistanceTests: XCTestCase {
             )
         )
     }
-
-    func testPictureCatalogNormalizesKnownWordsAndDoesNotGuess() {
-        XCTAssertEqual(
-            WordPictureHintCatalog.hint(for: "  DOG!  "),
-            WordPictureHint(glyph: "🐶", accessibilityLabel: "a dog")
-        )
-        XCTAssertNil(WordPictureHintCatalog.hint(for: "read"))
-    }
 }

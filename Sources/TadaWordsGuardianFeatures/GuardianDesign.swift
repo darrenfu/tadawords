@@ -2,6 +2,10 @@ import SwiftUI
 import TadaWordsDesignSystem
 import TadaWordsDomain
 
+#if os(iOS)
+    import UIKit
+#endif
+
 enum GuardianPrimitiveTokens {
     enum Spacing {
         static let xSmall: CGFloat = 4
@@ -179,3 +183,116 @@ extension LearningMode {
         }
     }
 }
+
+extension View {
+    /// Parent forms share one keyboard rule: a tap anywhere outside the active
+    /// text input dismisses the keyboard without swallowing the tapped control.
+    func guardianDismissesKeyboardOnOutsideTap() -> some View {
+        #if os(iOS)
+            background(GuardianKeyboardDismissInstaller())
+        #else
+            self
+        #endif
+    }
+}
+
+/// The keyboard-dismiss gesture lives on the window so it also covers sheets.
+/// It must remain observational: SwiftUI controls own the same touch sequence.
+enum GuardianKeyboardDismissGesturePolicy {
+    static let cancelsControlTouches = false
+    static let delaysTouchDelivery = false
+    static let recognizesAlongsideControls = true
+}
+
+#if os(iOS)
+    private struct GuardianKeyboardDismissInstaller: UIViewRepresentable {
+        func makeCoordinator() -> Coordinator {
+            Coordinator()
+        }
+
+        func makeUIView(context: Context) -> WindowObservingView {
+            let view = WindowObservingView()
+            view.isUserInteractionEnabled = false
+            view.onWindowChange = { [weak coordinator = context.coordinator] window in
+                coordinator?.attach(to: window)
+            }
+            return view
+        }
+
+        func updateUIView(_ uiView: WindowObservingView, context: Context) {
+            context.coordinator.attach(to: uiView.window)
+        }
+
+        static func dismantleUIView(
+            _ uiView: WindowObservingView,
+            coordinator: Coordinator
+        ) {
+            uiView.onWindowChange = nil
+            coordinator.detach()
+        }
+
+        final class WindowObservingView: UIView {
+            var onWindowChange: ((UIWindow?) -> Void)?
+
+            override func didMoveToWindow() {
+                super.didMoveToWindow()
+                onWindowChange?(window)
+            }
+        }
+
+        final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+            private weak var installedWindow: UIWindow?
+            private lazy var tapRecognizer: UITapGestureRecognizer = {
+                let recognizer = UITapGestureRecognizer(
+                    target: self,
+                    action: #selector(dismissKeyboard)
+                )
+                recognizer.cancelsTouchesInView =
+                    GuardianKeyboardDismissGesturePolicy.cancelsControlTouches
+                recognizer.delaysTouchesBegan =
+                    GuardianKeyboardDismissGesturePolicy.delaysTouchDelivery
+                recognizer.delaysTouchesEnded =
+                    GuardianKeyboardDismissGesturePolicy.delaysTouchDelivery
+                recognizer.delegate = self
+                return recognizer
+            }()
+
+            func attach(to window: UIWindow?) {
+                guard installedWindow !== window else { return }
+                detach()
+                installedWindow = window
+                window?.addGestureRecognizer(tapRecognizer)
+            }
+
+            func detach() {
+                installedWindow?.removeGestureRecognizer(tapRecognizer)
+                installedWindow = nil
+            }
+
+            func gestureRecognizer(
+                _ gestureRecognizer: UIGestureRecognizer,
+                shouldReceive touch: UITouch
+            ) -> Bool {
+                var candidate = touch.view
+                while let view = candidate {
+                    if view is UITextField || view is UITextView {
+                        return false
+                    }
+                    candidate = view.superview
+                }
+                return true
+            }
+
+            func gestureRecognizer(
+                _ gestureRecognizer: UIGestureRecognizer,
+                shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+            ) -> Bool {
+                GuardianKeyboardDismissGesturePolicy.recognizesAlongsideControls
+            }
+
+            @objc private func dismissKeyboard() {
+                installedWindow?.endEditing(true)
+            }
+        }
+    }
+#endif

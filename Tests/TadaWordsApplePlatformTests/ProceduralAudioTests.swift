@@ -281,12 +281,12 @@ final class ProceduralAudioTests: XCTestCase {
 
         XCTAssertTrue(throttle.accepts(at: 10))
         XCTAssertFalse(throttle.accepts(at: 10.02))
-        XCTAssertFalse(throttle.accepts(at: 10.07))
-        XCTAssertTrue(throttle.accepts(at: 10.08))
         XCTAssertFalse(throttle.accepts(at: 10.10))
+        XCTAssertTrue(throttle.accepts(at: 10.12))
+        XCTAssertFalse(throttle.accepts(at: 10.15))
 
         throttle.reset()
-        XCTAssertTrue(throttle.accepts(at: 10.10))
+        XCTAssertTrue(throttle.accepts(at: 10.15))
     }
 
     func testAmbientLoopsAreTwentyFourSecondStereoScoresWithDistinctContent() {

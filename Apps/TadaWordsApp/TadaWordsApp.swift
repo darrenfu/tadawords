@@ -14,6 +14,7 @@ struct TadaWordsApp: App {
     private let voiceprintRepository: KeychainDeviceVoiceprintRepository
     private let speechRecognitionService: AppleSpeechRecognitionService
     private let voiceprintEnrollmentService: AppleVoiceprintEnrollmentService
+    private let pictureHintProvider: AppleWordPictureHintService
     private let familySyncTransport: (any FamilySyncTransport)?
     private let notificationScheduler = AppleLearningNotificationScheduler()
     private let sensitiveActionAuthorizer = AppleSensitiveGuardianActionAuthorizer()
@@ -24,6 +25,18 @@ struct TadaWordsApp: App {
     init() {
         let experience = AppleAudioExperienceService()
         let voiceprints = KeychainDeviceVoiceprintRepository()
+        let pictureCacheDirectory =
+            ((try? Self.cachesDirectory())
+            ?? FileManager.default.temporaryDirectory)
+            .appendingPathComponent("TadaWords/word-pictures", isDirectory: true)
+        let teacherAudioCacheDirectory =
+            ((try? Self.cachesDirectory())
+            ?? FileManager.default.temporaryDirectory)
+            .appendingPathComponent("TadaWords/teacher-audio", isDirectory: true)
+        try? FileManager.default.createDirectory(
+            at: pictureCacheDirectory,
+            withIntermediateDirectories: true
+        )
         #if targetEnvironment(simulator) || LOCAL_DEVICE_QA
             // CKContainer traps when an intentionally unsigned simulator build
             // has no iCloud entitlement. Simulator and Local Device QA builds
@@ -34,11 +47,18 @@ struct TadaWordsApp: App {
         #endif
         audioExperienceService = experience
         voiceprintRepository = voiceprints
+        pictureHintProvider = AppleWordPictureHintService(
+            cacheDirectory: pictureCacheDirectory
+        )
         voiceprintEnrollmentService = AppleVoiceprintEnrollmentService(
-            repository: voiceprints
+            repository: voiceprints,
+            audioExperienceService: experience
         )
         audioPromptService = SystemAudioPromptService(
-            audioExperienceService: experience
+            audioExperienceService: experience,
+            teacherWordAudioProvider: Self.teacherWordAudioProvider(
+                cacheDirectory: teacherAudioCacheDirectory
+            )
         )
         speechRecognitionService = AppleSpeechRecognitionService(
             voiceprintVerifier: AppleVoiceprintVerifier(
@@ -65,6 +85,7 @@ struct TadaWordsApp: App {
                     speechRecognitionService: speechRecognitionService,
                     handwritingRecognitionService: handwritingRecognitionService,
                     imageTextRecognitionService: imageTextRecognitionService,
+                    pictureHintProvider: pictureHintProvider,
                     requestSpeechAuthorization: requestSpeechAuthorization,
                     audioExperienceService: audioExperienceService,
                     familySyncTransport: familySyncTransport,
@@ -112,6 +133,38 @@ struct TadaWordsApp: App {
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
+        )
+    }
+
+    nonisolated private static func cachesDirectory() throws -> URL {
+        try FileManager.default.url(
+            for: .cachesDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+    }
+
+    /// `TadaWordsTeacherAudioEndpoint` is a public app-backend URL, never an
+    /// ElevenLabs URL or credential. An absent/invalid value intentionally
+    /// leaves practice on the single offline Apple voice fallback.
+    private static func teacherWordAudioProvider(
+        cacheDirectory: URL,
+        bundle: Bundle = .main
+    ) -> (any TeacherWordAudioProviding)? {
+        guard
+            let rawEndpoint = bundle.object(
+                forInfoDictionaryKey: "TadaWordsTeacherAudioEndpoint"
+            ) as? String,
+            let endpoint = URL(string: rawEndpoint),
+            endpoint.scheme?.lowercased() == "https"
+        else {
+            return nil
+        }
+
+        return CachingTeacherWordAudioProvider(
+            upstream: RemoteTeacherWordAudioProvider(endpoint: endpoint),
+            cache: FileTeacherWordAudioCache(directory: cacheDirectory)
         )
     }
 

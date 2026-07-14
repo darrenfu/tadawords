@@ -28,7 +28,7 @@ log records why it changed, which version contains it, and how it was verified.
 Target release: `v0.2.0`
 
 Branch: `v0.2`
-Overall state: implementation and regression testing in progress.
+Overall state: merged to `main` by PR #1 at merge commit `7728f28`; physical-device acceptance remains open.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
@@ -119,3 +119,79 @@ To be filled after the final `v0.2.0` candidate is installed.
 |---|---|---|---|---|---|
 | Pending | iPhone 17 Pro Max | `v0.2.0` candidate | Parent + child | Pending | Full checklist above. |
 | Pending | iPad Pro 13-inch (M5) | `v0.2.0` candidate | Parent + child | Pending | Full checklist above. |
+
+## v0.3 — 2026-07-13
+
+Target release: `v0.3.0`
+
+Branch: `v0.3`
+Baseline: `main` at `7728f28`, which merged v0.2 through PR #1.
+Overall state: implementation, automated regression, and signed iPhone installation pass; human physical-device acceptance remains open.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V03-BUG-001 | Bug | OCR import | `Add all N to Read/Write` must remain tappable after recognition and must show progress or an actionable error while saving. | Automated pass | Recognize a photo, dismiss the keyboard, tap the sticky Add All action once, and verify the Pool changes exactly once. |
+| V03-BUG-002 | Bug | Voice setup | Voice setup must record usable enrollment samples instead of showing a generic error or leaving Finish disabled. Configure the audio session before reading the input format and preserve accepted progress when a sample is rejected. | Automated pass | Complete setup on a physical device, including one rejected sample, interruption, retry, and final save. |
+| V03-BUG-003 | Bug | Write canvas | Short dots, later letters, and connected strokes must remain in the drawing. Writing sound must use cached, throttled playback without stutter. | Automated pass | Write `i`, a three-letter word, and connected `vv`/`w` with each tool; listen for gaps, clipping, or repeated startup noise. |
+| V03-BUG-004 | Bug | Parent Gate | A wrong full-length answer must auto-clear without making its error feedback flash and disappear. Keep the message visible until the parent starts the next answer. | Automated pass | Enter a wrong answer, observe the cleared field and persistent message, then type the next digit and confirm the message dismisses. |
+| V03-BUG-005 | Bug | Quest transition | Advancing to the next word must not rebuild the root Quest shell or change its transition identity. | Automated pass | Record a multiword Write Quest frame by frame and confirm the canvas coordinate space stays fixed during each advance. |
+| V03-BUG-006 | Bug | Quest feedback | Read `You got it!` and Write completion feedback must dismiss once and advance; an old delayed callback must never cover or advance a newer word. | Automated pass | Critical XCUITest completes two consecutive words in each mode and confirms both transient cards disappear. |
+| V03-BUG-007 | Bug | Parent interactions | Keyboard dismissal must not swallow Add All, sort, or delete taps. Every confirmed deletion keeps Undo, while only the first deletion in a Parent session asks for confirmation. | Automated pass | Critical XCUITest performs two deletes, Undo exposure, Photos-picker dismissal, OCR Add All, Pool refresh, and A–Z sort. |
+| V03-BUG-008 | Bug | Write recognition | Short word `of` must pass when Vision returns the exact spelling in a lower-ranked candidate, splits the letters, varies case, or confuses handwritten `o` with `0`; unrelated neighbors must remain rejected. | Automated pass; child handwriting remains open | Verify `of`, `Of`, `OF`, `O` + `F`, and safe `0f` normalization through the real resolver; reject `if`, `on`, `or`, `ot`, and `off`, then repeat with the child on the target iPhone. |
+| V03-IMP-001 | Improvement | OCR review | Select multiple library photos or take additional camera photos in one import. Number recognized words from 1, enforce a 500-word maximum per image, dedupe, and sort by source order, A-Z, or practice frequency. Keep top/back and bottom jump controls available during long reviews. | Automated pass | Import several photos, trigger the per-image 500-word error, edit numbered rows, change all sort orders, and use both scroll controls. |
+| V03-IMP-002 | Improvement | Parent Words | Sort either Pool by added order, A-Z, or most practiced; show practice frequency; and support type-ahead search with Hear and Delete actions. | Automated pass | Search partial words, use both row actions, and compare all sort orders against known frequencies. |
+| V03-IMP-003 | Improvement | Parent input | Tapping outside any Parent input dismisses its keyboard. The first word removal in a Parent session asks for confirmation; later removals in that session execute directly and retain Undo. | Automated pass | Exercise typing, search, OCR review, and gate fields; then delete one, several, and a later single word. |
+| V03-IMP-004 | Improvement | Parent navigation | Parent Gate checks as soon as the expected number of digits is present. A wrong complete answer resets for retry. Tapping `Lock` in Parents locks the route and returns to Kid selection. | Automated pass | Enter correct and incorrect one- and two-digit answers, then enter Parents and tap Lock from the dashboard. |
+| V03-IMP-005 | Improvement | Picture hints | After a Pool import, asynchronously prefetch a privately cached hint for catalogued concrete words. On the first genuine Write mismatch, show a tappable picture icon. Function and abstract words such as `the`, `come`, and `kind` receive no image or network request. | Automated pass | Add `dog` and `the`, verify only the fixed dog asset is requested, force one Write mismatch, and test offline/cache fallback. |
+| V03-IMP-006 | Improvement | Voice setup | Replace generic sample recording with six shuffled, short Pre-K sentences. The child hears and repeats each sentence; accepted/rejected progress stays visible, and raw audio is not persisted. | Automated pass | Finish enrollment with a target child, retry rejected speech/noise samples, restart, and confirm only the device-local template remains. |
+| V03-IMP-007 | Improvement | Voice | Use one canonical teacher voice for every Profile; remove the six-style picker and discard its legacy preference on the next save. The client may call only a configured HTTPS teacher-audio endpoint and must never contain a provider API key. Without that endpoint it uses one deterministic clarity-ranked Apple fallback. | Automated pass; remote endpoint and listening remain open | Confirm no style UI or persisted style remains, no credential is present, and missing network/endpoint still produces one clear fallback voice. Configure and validate the restricted server endpoint separately. |
+| V03-IMP-008 | Improvement | Learning audio | Prioritize clear, fluent Read `Hear it` and Write reference speech over an exact slowdown multiplier. The offline fallback selects the clearest installed natural American-English voice, avoids consonant-smearing ultra-low rates and artificial pitch, adds one silent terminal boundary, and keeps music ducked through a longer release. The remote contract remains one canonical teacher at its supported slowest speed. | Automated synthesis pass; physical-device listening remains open | A/B synthesize and transcribe `of`, `at`, `cat`, `come`, and `look`; then listen on the target iPhone with both compact-only and optional premium/enhanced voices. Verify one uninterrupted word, a distinct final consonant, and no mid-word gap. |
+| V03-IMP-009 | Improvement | Read help | After two valid wrong readings, reveal only child-triggered `Hear it`; remove the Read picture button. Technical retries never unlock help. | Automated pass | Confirm hidden at 0/1 wrong, visible at 2 wrong, absent after technical retries, and reset for the next word. |
+| V03-IMP-010 | Improvement | Results | Replay only words missed or helped in the completed run. A perfect run has no empty Replay action. | Automated pass | Complete both modes with one tricky word, tap Replay, verify only that word returns, and confirm no duplicate permanent reward. |
+| V03-IMP-011 | Improvement | Scoring | Accuracy earns at 75% first-independent correctness or one eligible immediate unaided recovery. Personal Pace accepts calibration and 50% slow-side grace. Scores use up to 80 accuracy points plus 20 pace points; a perfect first try always earns 100 points and all three stars. Guardian evidence stays strict. | Automated pass | Compare perfect, 75%, recovered, helped, calibrating, too-fast, and slow-out-of-band runs with Guardian reports. |
+| V03-IMP-012 | Improvement | Write controls | Never pre-show spelling when a word begins. `Clear` acts without confirmation; `?` alone reveals the word. Accept initial-cap, uppercase, and lowercase handwriting. Keep completion feedback visible for 830 ms, 400 ms longer than v0.2. | Automated pass | Test new/review words, all supported case forms, one-tap Help/Clear, timing, and guidance scoring. |
+| V03-IMP-013 | Improvement | Write tools | Offer Pencil, Chalk, and Brush with black ink only; hide the color picker and remove Crayon from selectable tools. Persist the selected tool per Profile. Migrate legacy Crayon or colored settings to black Pencil. Use a 4× eraser; a blank-canvas tap after erasing restores the prior pen. | Automated pass | Switch all three tools, restart and change Profiles, load legacy tool/color data, erase partial strokes, tap blank canvas, and verify retained tool and recognition input. |
+| V03-IMP-014 | Improvement | Write layout | Make the writing region 10% wider and keep its frame fixed when feedback appears. Keep the root Quest transition identity stable across word changes so animation never shifts the handwriting coordinate space. | Automated pass | Record error feedback and word-to-word transitions on phone/tablet; compare canvas bounds and root transition keys. |
+| V03-IMP-015 | Improvement | Canonical pronunciation | Remove pronunciation-context editing from every Parent input and OCR path. Every new word uses isolated canonical teacher pronunciation; legacy contextual metadata remains decode-compatible only. | Automated pass | Add ordinary, homophone, and heteronym examples through typing and Add All; verify no editor appears and every new prompt has an isolated audio cue. |
+| V03-IMP-016 | Improvement | Read presentation | Replace per-word color variation with one fixed, coordinated, high-contrast design token per World. Every Read word in the active World uses that token; color changes only when the child changes Worlds. | Automated pass | Verify all eight World tokens are visually distinct, meet WCAG contrast on the Read card, remain fixed across words/retries, and change only after a World switch. |
+| V03-FEAT-001 | Feature | Cross-device sync | Sync Profiles, Read/Write pools, Profile settings, immutable attempts/corrections, event-derived progress, calendar completions, and rewards through parent-opted-in CloudKit while every Quest remains fully local-first. Voiceprints stay per-device; picture and canonical teacher-audio caches re-download. | Design complete; implementation and live acceptance incomplete | Pass restartable outbox and order-independent convergence tests, then validate one-Apple-ID private sync and two-Apple-ID `CKShare` sync on paid-Team Release builds. Delete a Profile while another device is offline and prove the tombstone prevents resurrection while non-tombstone CloudKit data is erased. See `Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md`. |
+
+## v0.3 daily notes
+
+### 2026-07-13
+
+- Created `v0.3` from merge commit `7728f28` after PR #1 merged v0.2 to `main`.
+- Rebuilt Parent word management around sticky Add All, numbered multi-photo OCR review, a strict 500-word-per-image limit, sort/search/frequency tools, session-scoped removal confirmation, and keyboard dismissal.
+- Made Parent Gate auto-submit at the expected digit count, preserved wrong-answer feedback through the automatic clear, and made Parent `Lock` return directly to Kid selection.
+- Replaced voice enrollment with shuffled repeat-after-me sentences. Practice now exposes one canonical teacher-voice contract; the former six-style picker and stored preference are removed, and a clarity-ranked Apple voice is the offline fallback.
+- Reworked Read and Write fallback speech around clarity: a natural quality-first American-English voice, moderate `0.40` AVSpeech rate, neutral pitch, one terminal boundary, and an extended release. Rendered A/B samples for `of`, `at`, `cat`, `come`, and `look` all returned the intended word in the local transcription check; physical-device listening remains required.
+- Reduced Read help to `Hear it` after two valid misses. Result Replay now contains only tricky words; perfect runs do not show an empty Replay action.
+- Relaxed child rewards to a 75% Accuracy threshold, 50% slow-side pace grace, and guaranteed 100 points/three stars for a perfect first try, without changing strict Guardian evidence.
+- Hardened handwriting capture for dots, later letters, and connected strokes; cached/throttled writing audio; changed the eraser to 4×; and restored the prior pen after a blank eraser tap.
+- Set Write to never pre-show the answer, accept capitalization variants, show Help only after `?`, and offer a concrete-word picture after the first real miss. The toolbox now keeps only Pencil, Chalk, and Brush with black ink; the selected tool persists per Profile.
+- Widened the Write canvas and stabilized both its local layout and the root Quest transition identity so feedback and word changes do not move its coordinates. Extended completion feedback from 430 ms to 830 ms.
+- Replaced per-word Read color variation with one unique, high-contrast design token per World so words remain visually consistent until the World changes.
+- Added pinned Twemoji 17.0.3 concrete-word hints, private on-device caching, abstract-word fail-closed behavior, and repository attribution in `THIRD_PARTY_NOTICES.md`.
+- Audited the existing local-first/CloudKit foundation and recorded the cross-device Profile + Progress Sync contract in `Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md`. The design keeps parent opt-in, makes voiceprints device-local and caches re-downloadable, and identifies durable outbox, event-derived progress, business-key convergence, unconditional tombstones, CloudKit erasure, and paid-Team two-device acceptance as remaining work.
+- Completed the v0.3 branch-wide Swift suite: 548/548 passed with zero failures.
+- Added five critical XCUITest flows; all 5/5 pass on the iPhone 17 Pro Max simulator, including OCR Review → Add All → Pool → Sort and consecutive Read/Write feedback dismissal.
+- Built fresh v0.3 LocalQA apps for iPhone 17 Pro Max and iPad Pro 13-inch
+  (M5) simulators with zero build failures.
+
+### 2026-07-14
+
+- Removed the Parent pronunciation-help section from typing, OCR, Pool display, import requests, copy, and documentation. Legacy contextual metadata remains decode-only and never appears or blocks an import.
+- Fixed the P0 Read/Write completion overlays by binding feedback to the current prompt and invalidating delayed callbacks before the next word.
+- Fixed gesture competition that swallowed Parent Add All, sort, and later delete actions; moved session Undo state into the long-lived dashboard model and made demo-store initialization single-flight.
+- Fixed `of` handwriting recognition by providing `of`/`Of`/`OF` to Vision, evaluating its five best candidates and split fragments, and allowing only target-aligned `0` → `o` glyph normalization. Neighbor words remain exact mismatches.
+- Reworked the offline teacher fallback for clear, fluent short words: quality-first American-English voice selection, one uninterrupted utterance, moderate rate, neutral pitch, terminal boundary, and longer release. Local synthesis/transcription recognized `of`, `at`, `cat`, `come`, and `look` 5/5; human speaker listening remains required.
+- Regenerated the Xcode project, passed 548/548 Swift tests and 5/5 critical XCUITests, built fresh LocalQA apps for both target simulators, signed the physical-device build, and installed it on the connected iPhone 17 Pro Max.
+
+## v0.3 device acceptance record
+
+Installation evidence is recorded here; human child/parent acceptance remains separate.
+
+| Date | Device | Build/version | Tester | Result | Notes/evidence |
+|---|---|---|---|---|---|
+| 2026-07-14 | iPhone 17 Pro Max | `v0.3.0` (`2026071401`) LocalQA | Codex install; Parent + child acceptance pending | Installed | Signed build installed successfully. Human `of`, pronunciation, speech, handwriting, rotation, and accessibility checks remain. |
+| Pending | iPad Pro 13-inch (M5) | `v0.3.0` candidate | Parent + child | Pending | Full v0.3 checklist above. |

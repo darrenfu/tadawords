@@ -80,11 +80,10 @@ struct GuardianParentGateView: View {
                     .accessibilityFocused($errorIsFocused)
             }
 
-            Button("Unlock", action: validateAnswer)
-                .buttonStyle(GuardianPrimaryButtonStyle())
-                .frame(maxWidth: 340)
-                .disabled(answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityHint("Opens the guardian dashboard")
+            Label("Unlocks automatically", systemImage: "bolt.fill")
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                .accessibilityHint("The answer is checked after the last digit")
 
             Button(action: onExit) {
                 Label("Back to Tada Words", systemImage: "chevron.left")
@@ -104,8 +103,11 @@ struct GuardianParentGateView: View {
             .frame(maxWidth: 220)
             .focused($answerIsFocused)
             .onSubmit(validateAnswer)
+            .onChange(of: answer) { _, newValue in
+                handleAnswerChange(newValue)
+            }
             .modifier(GuardianNumericKeyboardModifier())
-            .accessibilityHint("Enter the number, then choose Unlock")
+            .accessibilityHint("Enter the answer. It is checked automatically.")
     }
 
     private func gateEmblem(size: CGFloat, symbolSize: CGFloat) -> some View {
@@ -137,6 +139,37 @@ struct GuardianParentGateView: View {
         answerIsFocused = false
         onContinue()
     }
+
+    private func handleAnswerChange(_ value: String) {
+        let digits = value.filter(\.isNumber)
+        if digits != value {
+            answer = digits
+            return
+        }
+
+        let decision = ParentGateAnswerPolicy.decision(
+            input: digits,
+            expectedAnswer: challenge.answer
+        )
+        showsError = ParentGateAnswerPolicy.shouldShowError(
+            after: decision,
+            input: digits,
+            wasShowingError: showsError
+        )
+
+        switch decision {
+        case .incomplete:
+            if !showsError {
+                errorIsFocused = false
+            }
+        case .correct:
+            validateAnswer()
+        case .incorrect:
+            answer = ""
+            answerIsFocused = true
+            errorIsFocused = true
+        }
+    }
 }
 
 private struct GuardianNumericKeyboardModifier: ViewModifier {
@@ -146,6 +179,41 @@ private struct GuardianNumericKeyboardModifier: ViewModifier {
         #else
             content
         #endif
+    }
+}
+
+enum ParentGateAnswerDecision: Equatable {
+    case incomplete
+    case correct
+    case incorrect
+}
+
+enum ParentGateAnswerPolicy {
+    static func decision(
+        input: String,
+        expectedAnswer: Int
+    ) -> ParentGateAnswerDecision {
+        let expected = String(expectedAnswer)
+        guard input.count >= expected.count else { return .incomplete }
+        return input == expected ? .correct : .incorrect
+    }
+
+    static func shouldShowError(
+        after decision: ParentGateAnswerDecision,
+        input: String,
+        wasShowingError: Bool
+    ) -> Bool {
+        switch decision {
+        case .incomplete:
+            // A wrong full-length answer is cleared programmatically. Keep
+            // its feedback visible through that empty onChange callback, then
+            // dismiss it as soon as the parent starts the next answer.
+            input.isEmpty ? wasShowingError : false
+        case .correct:
+            false
+        case .incorrect:
+            true
+        }
     }
 }
 

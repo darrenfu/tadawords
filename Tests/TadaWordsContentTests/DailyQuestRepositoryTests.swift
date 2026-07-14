@@ -148,6 +148,25 @@ final class DailyQuestRepositoryTests: XCTestCase {
             practiceLaunch.questPlan.reviewWordIDs,
             candidate.orderedItems.map(\.wordPromptID)
         )
+        let focusedPracticeLaunch = try XCTUnwrap(
+            coordinator.practiceAgainLaunch(
+                from: completedState,
+                replaying: [wordID(22), wordID(999)],
+                questID: questID(22),
+                startedAt: Self.today.addingTimeInterval(700)
+            )
+        )
+        XCTAssertEqual(
+            focusedPracticeLaunch.questPlan.reviewWordIDs,
+            [wordID(22)]
+        )
+        XCTAssertNil(
+            coordinator.practiceAgainLaunch(
+                from: completedState,
+                replaying: [wordID(999)],
+                startedAt: Self.today.addingTimeInterval(700)
+            )
+        )
 
         let practiceWrite = try await coordinator.complete(
             practiceLaunch,

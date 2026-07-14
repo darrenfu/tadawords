@@ -7,20 +7,31 @@ public struct RecognizedEnglishWordParser: Sendable {
     public init() {}
 
     public func parse(_ fragments: [String]) -> [String] {
+        parseResult(fragments).uniqueWords
+    }
+
+    /// Returns both the de-duplicated import candidates and the number of valid
+    /// English word occurrences on the source image. The latter is used for a
+    /// per-image safety limit and therefore intentionally counts duplicates.
+    public func parseResult(_ fragments: [String]) -> RecognizedEnglishWordParseResult {
         var words: [String] = []
         var seen = Set<String>()
+        var recognizedWordCount = 0
 
         for fragment in fragments {
             for token in Self.tokens(in: fragment) {
-                guard let normalized = try? EnglishWordNormalizer.normalize(token),
-                    seen.insert(normalized).inserted
-                else {
+                guard let normalized = try? EnglishWordNormalizer.normalize(token) else {
                     continue
                 }
+                recognizedWordCount += 1
+                guard seen.insert(normalized).inserted else { continue }
                 words.append(normalized)
             }
         }
-        return words
+        return RecognizedEnglishWordParseResult(
+            uniqueWords: words,
+            recognizedWordCount: recognizedWordCount
+        )
     }
 
     private static func tokens(in source: String) -> [String] {
@@ -34,4 +45,14 @@ public struct RecognizedEnglishWordParser: Sendable {
     private static let wordExpression = try! NSRegularExpression(
         pattern: #"[A-Za-z]+(?:['’\-‐‑–—][A-Za-z]+)*"#
     )
+}
+
+public struct RecognizedEnglishWordParseResult: Equatable, Sendable {
+    public let uniqueWords: [String]
+    public let recognizedWordCount: Int
+
+    public init(uniqueWords: [String], recognizedWordCount: Int) {
+        self.uniqueWords = uniqueWords
+        self.recognizedWordCount = max(0, recognizedWordCount)
+    }
 }

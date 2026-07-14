@@ -67,7 +67,7 @@ struct QuestResultView: View {
                 }
                 .frame(maxWidth: 900)
 
-                continueButton
+                resultActions
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
@@ -87,20 +87,43 @@ struct QuestResultView: View {
             }
             .frame(maxWidth: 900)
 
-            continueButton
-                .frame(maxWidth: 360)
+            resultActions
+                .frame(maxWidth: 680)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
         .padding(.vertical, TadaPrimitiveTokens.Spacing.small)
     }
 
-    private var continueButton: some View {
+    @ViewBuilder
+    private var resultActions: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
+                actionButtons
+            }
+            VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                actionButtons
+            }
+        }
+        .opacity(revealPhase >= 5 ? 1 : 0)
+        .offset(y: revealPhase >= 5 ? 0 : 8)
+        .allowsHitTesting(revealPhase >= 5)
+        .accessibilityHidden(revealPhase < 5)
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        if result.showsReplayAction {
+            Button(action: onReplay) {
+                Label(result.replayActionLabel, systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(TadaPrimaryButtonStyle(fill: theme.secondary))
+            .accessibilityHint("Practices only the words that need another try")
+            .accessibilityIdentifier("quest-result.replay")
+        }
+
         Button("Back to quests", action: onContinue)
             .buttonStyle(TadaPrimaryButtonStyle(fill: theme.primary))
-            .opacity(revealPhase >= 5 ? 1 : 0)
-            .offset(y: revealPhase >= 5 ? 0 : 8)
-            .accessibilityHidden(revealPhase < 5)
     }
 
     private var completionHeader: some View {
@@ -243,11 +266,8 @@ struct QuestResultView: View {
                         size: TadaChildScaleTokens.Result.rewardRegular,
                         symbol: rewardSymbol
                     )
-                } else if result.showsReplayAction {
-                    replayButton(
-                        size: TadaChildScaleTokens.Result.rewardRegular,
-                        symbolSize: TadaChildScaleTokens.Result.replaySymbolRegular
-                    )
+                } else {
+                    practiceStatusSymbol(size: TadaChildScaleTokens.Result.rewardRegular)
                 }
 
                 if result.showsNewCollectible {
@@ -260,14 +280,14 @@ struct QuestResultView: View {
                 Text(
                     result.showsNewCollectible
                         ? rewardDisplayName
-                        : "Words grow stronger"
+                        : practiceStatusTitle
                 )
                 .font(.system(.title2, design: .rounded, weight: .bold))
                 .multilineTextAlignment(.center)
                 Text(
                     result.showsNewCollectible
                         ? "Added to \(theme.name)"
-                        : "Today’s collectible is already safe in \(theme.name)"
+                        : practiceStatusMessage
                 )
                 .font(.system(.subheadline, design: .rounded, weight: .medium))
                 .foregroundStyle(theme.ink.opacity(0.62))
@@ -346,11 +366,8 @@ struct QuestResultView: View {
                         size: TadaChildScaleTokens.Result.rewardCompact,
                         symbol: rewardSymbol
                     )
-                } else if result.showsReplayAction {
-                    replayButton(
-                        size: TadaChildScaleTokens.Result.rewardCompact,
-                        symbolSize: TadaChildScaleTokens.Result.replaySymbolCompact
-                    )
+                } else {
+                    practiceStatusSymbol(size: TadaChildScaleTokens.Result.rewardCompact)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -364,7 +381,7 @@ struct QuestResultView: View {
                     Text(
                         result.showsNewCollectible
                             ? rewardDisplayName
-                            : "Words grow stronger"
+                            : practiceStatusTitle
                     )
                     .font(.system(.headline, design: .rounded, weight: .bold))
                     .lineLimit(2)
@@ -372,7 +389,7 @@ struct QuestResultView: View {
                     Text(
                         result.showsNewCollectible
                             ? "Added to \(theme.name)"
-                            : "Today’s collectible is already safe"
+                            : practiceStatusMessage
                     )
                     .font(.system(.caption, design: .rounded, weight: .medium))
                     .foregroundStyle(theme.ink.opacity(0.62))
@@ -394,22 +411,20 @@ struct QuestResultView: View {
         .accessibilityHidden(revealPhase < 4)
     }
 
-    private func replayButton(size: CGFloat, symbolSize: CGFloat) -> some View {
-        Button(action: onReplay) {
-            Image(systemName: "arrow.clockwise.circle.fill")
-                .font(.system(size: symbolSize, weight: .bold))
-                .foregroundStyle(theme.primary)
-                .frame(
-                    minWidth: max(size, TadaPrimitiveTokens.TouchTarget.minimum),
-                    minHeight: max(size, TadaPrimitiveTokens.TouchTarget.minimum)
-                )
-                .contentShape(Circle())
+    private func practiceStatusSymbol(size: CGFloat) -> some View {
+        ZStack {
+            Circle()
+                .fill(theme.primary.opacity(0.12))
+            Image(
+                systemName: result.showsReplayAction
+                    ? "arrow.clockwise.circle.fill"
+                    : "checkmark.seal.fill"
+            )
+            .font(.system(size: size * 0.62, weight: .bold))
+            .foregroundStyle(theme.primary)
         }
-        .buttonStyle(TadaTactileCardButtonStyle())
-        .allowsHitTesting(revealPhase >= 4)
-        .accessibilityLabel("Practice \(result.mode.title) quest again")
-        .accessibilityHint("Starts the same words again")
-        .accessibilityIdentifier("quest-result.replay")
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 
     private func revealResults() async {
@@ -479,6 +494,18 @@ struct QuestResultView: View {
         result.runKind == .practiceAgain
             ? "You practiced your \(result.mode.title) words again."
             : "You finished today’s \(result.mode.title) quest."
+    }
+
+    private var practiceStatusTitle: String {
+        result.showsReplayAction ? "Tricky words ready" : "All words are strong"
+    }
+
+    private var practiceStatusMessage: String {
+        if result.showsReplayAction {
+            let noun = result.replayWordCount == 1 ? "word" : "words"
+            return "Replay only the \(result.replayWordCount) \(noun) that need another try"
+        }
+        return "Perfect first tries — nothing needs replay"
     }
 
     private var rewardDisplayName: String {

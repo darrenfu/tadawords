@@ -15,6 +15,8 @@ public struct TadaWordsRootView: View {
     private let speechRecognitionService: any SpeechRecognitionService
     private let handwritingRecognitionService: any HandwritingRecognitionService
     private let audioExperienceService: any AudioExperienceService
+    private var pictureHintProvider: any WordPictureHintProviding =
+        NoWordPictureHintProvider()
     private let speechPermissionActions: SpeechPermissionActions
     private let onOpenGuardian: () -> Void
     private let demoLaunchRoute: DemoLaunchRoute?
@@ -90,6 +92,8 @@ public struct TadaWordsRootView: View {
             SilentAudioExperienceService(),
         speechRecognitionService: any SpeechRecognitionService,
         handwritingRecognitionService: any HandwritingRecognitionService,
+        pictureHintProvider: any WordPictureHintProviding =
+            NoWordPictureHintProvider(),
         speechPermissionActions: SpeechPermissionActions,
         onLearningDataChanged: @escaping @Sendable () async -> Void = {},
         onOpenGuardian: @escaping () -> Void = {}
@@ -97,6 +101,7 @@ public struct TadaWordsRootView: View {
         self.speechRecognitionService = speechRecognitionService
         self.handwritingRecognitionService = handwritingRecognitionService
         self.audioExperienceService = audioExperienceService
+        self.pictureHintProvider = pictureHintProvider
         self.speechPermissionActions = speechPermissionActions
         self.onOpenGuardian = onOpenGuardian
         demoLaunchRoute = nil
@@ -140,6 +145,8 @@ public struct TadaWordsRootView: View {
             SilentAudioExperienceService(),
         speechRecognitionService: any SpeechRecognitionService,
         handwritingRecognitionService: any HandwritingRecognitionService,
+        pictureHintProvider: any WordPictureHintProviding =
+            NoWordPictureHintProvider(),
         speechPermissionActions: SpeechPermissionActions,
         onLearningDataChanged: @escaping @Sendable () async -> Void = {},
         onOpenGuardian: @escaping () -> Void = {}
@@ -147,6 +154,7 @@ public struct TadaWordsRootView: View {
         self.speechRecognitionService = speechRecognitionService
         self.handwritingRecognitionService = handwritingRecognitionService
         self.audioExperienceService = audioExperienceService
+        self.pictureHintProvider = pictureHintProvider
         self.speechPermissionActions = speechPermissionActions
         self.onOpenGuardian = onOpenGuardian
         demoLaunchRoute = nil
@@ -469,6 +477,7 @@ public struct TadaWordsRootView: View {
                     theme: model.selectedTheme,
                     recognitionService: handwritingRecognitionService,
                     audioExperienceService: audioExperienceService,
+                    pictureHintProvider: pictureHintProvider,
                     onSpeak: { await model.speakAndWait(session.prompt) },
                     onBack: model.showLobby,
                     onComplete: { summary in
@@ -499,7 +508,7 @@ public struct TadaWordsRootView: View {
                 result: result,
                 theme: model.selectedTheme,
                 audioExperienceService: audioExperienceService,
-                onReplay: { model.startQuest(result.mode) },
+                onReplay: model.replayMissedWords,
                 onContinue: model.showLobby
             )
         }
@@ -575,7 +584,7 @@ private struct DemoLaunchRoute {
 }
 
 extension TadaWordsAppModel {
-    fileprivate var transitionKey: String {
+    var transitionKey: String {
         switch destination {
         case .profileChooser:
             "profiles"
@@ -584,7 +593,11 @@ extension TadaWordsAppModel {
         case .loading(let mode, let phase):
             "loading-\(mode.rawValue)-\(String(describing: phase))"
         case .quest(let session):
-            "quest-\(session.id.description)-\(session.currentItem)-\(session.prompt.id)"
+            // Keep the quest shell's identity stable while advancing between
+            // words. WriteQuestView owns the in-quest feedback animation, so
+            // rebuilding and scaling this root would move the handwriting
+            // coordinate space underneath a child's finger.
+            "quest-\(session.id.description)"
         case .blocked(let mode, let reason):
             "blocked-\(mode.rawValue)-\(String(describing: reason))"
         case .result(let result):

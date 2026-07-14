@@ -6,7 +6,7 @@ import TadaWordsDomain
     import UIKit
 #endif
 
-struct InkStroke: Identifiable {
+struct InkStroke: Identifiable, Equatable {
     let id: UUID
     var points: [HandwritingPoint]
     var inputMethod: WritingInputMethod
@@ -18,7 +18,7 @@ struct InkStroke: Identifiable {
         points: [HandwritingPoint],
         inputMethod: WritingInputMethod = .finger,
         tool: HandwritingTool = .pencil,
-        ink: HandwritingInkChoice = .theme
+        ink: HandwritingInkChoice = .basic(.black)
     ) {
         self.id = id
         self.points = points
@@ -37,11 +37,14 @@ struct HandwritingCanvasView: View {
     let guideColor: Color
     let elapsedSincePrompt: () -> TimeInterval
     let onWritingSound: (HandwritingTool) -> Void
+    let onEraserTappedBlank: () -> Void
 
     @State private var activePoints: [HandwritingPoint] = []
     @State private var activeTool = HandwritingTool.pencil
-    @State private var activeInk = HandwritingInkChoice.theme
+    @State private var activeInk = HandwritingInkChoice.basic(.black)
     @State private var interactionIsErasing = false
+    @State private var eraserDidChangeInk = false
+    @State private var interactionStartLocation: CGPoint?
     @State private var lastWritingSoundLocation: CGPoint?
     @State private var lastWritingSoundTime: TimeInterval = 0
 
@@ -55,7 +58,8 @@ struct HandwritingCanvasView: View {
                 themeInkColor: UIColor(themeInkColor),
                 guideColor: UIColor(guideColor),
                 elapsedSincePrompt: elapsedSincePrompt,
-                onWritingSound: onWritingSound
+                onWritingSound: onWritingSound,
+                onEraserTappedBlank: onEraserTappedBlank
             )
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Handwriting area")
@@ -96,7 +100,7 @@ struct HandwritingCanvasView: View {
     }
 
     private var toolAccessibilityValue: String {
-        "\(HandwritingToolPolicy.displayName(for: selectedTool)), \(selectedInk.accessibilityName)"
+        HandwritingToolPolicy.displayName(for: selectedTool)
     }
 
     private var handwritingHint: String {
@@ -119,21 +123,28 @@ struct HandwritingCanvasView: View {
                     activeTool = selectedTool
                     activeInk = selectedInk
                     interactionIsErasing = isErasing
+                    eraserDidChangeInk = false
+                    interactionStartLocation = value.location
                     activePoints = [point]
                     lastWritingSoundLocation = value.location
                     if interactionIsErasing {
-                        applyEraser(along: [point], in: size)
+                        eraserDidChangeInk = applyEraser(along: [point], in: size)
                     }
                     return
                 }
 
                 let previousPoint = activePoints.last
-                activePoints.append(point)
+                activePoints = HandwritingStrokePointCollector.appending(
+                    [point],
+                    to: activePoints,
+                    canvasSize: size
+                )
                 if interactionIsErasing {
-                    applyEraser(
-                        along: [previousPoint, point].compactMap { $0 },
-                        in: size
-                    )
+                    eraserDidChangeInk =
+                        applyEraser(
+                            along: [previousPoint, point].compactMap { $0 },
+                            in: size
+                        ) || eraserDidChangeInk
                 } else {
                     emitWritingSoundIfNeeded(at: value.location)
                 }
@@ -141,12 +152,25 @@ struct HandwritingCanvasView: View {
             .onEnded { value in
                 let finalPoint = point(from: value.location, in: size)
                 if interactionIsErasing {
-                    applyEraser(
-                        along: [activePoints.last, finalPoint].compactMap { $0 },
-                        in: size
+                    eraserDidChangeInk =
+                        applyEraser(
+                            along: [activePoints.last, finalPoint].compactMap { $0 },
+                            in: size
+                        ) || eraserDidChangeInk
+                    if !eraserDidChangeInk,
+                        isTap(
+                            from: interactionStartLocation,
+                            to: value.location
+                        )
+                    {
+                        onEraserTappedBlank()
+                    }
+                } else if !activePoints.isEmpty {
+                    activePoints = HandwritingStrokePointCollector.finalizing(
+                        activePoints,
+                        with: finalPoint,
+                        canvasSize: size
                     )
-                } else if activePoints.count > 1 {
-                    activePoints.append(finalPoint)
                     strokes.append(
                         InkStroke(
                             points: activePoints,
@@ -159,16 +183,20 @@ struct HandwritingCanvasView: View {
             }
     }
 
+    @discardableResult
     private func applyEraser(
         along points: [HandwritingPoint],
         in size: CGSize
-    ) {
-        strokes = InkStrokeEraser.erase(
+    ) -> Bool {
+        let updated = InkStrokeEraser.erase(
             strokes: strokes,
             along: points,
             canvasSize: size,
             eraserLineWidth: HandwritingToolPolicy.eraserLineWidth(for: activeTool)
         )
+        guard updated != strokes else { return false }
+        strokes = updated
+        return true
     }
 
     private func emitWritingSoundIfNeeded(at location: CGPoint) {
@@ -178,7 +206,7 @@ struct HandwritingCanvasView: View {
             return
         }
         let moved = hypot(location.x - previous.x, location.y - previous.y)
-        guard moved >= 3, now - lastWritingSoundTime >= 0.075 else { return }
+        guard moved >= 5, now - lastWritingSoundTime >= 0.11 else { return }
         lastWritingSoundLocation = location
         lastWritingSoundTime = now
         onWritingSound(activeTool)
@@ -187,6 +215,8 @@ struct HandwritingCanvasView: View {
     private func resetActiveInteraction() {
         activePoints.removeAll(keepingCapacity: true)
         interactionIsErasing = false
+        eraserDidChangeInk = false
+        interactionStartLocation = nil
         lastWritingSoundLocation = nil
         lastWritingSoundTime = 0
     }
@@ -229,6 +259,23 @@ struct HandwritingCanvasView: View {
         guard let first = stroke.points.first else { return }
         let appearance = HandwritingToolPolicy.appearance(for: stroke.tool)
         let color = stroke.ink.color(themeInk: themeInkColor).opacity(appearance.opacity)
+
+        if stroke.points.count == 1 {
+            let center = canvasPoint(first, in: size)
+            let diameter = max(appearance.lineWidth, 2)
+            context.fill(
+                Path(
+                    ellipseIn: CGRect(
+                        x: center.x - (diameter / 2),
+                        y: center.y - (diameter / 2),
+                        width: diameter,
+                        height: diameter
+                    )
+                ),
+                with: .color(color)
+            )
+            return
+        }
 
         if appearance.respondsToPressure, stroke.points.count > 1 {
             for (start, end) in zip(stroke.points, stroke.points.dropFirst()) {
@@ -274,6 +321,11 @@ struct HandwritingCanvasView: View {
             y: CGFloat(point.location.y) * size.height
         )
     }
+
+    private func isTap(from start: CGPoint?, to end: CGPoint) -> Bool {
+        guard let start else { return false }
+        return hypot(end.x - start.x, end.y - start.y) <= 12
+    }
 }
 
 #if os(iOS)
@@ -286,6 +338,7 @@ struct HandwritingCanvasView: View {
         let guideColor: UIColor
         let elapsedSincePrompt: () -> TimeInterval
         let onWritingSound: (HandwritingTool) -> Void
+        let onEraserTappedBlank: () -> Void
 
         func makeCoordinator() -> Coordinator {
             Coordinator(strokes: $strokes)
@@ -318,6 +371,7 @@ struct HandwritingCanvasView: View {
             view.onStroke = coordinator.append
             view.onStrokesChanged = coordinator.replace
             view.onWritingSound = onWritingSound
+            view.onEraserTappedBlank = onEraserTappedBlank
         }
 
         final class Coordinator {
@@ -340,7 +394,7 @@ struct HandwritingCanvasView: View {
     private final class PencilAwareCanvasView: UIView {
         var persistedStrokes: [InkStroke] = []
         var selectedTool = HandwritingTool.pencil
-        var selectedInk = HandwritingInkChoice.theme
+        var selectedInk = HandwritingInkChoice.basic(.black)
         var isErasing = false
         var themeInkColor = UIColor.label
         var guideColor = UIColor.separator
@@ -348,13 +402,16 @@ struct HandwritingCanvasView: View {
         var onStroke: (InkStroke) -> Void = { _ in }
         var onStrokesChanged: ([InkStroke]) -> Void = { _ in }
         var onWritingSound: (HandwritingTool) -> Void = { _ in }
+        var onEraserTappedBlank: () -> Void = {}
 
         private var activePoints: [HandwritingPoint] = []
         private var activeTouch: UITouch?
         private var activeInputMethod: WritingInputMethod = .finger
         private var activeTool = HandwritingTool.pencil
-        private var activeInk = HandwritingInkChoice.theme
+        private var activeInk = HandwritingInkChoice.basic(.black)
         private var activeInteractionIsErasing = false
+        private var eraserDidChangeInk = false
+        private var interactionStartLocation: CGPoint?
         private var lastWritingSoundLocation: CGPoint?
         private var lastWritingSoundTime: TimeInterval = 0
 
@@ -386,10 +443,12 @@ struct HandwritingCanvasView: View {
             activeTool = selectedTool
             activeInk = selectedInk
             activeInteractionIsErasing = isErasing
+            eraserDidChangeInk = false
+            interactionStartLocation = touch.location(in: self)
             activePoints = [point(from: touch)]
             lastWritingSoundLocation = touch.location(in: self)
             if activeInteractionIsErasing {
-                applyEraser(along: activePoints)
+                eraserDidChangeInk = applyEraser(along: activePoints)
             }
             setNeedsDisplay()
         }
@@ -401,11 +460,18 @@ struct HandwritingCanvasView: View {
             let coalesced = event?.coalescedTouches(for: activeTouch) ?? [activeTouch]
             let newPoints = coalesced.map { point(from: $0) }
             if activeInteractionIsErasing {
-                applyEraser(along: ([activePoints.last].compactMap { $0 }) + newPoints)
+                eraserDidChangeInk =
+                    applyEraser(
+                        along: ([activePoints.last].compactMap { $0 }) + newPoints
+                    ) || eraserDidChangeInk
             } else if let finalTouch = coalesced.last {
                 emitWritingSoundIfNeeded(at: finalTouch.location(in: self))
             }
-            activePoints.append(contentsOf: newPoints)
+            activePoints = HandwritingStrokePointCollector.appending(
+                newPoints,
+                to: activePoints,
+                canvasSize: bounds.size
+            )
             setNeedsDisplay()
         }
 
@@ -413,12 +479,28 @@ struct HandwritingCanvasView: View {
             guard let activeTouch,
                 touches.contains(where: { $0 === activeTouch })
             else { return }
-            let finalPoint = point(from: activeTouch)
+            let endedTouch = touches.first(where: { $0 === activeTouch }) ?? activeTouch
+            let finalPoint = point(from: endedTouch)
             if activeInteractionIsErasing {
-                applyEraser(along: [activePoints.last, finalPoint].compactMap { $0 })
+                eraserDidChangeInk =
+                    applyEraser(
+                        along: [activePoints.last, finalPoint].compactMap { $0 }
+                    ) || eraserDidChangeInk
+                if !eraserDidChangeInk,
+                    isTap(
+                        from: interactionStartLocation,
+                        to: endedTouch.location(in: self)
+                    )
+                {
+                    onEraserTappedBlank()
+                }
             } else {
-                activePoints.append(finalPoint)
-                if activePoints.count > 1 {
+                activePoints = HandwritingStrokePointCollector.finalizing(
+                    activePoints,
+                    with: finalPoint,
+                    canvasSize: bounds.size
+                )
+                if !activePoints.isEmpty {
                     let stroke = InkStroke(
                         points: activePoints,
                         inputMethod: activeInputMethod,
@@ -436,7 +518,8 @@ struct HandwritingCanvasView: View {
             resetActiveInteraction()
         }
 
-        private func applyEraser(along points: [HandwritingPoint]) {
+        @discardableResult
+        private func applyEraser(along points: [HandwritingPoint]) -> Bool {
             let updated = InkStrokeEraser.erase(
                 strokes: persistedStrokes,
                 along: points,
@@ -446,9 +529,10 @@ struct HandwritingCanvasView: View {
             guard
                 updated.map(\.id) != persistedStrokes.map(\.id)
                     || updated.map(\.points) != persistedStrokes.map(\.points)
-            else { return }
+            else { return false }
             persistedStrokes = updated
             onStrokesChanged(updated)
+            return true
         }
 
         private func emitWritingSoundIfNeeded(at location: CGPoint) {
@@ -458,7 +542,7 @@ struct HandwritingCanvasView: View {
                 return
             }
             let moved = hypot(location.x - previous.x, location.y - previous.y)
-            guard moved >= 3, now - lastWritingSoundTime >= 0.075 else { return }
+            guard moved >= 5, now - lastWritingSoundTime >= 0.11 else { return }
             lastWritingSoundLocation = location
             lastWritingSoundTime = now
             onWritingSound(activeTool)
@@ -470,9 +554,7 @@ struct HandwritingCanvasView: View {
             }
             // Indirect and estimated palm contacts are ignored. When Pencil is
             // present in the same event it always wins over a direct touch.
-            return touches.first(where: {
-                $0.type == .direct && $0.majorRadius < 30
-            })
+            return touches.first(where: { $0.type == .direct })
         }
 
         private func point(from touch: UITouch) -> HandwritingPoint {
@@ -497,6 +579,8 @@ struct HandwritingCanvasView: View {
             activePoints.removeAll(keepingCapacity: true)
             activeTouch = nil
             activeInteractionIsErasing = false
+            eraserDidChangeInk = false
+            interactionStartLocation = nil
             lastWritingSoundLocation = nil
             lastWritingSoundTime = 0
             setNeedsDisplay()
@@ -530,6 +614,25 @@ struct HandwritingCanvasView: View {
             )
             context.setLineCap(.round)
             context.setLineJoin(.round)
+
+            if stroke.points.count == 1 {
+                let center = canvasPoint(first)
+                let diameter = max(appearance.lineWidth, 2)
+                context.setFillColor(
+                    resolvedColor(for: stroke.ink)
+                        .withAlphaComponent(appearance.opacity).cgColor
+                )
+                context.fillEllipse(
+                    in: CGRect(
+                        x: center.x - (diameter / 2),
+                        y: center.y - (diameter / 2),
+                        width: diameter,
+                        height: diameter
+                    )
+                )
+                context.restoreGState()
+                return
+            }
 
             if appearance.respondsToPressure, stroke.points.count > 1 {
                 for (start, end) in zip(stroke.points, stroke.points.dropFirst()) {
@@ -571,6 +674,11 @@ struct HandwritingCanvasView: View {
                 x: CGFloat(point.location.x) * bounds.width,
                 y: CGFloat(point.location.y) * bounds.height
             )
+        }
+
+        private func isTap(from start: CGPoint?, to end: CGPoint) -> Bool {
+            guard let start else { return false }
+            return hypot(end.x - start.x, end.y - start.y) <= 12
         }
     }
 #endif

@@ -41,12 +41,72 @@ final class AppleVoiceprintFeatureExtractorTests: XCTestCase {
         XCTAssertEqual(assessment, .unavailable)
     }
 
+    func testRecordingCoordinatorFinishesAudioOnSuccess() async throws {
+        let audio = VoiceprintAudioExperienceSpy()
+        let coordinator = VoiceprintRecordingAudioCoordinator(
+            audioExperienceService: audio
+        )
+
+        let value = try await coordinator.capture { 42 }
+        let events = await audio.events()
+
+        XCTAssertEqual(value, 42)
+        XCTAssertEqual(events, [.prepareRecording, .finishRecording])
+    }
+
+    func testRecordingCoordinatorFinishesAudioOnFailure() async {
+        let audio = VoiceprintAudioExperienceSpy()
+        let coordinator = VoiceprintRecordingAudioCoordinator(
+            audioExperienceService: audio
+        )
+
+        do {
+            let _: Int = try await coordinator.capture {
+                throw VoiceprintTestError.captureFailed
+            }
+            XCTFail("Expected capture to fail")
+        } catch {
+            XCTAssertEqual(error as? VoiceprintTestError, .captureFailed)
+        }
+
+        let events = await audio.events()
+        XCTAssertEqual(events, [.prepareRecording, .finishRecording])
+    }
+
     private func sineWave(frequency: Double, duration: Double) -> [Float] {
         let sampleRate = 16_000.0
         return (0..<Int(sampleRate * duration)).map { index in
             Float(sin(2 * Double.pi * frequency * Double(index) / sampleRate) * 0.35)
         }
     }
+}
+
+private enum VoiceprintTestError: Error, Equatable {
+    case captureFailed
+}
+
+private actor VoiceprintAudioExperienceSpy: AudioExperienceService {
+    enum Event: Equatable {
+        case prepareRecording
+        case finishRecording
+    }
+
+    private var recordedEvents: [Event] = []
+
+    func events() -> [Event] { recordedEvents }
+
+    func playLaunchSignature() async {}
+    func activate(world: WorldTheme, preferences: AudioPreferences) async {
+        _ = world
+        _ = preferences
+    }
+    func stopAmbientAudio() async {}
+    func play(_ cue: FunctionalAudioCue) async { _ = cue }
+    func prepareForVoicePrompt() async -> Bool { true }
+    func finishVoicePrompt() async {}
+    func prepareForRecording() async { recordedEvents.append(.prepareRecording) }
+    func finishRecording() async { recordedEvents.append(.finishRecording) }
+    func setApplicationActive(_ isActive: Bool) async { _ = isActive }
 }
 
 private actor EmptyVoiceprintRepository: DeviceVoiceprintRepository {

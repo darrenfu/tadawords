@@ -181,62 +181,123 @@ struct GuardianVoiceprintEnrollmentView: View {
     let profile: KidProfile
     let progress: VoiceprintEnrollmentProgress?
     let isCapturing: Bool
+    let currentSentence: String?
+    let currentSampleNumber: Int
+    let sampleCount: Int
+    let isPlayingPrompt: Bool
+    let guidanceMessage: String?
     let onBack: () -> Void
     let onBegin: () -> Void
+    let onReplaySentence: () -> Void
     let onCapture: () -> Void
     let onFinish: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.large) {
-            GuardianNavigationHeader(title: "Voice setup", onBack: onBack)
-            GuardianCard {
-                VStack(alignment: .leading, spacing: 14) {
-                    Label("One-minute voice setup", systemImage: "waveform.badge.mic")
-                        .font(.system(.title2, design: .rounded, weight: .bold))
-                    Text(
-                        "Ask \(profile.displayName) to speak naturally in a quiet spot. Audio is processed on this device; recordings are not saved or synced."
-                    )
-                    ProgressView(value: progressValue)
-                    Text(progressText)
-                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                        .monospacedDigit()
+        ScrollView {
+            VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.large) {
+                GuardianNavigationHeader(title: "Voice setup", onBack: onBack)
+                GuardianCard {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Label("One-minute voice setup", systemImage: "waveform.badge.mic")
+                            .font(.system(.title2, design: .rounded, weight: .bold))
+                        Text(
+                            "\(profile.displayName) will hear and repeat \(sampleCount) short sentences. Use one child’s voice in a quiet spot."
+                        )
+                        ProgressView(value: progressValue)
+                        Text(progressText)
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .monospacedDigit()
 
-                    if progress == nil {
-                        Button("Start voice setup", action: onBegin)
-                            .buttonStyle(.borderedProminent)
-                    } else {
-                        Button(action: onCapture) {
-                            Label(
-                                isCapturing ? "Listening…" : "Record next sample",
-                                systemImage: isCapturing ? "waveform" : "mic.circle.fill"
-                            )
+                        if progress == nil {
+                            Button("Start voice setup", action: onBegin)
+                                .buttonStyle(.borderedProminent)
+                        } else {
+                            if let currentSentence {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("SAMPLE \(currentSampleNumber) OF \(sampleCount)")
+                                        .font(.system(.caption, design: .rounded, weight: .heavy))
+                                        .foregroundStyle(
+                                            GuardianSemanticTokens.secondaryForeground
+                                        )
+                                    Text("“\(currentSentence)”")
+                                        .font(.system(.title2, design: .rounded, weight: .bold))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .padding(16)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(
+                                    GuardianSemanticTokens.primary.opacity(0.09),
+                                    in: RoundedRectangle(cornerRadius: 18)
+                                )
+
+                                HStack(spacing: 12) {
+                                    Button(action: onReplaySentence) {
+                                        Label(
+                                            isPlayingPrompt ? "Playing…" : "Hear sentence",
+                                            systemImage: "speaker.wave.2.fill"
+                                        )
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(isCapturing || isPlayingPrompt)
+
+                                    Button(action: onCapture) {
+                                        Label(
+                                            isCapturing ? "Listening…" : "Record and repeat",
+                                            systemImage: isCapturing
+                                                ? "waveform"
+                                                : "mic.circle.fill"
+                                        )
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(isCapturing || isPlayingPrompt)
+                                }
+                            }
+
+                            if let guidanceMessage {
+                                Label(
+                                    guidanceMessage,
+                                    systemImage: isCapturing ? "waveform" : "sparkles"
+                                )
+                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                            }
+
+                            Button("Finish setup", action: onFinish)
+                                .buttonStyle(.bordered)
+                                .disabled(
+                                    progress?.isReadyToFinalize != true
+                                        || isCapturing
+                                        || isPlayingPrompt
+                                )
                         }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isCapturing)
 
-                        Button("Finish setup", action: onFinish)
-                            .buttonStyle(.bordered)
-                            .disabled(progress?.isReadyToFinalize != true || isCapturing)
+                        Label(
+                            "Audio stays in memory only while each sample is analyzed. Recordings are never saved or synced.",
+                            systemImage: "lock.shield.fill"
+                        )
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
                     }
                 }
+                Spacer()
             }
-            Spacer()
+            .frame(maxWidth: 760, alignment: .leading)
+            .padding(GuardianPrimitiveTokens.Spacing.large)
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: 760, alignment: .leading)
-        .padding(GuardianPrimitiveTokens.Spacing.large)
-        .frame(maxWidth: .infinity)
+        .scrollIndicators(.hidden)
     }
 
     private var progressValue: Double {
         guard let progress else { return 0 }
-        return min(1, progress.acceptedSpeechDuration.seconds / 15)
+        return min(1, Double(progress.acceptedSegmentCount) / Double(max(1, sampleCount)))
     }
 
     private var progressText: String {
         guard let progress else {
-            return "Six short, clear samples are usually enough."
+            return "Usually finished in about one minute."
         }
         return
-            "\(progress.acceptedSegmentCount) clear samples · \(Int(progress.acceptedSpeechDuration.seconds)) seconds of speech"
+            "\(progress.acceptedSegmentCount) of \(sampleCount) clear samples · \(Int(progress.acceptedSpeechDuration.seconds)) seconds"
     }
 }

@@ -296,3 +296,78 @@ final class QuestAttemptStateMachineTests: XCTestCase {
     }
 
 }
+
+final class QuestItemFeedbackLifecycleTests: XCTestCase {
+    func testTransitionToSecondWordDismissesFirstFeedbackAndAllowsSecondFeedback() {
+        let firstID = WordPromptID()
+        let secondID = WordPromptID()
+        let firstSummary = summary(completion: .independentSuccess)
+        let secondSummary = summary(completion: .needsPractice)
+        var lifecycle = QuestItemFeedbackLifecycle<
+            WordPromptID,
+            QuestAttemptSummary
+        >(itemID: firstID)
+
+        XCTAssertTrue(lifecycle.present(firstSummary, for: firstID))
+        XCTAssertEqual(lifecycle.visibleFeedback(for: firstID), firstSummary)
+        XCTAssertTrue(lifecycle.requestAdvance(for: firstID))
+        XCTAssertFalse(lifecycle.requestAdvance(for: firstID))
+
+        XCTAssertTrue(lifecycle.transition(to: secondID))
+        XCTAssertNil(lifecycle.visibleFeedback(for: secondID))
+        XCTAssertNil(lifecycle.visibleFeedback(for: firstID))
+        XCTAssertFalse(lifecycle.requestAdvance(for: firstID))
+
+        XCTAssertTrue(lifecycle.present(secondSummary, for: secondID))
+        XCTAssertEqual(lifecycle.visibleFeedback(for: secondID), secondSummary)
+        XCTAssertTrue(lifecycle.requestAdvance(for: secondID))
+    }
+
+    func testStaleDelayedCompletionCannotAdvanceTheNextWord() async {
+        let firstID = WordPromptID()
+        let secondID = WordPromptID()
+        let firstSummary = summary(completion: .independentSuccess)
+        var lifecycle = QuestItemFeedbackLifecycle<
+            WordPromptID,
+            QuestAttemptSummary
+        >(itemID: firstID)
+        XCTAssertTrue(lifecycle.present(firstSummary, for: firstID))
+
+        await Task.yield()
+        XCTAssertTrue(lifecycle.transition(to: secondID))
+
+        XCTAssertFalse(lifecycle.requestAdvance(for: firstID))
+        XCTAssertNil(lifecycle.visibleFeedback(for: secondID))
+    }
+
+    func testDuplicateCompletionCannotScheduleASecondAdvance() {
+        let itemID = WordPromptID()
+        let value = summary(completion: .independentSuccess)
+        var lifecycle = QuestItemFeedbackLifecycle<
+            WordPromptID,
+            QuestAttemptSummary
+        >(itemID: itemID)
+
+        XCTAssertTrue(lifecycle.present(value, for: itemID))
+        XCTAssertFalse(lifecycle.present(value, for: itemID))
+        XCTAssertTrue(lifecycle.requestAdvance(for: itemID))
+        XCTAssertFalse(lifecycle.requestAdvance(for: itemID))
+    }
+
+    private func summary(
+        completion: QuestAttemptCompletion
+    ) -> QuestAttemptSummary {
+        QuestAttemptSummary(
+            completion: completion,
+            records: [
+                QuestAttemptRecord(
+                    evidence: .firstIndependentAttempt,
+                    outcome: completion == .needsPractice ? .incorrect : .correct,
+                    confidence: RecognitionConfidence(0.95)
+                )
+            ],
+            validAttemptCount: 1,
+            usedGuidance: false
+        )
+    }
+}

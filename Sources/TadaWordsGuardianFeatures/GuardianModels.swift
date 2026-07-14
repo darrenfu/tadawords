@@ -178,6 +178,12 @@ public struct GuardianDashboardSnapshot: Sendable {
     public let todaySummary: GuardianTodaySummary
     public let worldProgression: WorldProgression
     public let collections: [WorldTheme: RewardCollection]
+    /// Number of completed, independent practice encounters for each word.
+    ///
+    /// Technical retries and guided/helped attempts are intentionally excluded
+    /// so a difficult recognition session cannot make a word look more
+    /// frequently practiced than it really was.
+    public let practiceFrequencyByWordID: [WordPromptID: Int]
 
     public init(
         profile: KidProfile,
@@ -189,7 +195,8 @@ public struct GuardianDashboardSnapshot: Sendable {
         today: LocalDay,
         todaySummary: GuardianTodaySummary? = nil,
         worldProgression: WorldProgression? = nil,
-        collections: [WorldTheme: RewardCollection] = [:]
+        collections: [WorldTheme: RewardCollection] = [:],
+        practiceFrequencyByWordID: [WordPromptID: Int] = [:]
     ) {
         self.profile = profile
         self.readPool = readPool.filter { $0.learningMode == .read }
@@ -211,6 +218,9 @@ public struct GuardianDashboardSnapshot: Sendable {
                 currentLocalDay: today
             )
         self.collections = collections
+        self.practiceFrequencyByWordID = practiceFrequencyByWordID.mapValues {
+            max(0, $0)
+        }
     }
 
     public func pool(for mode: LearningMode) -> [WordPrompt] {
@@ -409,16 +419,13 @@ public struct GuardianLearningReport: Equatable, Sendable {
 public struct GuardianWordImportRequest: Equatable, Sendable {
     public let rawText: String
     public let learningMode: LearningMode
-    public let spokenContextsByNormalizedWord: [String: String]
 
     public init(
         rawText: String,
-        learningMode: LearningMode,
-        spokenContextsByNormalizedWord: [String: String] = [:]
+        learningMode: LearningMode
     ) {
         self.rawText = rawText
         self.learningMode = learningMode
-        self.spokenContextsByNormalizedWord = spokenContextsByNormalizedWord
     }
 }
 
@@ -459,11 +466,186 @@ public struct GuardianWordImportReport: Equatable, Sendable {
 
 struct GuardianEditableOCRWord: Identifiable, Equatable {
     let id: UUID
+    /// Stable one-based position in the complete photo batch. This stays fixed
+    /// while the parent changes the visible sort order for easier auditing.
+    let sourceOrdinal: Int
     var text: String
 
-    init(id: UUID = UUID(), text: String) {
+    init(id: UUID = UUID(), sourceOrdinal: Int = 1, text: String) {
         self.id = id
+        self.sourceOrdinal = max(1, sourceOrdinal)
         self.text = text
+    }
+}
+
+enum GuardianOCRPhotoWordLimitError: Error, Equatable {
+    case tooManyWords(recognizedCount: Int, maximum: Int)
+}
+
+struct GuardianOCRPhotoWordLimitPolicy: Equatable {
+    static let defaultMaximum = 500
+
+    let maximumWordsPerImage: Int
+
+    init(maximumWordsPerImage: Int = Self.defaultMaximum) {
+        self.maximumWordsPerImage = max(1, maximumWordsPerImage)
+    }
+
+    func validate(recognizedWordCount: Int) throws {
+        guard recognizedWordCount <= maximumWordsPerImage else {
+            throw GuardianOCRPhotoWordLimitError.tooManyWords(
+                recognizedCount: recognizedWordCount,
+                maximum: maximumWordsPerImage
+            )
+        }
+    }
+}
+
+struct GuardianOCRBatchAccumulator {
+    static func appending(
+        _ recognizedWords: [String],
+        to existing: [GuardianEditableOCRWord]
+    ) -> [GuardianEditableOCRWord] {
+        let firstOrdinal = (existing.map(\.sourceOrdinal).max() ?? 0) + 1
+        let additions = recognizedWords.enumerated().map { offset, word in
+            GuardianEditableOCRWord(
+                sourceOrdinal: firstOrdinal + offset,
+                text: word
+            )
+        }
+        return existing + additions
+    }
+}
+
+struct GuardianOCRSubmissionPolicy {
+    static func canSubmit(
+        addableWords: [String],
+        isAdding: Bool,
+        isRecognizingAdditionalPhotos: Bool
+    ) -> Bool {
+        !addableWords.isEmpty && !isAdding && !isRecognizingAdditionalPhotos
+    }
+}
+
+enum GuardianWordSortOrder: String, CaseIterable, Equatable, Sendable {
+    case addedOrder
+    case alphabetical
+    case practiceFrequency
+
+    var title: String {
+        switch self {
+        case .addedOrder:
+            "Added order"
+        case .alphabetical:
+            "A–Z"
+        case .practiceFrequency:
+            "Most practiced"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .addedOrder:
+            "clock.arrow.circlepath"
+        case .alphabetical:
+            "textformat.abc"
+        case .practiceFrequency:
+            "chart.bar.fill"
+        }
+    }
+}
+
+struct GuardianWordListPresentation {
+    static func prompts(
+        _ prompts: [WordPrompt],
+        sortOrder: GuardianWordSortOrder,
+        searchText: String,
+        practiceFrequencyByWordID: [WordPromptID: Int]
+    ) -> [WordPrompt] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let filtered =
+            query.isEmpty
+            ? prompts
+            : prompts.filter {
+                $0.normalizedText.localizedStandardContains(query)
+                    || $0.displayText.lowercased().localizedStandardContains(query)
+            }
+
+        switch sortOrder {
+        case .addedOrder:
+            return filtered
+        case .alphabetical:
+            return filtered.sorted(by: promptAlphabeticalOrder)
+        case .practiceFrequency:
+            return filtered.sorted { left, right in
+                let leftCount = practiceFrequencyByWordID[left.id, default: 0]
+                let rightCount = practiceFrequencyByWordID[right.id, default: 0]
+                if leftCount != rightCount { return leftCount > rightCount }
+                return promptAlphabeticalOrder(left, right)
+            }
+        }
+    }
+
+    static func recognizedWords(
+        _ words: [GuardianEditableOCRWord],
+        sortOrder: GuardianWordSortOrder,
+        practiceFrequencyByNormalizedWord: [String: Int]
+    ) -> [GuardianEditableOCRWord] {
+        switch sortOrder {
+        case .addedOrder:
+            return words.sorted { $0.sourceOrdinal < $1.sourceOrdinal }
+        case .alphabetical:
+            return words.sorted(by: recognizedWordAlphabeticalOrder)
+        case .practiceFrequency:
+            return words.sorted { left, right in
+                let leftCount = recognizedFrequency(
+                    for: left,
+                    in: practiceFrequencyByNormalizedWord
+                )
+                let rightCount = recognizedFrequency(
+                    for: right,
+                    in: practiceFrequencyByNormalizedWord
+                )
+                if leftCount != rightCount { return leftCount > rightCount }
+                return recognizedWordAlphabeticalOrder(left, right)
+            }
+        }
+    }
+
+    private static func promptAlphabeticalOrder(
+        _ left: WordPrompt,
+        _ right: WordPrompt
+    ) -> Bool {
+        if left.normalizedText != right.normalizedText {
+            return left.normalizedText.localizedStandardCompare(right.normalizedText)
+                == .orderedAscending
+        }
+        return left.id.rawValue.uuidString < right.id.rawValue.uuidString
+    }
+
+    private static func recognizedWordAlphabeticalOrder(
+        _ left: GuardianEditableOCRWord,
+        _ right: GuardianEditableOCRWord
+    ) -> Bool {
+        let leftText = normalizedText(for: left)
+        let rightText = normalizedText(for: right)
+        if leftText != rightText {
+            return leftText.localizedStandardCompare(rightText) == .orderedAscending
+        }
+        return left.sourceOrdinal < right.sourceOrdinal
+    }
+
+    static func recognizedFrequency(
+        for word: GuardianEditableOCRWord,
+        in frequencies: [String: Int]
+    ) -> Int {
+        frequencies[normalizedText(for: word), default: 0]
+    }
+
+    private static func normalizedText(for word: GuardianEditableOCRWord) -> String {
+        (try? EnglishWordNormalizer.normalize(word.text))
+            ?? word.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
 
