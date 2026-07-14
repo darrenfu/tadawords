@@ -130,11 +130,134 @@ worker() {
 export -f is_valid_m4a generate_clip worker
 export CARTESIA_API_KEY AUDIO_ROOT API_VERSION MODEL_ID
 
+trim_silence_to_wav() {
+  local input="$1"
+  local output="$2"
+  ffmpeg -v error -y \
+    -i "$input" \
+    -af \
+    'aformat=sample_rates=44100:channel_layouts=mono,
+     silenceremove=start_periods=1:start_duration=0.01:start_threshold=-45dB,
+     areverse,
+     silenceremove=start_periods=1:start_duration=0.01:start_threshold=-45dB,
+     areverse' \
+    -c:a pcm_s16le \
+    "$output"
+}
+
+compose_launch() {
+  local ta_da_source="$1"
+  local word_source="$2"
+  local output="$3"
+  local directory="$4"
+  local ta_da_wav="$directory/ta-da.wav"
+  local word_wav="$directory/word.wav"
+  local temporary="${output%.m4a}.part.m4a"
+
+  if [[ "$(ffmpeg -hide_banner -filters 2>/dev/null)" != *rubberband* ]]; then
+    printf 'FFmpeg rubberband filter is required for launch prosody\n' >&2
+    return 1
+  fi
+
+  trim_silence_to_wav "$ta_da_source" "$ta_da_wav"
+  trim_silence_to_wav "$word_source" "$word_wav"
+
+  local ta_da_duration word_duration syllable_boundary
+  local da_first_end da_second_end word_first_end word_second_end
+  ta_da_duration="$(ffprobe -v error \
+    -show_entries format=duration -of default=nw=1:nk=1 "$ta_da_wav")"
+  word_duration="$(ffprobe -v error \
+    -show_entries format=duration -of default=nw=1:nk=1 "$word_wav")"
+  syllable_boundary="$(ffmpeg -hide_banner -i "$ta_da_wav" \
+    -af 'silencedetect=noise=-38dB:d=0.015' -f null - 2>&1 |
+    awk '/silence_end:/ {print $5; exit}')"
+  if [[ -z "$syllable_boundary" ]]; then
+    syllable_boundary="$(awk -v duration="$ta_da_duration" \
+      'BEGIN {printf "%.6f", duration * 0.34}')"
+  fi
+
+  read -r da_first_end da_second_end <<< "$(awk \
+    -v start="$syllable_boundary" -v end="$ta_da_duration" \
+    'BEGIN {
+      step = (end - start) / 3
+      printf "%.6f %.6f", start + step, start + (2 * step)
+    }')"
+  read -r word_first_end word_second_end <<< "$(awk \
+    -v end="$word_duration" \
+    'BEGIN {printf "%.6f %.6f", end / 3, (2 * end) / 3}')"
+
+  rm -f "$temporary"
+  ffmpeg -v error -y \
+    -i "$ta_da_wav" \
+    -i "$word_wav" \
+    -filter_complex \
+    "[0:a]atrim=start=0:end=$syllable_boundary,asetpts=PTS-STARTPTS[ta];
+     [0:a]atrim=start=$syllable_boundary:end=$da_first_end,
+       asetpts=PTS-STARTPTS,
+       rubberband=tempo=0.70:pitch=1.00:transients=smooth:formant=preserved:pitchq=quality[da1];
+     [0:a]atrim=start=$da_first_end:end=$da_second_end,
+       asetpts=PTS-STARTPTS,
+       rubberband=tempo=0.70:pitch=1.08:transients=smooth:formant=preserved:pitchq=quality[da2];
+     [0:a]atrim=start=$da_first_end:end=$da_second_end,
+       asetpts=PTS-STARTPTS,
+       rubberband=tempo=0.70:pitch=1.18:transients=smooth:formant=preserved:pitchq=quality[da3];
+     [da1][da2]acrossfade=d=0.020:c1=tri:c2=tri[da12];
+     [da12][da3]acrossfade=d=0.020:c1=tri:c2=tri[da];
+     [ta][da]concat=n=2:v=0:a=1[ta_da];
+     [1:a]atrim=start=0:end=$word_first_end,
+       asetpts=PTS-STARTPTS,
+       rubberband=tempo=0.95:pitch=1.00:transients=smooth:formant=preserved:pitchq=quality[word1];
+     [1:a]atrim=start=$word_first_end:end=$word_second_end,
+       asetpts=PTS-STARTPTS,
+       rubberband=tempo=0.95:pitch=0.94:transients=smooth:formant=preserved:pitchq=quality[word2];
+     [1:a]atrim=start=$word_second_end:end=$word_duration,
+       asetpts=PTS-STARTPTS,
+       rubberband=tempo=0.95:pitch=0.88:transients=smooth:formant=preserved:pitchq=quality[word3];
+     [word1][word2]acrossfade=d=0.015:c1=tri:c2=tri[word12];
+     [word12][word3]acrossfade=d=0.015:c1=tri:c2=tri[words];
+     [ta_da][words]acrossfade=d=0.050:c1=tri:c2=tri,
+       afade=t=in:st=0:d=0.010,
+       apad=pad_dur=0.060[out]" \
+    -map '[out]' \
+    -map_metadata -1 \
+    -ar 44100 \
+    -ac 1 \
+    -c:a aac \
+    -b:a 64k \
+    "$temporary"
+  mv "$temporary" "$output"
+  is_valid_m4a "$output"
+}
+
+generate_launch() (
+  local manifest="$ACCENT_ROOT/manifest.json"
+  local output="$ACCENT_ROOT/$(jq -r '.launch.file' "$manifest")"
+  if is_valid_m4a "$output"; then
+    return 0
+  fi
+
+  local directory voice dictionary emotion word_text word_speed ta_da_source
+  directory="$(mktemp -d -t tada-launch)"
+  trap 'rm -rf "$directory"' EXIT
+  voice="$(jq -r '.voice.id' "$manifest")"
+  dictionary="$(jq -r '.pronunciation_dictionary_id' "$manifest")"
+  emotion="$(jq -r '.emotion // ""' "$manifest")"
+  word_text="$(jq -r '.launch.rendering.word_text' "$manifest")"
+  word_speed="$(jq -r '.launch.rendering.word_speed' "$manifest")"
+  ta_da_source="$ACCENT_ROOT/$(jq -r \
+    '.launch.rendering.ta_da_source' "$manifest")"
+
+  generate_clip \
+    "$word_text" "$word_speed" "$voice" "$dictionary" \
+    "$directory/word.m4a" "$emotion"
+  compose_launch "$ta_da_source" "$directory/word.m4a" "$output" "$directory"
+)
+
 generate_accents() {
   local manifest="$ACCENT_ROOT/manifest.json"
   jq -r '
     . as $manifest |
-    ([.launch] + .correct + [.quest_complete])[] |
+    (.correct + [.quest_complete])[] |
     {
       text: .text,
       speed: .speed,
@@ -145,6 +268,7 @@ generate_accents() {
     } | @base64
   ' "$manifest" |
     xargs -n 1 -P "$CONCURRENCY" bash -c 'worker "$1"' _
+  generate_launch
 }
 
 generate_teacher_words() {

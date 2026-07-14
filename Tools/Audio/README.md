@@ -12,6 +12,13 @@ The generator is resumable. It skips valid AAC files, limits concurrency to
 the Cartesia Pro TTS limit of three, retries rate limits/server failures, and
 keeps partial responses out of the app bundle.
 
+The Aurora launch mark is not a single unconstrained TTS render. The generator
+uses the versioned Aurora `Ta-da!` clip plus a temporary `words` render, trims
+their silence, applies three rising pitch stages to `da`, three falling stages
+to `words`, and joins them with a 50 ms crossfade. FFmpeg must include the
+`rubberband` filter. Temporary component files are deleted and never enter the
+App bundle.
+
 After changing a pronunciation dictionary, regenerate only selected words with
 a comma-separated filter:
 

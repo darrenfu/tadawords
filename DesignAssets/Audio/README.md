@@ -80,7 +80,8 @@ older fade if another world, rescue-state, recording, or app-state transition
 supersedes it.
 
 The launch mark is an original bright ascending gesture and sonic tail paired
-with the bundled continuous Aurora “Ta-dá↗ woooords↘!” line. Correct, star, and reward cues use
+with the bundled continuous Aurora “Ta-dá↗ woooords↘!” line. Correct, star, and
+reward cues use
 quicker upward movement and a little more harmonic lift, while valid retry
 remains gentle and technical retry remains a neutral two-pulse cue. Functional
 cues share stable meanings while their oscillator timbre follows the selected
@@ -102,8 +103,11 @@ explicitly female `en-US` voice and reports it as standard quality. If a higher
 quality voice is absent, Tada Words selects the best available female voice,
 then a natural `en-US` voice, then Apple's language default.
 
-The Aurora brand line lands over the original roughly 1.2-second sonic mark;
-`da` rises into a connected, lengthened, falling `wor` with no deliberate pause.
+The Aurora brand line lands over the original roughly 1.2-second sonic mark.
+The generator trims the source components, holds `da` across three rising pitch
+stages, lowers `words` across three stages, and overlaps both words by 50 ms.
+This makes the prosody deterministic instead of asking TTS punctuation to infer
+the brand contour.
 Katie Read prompts use 0.90× and Write prompts use 0.82× to keep short vowels and
 final consonants clear. Words outside the versioned manifest pass unchanged to
 Apple fallback synthesis.
