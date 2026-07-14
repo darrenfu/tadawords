@@ -104,10 +104,13 @@ quality voice is absent, Tada Words selects the best available female voice,
 then a natural `en-US` voice, then Apple's language default.
 
 The Aurora brand line lands over the original roughly 1.2-second sonic mark.
-The generator trims the source components, holds `da` across three rising pitch
-stages, lowers `words` across three stages, and overlaps both words by 50 ms.
-This makes the prosody deterministic instead of asking TTS punctuation to infer
-the brand contour.
+The generator trims the source components, keeps only the naturally level-to-
+rising onset of the first syllable and makes that `/tə/` light and short. It
+stretches one continuous `/dɑː/` source window through a rising pitch map and
+never repeats a vowel slice. `words` falls across three
+stages and connects through only an 8 ms click-safe crossfade. This makes the
+prosody deterministic instead of asking TTS punctuation to infer the brand
+contour.
 Katie Read prompts use 0.90× and Write prompts use 0.82× to keep short vowels and
 final consonants clear. Words outside the versioned manifest pass unchanged to
 Apple fallback synthesis.

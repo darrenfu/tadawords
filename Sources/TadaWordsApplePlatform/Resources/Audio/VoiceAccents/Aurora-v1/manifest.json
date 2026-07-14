@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "pack_version": "1.0.1",
+  "pack_version": "1.0.2",
   "created_on": "2026-07-14",
   "locale": "en-US",
   "vendor": "Cartesia",
@@ -15,13 +15,19 @@
   "launch": {
     "id": "launch",
     "text": "Ta-da, words!",
-    "prosody": "da is held and rises directly into a long falling wor",
+    "prosody": "unstressed level tuh, then one continuous held rising dah directly into a long falling wor",
     "rendering": {
       "ta_da_source": "correct/ta-da.m4a",
       "word_text": "words",
       "word_speed": 0.82,
-      "phrase_crossfade_ms": 50,
-      "da_pitch_steps": [1.0, 1.08, 1.18],
+      "ta_source_window_ms": 85,
+      "ta_duration_ratio": 1.2,
+      "ta_pitch_semitones": -1.5,
+      "da_source_window_ms": 190,
+      "da_duration_ratio": 1.85,
+      "da_pitch_semitone_map": [-0.5, 1.5, 3.5],
+      "syllable_crossfade_ms": 8,
+      "phrase_crossfade_ms": 8,
       "word_pitch_steps": [1.0, 0.94, 0.88]
     },
     "file": "launch.m4a"

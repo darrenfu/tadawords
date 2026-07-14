@@ -152,70 +152,98 @@ compose_launch() {
   local directory="$4"
   local ta_da_wav="$directory/ta-da.wav"
   local word_wav="$directory/word.wav"
+  local ta_source_wav="$directory/ta-source.wav"
+  local da_source_wav="$directory/da-source.wav"
+  local ta_shaped_wav="$directory/ta-shaped.wav"
+  local da_shaped_wav="$directory/da-shaped.wav"
+  local da_pitch_map="$directory/da-pitch.map"
   local temporary="${output%.m4a}.part.m4a"
 
   if [[ "$(ffmpeg -hide_banner -filters 2>/dev/null)" != *rubberband* ]]; then
     printf 'FFmpeg rubberband filter is required for launch prosody\n' >&2
     return 1
   fi
+  if ! command -v rubberband >/dev/null; then
+    printf 'Rubber Band CLI is required for continuous launch pitch maps\n' >&2
+    return 1
+  fi
 
   trim_silence_to_wav "$ta_da_source" "$ta_da_wav"
   trim_silence_to_wav "$word_source" "$word_wav"
 
-  local ta_da_duration word_duration syllable_boundary
-  local da_first_end da_second_end word_first_end word_second_end
+  local ta_da_duration word_duration ta_end ta_source_end da_start da_source_end
+  local da_duration da_frames
+  local word_first_end word_second_end
   ta_da_duration="$(ffprobe -v error \
     -show_entries format=duration -of default=nw=1:nk=1 "$ta_da_wav")"
   word_duration="$(ffprobe -v error \
     -show_entries format=duration -of default=nw=1:nk=1 "$word_wav")"
-  syllable_boundary="$(ffmpeg -hide_banner -i "$ta_da_wav" \
+  ta_end="$(ffmpeg -hide_banner -i "$ta_da_wav" \
+    -af 'silencedetect=noise=-38dB:d=0.015' -f null - 2>&1 |
+    awk '/silence_start:/ {print $5; exit}')"
+  da_start="$(ffmpeg -hide_banner -i "$ta_da_wav" \
     -af 'silencedetect=noise=-38dB:d=0.015' -f null - 2>&1 |
     awk '/silence_end:/ {print $5; exit}')"
-  if [[ -z "$syllable_boundary" ]]; then
-    syllable_boundary="$(awk -v duration="$ta_da_duration" \
+  if [[ -z "$ta_end" || -z "$da_start" ]]; then
+    ta_end="$(awk -v duration="$ta_da_duration" \
+      'BEGIN {printf "%.6f", duration * 0.29}')"
+    da_start="$(awk -v duration="$ta_da_duration" \
       'BEGIN {printf "%.6f", duration * 0.34}')"
   fi
-
-  read -r da_first_end da_second_end <<< "$(awk \
-    -v start="$syllable_boundary" -v end="$ta_da_duration" \
+  ta_source_end="$(awk -v end="$ta_end" \
+    'BEGIN {printf "%.6f", (0.085 < end ? 0.085 : end)}')"
+  da_source_end="$(awk -v start="$da_start" -v end="$ta_da_duration" \
     'BEGIN {
-      step = (end - start) / 3
-      printf "%.6f %.6f", start + step, start + (2 * step)
+      candidate = start + 0.190
+      printf "%.6f", (candidate < end ? candidate : end)
     }')"
+
+  ffmpeg -v error -y -i "$ta_da_wav" \
+    -af "atrim=start=0:end=$ta_source_end,asetpts=PTS-STARTPTS" \
+    -c:a pcm_s16le "$ta_source_wav"
+  ffmpeg -v error -y -i "$ta_da_wav" \
+    -af "atrim=start=$da_start:end=$da_source_end,asetpts=PTS-STARTPTS" \
+    -c:a pcm_s16le "$da_source_wav"
+
+  da_duration="$(ffprobe -v error \
+    -show_entries format=duration -of default=nw=1:nk=1 "$da_source_wav")"
+  da_frames="$(awk -v duration="$da_duration" \
+    'BEGIN {printf "%d", duration * 44100}')"
+
+  awk -v frames="$da_frames" 'BEGIN {
+    printf "0 -0.5\n%d 1.5\n%d 3.5\n", frames * 0.55, frames - 1
+  }' > "$da_pitch_map"
+
+  rubberband --quiet --fine --formant --time 1.20 --pitch -1.5 \
+    "$ta_source_wav" "$ta_shaped_wav"
+  rubberband --quiet --fine --formant --time 1.85 \
+    --pitchmap "$da_pitch_map" "$da_source_wav" "$da_shaped_wav"
+
   read -r word_first_end word_second_end <<< "$(awk \
     -v end="$word_duration" \
     'BEGIN {printf "%.6f %.6f", end / 3, (2 * end) / 3}')"
 
   rm -f "$temporary"
   ffmpeg -v error -y \
-    -i "$ta_da_wav" \
+    -i "$ta_shaped_wav" \
+    -i "$da_shaped_wav" \
     -i "$word_wav" \
     -filter_complex \
-    "[0:a]atrim=start=0:end=$syllable_boundary,asetpts=PTS-STARTPTS[ta];
-     [0:a]atrim=start=$syllable_boundary:end=$da_first_end,
-       asetpts=PTS-STARTPTS,
-       rubberband=tempo=0.70:pitch=1.00:transients=smooth:formant=preserved:pitchq=quality[da1];
-     [0:a]atrim=start=$da_first_end:end=$da_second_end,
-       asetpts=PTS-STARTPTS,
-       rubberband=tempo=0.70:pitch=1.08:transients=smooth:formant=preserved:pitchq=quality[da2];
-     [0:a]atrim=start=$da_first_end:end=$da_second_end,
-       asetpts=PTS-STARTPTS,
-       rubberband=tempo=0.70:pitch=1.18:transients=smooth:formant=preserved:pitchq=quality[da3];
-     [da1][da2]acrossfade=d=0.020:c1=tri:c2=tri[da12];
-     [da12][da3]acrossfade=d=0.020:c1=tri:c2=tri[da];
-     [ta][da]concat=n=2:v=0:a=1[ta_da];
-     [1:a]atrim=start=0:end=$word_first_end,
+    "[0:a]volume=0.78[ta];
+     [1:a]volume=1.00[da];
+     [ta][da]acrossfade=d=0.008:c1=tri:c2=tri[ta_da];
+     [2:a]atrim=start=0:end=$word_first_end,
        asetpts=PTS-STARTPTS,
        rubberband=tempo=0.95:pitch=1.00:transients=smooth:formant=preserved:pitchq=quality[word1];
-     [1:a]atrim=start=$word_first_end:end=$word_second_end,
+     [2:a]atrim=start=$word_first_end:end=$word_second_end,
        asetpts=PTS-STARTPTS,
        rubberband=tempo=0.95:pitch=0.94:transients=smooth:formant=preserved:pitchq=quality[word2];
-     [1:a]atrim=start=$word_second_end:end=$word_duration,
+     [2:a]atrim=start=$word_second_end:end=$word_duration,
        asetpts=PTS-STARTPTS,
        rubberband=tempo=0.95:pitch=0.88:transients=smooth:formant=preserved:pitchq=quality[word3];
      [word1][word2]acrossfade=d=0.015:c1=tri:c2=tri[word12];
      [word12][word3]acrossfade=d=0.015:c1=tri:c2=tri[words];
-     [ta_da][words]acrossfade=d=0.050:c1=tri:c2=tri,
+     [ta_da][words]acrossfade=d=0.008:c1=tri:c2=tri,
        afade=t=in:st=0:d=0.010,
        apad=pad_dur=0.060[out]" \
     -map '[out]' \
