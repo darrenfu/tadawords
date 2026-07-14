@@ -80,7 +80,8 @@ public actor SystemAudioPromptService: AudioPromptService {
                 }
                 // A missing endpoint, offline device, or remote playback
                 // failure must not block a child's quest. This is explicitly
-                // the single Apple system-voice fallback, not ElevenLabs.
+                // the single Apple system-voice fallback, never a direct
+                // runtime vendor call from the child's device.
             }
         }
 

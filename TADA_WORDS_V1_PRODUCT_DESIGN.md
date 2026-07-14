@@ -84,6 +84,7 @@ V1 是 Universal iOS App。
 - iPhone 家长路线支持 Portrait 与两个 Landscape，不支持 Portrait Upside Down；iPad 家长路线支持四个方向。
 - 离开家长路线后，App 必须通过 route-level geometry update 立即恢复横屏；孩子页面左右两个横屏方向都要验收。
 - iPhone Kid Quest 会减少背景装饰，优先保证大单词、麦克风和完整书写区。
+- Kid Lobby 的大型故事装饰固定在左右下方安全带，前景 Quest 卡片和按钮坐标不移动；装饰动画只能从安全基线向下漂浮，不能上浮回卡片阴影。Moonpetal 独角兽在 iPhone 横屏最紧凑帧也必须与 Write 卡片保留可见背景间隙，且任何 World 的装饰都不能在底部或侧边被裁切。
 
 Write 支持手指；Apple Pencil 仅在兼容设备上启用，并使用防误触。Apple 官方当前的 Pencil 兼容设备为 iPad，因此 iPhone 17 Pro Max 的 Write 输入使用手指。[Apple Pencil compatibility](https://support.apple.com/en-am/108937)
 
@@ -594,7 +595,7 @@ modelVersion, schedulerVersion, deviceID
 - 原始录音不持久化、不上传。
 - 声纹模板只保存在当前设备 Keychain；Profile 同步时导出 `notEnrolled`，导入时保留接收设备自己的 enrollment 状态。
 - 新 iPhone/iPad 需要为同一个 Kid Profile 单独完成一次声纹注册；声纹不可用不能阻塞学习历史同步。
-- 具体词图片和 canonical teacher audio 只写入 App `Caches`，不进入 CloudKit。新设备在需要时异步重下载，离线时使用无图或本机语音 fallback。
+- 具体词图片和未来的远端 audio 补包只写入 App `Caches`，不进入 CloudKit。首发 500 词的 Katie 双语速音频随 App bundle 离线分发；bundle 外的家长自定义词使用本机 Apple 英语女声 fallback。两类音频都不进入家庭同步数据。
 - Avatar 原图属于家长明确选择的 Profile 数据，不是 cache；Family Sync 开启后可同步，但生产版应使用有大小上限的独立 `CKAsset`。
 
 ## 19. 通知
@@ -661,9 +662,9 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 
 #### 启动声音标识
 
-- 每次冷启动播放约 1.5–2 秒的原创 sonic logo，并用单个连续 SSML 短句清楚喊出 **`tā-'dá, wòrds!`**（近似“它达，沃尔子”）。
-- 第二音节重读，逗号停顿约 110ms，`words` 音高下落；整体兴奋有朝气，同时不得出现三个排队 utterance 的机械接缝。
-- 优先使用设备上可用的年轻、明亮的美式女声 persona；Apple 系统不提供年龄字段，因此使用确定性的自然女声回退，不能因未下载某个可选声音而静音。
+- 每次冷启动播放约 1.5–2 秒的原创 sonic logo，并用 Aurora 离线录制的一条连续短句清楚喊出 **`Ta-dá↗ woooords↘!`**（近似“它达，沃尔子”）。
+- `da` 略拉长并上扬，随后不做刻意逗号停顿，直接连入明显拉长且下落的 `wor`；整体兴奋有朝气，同时不得出现多个排队 utterance 的机械接缝。
+- 正常启动固定使用 Cartesia Aurora 声线，确保所有设备的品牌读法一致；资源损坏或缺失时才使用确定性的 Apple 美式女声回退，不能静音或联网临时合成。
 - 结尾配器和环境尾音跟随当前选中的 World Pack；尚未选择 Starter World 时使用中性的品牌版本。
 - 不模仿 Todo Math 的旋律、节奏、声音演员或任何真人声线。
 - 从后台短暂返回时不重复播放，避免频繁打扰。
@@ -676,18 +677,18 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 - 正常状态使用轻快但低密度的循环，不与 TTS、孩子朗读或书写节奏争夺注意力。
 - 紧急状态使用同一原创主题的加速或加层版本，平滑切换；不突然增大音量、不加入警报声。
 - TTS、Help 和标准发音播放时，背景乐自动 ducking。
-- Read `Hear it`、Write 自动提示和 Parent 试听统一使用约 1.5× slower 的孤立单词节奏；本机回退以系统默认语速除以 1.5，远端 canonical teacher 使用服务商允许的最慢稳定速度。播放期间切到 spoken-audio session 并同时压低 App 音乐与外部音频，结束后再恢复混音。
+- Read `Hear it`、Write 自动提示和 Parent 试听优先使用 500 词离线包：Katie 是 canonical teacher，Read 为清晰自然的 0.90×，Write 为保留尾音的 0.82×。若双识别审计确认某个孤立词的 canonical 输出不清楚，允许在 manifest 中记录单词级 voice/speed override；首包仅 `bun` 使用 Aurora。每词两个版本不可互换；未覆盖词使用同一条 Apple 美式女声 fallback。播放期间切到 spoken-audio session 并同时压低 App 音乐与外部音频，结束后再恢复混音。
 - Read 开始录音前快速淡出背景乐和非必要环境音；录音结束后再平滑恢复，避免影响降噪和识别。
 
 #### 功能音效
 
 - 点击、正确、重试、星星和收藏品使用相同的功能语义，但具体音色与短旋律跟随当前 World。
 - 点击：短、柔和、低刺激的触感音。
-- 正确：原创的上行短音型，并与 1–2 秒主题动画同步。
+- 正确：先立即播放当前 World 的原创上行短音型，再依序轮换六条 Aurora 微庆祝语（如 `Ta-da!`、`Yes!`、`You did it!`），避免连续重复同一句；Reduced Sound 只保留必要非语言反馈并关闭这些装饰口播。
 - 有效错误：温和的“再试一次”提示，不使用蜂鸣器或失败号角。
 - `technicalRetry`：使用中性提示音，必须与孩子答错的声音明显不同。
 - 三颗星：三段可区分但属于同一声音家族的揭晓音。
-- 永久收藏品：使用当前 World 的专属完成音，不做随机稀有度音效。
+- Quest 结算：星星仍使用当前 World 的专属音色，完成时增加 Aurora 的短句 `Quest complete! Ta-da!`；不做随机稀有度音效。
 - 三种书写工具使用原创的短促摩擦/颗粒音色，并按实际移动节流；Reduced Sound 关闭这些装饰性书写音，提示发音播放时也不叠加。
 
 #### 首发 World 的声音方向

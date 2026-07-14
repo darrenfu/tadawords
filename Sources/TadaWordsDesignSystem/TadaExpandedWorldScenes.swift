@@ -3,27 +3,44 @@ import SwiftUI
 /// Shared landscape geometry for the five expansion worlds.
 /// Large story elements stay in the outer quarter of the canvas so quest content owns the center.
 struct TadaExpandedWorldSceneLayout: Equatable {
+    static let minimumDownwardMotion: CGFloat = 0
+    static let maximumDownwardMotion: CGFloat = 4
+
     let leftStoryFrame: CGRect
     let rightStoryFrame: CGRect
     let groundHeight: CGFloat
+    let storyVerticalOffset: CGFloat
 
     init(canvasSize: CGSize) {
         let storyWidth = min(canvasSize.width * 0.21, canvasSize.height * 0.50)
-        let storyHeight = min(canvasSize.height * 0.52, canvasSize.width * 0.27)
+        let initialStoryHeight = min(canvasSize.height * 0.52, canvasSize.width * 0.27)
+        let storyVerticalOffset = TadaWorldStoryArtLayoutPolicy.verticalOffset(
+            canvasHeight: canvasSize.height
+        )
+        let frameOriginY = canvasSize.height * 0.47
+        let safeShiftedHeight = max(
+            0,
+            canvasSize.height - frameOriginY - storyVerticalOffset
+                - Self.maximumDownwardMotion
+        )
+        let storyHeight = min(initialStoryHeight, safeShiftedHeight)
 
-        leftStoryFrame = CGRect(
+        let leftStoryFrame = CGRect(
             x: canvasSize.width * 0.12 - storyWidth * 0.5,
-            y: canvasSize.height * 0.47,
+            y: frameOriginY,
             width: storyWidth,
             height: storyHeight
         )
-        rightStoryFrame = CGRect(
+        let rightStoryFrame = CGRect(
             x: canvasSize.width * 0.88 - storyWidth * 0.5,
-            y: canvasSize.height * 0.47,
+            y: frameOriginY,
             width: storyWidth,
             height: storyHeight
         )
+        self.leftStoryFrame = leftStoryFrame
+        self.rightStoryFrame = rightStoryFrame
         groundHeight = min(canvasSize.height * 0.14, 112)
+        self.storyVerticalOffset = storyVerticalOffset
     }
 }
 
@@ -43,7 +60,9 @@ struct DinoDiscoveryScene: View {
                     .frame(width: layout.leftStoryFrame.width, height: layout.leftStoryFrame.height)
                     .position(
                         x: layout.leftStoryFrame.midX,
-                        y: layout.leftStoryFrame.midY + (isDrifting ? -3 : 2)
+                        y: layout.leftStoryFrame.midY + layout.storyVerticalOffset
+                            + (isDrifting
+                                ? TadaExpandedWorldSceneLayout.minimumDownwardMotion : 2)
                     )
 
                 SceneDinosaur(theme: theme)
@@ -52,7 +71,9 @@ struct DinoDiscoveryScene: View {
                     )
                     .position(
                         x: layout.rightStoryFrame.midX,
-                        y: layout.rightStoryFrame.midY + (isDrifting ? -5 : 3)
+                        y: layout.rightStoryFrame.midY + layout.storyVerticalOffset
+                            + (isDrifting
+                                ? TadaExpandedWorldSceneLayout.minimumDownwardMotion : 3)
                     )
             }
         }
@@ -79,7 +100,10 @@ struct FirehouseHeroesScene: View {
 
                 StoryFirehouse(theme: theme)
                     .frame(width: layout.leftStoryFrame.width, height: layout.leftStoryFrame.height)
-                    .position(x: layout.leftStoryFrame.midX, y: layout.leftStoryFrame.midY)
+                    .position(
+                        x: layout.leftStoryFrame.midX,
+                        y: layout.leftStoryFrame.midY + layout.storyVerticalOffset
+                    )
 
                 StoryFireEngine(theme: theme)
                     .frame(
@@ -87,7 +111,9 @@ struct FirehouseHeroesScene: View {
                     )
                     .position(
                         x: layout.rightStoryFrame.midX,
-                        y: layout.rightStoryFrame.midY + (isDrifting ? -3 : 2)
+                        y: layout.rightStoryFrame.midY + layout.storyVerticalOffset
+                            + (isDrifting
+                                ? TadaExpandedWorldSceneLayout.minimumDownwardMotion : 2)
                     )
             }
         }
@@ -110,7 +136,9 @@ struct BrickworkCityScene: View {
                     .frame(width: layout.leftStoryFrame.width, height: layout.leftStoryFrame.height)
                     .position(
                         x: layout.leftStoryFrame.midX,
-                        y: layout.leftStoryFrame.midY + (isDrifting ? -3 : 2)
+                        y: layout.leftStoryFrame.midY + layout.storyVerticalOffset
+                            + (isDrifting
+                                ? TadaExpandedWorldSceneLayout.minimumDownwardMotion : 2)
                     )
 
                 ColorBlockSkyline(theme: theme, isMirrored: true)
@@ -119,7 +147,9 @@ struct BrickworkCityScene: View {
                     )
                     .position(
                         x: layout.rightStoryFrame.midX,
-                        y: layout.rightStoryFrame.midY + (isDrifting ? 2 : -2)
+                        y: layout.rightStoryFrame.midY + layout.storyVerticalOffset
+                            + (isDrifting
+                                ? 2 : TadaExpandedWorldSceneLayout.minimumDownwardMotion)
                     )
             }
         }
@@ -147,7 +177,9 @@ struct FrostlightWorldScene: View {
                     .frame(width: layout.leftStoryFrame.width, height: layout.leftStoryFrame.height)
                     .position(
                         x: layout.leftStoryFrame.midX,
-                        y: layout.leftStoryFrame.midY + (isDrifting ? -4 : 2)
+                        y: layout.leftStoryFrame.midY + layout.storyVerticalOffset
+                            + (isDrifting
+                                ? TadaExpandedWorldSceneLayout.minimumDownwardMotion : 2)
                     )
 
                 StorySnowBuddy(theme: theme)
@@ -156,7 +188,9 @@ struct FrostlightWorldScene: View {
                     )
                     .position(
                         x: layout.rightStoryFrame.midX,
-                        y: layout.rightStoryFrame.midY + (isDrifting ? -5 : 3)
+                        y: layout.rightStoryFrame.midY + layout.storyVerticalOffset
+                            + (isDrifting
+                                ? TadaExpandedWorldSceneLayout.minimumDownwardMotion : 3)
                     )
             }
         }
@@ -177,7 +211,10 @@ struct CoasterCarnivalScene: View {
 
                 CoasterLoop(theme: theme)
                     .frame(width: layout.leftStoryFrame.width, height: layout.leftStoryFrame.height)
-                    .position(x: layout.leftStoryFrame.midX, y: layout.leftStoryFrame.midY)
+                    .position(
+                        x: layout.leftStoryFrame.midX,
+                        y: layout.leftStoryFrame.midY + layout.storyVerticalOffset
+                    )
 
                 StoryCoasterCar(theme: theme)
                     .frame(
@@ -185,7 +222,9 @@ struct CoasterCarnivalScene: View {
                     )
                     .position(
                         x: layout.rightStoryFrame.midX,
-                        y: layout.rightStoryFrame.midY + (isDrifting ? -7 : 4)
+                        y: layout.rightStoryFrame.midY + layout.storyVerticalOffset
+                            + (isDrifting
+                                ? TadaExpandedWorldSceneLayout.minimumDownwardMotion : 4)
                     )
             }
         }

@@ -3,7 +3,7 @@ import CryptoKit
 import TadaWordsDomain
 
 /// Calls a Tada Words-owned audio endpoint. The endpoint is responsible for
-/// holding the ElevenLabs API key and canonical voice ID; neither value is
+/// holding any provider credential and canonical voice ID; neither value is
 /// represented by this client API or sent from the iOS app.
 public struct RemoteTeacherWordAudioProvider: TeacherWordAudioProviding {
     typealias DataLoader = @Sendable (URLRequest) async throws -> (Data, URLResponse)
@@ -75,12 +75,14 @@ public struct RemoteTeacherWordAudioProvider: TeacherWordAudioProviding {
     private struct RequestPayload: Encodable {
         let spokenText: String
         let pronunciationKey: String?
+        let usage: TeacherWordAudioUsage
         let speed: Double
         let contractVersion: String
 
         init(request: TeacherWordAudioRequest) {
             spokenText = request.spokenText
             pronunciationKey = request.pronunciationKey
+            usage = request.usage
             speed = request.speed
             contractVersion = request.voiceContractVersion
         }

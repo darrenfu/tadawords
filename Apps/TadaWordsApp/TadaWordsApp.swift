@@ -145,27 +145,34 @@ struct TadaWordsApp: App {
         )
     }
 
-    /// `TadaWordsTeacherAudioEndpoint` is a public app-backend URL, never an
-    /// ElevenLabs URL or credential. An absent/invalid value intentionally
-    /// leaves practice on the single offline Apple voice fallback.
+    /// The versioned Katie pack is always first. The optional public app backend
+    /// fills future pack misses, and Apple en-US TTS remains the final offline
+    /// fallback. No Cartesia credential is present in the app.
     private static func teacherWordAudioProvider(
         cacheDirectory: URL,
         bundle: Bundle = .main
     ) -> (any TeacherWordAudioProviding)? {
-        guard
-            let rawEndpoint = bundle.object(
-                forInfoDictionaryKey: "TadaWordsTeacherAudioEndpoint"
-            ) as? String,
-            let endpoint = URL(string: rawEndpoint),
-            endpoint.scheme?.lowercased() == "https"
-        else {
-            return nil
+        var providers: [any TeacherWordAudioProviding] = []
+        if let bundled = BundledTeacherWordAudioProvider.production() {
+            providers.append(bundled)
         }
 
-        return CachingTeacherWordAudioProvider(
-            upstream: RemoteTeacherWordAudioProvider(endpoint: endpoint),
-            cache: FileTeacherWordAudioCache(directory: cacheDirectory)
-        )
+        if let rawEndpoint = bundle.object(
+            forInfoDictionaryKey: "TadaWordsTeacherAudioEndpoint"
+        ) as? String,
+            let endpoint = URL(string: rawEndpoint),
+            endpoint.scheme?.lowercased() == "https"
+        {
+            providers.append(
+                CachingTeacherWordAudioProvider(
+                    upstream: RemoteTeacherWordAudioProvider(endpoint: endpoint),
+                    cache: FileTeacherWordAudioCache(directory: cacheDirectory)
+                )
+            )
+        }
+
+        guard !providers.isEmpty else { return nil }
+        return FirstAvailableTeacherWordAudioProvider(providers: providers)
     }
 
     private var requestSpeechAuthorization: @Sendable () async -> Bool {

@@ -65,14 +65,15 @@ final class RemoteTeacherWordAudioProviderTests: XCTestCase {
         XCTAssertNil(request.value(forHTTPHeaderField: "xi-api-key"))
         XCTAssertEqual(payload["spokenText"] as? String, "I read every day.")
         XCTAssertEqual(payload["pronunciationKey"] as? String, "present-tense")
+        XCTAssertEqual(payload["usage"] as? String, "read_hint")
         XCTAssertEqual(
             try XCTUnwrap(payload["speed"] as? Double),
-            0.7,
+            0.90,
             accuracy: 0.000_1
         )
         XCTAssertEqual(
             payload["contractVersion"] as? String,
-            "canonical-teacher-v1"
+            "canonical-teacher-v2"
         )
         XCTAssertNil(payload["voiceID"])
         XCTAssertNil(payload["apiKey"])

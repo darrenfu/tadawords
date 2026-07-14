@@ -563,7 +563,7 @@ extension WorldTheme {
         case .dinoDiscovery:
             "lizard.fill"
         case .firehouseHeroes:
-            "firetruck.fill"
+            "truck.box.fill"
         case .brickworkCity:
             "square.grid.3x3.fill"
         case .frostlightWorld:

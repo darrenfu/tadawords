@@ -81,8 +81,9 @@ struct VoicePromptAudioSessionState {
     }
 }
 
-/// Original, programmatic sound layer. It uses no sampled or downloaded audio.
-/// Every world score and effect is synthesized in memory.
+/// Hybrid audio layer. Original world scores and effects remain synthesized in
+/// memory; the launch mark and brief transition voices come from the versioned
+/// Aurora bundle and never require a runtime network request.
 public actor AppleAudioExperienceService: AudioExperienceService {
     private static let sampleRate = 44_100.0
 
@@ -93,6 +94,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     private let writingPlayer = AVAudioPlayerNode()
     private let launchVoice = AVSpeechSynthesizer()
     private let spokenVoice = SystemSpeechVoiceResolver.preferredVoice()
+    private let voiceAccentLibrary: BundledVoiceAccentLibrary
 
     private var world: WorldTheme = .moonpetalKingdom
     private var preferences = AudioPreferences.default
@@ -109,8 +111,13 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     private var ambientBufferCache = AmbientBufferCache<AVAudioPCMBuffer>()
     private var writingCueThrottle = WritingCueThrottle()
     private var writingBuffers: [HandwritingTool: AVAudioPCMBuffer] = [:]
+    private var spokenAccentPlayer: AVAudioPlayer?
+    private var spokenAccentGeneration = 0
+    private var spokenAccentOwnsVoicePrompt = false
+    private var correctAccentIndex = 0
 
     public init() {
+        voiceAccentLibrary = .production()
         engine.attach(ambientPlayerA)
         engine.attach(ambientPlayerB)
         engine.attach(effectPlayer)
@@ -151,6 +158,14 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         }
 
         if shouldSpeakLaunchVoice {
+            if let launch = voiceAccentLibrary.launch,
+                await playSpokenAccent(at: launch)
+            {
+                return
+            }
+
+            // Apple TTS is a fail-safe for a damaged or unavailable bundle,
+            // not the normal launch voice.
             beginVoicePrompt()
             let design = LaunchVoiceDesignPolicy.utterance
             let utterance =
@@ -164,10 +179,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
             utterance.preUtteranceDelay = design.preUtteranceDelay
             utterance.postUtteranceDelay = design.postUtteranceDelay
             launchVoice.speak(utterance)
-        }
-
-        try? await Task.sleep(for: .milliseconds(1_600))
-        if shouldSpeakLaunchVoice {
+            try? await Task.sleep(for: .milliseconds(1_600))
             endVoicePrompt()
         }
     }
@@ -224,36 +236,44 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         isEmergencyMode = false
         stopAllAmbientPlayers()
         stopWritingAudio()
+        stopSpokenAccent()
     }
 
     public func play(_ cue: FunctionalAudioCue) async {
-        guard AudioPreferencePolicy.shouldPlay(cue, preferences: preferences),
-            recordingDepth == 0,
+        guard recordingDepth == 0,
             isApplicationActive
         else {
             return
         }
         if case .writing(let tool) = cue {
+            guard AudioPreferencePolicy.shouldPlay(cue, preferences: preferences)
+            else { return }
             playWritingCue(for: tool)
             return
         }
 
-        guard startEngineIfNeeded() else { return }
-        stopWritingAudio()
-        effectPlayer.stop()
-        effectPlayer.volume = adjustedVolume(0.20)
-        effectPlayer.scheduleBuffer(
-            ProceduralAudioFactory.effect(
-                cue: cue,
-                world: world,
-                sampleRate: Self.sampleRate
-            ),
-            at: nil,
-            options: [],
-            completionCallbackType: .dataConsumed,
-            completionHandler: nil
-        )
-        effectPlayer.play()
+        if AudioPreferencePolicy.shouldPlay(cue, preferences: preferences),
+            startEngineIfNeeded()
+        {
+            stopWritingAudio()
+            effectPlayer.stop()
+            effectPlayer.volume = adjustedVolume(0.20)
+            effectPlayer.scheduleBuffer(
+                ProceduralAudioFactory.effect(
+                    cue: cue,
+                    world: world,
+                    sampleRate: Self.sampleRate
+                ),
+                at: nil,
+                options: [],
+                completionCallbackType: .dataConsumed,
+                completionHandler: nil
+            )
+            effectPlayer.play()
+        }
+
+        guard let accentURL = spokenAccentURL(for: cue) else { return }
+        _ = await playSpokenAccent(at: accentURL)
     }
 
     public func setEmergencyMode(_ isEnabled: Bool) async {
@@ -298,6 +318,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         stopAllAmbientPlayers()
         effectPlayer.stop()
         stopWritingAudio()
+        stopSpokenAccent()
         engine.stop()
         deactivateAudioSession()
     }
@@ -316,6 +337,64 @@ public actor AppleAudioExperienceService: AudioExperienceService {
             stopAllAmbientPlayers()
             effectPlayer.stop()
             stopWritingAudio()
+            stopSpokenAccent()
+        }
+    }
+
+    private func spokenAccentURL(for cue: FunctionalAudioCue) -> URL? {
+        guard SpokenAccentPolicy.allows(cue, preferences: preferences) else {
+            return nil
+        }
+
+        switch cue {
+        case .correct:
+            guard !voiceAccentLibrary.correct.isEmpty else { return nil }
+            let url = voiceAccentLibrary.correct[
+                correctAccentIndex % voiceAccentLibrary.correct.count
+            ]
+            correctAccentIndex =
+                (correctAccentIndex + 1)
+                % voiceAccentLibrary.correct.count
+            return url
+        case .reward:
+            return voiceAccentLibrary.questComplete
+        case .click, .validRetry, .technicalRetry, .star, .writing:
+            return nil
+        }
+    }
+
+    @discardableResult
+    private func playSpokenAccent(at url: URL) async -> Bool {
+        stopSpokenAccent()
+        guard let player = try? AVAudioPlayer(contentsOf: url) else { return false }
+        player.volume = adjustedVolume(0.84)
+        player.prepareToPlay()
+
+        spokenAccentGeneration += 1
+        let generation = spokenAccentGeneration
+        spokenAccentPlayer = player
+        beginVoicePrompt()
+        spokenAccentOwnsVoicePrompt = true
+
+        guard player.play() else {
+            stopSpokenAccent()
+            return false
+        }
+
+        let duration = max(0.1, player.duration + 0.05)
+        try? await Task.sleep(for: .seconds(duration))
+        guard generation == spokenAccentGeneration else { return true }
+        stopSpokenAccent()
+        return true
+    }
+
+    private func stopSpokenAccent() {
+        spokenAccentGeneration += 1
+        spokenAccentPlayer?.stop()
+        spokenAccentPlayer = nil
+        if spokenAccentOwnsVoicePrompt {
+            spokenAccentOwnsVoicePrompt = false
+            endVoicePrompt()
         }
     }
 
@@ -444,6 +523,9 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         )
         if !preferences.voiceEnabled, launchVoice.isSpeaking {
             launchVoice.stopSpeaking(at: .immediate)
+        }
+        if !preferences.voiceEnabled || preferences.reducedSoundEnabled {
+            stopSpokenAccent()
         }
         if !preferences.soundEffectsEnabled {
             effectPlayer.stop()
