@@ -178,6 +178,12 @@ struct SpeechUtteranceDesign: Equatable, Sendable {
 }
 
 enum SpeechUtteranceDesignPolicy {
+    /// Apple speech rate used for isolated practice words. Dividing the system
+    /// default by 1.5 makes each word 1.5 times slower without coupling local
+    /// fallback playback to the remote teacher-audio speed contract.
+    static let appleIsolatedWordRate: Float =
+        AVSpeechUtteranceDefaultSpeechRate / 1.5
+
     static func design(text: String, role: SpokenAudioRole) -> SpeechUtteranceDesign {
         let pronunciation = pronunciationPlan(text: text, role: role)
         return switch role {
@@ -193,14 +199,13 @@ enum SpeechUtteranceDesignPolicy {
                 postUtteranceDelay: 0.055
             )
         case .learning:
-            // Very low AVSpeech rates smear short vowels and final consonants.
-            // This moderately slow setting stays intelligible even with the
-            // compact fallback voice installed on a new device.
+            // Keep the word in one utterance at the requested 1.5x-slower
+            // cadence. The terminal boundary below protects final consonants.
             SpeechUtteranceDesign(
                 text: pronunciation.text,
                 ipaPronunciation: pronunciation.ipaPronunciation,
                 addsSentenceBoundary: pronunciation.addsSentenceBoundary,
-                rate: 0.40,
+                rate: appleIsolatedWordRate,
                 pitchMultiplier: 1.0,
                 volume: 0.96,
                 preUtteranceDelay: 0.08,
@@ -213,7 +218,7 @@ enum SpeechUtteranceDesignPolicy {
                 text: pronunciation.text,
                 ipaPronunciation: pronunciation.ipaPronunciation,
                 addsSentenceBoundary: pronunciation.addsSentenceBoundary,
-                rate: 0.40,
+                rate: appleIsolatedWordRate,
                 pitchMultiplier: 1.0,
                 volume: 0.98,
                 preUtteranceDelay: 0.10,

@@ -25,11 +25,13 @@ public struct WordPoolEntryDraft: Hashable, Sendable {
 
 public enum WordPoolUpsertOutcome: Hashable, Sendable {
     case inserted(WordPoolEntry)
-    case requeuedExisting(WordPoolEntry)
+    case reactivated(WordPoolEntry)
+    case alreadyActive(WordPoolEntry)
 
     public var entry: WordPoolEntry {
         switch self {
-        case .inserted(let entry), .requeuedExisting(let entry):
+        case .inserted(let entry), .reactivated(let entry),
+            .alreadyActive(let entry):
             entry
         }
     }
@@ -166,7 +168,9 @@ struct WordPoolStorage: Sendable {
                     positionInBatch: draft.positionInBatch
                 )
                 entriesByID[existingID] = requeuedEntry
-                return .requeuedExisting(requeuedEntry)
+                return existingEntry.isActive
+                    ? .alreadyActive(requeuedEntry)
+                    : .reactivated(requeuedEntry)
             }
 
             let entry = WordPoolEntry(

@@ -45,10 +45,23 @@ public actor DemoGuardianFamilyStore: GuardianFamilyStore {
         try await preparedStore().dashboardSnapshot()
     }
 
+    public func dashboardSnapshot(
+        for profileID: ProfileID
+    ) async throws -> GuardianDashboardSnapshot {
+        try await preparedStore().dashboardSnapshot(for: profileID)
+    }
+
     public func importWords(
         _ request: GuardianWordImportRequest
     ) async throws -> GuardianWordImportReport {
         try await preparedStore().importWords(request)
+    }
+
+    public func importWords(
+        _ request: GuardianWordImportRequest,
+        for profileID: ProfileID
+    ) async throws -> GuardianWordImportReport {
+        try await preparedStore().importWords(request, for: profileID)
     }
 
     public func updatePracticeSettings(
@@ -76,6 +89,34 @@ public actor DemoGuardianFamilyStore: GuardianFamilyStore {
             ids: ids,
             learningMode: learningMode,
             isActive: isActive
+        )
+    }
+
+    public func setWordsActive(
+        ids: [WordPromptID],
+        learningMode: LearningMode,
+        isActive: Bool,
+        for profileID: ProfileID
+    ) async throws -> GuardianDashboardSnapshot {
+        try await preparedStore().setWordsActive(
+            ids: ids,
+            learningMode: learningMode,
+            isActive: isActive,
+            for: profileID
+        )
+    }
+
+    public func setMembershipsActive(
+        ids: [WordPoolEntryID],
+        learningMode: LearningMode,
+        isActive: Bool,
+        for profileID: ProfileID
+    ) async throws {
+        try await preparedStore().setMembershipsActive(
+            ids: ids,
+            learningMode: learningMode,
+            isActive: isActive,
+            for: profileID
         )
     }
 

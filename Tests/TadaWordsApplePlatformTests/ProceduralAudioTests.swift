@@ -289,6 +289,36 @@ final class ProceduralAudioTests: XCTestCase {
         XCTAssertTrue(throttle.accepts(at: 10.15))
     }
 
+    func testVoicePromptPolicyUsesSpokenPlaybackAndDucksExternalAudio() {
+        XCTAssertEqual(AppAudioSessionPolicy.spokenPrompt.category, .playback)
+        XCTAssertEqual(AppAudioSessionPolicy.spokenPrompt.mode, .spokenAudio)
+        XCTAssertTrue(
+            AppAudioSessionPolicy.spokenPrompt.options.contains(.mixesWithOthers)
+        )
+        XCTAssertTrue(
+            AppAudioSessionPolicy.spokenPrompt.options.contains(.ducksOthers)
+        )
+
+        XCTAssertEqual(AppAudioSessionPolicy.ambientMix.category, .ambient)
+        XCTAssertEqual(AppAudioSessionPolicy.ambientMix.mode, .defaultMode)
+        XCTAssertEqual(AppAudioSessionPolicy.ambientMix.options, [.mixesWithOthers])
+    }
+
+    func testNestedVoicePromptsRestoreAmbientPolicyOnlyAfterOutermostPrompt() {
+        var state = VoicePromptAudioSessionState()
+
+        XCTAssertEqual(state.begin(), .spokenPrompt)
+        XCTAssertNil(state.begin())
+        XCTAssertEqual(state.depth, 2)
+
+        XCTAssertNil(state.finish())
+        XCTAssertTrue(state.isActive)
+        XCTAssertEqual(state.finish(), .ambientMix)
+        XCTAssertFalse(state.isActive)
+        XCTAssertNil(state.finish())
+        XCTAssertEqual(state.depth, 0)
+    }
+
     func testAmbientLoopsAreTwentyFourSecondStereoScoresWithDistinctContent() {
         let buffers = WorldTheme.allCases.map {
             ProceduralAudioFactory.ambientLoop(

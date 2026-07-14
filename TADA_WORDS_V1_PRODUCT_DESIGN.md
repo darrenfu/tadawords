@@ -1,6 +1,6 @@
 # Tada Words — V1 产品与交互设计
 
-> 状态：真机第一轮反馈与追加需求已纳入；修复后等待 iPhone / iPad 回归验收
+> 状态：v0.3.1 已完成 iPhone production Vision 真机测试，以及 iPad production/UI 真机自动化回归；儿童手写、音频听感、布局与辅助功能仍待人工验收
 >
 > 项目名称：**Tada Words**
 >
@@ -8,7 +8,7 @@
 
 ## 1. 产品定义
 
-Tada Words 是一款面向学前儿童的英语 sight-word 学习 App。Guardian 每天分别输入需要“会读”和“会写”的单词；孩子通过两个彼此独立的主题闯关，最终做到：
+Tada Words 是一款面向学前儿童的英语 sight-word 学习 App。Guardian 每天分别录入或选择需要“会读”和“会写”的单词；孩子通过两个彼此独立的主题闯关，最终做到：
 
 - **Read**：看见单词后，可以独立读出来。
 - **Write**：只听见标准发音，可以独立手写完整单词。
@@ -27,7 +27,7 @@ Tada Words 是一款面向学前儿童的英语 sight-word 学习 App。Guardian
 
 ### V1 不做
 
-- 不内置 Pre-K / Kindergarten / Grade 1 自动课程词库；该功能进入 V2。
+- 不按年级自动填充 Read 或 Write Pool。V1 的离线 Preset Catalog 只提供排序、浏览和搜索，必须由 Guardian 明确选择并提交；自动课程模式进入 V2。
 - 不做 Read 配对、听音找词等额外小游戏。
 - 不做社交、儿童排行榜、广告、抽卡或随机宝箱。
 - 不保存或上传任何原始练习录音。
@@ -39,7 +39,7 @@ Tada Words 是一款面向学前儿童的英语 sight-word 学习 App。Guardian
 | 角色 | 能力 |
 |---|---|
 | Owner Guardian | 创建家庭、邀请 Guardian、创建和删除 Kid Profile、管理所有数据 |
-| Guardian | 输入单词、调整设置、查看报告、管理声纹与主题 |
+| Guardian | 手输、OCR 或选择 Preset 单词，调整设置、查看报告、管理声纹与主题 |
 | Kid Profile | 选择自己的头像、完成 Quest、查看收藏与世界 |
 
 V1 的 Kid 是 App 内 Profile，而不是必须拥有独立 Apple ID 的 CloudKit 成员。孩子在 Guardian 已登录 iCloud 的设备上使用；不同 Guardian 可以通过邀请共享同一个 Kid Profile。
@@ -49,7 +49,7 @@ V1 的 Kid 是 App 内 Profile，而不是必须拥有独立 Apple ID 的 CloudK
 - 昵称
 - 头像
 - 当前年级
-- 可选年龄
+- 年龄；新建 Profile 必须明确选择 3–8 岁，旧版缺失年龄仍可读取
 - 儿童声纹模板
 
 不收集真实姓名、完整生日、学校或老师信息。
@@ -71,6 +71,12 @@ V1 是 Universal iOS App。
 
 其他 iPhone 使用响应式布局尽力兼容，但不作为 V1 发布阻塞项。
 
+### 当前真机自动化证据
+
+2026-07-14，Team `6S245NCUPQ` 签名的 `Tada Words QA` v0.3.1 (`2026071403`) 已在 Darren iPad Air 13-inch (M4)、iPadOS 26.5 安装并启动。Production DeviceTests 2/2 通过，覆盖 wrong-word rejection 与 `of/go` case variants；LocalQA Critical XCUITest 7/7 通过，覆盖 OCR Add All、Delete All/restore、明确批准 Preset、连续删除/排序、Photo picker/排序及 Read/Write 完成反馈消失。
+
+这些证据验证 production 识别链路和关键交互可以在 iPad 真机运行，但不替代儿童真实手写、发音听感、横竖屏布局、Apple Pencil、VoiceOver 与 Dynamic Type 验收。
+
 ### 方向规则
 
 - Profile Picker、World Lobby、Kid Quest、结果页与 Collection 只支持 `Landscape Left` 与 `Landscape Right`。
@@ -78,6 +84,7 @@ V1 是 Universal iOS App。
 - iPhone 家长路线支持 Portrait 与两个 Landscape，不支持 Portrait Upside Down；iPad 家长路线支持四个方向。
 - 离开家长路线后，App 必须通过 route-level geometry update 立即恢复横屏；孩子页面左右两个横屏方向都要验收。
 - iPhone Kid Quest 会减少背景装饰，优先保证大单词、麦克风和完整书写区。
+- Kid Lobby 的大型故事装饰固定在左右下方安全带，前景 Quest 卡片和按钮坐标不移动；装饰动画只能从安全基线向下漂浮，不能上浮回卡片阴影。Moonpetal 独角兽在 iPhone 横屏最紧凑帧也必须与 Write 卡片保留可见背景间隙，且任何 World 的装饰都不能在底部或侧边被裁切。
 
 Write 支持手指；Apple Pencil 仅在兼容设备上启用，并使用防误触。Apple 官方当前的 Pencil 兼容设备为 iPad，因此 iPhone 17 Pro Max 的 Write 输入使用手指。[Apple Pencil compatibility](https://support.apple.com/en-am/108937)
 
@@ -86,7 +93,7 @@ Write 支持手指；Apple Pencil 仅在兼容设备上启用，并使用防误�
 ```text
 App Launch
 ├── Profile Picker
-│   ├── New Kid（没有 Profile 时直接展开；孩子只输入昵称）
+│   ├── New Kid（没有 Profile 时直接展开；孩子输入昵称与年龄）
 │   ├── 上次 Profile（有 Profile 时突出显示，孩子点击确认）
 │   └── World Lobby
 │       ├── Read Today’s Quest
@@ -100,6 +107,7 @@ App Launch
     ├── Words
     │   ├── Read Pool：Type / Camera / Photo / Select / Delete
     │   └── Write Pool：Type / Camera / Photo / Select / Delete
+    ├── Preset Words（按年龄、年级与精细分类浏览；家长明确选择后才加入）
     ├── Reports
     ├── Profiles & Family
     ├── Worlds
@@ -112,14 +120,14 @@ App Launch
 2. 今天 Read 还是 Write？
 3. 在哪个已解锁世界冒险？
 
-App 只从 Guardian 已经录入的 Pool 中编排 New、Review、难词回流和计时；不得从年级词库、内置 catalog 或生成模型自动添加练习词。
+App 只从 Guardian 已明确批准进入 Pool 的词中编排 New、Review、难词回流和计时。来源可以是手输、OCR，或家长在内置 Preset Catalog 中主动选择的词；年龄和年级只改变推荐排序，任何 catalog 或生成模型都不得自动添加练习词。
 
 ## 5. 首次设置
 
 首次启动必须先处理 Profile，不先要求输入单词：
 
 1. 已有 Profile：显示 Picker，并突出上次使用的有效 Profile；孩子点击后进入。
-2. 没有 Profile：直接显示 `New Kid`，输入昵称并选择头像、年级和 Starter World。
+2. 没有 Profile：直接显示 `New Kid`，输入昵称和年龄，并选择头像、年级和 Starter World。V1 新建范围为 3–8 岁，对应 Pre-K–Grade 3；旧 Profile 缺少年龄仍可兼容读取。
 3. 阅读并同意儿童声纹、同步与删除规则。
 4. 声纹注册、单词录入和通知均可稍后在 Parents 中完成，不阻塞第一次进入 Kid Lobby。
 
@@ -152,7 +160,7 @@ App 只从 Guardian 已经录入的 Pool 中编排 New、Review、难词回流�
 - 孩子先点击自己的头像；App 不依赖声纹自动切换 Profile。
 - App 记住最后使用的有效 Profile；下次冷启动在 Picker 中突出该 Profile，但仍由孩子点击确认。若该 Profile 已不存在，则显示普通 Picker，不猜测其他身份。
 - 上次 Profile 使用静态 1.03× 尺寸与更高叠放层级突出；其他 Profile 不降透明度，也不使用持续动画。
-- Picker 提供 `New Kid` 卡片。孩子只输入昵称，App 自动分配内置动物头像与 Starter World；完整编辑仍由 Guardian 完成。
+- Picker 提供 `New Kid` 卡片。孩子输入昵称并明确选择 3–8 岁年龄；App 按年龄给出当前支持的 Grade 建议，并自动分配内置动物头像与 Starter World。完整编辑仍由 Guardian 完成。
 - Read 录音时，才用选中 Profile 的声纹过滤其他说话人。
 - `Parents` 入口放在稳定的右上角，普通单击后立即进入随机算术 Parent Gate，不与 Quest 主入口争夺注意力。
 
@@ -194,7 +202,7 @@ App 只从 Guardian 已经录入的 Pool 中编排 New、Review、难词回流�
 
 ## 8. 单词池与每日编排
 
-Guardian 每天直接向两个独立 Pool 输入：
+Guardian 每天向两个独立 Pool 录入或选择单词：
 
 - `Read New Words Pool`
 - `Write New Words Pool`
@@ -208,10 +216,13 @@ Guardian 每天直接向两个独立 Pool 输入：
 - 默认显示为小写；Guardian 可为个别单词保留指定大小写。
 - Read 与 Write 之间不跨组去重；同一个词可以拥有两套独立记录。
 - 同 Pool 重复输入时不创建副本，而是把已有词移动到队列最前面并保留学习历史。
-- 支持单条删除、选择模式与批量删除；批量删除需要确认，并提供短时 Undo。
+- `Preset Words` 按 Profile 的年龄与年级排序，支持分层浏览、搜索、逐词选择或全选；只有点击 Add 才写入 Read、Write 或 Both。
+- Preset 导入绑定发起操作的 Profile。Both 必须全部完成；任一 Pool 失败、部分成功或返回不一致时，只撤销本次插入或重新启用的 membership，不得停用导入前已 active 的词。
+- 支持单条删除、选择模式与批量删除；第一次删除确认与 Undo 状态按 Profile 隔离。
+- Read 与 Write 各自支持 `Delete all N words`；每次明确确认数量与 Pool，保留学习历史和另一 Pool，并可完整 Undo。
 - 自动生成标准美式英语发音，允许 Guardian 试听。
 - 不提供多读音选择，也不要求 Guardian 自己录音。
-- 所有新增词必须来自 Guardian typing 或 OCR；Pool 不足时只练已有词，绝不自动补词。
+- 所有新增词必须来自 Guardian typing、OCR 或明确批准的 Preset selection；Pool 不足时只练已有词，绝不自动补词。
 
 ### 默认题量
 
@@ -333,7 +344,7 @@ Show Word
 - `confidentIncorrect`：温和提示重写；具体词可出现可点图片，但不自动显示拼写。
 - `uncertain`：不直接判错或显示答案；作为技术重试允许再次提交。
 - 第二次仍不能确认：标记为需要复习并继续，不让识别引擎阻塞 Quest。
-- 匹配忽略大小写；Vision 使用目标词的 lower/Initial-cap/ALL-CAPS 词表并检查前五个候选与分段字母。只允许目标对齐的 `0` → `o` 字形归一化，不做会接受 `if/on/or/off` 等邻词的模糊编辑距离。
+- 匹配忽略大小写；Vision 使用目标词的 lower/Initial-cap/ALL-CAPS 词表、语言修正和前五个候选。生产识别最多使用两个彼此独立的有界栅格（默认 26-point 与 36-point fallback），每个 pass 都必须独立得到完整目标，不跨 pass 拼接或投票。只允许完整目标对齐时的 `0` → `o`；`9` → `g` 还必须由同一 Vision fragment 的同长度候选在相同位置明确给出 `g`。不使用会接受 `if/on/or/off/do/no/90` 等邻词或数字的模糊编辑距离。
 - 只保存笔画/识别结果所需的数据；Guardian 报告不展示孩子原始手写轨迹回放。
 
 ### 用时
@@ -438,14 +449,19 @@ V1 当前实现八个完整 World Pack：
 - 需要关注的词
 - 同步状态
 - `Manage Words`
+- `Choose preset words`
 
 ### Words
 
 - Read / Write 两个明确 Tab。
 - 顶部单词输入栏：每次一个词，Return 即时加入。
 - 本机 `Take Photo` / `Choose Photo` OCR、可编辑导入预览和 `Add All`。
-- 下方 newest-first 队列、单条删除、选择模式、批量删除确认与 Undo。
-- 布局在 iPhone / iPad 横屏均保持 44 pt 触控目标、键盘不遮挡操作。
+- 下方 newest-first 队列、单条删除、选择模式、批量删除确认与 Undo；首次删除确认和 Undo 状态按 Profile 隔离。
+- Read / Write 各自提供 `Delete all N words`；高影响操作每次都明确确认数量和目标 Pool，完成后仍可完整 Undo，且不删除学习历史或修改另一 Pool。
+- 独立的 Preset Words 浏览器提供 3–8 岁 / Pre-K–Grade 3 推荐；先显示最多 6 组匹配内容，再按“基础词/拼读/名词主题/动词/形容词与概念”逐层浏览或搜索。
+- Preset Catalog 的每个叶子词组为 30–50 个原创编排的单词；家长可逐词选择或 Select all，并明确加入 Read、Write 或 Both。打开列表、年龄匹配或推荐排序均不会自动写入 Pool；目标 Pool 内按标准化拼写去重。
+- Preset 导入始终写入发起操作的 Profile。Both 导入按补偿事务处理；失败时只撤销本次插入或重新启用的 membership，保留已有 active word。
+- 布局在 iPhone / iPad 的 Parent 横竖屏均保持 44 pt 触控目标、键盘不遮挡操作。
 - 状态：`Queued`、`Learning`、`Review Due`、`Strong`。
 - 单词详情：编辑大小写、试听、查看历史、删除。
 
@@ -474,6 +490,7 @@ Guardian 可以纠正一次明显的语音或手写误判。系统修正该 Atte
 ### Profiles & Family
 
 - 创建、编辑、删除 Kid Profile。
+- 所有新建入口都必须采集 3–8 岁年龄；孩子自建时由年龄给出当前支持范围内的年级建议，首次设置与 Parent 编辑仍由家长明确选择年级，修改年龄不静默覆盖家长选择。
 - 邀请或移除 Guardian。
 - 查看同步状态、待同步修改数和最近一次成功时间；每台设备分别显示是否需要重新注册声纹。
 - 在当前设备重新注册或删除声纹；声纹模板不跨设备复制。
@@ -578,7 +595,7 @@ modelVersion, schedulerVersion, deviceID
 - 原始录音不持久化、不上传。
 - 声纹模板只保存在当前设备 Keychain；Profile 同步时导出 `notEnrolled`，导入时保留接收设备自己的 enrollment 状态。
 - 新 iPhone/iPad 需要为同一个 Kid Profile 单独完成一次声纹注册；声纹不可用不能阻塞学习历史同步。
-- 具体词图片和 canonical teacher audio 只写入 App `Caches`，不进入 CloudKit。新设备在需要时异步重下载，离线时使用无图或本机语音 fallback。
+- 具体词图片和未来的远端 audio 补包只写入 App `Caches`，不进入 CloudKit。首发 500 词的 Katie 双语速音频随 App bundle 离线分发；bundle 外的家长自定义词使用本机 Apple 英语女声 fallback。两类音频都不进入家庭同步数据。
 - Avatar 原图属于家长明确选择的 Profile 数据，不是 cache；Family Sync 开启后可同步，但生产版应使用有大小上限的独立 `CKAsset`。
 
 ## 19. 通知
@@ -645,9 +662,9 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 
 #### 启动声音标识
 
-- 每次冷启动播放约 1.5–2 秒的原创 sonic logo，并用单个连续 SSML 短句清楚喊出 **`tā-'dá, wòrds!`**（近似“它达，沃尔子”）。
-- 第二音节重读，逗号停顿约 110ms，`words` 音高下落；整体兴奋有朝气，同时不得出现三个排队 utterance 的机械接缝。
-- 优先使用设备上可用的年轻、明亮的美式女声 persona；Apple 系统不提供年龄字段，因此使用确定性的自然女声回退，不能因未下载某个可选声音而静音。
+- 每次冷启动播放约 1.5–2 秒的原创 sonic logo，并用 Aurora 离线录制的一条连续短句清楚喊出 **`Ta-dá↗ woooords↘!`**（近似“它达，沃尔子”）。
+- `da` 略拉长并上扬，随后不做刻意逗号停顿，直接连入明显拉长且下落的 `wor`；整体兴奋有朝气，同时不得出现多个排队 utterance 的机械接缝。
+- 正常启动固定使用 Cartesia Aurora 声线，确保所有设备的品牌读法一致；资源损坏或缺失时才使用确定性的 Apple 美式女声回退，不能静音或联网临时合成。
 - 结尾配器和环境尾音跟随当前选中的 World Pack；尚未选择 Starter World 时使用中性的品牌版本。
 - 不模仿 Todo Math 的旋律、节奏、声音演员或任何真人声线。
 - 从后台短暂返回时不重复播放，避免频繁打扰。
@@ -660,17 +677,18 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 - 正常状态使用轻快但低密度的循环，不与 TTS、孩子朗读或书写节奏争夺注意力。
 - 紧急状态使用同一原创主题的加速或加层版本，平滑切换；不突然增大音量、不加入警报声。
 - TTS、Help 和标准发音播放时，背景乐自动 ducking。
+- Read `Hear it`、Write 自动提示和 Parent 试听优先使用 500 词离线包：Katie 是 canonical teacher，Read 为清晰自然的 0.90×，Write 为保留尾音的 0.82×。若双识别审计确认某个孤立词的 canonical 输出不清楚，允许在 manifest 中记录单词级 voice/speed override；首包仅 `bun` 使用 Aurora。每词两个版本不可互换；未覆盖词使用同一条 Apple 美式女声 fallback。播放期间切到 spoken-audio session 并同时压低 App 音乐与外部音频，结束后再恢复混音。
 - Read 开始录音前快速淡出背景乐和非必要环境音；录音结束后再平滑恢复，避免影响降噪和识别。
 
 #### 功能音效
 
 - 点击、正确、重试、星星和收藏品使用相同的功能语义，但具体音色与短旋律跟随当前 World。
 - 点击：短、柔和、低刺激的触感音。
-- 正确：原创的上行短音型，并与 1–2 秒主题动画同步。
+- 正确：先立即播放当前 World 的原创上行短音型，再依序轮换六条 Aurora 微庆祝语（如 `Ta-da!`、`Yes!`、`You did it!`），避免连续重复同一句；Reduced Sound 只保留必要非语言反馈并关闭这些装饰口播。
 - 有效错误：温和的“再试一次”提示，不使用蜂鸣器或失败号角。
 - `technicalRetry`：使用中性提示音，必须与孩子答错的声音明显不同。
 - 三颗星：三段可区分但属于同一声音家族的揭晓音。
-- 永久收藏品：使用当前 World 的专属完成音，不做随机稀有度音效。
+- Quest 结算：星星仍使用当前 World 的专属音色，完成时增加 Aurora 的短句 `Quest complete! Ta-da!`；不做随机稀有度音效。
 - 三种书写工具使用原创的短促摩擦/颗粒音色，并按实际移动节流；Reduced Sound 关闭这些装饰性书写音，提示发音播放时也不叠加。
 
 #### 首发 World 的声音方向
@@ -741,9 +759,11 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 
 ### Guardian
 
-- 可在 30 秒内通过逐词 typing 或 Camera / Photo OCR 向任一 Pool 加词并试听。
-- 新词即时出现在队列最前；可单删、多选批量删除并 Undo。
-- App 不会在空 Pool 或数量不足时自动生成、推荐或补充单词。
+- 可在 30 秒内通过逐词 typing、Camera / Photo OCR 或明确批准的 Preset selection 向任一 Pool 加词并试听。
+- 新词即时出现在队列最前；可单删、多选批量删除、整组清空并 Undo，删除状态不会跨 Profile。
+- 新建 Profile 必须明确选择 3–8 岁年龄；年龄与 Grade 只排序 Preset 建议。
+- App 不会在空 Pool 或数量不足时自动生成、加入推荐词或补充单词。
+- Both Preset 导入要么更新两个 Pool，要么只回滚本次变更，不影响既有 active word 或其他 Profile。
 - 自动去重不会删除另一路线的同名词。
 - 报告能解释某词为何进入 Review。
 - 可以纠正自动识别误判。
@@ -764,7 +784,7 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 1. 4 岁儿童单词识别、声纹过滤和家庭噪声下的本地准确率。
 2. 4 岁儿童手写在目标词约束下的正确 / 错误 / 不确定三态阈值。
 3. 不同 Apple ID 的 `CKShare`、ProfileKey 分发、撤销和密钥轮换。
-4. iPhone 17 Pro Max 与目标 iPad 的横屏书写可用性。
+4. 4 岁儿童在 iPhone 17 Pro Max 与目标 iPad 上的横屏手写、听感、布局与辅助功能可用性；iPad 自动化链路已通过，人工验收仍未完成。
 
 ## 24. V2
 

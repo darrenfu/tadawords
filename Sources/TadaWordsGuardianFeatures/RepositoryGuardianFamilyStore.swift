@@ -74,7 +74,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     public func createProfile(
         from draft: GuardianProfileDraft
     ) async throws -> GuardianDashboardSnapshot {
-        let values = try validatedValues(from: draft)
+        let values = try validatedValues(from: draft, requiresAge: true)
         let profile = KidProfile(
             displayName: values.displayName,
             avatar: values.avatar,
@@ -100,7 +100,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         guard let existing = try await profileRepository.profile(id: id) else {
             throw GuardianFamilyStoreError.profileNotFound(id)
         }
-        let values = try validatedValues(from: draft)
+        let values = try validatedValues(from: draft, requiresAge: false)
         let updated = KidProfile(
             id: existing.id,
             displayName: values.displayName,
@@ -130,6 +130,13 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
 
     public func dashboardSnapshot() async throws -> GuardianDashboardSnapshot {
         let profile = try await selectedProfile()
+        return try await makeWordStore(for: profile).dashboardSnapshot()
+    }
+
+    public func dashboardSnapshot(
+        for profileID: ProfileID
+    ) async throws -> GuardianDashboardSnapshot {
+        let profile = try await requiredProfile(id: profileID)
         return try await makeWordStore(for: profile).dashboardSnapshot()
     }
 
@@ -167,6 +174,14 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         return try await makeWordStore(for: profile).importWords(request)
     }
 
+    public func importWords(
+        _ request: GuardianWordImportRequest,
+        for profileID: ProfileID
+    ) async throws -> GuardianWordImportReport {
+        let profile = try await requiredProfile(id: profileID)
+        return try await makeWordStore(for: profile).importWords(request)
+    }
+
     public func updatePracticeSettings(
         _ settings: ProfilePracticeSettings
     ) async throws -> GuardianDashboardSnapshot {
@@ -192,6 +207,34 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     ) async throws -> GuardianDashboardSnapshot {
         let profile = try await selectedProfile()
         return try await makeWordStore(for: profile).setWordsActive(
+            ids: ids,
+            learningMode: learningMode,
+            isActive: isActive
+        )
+    }
+
+    public func setWordsActive(
+        ids: [WordPromptID],
+        learningMode: LearningMode,
+        isActive: Bool,
+        for profileID: ProfileID
+    ) async throws -> GuardianDashboardSnapshot {
+        let profile = try await requiredProfile(id: profileID)
+        return try await makeWordStore(for: profile).setWordsActive(
+            ids: ids,
+            learningMode: learningMode,
+            isActive: isActive
+        )
+    }
+
+    public func setMembershipsActive(
+        ids: [WordPoolEntryID],
+        learningMode: LearningMode,
+        isActive: Bool,
+        for profileID: ProfileID
+    ) async throws {
+        let profile = try await requiredProfile(id: profileID)
+        try await makeWordStore(for: profile).setMembershipsActive(
             ids: ids,
             learningMode: learningMode,
             isActive: isActive
@@ -274,8 +317,25 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     }
 
     private func selectedProfile() async throws -> KidProfile {
+        let requestedProfileID = selectedProfileID
         let profiles = try await profileRepository.profiles()
-        return try resolveSelectedProfile(in: profiles)
+        if let selected = profiles.first(where: { $0.id == requestedProfileID }) {
+            return selected
+        }
+        guard let fallback = profiles.first else {
+            throw GuardianFamilyStoreError.profileNotFound(requestedProfileID)
+        }
+        if selectedProfileID == requestedProfileID {
+            selectedProfileID = fallback.id
+        }
+        return fallback
+    }
+
+    private func requiredProfile(id: ProfileID) async throws -> KidProfile {
+        guard let profile = try await profileRepository.profile(id: id) else {
+            throw GuardianFamilyStoreError.profileNotFound(id)
+        }
+        return profile
     }
 
     private func resolveSelectedProfile(
@@ -306,7 +366,8 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     }
 
     private func validatedValues(
-        from draft: GuardianProfileDraft
+        from draft: GuardianProfileDraft,
+        requiresAge: Bool
     ) throws -> (displayName: String, avatar: ProfileAvatar) {
         let displayName = draft.displayName.trimmingCharacters(
             in: .whitespacesAndNewlines
@@ -319,7 +380,16 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
                 maximumCharacterCount: Self.maximumDisplayNameCharacterCount
             )
         }
-        guard draft.ageYears.map({ (2...18).contains($0) }) ?? true else {
+        guard !requiresAge || draft.ageYears != nil else {
+            throw GuardianFamilyStoreError.invalidAge
+        }
+        let ageIsValid =
+            draft.ageYears.map {
+                requiresAge
+                    ? ProfileAgePolicy.isSupported($0)
+                    : ProfileAgePolicy.isDurable($0)
+            } ?? true
+        guard ageIsValid else {
             throw GuardianFamilyStoreError.invalidAge
         }
         switch draft.avatar {

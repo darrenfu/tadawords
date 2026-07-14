@@ -53,7 +53,12 @@ public struct KidProfile: Codable, Hashable, Sendable {
             : nil
         self.selectedTreasureAvatar = selectedTreasureAvatar
         self.schoolGrade = schoolGrade
-        self.ageYears = ageYears.map { min(18, max(2, $0)) }
+        self.ageYears = ageYears.map {
+            min(
+                ProfileAgePolicy.durableAges.upperBound,
+                max(ProfileAgePolicy.durableAges.lowerBound, $0)
+            )
+        }
         self.voiceprintStatus = voiceprintStatus
         self.createdAt = createdAt
         self.updatedAt = max(createdAt, updatedAt ?? createdAt)

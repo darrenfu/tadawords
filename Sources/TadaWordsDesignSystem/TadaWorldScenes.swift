@@ -29,6 +29,17 @@ enum TadaWorldSceneMotionPolicy {
     }
 }
 
+enum TadaWorldStoryArtLayoutPolicy {
+    static let moonpetalCastleHeightRatio: CGFloat = 0.28
+    static let moonpetalUnicornAdditionalOffset: CGFloat = 10
+    static let moonpetalMinimumDownwardMotion: CGFloat = 0
+    static let moonpetalMaximumDownwardMotion: CGFloat = 3
+
+    static func verticalOffset(canvasHeight: CGFloat) -> CGFloat {
+        min(max(canvasHeight, 0) * 0.05, 32)
+    }
+}
+
 public enum TadaMascotPose: Sendable {
     case resting
     case cheering
@@ -468,6 +479,9 @@ private struct MoonpetalScene: View {
     var body: some View {
         GeometryReader { proxy in
             let layout = MoonpetalSceneDecorationLayout(canvasSize: proxy.size)
+            let storyOffset = TadaWorldStoryArtLayoutPolicy.verticalOffset(
+                canvasHeight: proxy.size.height
+            )
             ZStack {
                 MoonpetalRainbow(theme: theme)
                     .frame(width: layout.rainbowSize.width, height: layout.rainbowSize.height)
@@ -497,13 +511,28 @@ private struct MoonpetalScene: View {
                     .frame(maxHeight: .infinity, alignment: .bottom)
 
                 MoonpetalCastle(theme: theme)
-                    .frame(width: proxy.size.width * 0.22, height: proxy.size.height * 0.32)
-                    .position(x: proxy.size.width * 0.14, y: proxy.size.height * 0.80)
+                    .frame(
+                        width: proxy.size.width * 0.22,
+                        height: proxy.size.height
+                            * TadaWorldStoryArtLayoutPolicy.moonpetalCastleHeightRatio
+                    )
+                    .position(
+                        x: proxy.size.width * 0.14,
+                        y: proxy.size.height * 0.80 + storyOffset
+                    )
 
                 MoonpetalUnicorn(theme: theme)
                     .frame(width: layout.unicornSize.width, height: layout.unicornSize.height)
-                    .position(layout.unicornCenter)
-                    .offset(y: isDrifting ? -4 : 3)
+                    .position(
+                        x: layout.unicornCenter.x,
+                        y: layout.unicornCenter.y + storyOffset
+                            + TadaWorldStoryArtLayoutPolicy.moonpetalUnicornAdditionalOffset
+                    )
+                    .offset(
+                        y: isDrifting
+                            ? TadaWorldStoryArtLayoutPolicy.moonpetalMinimumDownwardMotion
+                            : TadaWorldStoryArtLayoutPolicy.moonpetalMaximumDownwardMotion
+                    )
             }
         }
     }
@@ -523,9 +552,9 @@ struct MoonpetalSceneDecorationLayout: Equatable {
         rainbowCenter = CGPoint(x: canvasSize.width * 0.12, y: canvasSize.height * 0.27)
         unicornSize = CGSize(
             width: min(canvasSize.width * 0.13, canvasSize.height * 0.29),
-            height: min(canvasSize.width * 0.12, canvasSize.height * 0.27)
+            height: min(canvasSize.width * 0.108, canvasSize.height * 0.27)
         )
-        unicornCenter = CGPoint(x: canvasSize.width * 0.88, y: canvasSize.height * 0.80)
+        unicornCenter = CGPoint(x: canvasSize.width * 0.91, y: canvasSize.height * 0.80)
     }
 }
 
@@ -664,9 +693,9 @@ private struct MoonpetalUnicorn: View {
 
                 Triangle()
                     .fill(theme.sceneAccent.opacity(0.76))
-                    .frame(width: unit * 0.17, height: unit * 0.47)
+                    .frame(width: unit * 0.17, height: unit * 0.40)
                     .rotationEffect(.degrees(22))
-                    .offset(x: unit * 0.40, y: -unit * 0.61)
+                    .offset(x: unit * 0.40, y: -unit * 0.55)
 
                 VStack(spacing: -unit * 0.03) {
                     Circle().fill(theme.secondary.opacity(0.72))
@@ -729,6 +758,9 @@ private struct BuildItScene: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let storyOffset = TadaWorldStoryArtLayoutPolicy.verticalOffset(
+                canvasHeight: proxy.size.height
+            )
             ZStack(alignment: .bottom) {
                 Circle()
                     .fill(theme.sceneAccent.opacity(0.48))
@@ -750,6 +782,7 @@ private struct BuildItScene: View {
                 }
                 .padding(.leading, proxy.size.width * 0.26)
                 .padding(.bottom, proxy.size.height * 0.10)
+                .offset(y: storyOffset)
 
                 CraneShape()
                     .stroke(
@@ -759,6 +792,7 @@ private struct BuildItScene: View {
                     )
                     .frame(width: proxy.size.width * 0.28, height: proxy.size.height * 0.54)
                     .position(x: proxy.size.width * 0.13, y: proxy.size.height * 0.54)
+                    .offset(y: storyOffset)
 
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .fill(theme.secondary.opacity(0.40))
@@ -767,6 +801,7 @@ private struct BuildItScene: View {
                         x: proxy.size.width * 0.245,
                         y: proxy.size.height * (isDrifting ? 0.48 : 0.43)
                     )
+                    .offset(y: storyOffset)
 
                 Rectangle()
                     .fill(theme.ground.opacity(0.24))
@@ -791,6 +826,9 @@ private struct PawsScene: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let storyOffset = TadaWorldStoryArtLayoutPolicy.verticalOffset(
+                canvasHeight: proxy.size.height
+            )
             ZStack(alignment: .bottom) {
                 Circle()
                     .fill(theme.sceneAccent.opacity(0.48))
@@ -814,6 +852,7 @@ private struct PawsScene: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, proxy.size.width * 0.05)
                 .padding(.bottom, proxy.size.height * 0.05)
+                .offset(y: storyOffset)
 
                 Image(systemName: "bird.fill")
                     .font(.system(size: max(18, proxy.size.height * 0.05)))

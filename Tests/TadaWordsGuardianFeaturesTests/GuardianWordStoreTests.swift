@@ -1,3 +1,4 @@
+import Foundation
 import TadaWordsContent
 import TadaWordsDomain
 import XCTest
@@ -68,6 +69,172 @@ final class GuardianWordStoreTests: XCTestCase {
         let activeWords = try await store.dashboardSnapshot().readPool
         XCTAssertFalse(activeWords.contains(first))
         XCTAssertTrue(activeWords.contains(second))
+    }
+
+    func testViewModelDeleteAllKeepsOtherPoolAndUndoRestoresEntirePool() async throws {
+        let store = DemoGuardianFamilyStore()
+        let original = try await store.dashboardSnapshot()
+        let model = await MainActor.run {
+            GuardianDashboardViewModel(
+                store: store,
+                audioPromptService: GuardianWordStoreSilentAudioPromptService()
+            )
+        }
+
+        let removed = await model.setWordsActive(original.readPool, isActive: false)
+
+        XCTAssertTrue(removed)
+        let removalSnapshot = await MainActor.run { model.snapshot }
+        let afterRemoval = try XCTUnwrap(removalSnapshot)
+        XCTAssertTrue(afterRemoval.readPool.isEmpty)
+        XCTAssertEqual(afterRemoval.writePool, original.writePool)
+        let pendingUndo = await MainActor.run { model.undoWordsByMode[.read] }
+        let undo = try XCTUnwrap(pendingUndo)
+        XCTAssertEqual(undo, original.readPool)
+
+        let restored = await model.setWordsActive(undo, isActive: true)
+
+        XCTAssertTrue(restored)
+        let undoSnapshot = await MainActor.run { model.snapshot }
+        let afterUndo = try XCTUnwrap(undoSnapshot)
+        XCTAssertEqual(afterUndo.readPool, original.readPool)
+        XCTAssertEqual(afterUndo.writePool, original.writePool)
+        let clearedUndo = await MainActor.run { model.undoWordsByMode[.read] }
+        XCTAssertNil(clearedUndo)
+    }
+
+    func testWordRemovalUndoAndConfirmationStayScopedToEachProfile() async throws {
+        let profileRepository = InMemoryKidProfileRepository()
+        let firstProfile = KidProfile(
+            displayName: "Mia",
+            avatar: .cartoonAnimal(assetID: "hare"),
+            selectedWorld: .moonpetalKingdom,
+            createdAt: Date(timeIntervalSince1970: 1_999_999_900)
+        )
+        let secondProfile = KidProfile(
+            displayName: "Leo",
+            avatar: .cartoonAnimal(assetID: "fox"),
+            selectedWorld: .pawsAndPines,
+            createdAt: Date(timeIntervalSince1970: 1_999_999_901)
+        )
+        try await profileRepository.save(firstProfile)
+        try await profileRepository.save(secondProfile)
+        let store = RepositoryGuardianFamilyStore(
+            profiles: [firstProfile, secondProfile],
+            selectedProfileID: firstProfile.id,
+            profileRepository: profileRepository,
+            wordPoolRepository: InMemoryWordPoolRepository(),
+            practiceSettingsRepository: InMemoryPracticeSettingsRepository(),
+            clock: GuardianWordStoreFixedClock(now: Date(timeIntervalSince1970: 2_000_000_000))
+        )
+        _ = try await store.importWords(
+            GuardianWordImportRequest(rawText: "cat", learningMode: .read)
+        )
+        _ = try await store.selectProfile(id: secondProfile.id)
+        _ = try await store.importWords(
+            GuardianWordImportRequest(rawText: "dog", learningMode: .read)
+        )
+        _ = try await store.selectProfile(id: firstProfile.id)
+        let model = await MainActor.run {
+            GuardianDashboardViewModel(
+                store: store,
+                audioPromptService: GuardianWordStoreSilentAudioPromptService()
+            )
+        }
+        await MainActor.run { model.unlockGuardianArea() }
+        try await waitForProfile(firstProfile.id, in: model)
+
+        let firstWords = try await MainActor.run {
+            try XCTUnwrap(model.snapshot).readPool
+        }
+        await MainActor.run { model.setWordRemovalConfirmation(true) }
+        let removedFirstWords = await model.setWordsActive(firstWords, isActive: false)
+        XCTAssertTrue(removedFirstWords)
+
+        await MainActor.run { model.selectProfile(secondProfile) }
+        try await waitForProfile(secondProfile.id, in: model)
+
+        let secondProfileState = await MainActor.run {
+            (
+                model.hasConfirmedWordRemovalThisSession,
+                model.undoWordsByMode[.read],
+                model.snapshot?.readPool
+            )
+        }
+        XCTAssertFalse(secondProfileState.0)
+        XCTAssertNil(secondProfileState.1)
+        XCTAssertEqual(secondProfileState.2?.map(\.normalizedText), ["dog"])
+
+        await MainActor.run { model.selectProfile(firstProfile) }
+        try await waitForProfile(firstProfile.id, in: model)
+
+        let restoredFirstProfileState = await MainActor.run {
+            (
+                model.hasConfirmedWordRemovalThisSession,
+                model.undoWordsByMode[.read]
+            )
+        }
+        XCTAssertTrue(restoredFirstProfileState.0)
+        XCTAssertEqual(restoredFirstProfileState.1, firstWords)
+    }
+
+    @MainActor
+    func testPresetRollbackUsesExactIDsAfterImportRefreshFailure() async throws {
+        let profileRepository = InMemoryKidProfileRepository()
+        let profile = KidProfile(
+            displayName: "Mia",
+            avatar: .cartoonAnimal(assetID: "hare"),
+            selectedWorld: .moonpetalKingdom,
+            createdAt: Date(timeIntervalSince1970: 1_999_999_900)
+        )
+        try await profileRepository.save(profile)
+        let wordRepository = InMemoryWordPoolRepository()
+        let settingsRepository = GuardianFailOnSettingsReadNumber(failingRead: 2)
+        let store = RepositoryGuardianFamilyStore(
+            profiles: [profile],
+            profileRepository: profileRepository,
+            wordPoolRepository: wordRepository,
+            practiceSettingsRepository: settingsRepository,
+            clock: GuardianWordStoreFixedClock(
+                now: Date(timeIntervalSince1970: 2_000_000_000)
+            )
+        )
+        let model = GuardianDashboardViewModel(
+            store: store,
+            audioPromptService: GuardianWordStoreSilentAudioPromptService()
+        )
+        model.unlockGuardianArea()
+        try await waitForProfile(profile.id, in: model)
+        let plan = PresetWordSelectionPlanner().plan(
+            selectedWords: ["dog"],
+            destination: .both,
+            existingReadWords: [],
+            existingWriteWords: []
+        )
+        var submittedModes: [LearningMode] = []
+
+        let outcome = await GuardianPresetImportCoordinator().execute(
+            profileID: profile.id,
+            plan: plan,
+            submit: { profileID, request in
+                submittedModes.append(request.learningMode)
+                guard request.learningMode == .read else { return nil }
+                return await model.addPresetWords(request, for: profileID)
+            },
+            rollback: model.rollbackPresetAdditions
+        )
+
+        XCTAssertEqual(submittedModes, [.read, .write])
+        XCTAssertEqual(outcome, .failure(.rolledBack))
+        let records = try await wordRepository.entries(
+            for: profile.id,
+            learningMode: .read,
+            includingInactive: true
+        )
+        XCTAssertEqual(records.map(\.normalizedText), ["dog"])
+        XCTAssertTrue(records.allSatisfy { !$0.isActive })
+        XCTAssertTrue(model.snapshot?.readPool.isEmpty == true)
+        XCTAssertFalse(model.isUpdatingWordPool)
     }
 
     func testDemoStoreConcurrentRefreshKeepsDashboardAndMutationOnOneProfile()
@@ -294,6 +461,56 @@ final class GuardianWordStoreTests: XCTestCase {
 
         XCTAssertEqual(updatedSnapshot.practiceSettings, settings)
     }
+}
+
+private struct GuardianWordStoreFixedClock: AppClock {
+    let now: Date
+}
+
+private actor GuardianFailOnSettingsReadNumber: PracticeSettingsRepository {
+    private let failingRead: Int
+    private var reads = 0
+
+    init(failingRead: Int) {
+        self.failingRead = failingRead
+    }
+
+    func settings(for profileID: ProfileID) async throws -> ProfilePracticeSettings? {
+        _ = profileID
+        reads += 1
+        if reads >= failingRead {
+            throw GuardianWordStoreInjectedFailure.unavailable
+        }
+        return nil
+    }
+
+    func save(_ settings: ProfilePracticeSettings) async throws {
+        _ = settings
+    }
+
+    func delete(for profileID: ProfileID) async throws {
+        _ = profileID
+    }
+}
+
+private enum GuardianWordStoreInjectedFailure: Error {
+    case unavailable
+}
+
+private struct GuardianWordStoreWaitTimeout: Error {}
+
+private func waitForProfile(
+    _ profileID: ProfileID,
+    in model: GuardianDashboardViewModel
+) async throws {
+    for _ in 0..<200 {
+        let isReady = await MainActor.run {
+            model.snapshot?.profile.id == profileID && !model.isLoading
+        }
+        if isReady { return }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    throw GuardianWordStoreWaitTimeout()
 }
 
 private struct GuardianWordStoreSilentAudioPromptService: AudioPromptService {

@@ -10,7 +10,7 @@ struct ProfileChooserView: View {
     let profiles: [KidProfile]
     let lastPlayedProfileID: ProfileID?
     let onSelect: (KidProfile) -> Void
-    let onCreateProfile: (String) async -> Bool
+    let onCreateProfile: (String, Int?) async -> Bool
     let isCreatingProfile: Bool
     let creationError: String?
     let onDismissCreationError: () -> Void
@@ -462,7 +462,7 @@ private struct NewPlayerCard: View {
                     .foregroundStyle(TadaPrimitiveTokens.ColorValue.ink)
                     .lineLimit(1)
 
-                Label("Pick a nickname", systemImage: "pencil.line")
+                Label("Nickname & age", systemImage: "pencil.line")
                     .font(.system(.caption, design: .rounded, weight: .semibold))
                     .foregroundStyle(TadaWorldTheme.pawsAndPines.primary)
                     .lineLimit(1)
@@ -498,18 +498,19 @@ private struct NewPlayerCard: View {
         }
         .buttonStyle(TadaTactileCardButtonStyle())
         .accessibilityLabel("Create a new kid profile")
-        .accessibilityHint("Enter a nickname and get a surprise animal")
+        .accessibilityHint("Enter a nickname and age, then get a surprise animal")
     }
 }
 
 private struct NewPlayerView: View {
     let isSaving: Bool
     let errorMessage: String?
-    let onSubmit: (String) async -> Bool
+    let onSubmit: (String, Int?) async -> Bool
     let onDismissError: () -> Void
     let onClose: () -> Void
 
     @State private var nickname = ""
+    @State private var ageYears: Int?
     @FocusState private var isNicknameFocused: Bool
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -622,6 +623,25 @@ private struct NewPlayerView: View {
                     onDismissError()
                 }
 
+            TadaAgePicker(
+                selection: $ageYears,
+                ages: ProfileAgePolicy.supportedAges,
+                prompt: "How old are you?",
+                tint: TadaWorldTheme.pawsAndPines.primary
+            )
+
+            if let ageYears,
+                let suggestedGrade = ProfileAgePolicy.suggestedSchoolGrade(
+                    for: ageYears
+                )
+            {
+                Text(
+                    "We’ll start at \(suggestedGrade.displayName). A parent can change your learning level later."
+                )
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(TadaPrimitiveTokens.ColorValue.softInk)
+            }
+
             if let errorMessage {
                 TadaInlineError(errorMessage)
             } else {
@@ -649,7 +669,16 @@ private struct NewPlayerView: View {
                     foreground: .white
                 )
             )
-            .disabled(cleanedNickname.isEmpty || isSaving)
+            .disabled(
+                cleanedNickname.isEmpty
+                    || ageYears == nil
+                    || isSaving
+            )
+            .accessibilityHint(
+                ageYears == nil
+                    ? "Choose your age before creating the profile"
+                    : "Creates this kid profile"
+            )
         }
         .frame(maxWidth: layoutMode == .compactLandscape ? 560 : 470)
     }
@@ -687,9 +716,9 @@ private struct NewPlayerView: View {
     }
 
     private func submit() {
-        guard !cleanedNickname.isEmpty, !isSaving else { return }
+        guard !cleanedNickname.isEmpty, let ageYears, !isSaving else { return }
         Task {
-            if await onSubmit(cleanedNickname) {
+            if await onSubmit(cleanedNickname, ageYears) {
                 onClose()
             }
         }

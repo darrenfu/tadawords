@@ -278,11 +278,11 @@ extension TadaWorldTheme {
         backgroundBottom: Color(red: 1.00, green: 0.83, blue: 0.73),
         surface: Color.white.opacity(0.91),
         ink: Color(red: 0.30, green: 0.07, blue: 0.08),
-        motifSymbol: "firetruck.fill",
+        motifSymbol: "truck.box.fill",
         rewardName: "Hero Badge",
         rewardSymbol: "shield.fill",
         rewardSymbols: [
-            "shield.fill", "firetruck.fill", "flame.fill", "drop.fill",
+            "shield.fill", "truck.box.fill", "flame.fill", "drop.fill",
             "light.beacon.max.fill", "medal.fill",
         ],
         ground: Color(red: 0.39, green: 0.43, blue: 0.48),

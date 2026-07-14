@@ -13,7 +13,9 @@ final class RepositoryGuardianFamilyStoreTests: XCTestCase {
             from: GuardianProfileDraft(
                 displayName: "  Leo  ",
                 avatarAssetID: "bear",
-                selectedWorld: .buildItBay
+                selectedWorld: .buildItBay,
+                schoolGrade: .kindergarten,
+                ageYears: 5
             )
         )
         let family = try await fixture.store.familySnapshot()
@@ -26,6 +28,8 @@ final class RepositoryGuardianFamilyStoreTests: XCTestCase {
             .cartoonAnimal(assetID: "bear")
         )
         XCTAssertEqual(dashboard.profile.selectedWorld, .buildItBay)
+        XCTAssertEqual(dashboard.profile.schoolGrade, .kindergarten)
+        XCTAssertEqual(dashboard.profile.ageYears, 5)
         XCTAssertTrue(dashboard.readPool.isEmpty)
         XCTAssertTrue(dashboard.writePool.isEmpty)
         XCTAssertEqual(
@@ -44,7 +48,8 @@ final class RepositoryGuardianFamilyStoreTests: XCTestCase {
             from: GuardianProfileDraft(
                 displayName: "Leo",
                 avatarAssetID: "fox",
-                selectedWorld: .pawsAndPines
+                selectedWorld: .pawsAndPines,
+                ageYears: 4
             )
         ).profile
         _ = try await fixture.store.importWords(
@@ -86,6 +91,76 @@ final class RepositoryGuardianFamilyStoreTests: XCTestCase {
         XCTAssertEqual(restoredFirst.writePool.map(\.normalizedText), ["dog"])
     }
 
+    func testPresetBothRemainsBoundToInitiatingProfileAfterSelectionChanges()
+        async throws
+    {
+        let fixture = try await makeFixture()
+        let secondProfile = try await fixture.store.createProfile(
+            from: GuardianProfileDraft(
+                displayName: "Leo",
+                avatarAssetID: "fox",
+                selectedWorld: .pawsAndPines,
+                ageYears: 4
+            )
+        ).profile
+        _ = try await fixture.store.selectProfile(id: fixture.firstProfile.id)
+        let plan = PresetWordSelectionPlanner().plan(
+            selectedWords: ["dog"],
+            destination: .both,
+            existingReadWords: [],
+            existingWriteWords: []
+        )
+
+        let outcome = await GuardianPresetImportCoordinator().execute(
+            profileID: fixture.firstProfile.id,
+            plan: plan,
+            submit: { profileID, request in
+                let report = try? await fixture.store.importWords(
+                    request,
+                    for: profileID
+                )
+                if request.learningMode == .read {
+                    _ = try? await fixture.store.selectProfile(id: secondProfile.id)
+                }
+                return report
+            },
+            rollback: { request in
+                do {
+                    try await fixture.store.setMembershipsActive(
+                        ids: request.membershipIDs,
+                        learningMode: request.learningMode,
+                        isActive: false,
+                        for: request.profileID
+                    )
+                    return true
+                } catch {
+                    return false
+                }
+            }
+        )
+
+        XCTAssertEqual(
+            outcome,
+            .success(
+                GuardianPresetImportSummary(
+                    addedMembershipCount: 2,
+                    reactivatedMembershipCount: 0,
+                    alreadyPresentMembershipCount: 0
+                )
+            )
+        )
+        let first = try await fixture.store.dashboardSnapshot(
+            for: fixture.firstProfile.id
+        )
+        let second = try await fixture.store.dashboardSnapshot(for: secondProfile.id)
+        let family = try await fixture.store.familySnapshot()
+        XCTAssertEqual(first.readPool.map(\.normalizedText), ["dog"])
+        XCTAssertEqual(first.writePool.map(\.normalizedText), ["dog"])
+        XCTAssertTrue(second.readPool.isEmpty)
+        XCTAssertTrue(second.writePool.isEmpty)
+        XCTAssertEqual(family.selectedProfileID, secondProfile.id)
+    }
+
     func testEditPreservesIdentityCreationDateAndVoiceprint() async throws {
         let fixture = try await makeFixture(
             voiceprintStatus: .enrolled(
@@ -108,6 +183,7 @@ final class RepositoryGuardianFamilyStoreTests: XCTestCase {
         XCTAssertEqual(updated.voiceprintStatus, fixture.firstProfile.voiceprintStatus)
         XCTAssertEqual(updated.displayName, "Ava")
         XCTAssertEqual(updated.avatar, .cartoonAnimal(assetID: "owl"))
+        XCTAssertNil(updated.ageYears)
     }
 
     func testInvalidDraftsDoNotCreateProfiles() async throws {
@@ -128,8 +204,20 @@ final class RepositoryGuardianFamilyStoreTests: XCTestCase {
             _ = try await fixture.store.createProfile(
                 from: GuardianProfileDraft(
                     displayName: "Nora",
-                    avatarAssetID: "not-built-in",
+                    avatarAssetID: "hare",
                     selectedWorld: .pawsAndPines
+                )
+            )
+        } verify: { error in
+            XCTAssertEqual(error as? GuardianFamilyStoreError, .invalidAge)
+        }
+        await assertThrowsErrorAsync {
+            _ = try await fixture.store.createProfile(
+                from: GuardianProfileDraft(
+                    displayName: "Nora",
+                    avatarAssetID: "not-built-in",
+                    selectedWorld: .pawsAndPines,
+                    ageYears: 4
                 )
             )
         } verify: { error in
@@ -165,7 +253,8 @@ final class RepositoryGuardianFamilyStoreTests: XCTestCase {
                 from: GuardianProfileDraft(
                     displayName: "Leo",
                     avatarAssetID: "fox",
-                    selectedWorld: .buildItBay
+                    selectedWorld: .buildItBay,
+                    ageYears: 4
                 )
             )
         } verify: { _ in

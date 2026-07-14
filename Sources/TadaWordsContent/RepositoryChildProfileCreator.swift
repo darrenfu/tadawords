@@ -27,6 +27,7 @@ public actor RepositoryChildProfileCreator: ChildProfileCreating {
 
     public func createProfile(
         displayName: String,
+        ageYears: Int,
         existingProfiles: [KidProfile]
     ) async throws -> KidProfile {
         let nickname = displayName.trimmingCharacters(
@@ -40,9 +41,18 @@ public actor RepositoryChildProfileCreator: ChildProfileCreating {
                 maximumCharacterCount: Self.maximumDisplayNameCharacterCount
             )
         }
+        guard
+            let suggestedGrade = ProfileAgePolicy.suggestedSchoolGrade(
+                for: ageYears
+            )
+        else {
+            throw ChildProfileCreationError.invalidAge
+        }
 
         let profile = makeProfile(
             nickname: nickname,
+            ageYears: ageYears,
+            schoolGrade: suggestedGrade,
             existingProfiles: existingProfiles
         )
         do {
@@ -66,6 +76,8 @@ public actor RepositoryChildProfileCreator: ChildProfileCreating {
 
     private func makeProfile(
         nickname: String,
+        ageYears: Int,
+        schoolGrade: ProfileSchoolGrade,
         existingProfiles: [KidProfile]
     ) -> KidProfile {
         let nextIndex = existingProfiles.count
@@ -75,6 +87,8 @@ public actor RepositoryChildProfileCreator: ChildProfileCreating {
                 assetID: Self.avatarAssetIDs[nextIndex % Self.avatarAssetIDs.count]
             ),
             selectedWorld: Self.worlds[nextIndex % Self.worlds.count],
+            schoolGrade: schoolGrade,
+            ageYears: ageYears,
             createdAt: clock.now
         )
     }

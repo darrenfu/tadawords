@@ -122,8 +122,15 @@ final class TadaWordsAppModel: ObservableObject {
     }
 
     @discardableResult
-    func createChildProfileAndWait(nickname: String) async -> Bool {
+    func createChildProfileAndWait(
+        nickname: String,
+        ageYears: Int?
+    ) async -> Bool {
         guard !isCreatingChildProfile else { return false }
+        guard let ageYears, ProfileAgePolicy.isSupported(ageYears) else {
+            childProfileCreationError = Self.message(for: .invalidAge)
+            return false
+        }
         guard let childProfileCreator else {
             childProfileCreationError = Self.creationFailureMessage
             return false
@@ -133,6 +140,7 @@ final class TadaWordsAppModel: ObservableObject {
         do {
             let profile = try await childProfileCreator.createProfile(
                 displayName: nickname,
+                ageYears: ageYears,
                 existingProfiles: profiles
             )
             profiles.append(profile)
@@ -1311,6 +1319,8 @@ final class TadaWordsAppModel: ObservableObject {
             "Type your nickname first."
         case .displayNameTooLong(let maximumCharacterCount):
             "Keep your nickname to \(maximumCharacterCount) letters or fewer."
+        case .invalidAge:
+            "Choose your age, then try again."
         case .settingsPersistenceFailed, .profilePersistenceFailed,
             .rollbackFailed:
             creationFailureMessage

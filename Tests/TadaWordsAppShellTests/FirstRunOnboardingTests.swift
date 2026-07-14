@@ -325,6 +325,7 @@ final class FirstRunOnboardingTests: XCTestCase {
         XCTAssertEqual(saved.displayName, "Coco")
         XCTAssertEqual(saved.avatar, .cartoonAnimal(assetID: "owl"))
         XCTAssertEqual(saved.schoolGrade, .kindergarten)
+        XCTAssertEqual(saved.ageYears, 4)
         XCTAssertEqual(saved.selectedWorld, .buildItBay)
         XCTAssertEqual(saved.starterWorld, .buildItBay)
         XCTAssertEqual(saved.guardianUnlockedWorlds, [.buildItBay])
@@ -382,6 +383,44 @@ final class FirstRunOnboardingTests: XCTestCase {
             .lastSelectedProfileID()
         XCTAssertEqual(state?.status, .pending)
         XCTAssertNil(selectedProfileID)
+    }
+
+    func testCompletionRequiresAgeWithoutOverwritingSelectedGrade() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let environment = try await bootstrap(in: directory)
+        let coordinator = FirstRunOnboardingCoordinator(
+            profileRepository: environment.profileRepository,
+            childSessionRepository: environment.childSessionRepository,
+            onboardingRepository: environment.firstRunOnboardingRepository,
+            guardianStore: environment.guardianStore,
+            clock: OnboardingClock(now: testDate.addingTimeInterval(50))
+        )
+
+        do {
+            _ = try await coordinator.complete(
+                profileID: defaultProfile.id,
+                submission: FirstRunOnboardingSubmission(
+                    action: .createProfile(
+                        GuardianProfileDraft(
+                            displayName: "Coco",
+                            avatarAssetID: "hare",
+                            selectedWorld: .moonpetalKingdom,
+                            schoolGrade: .grade1
+                        )
+                    )
+                )
+            )
+            XCTFail("Expected age to be required")
+        } catch {
+            XCTAssertEqual(error as? FirstRunOnboardingError, .invalidAge)
+        }
+
+        let persisted = try await environment.profileRepository.profile(
+            id: defaultProfile.id
+        )
+        XCTAssertEqual(persisted?.schoolGrade, defaultProfile.schoolGrade)
+        XCTAssertNil(persisted?.ageYears)
     }
 
     func testCompletionRejectsStaleConsentBeforeMutatingProfile() async throws {

@@ -85,7 +85,9 @@ final class WordPoolRepositoryTests: XCTestCase {
         XCTAssertEqual(history.map(\.normalizedText), ["legacy"])
     }
 
-    func testReenteringWordPreservesStableIdentityAndReactivatesIt() async throws {
+    func testReenteringInactiveWordPreservesStableIdentityAndReactivatesIt()
+        async throws
+    {
         let repository = InMemoryWordPoolRepository()
         let importer = ManualWordPoolImporter(repository: repository)
         let firstDate = ContentTestFixture.day.addingTimeInterval(-86_400)
@@ -107,14 +109,62 @@ final class WordPoolRepositoryTests: XCTestCase {
             addedAt: secondDate,
             source: .gradeRecommendation
         )
-        let requeued = try XCTUnwrap(second.requeuedExisting.first)
+        let reactivated = try XCTUnwrap(second.reactivated.first)
 
+        XCTAssertEqual(reactivated.id, original.id)
+        XCTAssertEqual(reactivated.prompt.id, original.prompt.id)
+        XCTAssertEqual(reactivated.addedAt, firstDate)
+        XCTAssertEqual(reactivated.source, .guardianManual)
+        XCTAssertEqual(reactivated.lastQueuedAt, secondDate)
+        XCTAssertTrue(reactivated.isActive)
+        XCTAssertTrue(second.alreadyActive.isEmpty)
+    }
+
+    func testReenteringActiveWordClassifiesItAndMovesItNewestFirst()
+        async throws
+    {
+        let repository = InMemoryWordPoolRepository()
+        let importer = ManualWordPoolImporter(repository: repository)
+        let firstDate = ContentTestFixture.day.addingTimeInterval(-120)
+
+        let first = try await importer.importBatch(
+            "cat",
+            profileID: ContentTestFixture.profileID,
+            learningMode: .read,
+            addedAt: firstDate
+        )
+        let original = try XCTUnwrap(first.inserted.first)
+        _ = try await importer.importBatch(
+            "dog",
+            profileID: ContentTestFixture.profileID,
+            learningMode: .read,
+            addedAt: ContentTestFixture.day.addingTimeInterval(-60)
+        )
+
+        let duplicate = try await importer.importBatch(
+            "123 ＣＡＴ",
+            profileID: ContentTestFixture.profileID,
+            learningMode: .read,
+            addedAt: ContentTestFixture.day
+        )
+
+        let requeued = try XCTUnwrap(duplicate.alreadyActive.first)
         XCTAssertEqual(requeued.id, original.id)
         XCTAssertEqual(requeued.prompt.id, original.prompt.id)
-        XCTAssertEqual(requeued.addedAt, firstDate)
-        XCTAssertEqual(requeued.source, .guardianManual)
-        XCTAssertEqual(requeued.lastQueuedAt, secondDate)
+        XCTAssertEqual(requeued.addedAt, original.addedAt)
+        XCTAssertEqual(requeued.source, original.source)
+        XCTAssertEqual(requeued.lastQueuedAt, ContentTestFixture.day)
+        XCTAssertEqual(requeued.positionInLastBatch, 1)
         XCTAssertTrue(requeued.isActive)
+        XCTAssertTrue(duplicate.inserted.isEmpty)
+        XCTAssertTrue(duplicate.reactivated.isEmpty)
+        let entries = try await repository.entries(
+            for: ContentTestFixture.profileID,
+            learningMode: .read,
+            includingInactive: true
+        )
+        XCTAssertEqual(entries.map(\.normalizedText), ["cat", "dog"])
+        XCTAssertEqual(entries.first, requeued)
     }
 
     func testSameWordCanExistAcrossProfilesAndModes() async throws {
@@ -154,9 +204,9 @@ final class WordPoolRepositoryTests: XCTestCase {
         let repository = InMemoryWordPoolRepository()
         let importer = ManualWordPoolImporter(repository: repository)
 
-        let returnedIDs = await withTaskGroup(
-            of: WordPoolEntryID?.self,
-            returning: [WordPoolEntryID].self
+        let results = await withTaskGroup(
+            of: ManualWordPoolImportResult?.self,
+            returning: [ManualWordPoolImportResult].self
         ) { group in
             for offset in 0..<20 {
                 group.addTask {
@@ -166,26 +216,32 @@ final class WordPoolRepositoryTests: XCTestCase {
                         learningMode: .read,
                         addedAt: ContentTestFixture.day.addingTimeInterval(Double(offset))
                     )
-                    return result?.inserted.first?.id
-                        ?? result?.requeuedExisting.first?.id
+                    return result
                 }
             }
 
-            var ids: [WordPoolEntryID] = []
-            for await id in group {
-                if let id { ids.append(id) }
+            var results: [ManualWordPoolImportResult] = []
+            for await result in group {
+                if let result { results.append(result) }
             }
-            return ids
+            return results
         }
 
+        let inserted = results.flatMap(\.inserted)
+        let reactivated = results.flatMap(\.reactivated)
+        let alreadyActive = results.flatMap(\.alreadyActive)
         let storedEntries = try await repository.entries(
             for: ContentTestFixture.profileID,
             learningMode: .read,
             includingInactive: true
         )
-        XCTAssertEqual(returnedIDs.count, 20)
-        XCTAssertEqual(Set(returnedIDs).count, 1)
+        XCTAssertEqual(results.count, 20)
+        XCTAssertEqual(inserted.count, 1)
+        XCTAssertTrue(reactivated.isEmpty)
+        XCTAssertEqual(alreadyActive.count, 19)
+        XCTAssertEqual(Set((inserted + alreadyActive).map(\.id)).count, 1)
         XCTAssertEqual(storedEntries.count, 1)
+        XCTAssertEqual(storedEntries.first?.id, inserted.first?.id)
         XCTAssertEqual(
             storedEntries.first?.lastQueuedAt,
             ContentTestFixture.day.addingTimeInterval(19)

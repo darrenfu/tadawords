@@ -40,8 +40,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app
         PRODUCT_NAME: Tada Words
-        MARKETING_VERSION: 0.3.0
-        CURRENT_PROJECT_VERSION: 2026071401
+        MARKETING_VERSION: 0.3.1
+        CURRENT_PROJECT_VERSION: 2026071405
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: false
@@ -59,8 +59,8 @@ targets:
       path: Apps/TadaWordsApp/Info.plist
       properties:
         CFBundleDisplayName: Tada Words
-        CFBundleShortVersionString: "0.3.0"
-        CFBundleVersion: "2026071401"
+        CFBundleShortVersionString: "0.3.1"
+        CFBundleVersion: "2026071405"
         CKSharingSupported: true
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: Tada Words uses the microphone after a child taps Record to check a spoken practice word or capture a voice-setup sample. Raw audio is not saved or uploaded.
@@ -80,6 +80,28 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+
+  TadaWordsDeviceTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/TadaWordsDeviceTests
+    dependencies:
+      - target: TadaWords
+      - package: TadaWordsModules
+        product: TadaWordsApplePlatform
+      - package: TadaWordsModules
+        product: TadaWordsDomain
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app.devicetests
+        GENERATE_INFOPLIST_FILE: true
+        CODE_SIGN_STYLE: Automatic
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Tada Words.app/Tada Words"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+      configs:
+        LocalQA:
+          TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Tada Words QA.app/Tada Words QA"
 
   TadaWordsUITests:
     type: bundle.ui-testing
@@ -123,3 +145,12 @@ schemes:
       config: LocalQA
     archive:
       config: LocalQA
+  TadaWordsDeviceTests:
+    build:
+      targets:
+        TadaWords: [test]
+        TadaWordsDeviceTests: [test]
+    test:
+      config: LocalQA
+      targets:
+        - name: TadaWordsDeviceTests

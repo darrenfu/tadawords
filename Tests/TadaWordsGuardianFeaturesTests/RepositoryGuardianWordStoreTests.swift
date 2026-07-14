@@ -6,6 +6,54 @@ import XCTest
 @testable import TadaWordsGuardianFeatures
 
 final class RepositoryGuardianWordStoreTests: XCTestCase {
+    func testPostCommitSnapshotFailureCompensatesEntireBatchRemoval() async throws {
+        let wordRepository = InMemoryWordPoolRepository()
+        let settingsRepository = FailOnSettingsReadNumber(failingRead: 2)
+        let profile = makeProfile(number: 91, name: "Ava")
+        let prompts = [
+            try WordPrompt(learningMode: .read, text: "cat"),
+            try WordPrompt(learningMode: .read, text: "dog"),
+        ]
+        _ = try await wordRepository.upsert(
+            prompts.enumerated().map { index, prompt in
+                WordPoolEntryDraft(
+                    profileID: profile.id,
+                    prompt: prompt,
+                    addedAt: testDate,
+                    source: .guardianManual,
+                    positionInBatch: index
+                )
+            }
+        )
+        let store = RepositoryGuardianWordStore(
+            profile: profile,
+            wordPoolRepository: wordRepository,
+            practiceSettingsRepository: settingsRepository,
+            clock: FixedGuardianClock(now: testDate)
+        )
+
+        do {
+            _ = try await store.setWordsActive(
+                ids: prompts.map(\.id),
+                learningMode: .read,
+                isActive: false
+            )
+            XCTFail("Expected the post-mutation dashboard read to fail")
+        } catch GuardianWordStoreTestFailure.unavailable {
+            // The mutation was compensated before the read error escaped.
+        }
+
+        let entries = try await wordRepository.entries(
+            for: profile.id,
+            learningMode: .read,
+            includingInactive: true
+        )
+        XCTAssertEqual(Set(entries.map(\.prompt.id)), Set(prompts.map(\.id)))
+        XCTAssertTrue(entries.allSatisfy(\.isActive))
+        let settingsReadCount = await settingsRepository.readCount()
+        XCTAssertEqual(settingsReadCount, 2)
+    }
+
     func testDependentReadFailureCannotPartiallyDeactivateWord() async throws {
         let wordRepository = InMemoryWordPoolRepository()
         let profile = makeProfile(number: 90, name: "Ava")
@@ -204,8 +252,9 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
         async throws
     {
         let repository = InMemoryWordPoolRepository()
+        let profile = makeProfile(number: 1, name: "Ava")
         let store = makeStore(
-            profile: makeProfile(number: 1, name: "Ava"),
+            profile: profile,
             repository: repository
         )
         _ = try await store.importWords(
@@ -219,9 +268,57 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
             )
         )
 
+        XCTAssertEqual(report.profileID, profile.id)
         XCTAssertEqual(report.accepted, ["dog"])
         XCTAssertEqual(report.duplicates, ["cat", "dog"])
+        XCTAssertEqual(
+            report.insertedMemberships.map(\.normalizedText),
+            ["dog"]
+        )
+        XCTAssertTrue(report.reactivatedMemberships.isEmpty)
+        XCTAssertEqual(
+            report.alreadyActiveMemberships.map(\.normalizedText),
+            ["cat"]
+        )
+        XCTAssertEqual(report.duplicateInputWords, ["dog"])
         XCTAssertEqual(report.rejected.map(\.sourceText), ["bad!"])
+    }
+
+    func testImportReportKeepsExactMembershipIdentityAcrossRestoreAndActiveDuplicate()
+        async throws
+    {
+        let repository = InMemoryWordPoolRepository()
+        let profile = makeProfile(number: 92, name: "Ava")
+        let store = makeStore(profile: profile, repository: repository)
+        let inserted = try await store.importWords(
+            GuardianWordImportRequest(rawText: "dog", learningMode: .read)
+        )
+        let original = try XCTUnwrap(inserted.insertedMemberships.first)
+        try await store.setMembershipsActive(
+            ids: [original.entryID],
+            learningMode: .read,
+            isActive: false
+        )
+
+        let restored = try await store.importWords(
+            GuardianWordImportRequest(rawText: "dog", learningMode: .read)
+        )
+
+        XCTAssertEqual(restored.profileID, profile.id)
+        XCTAssertEqual(restored.reactivatedMemberships, [original])
+        XCTAssertTrue(restored.insertedMemberships.isEmpty)
+        XCTAssertTrue(restored.alreadyActiveMemberships.isEmpty)
+        XCTAssertEqual(restored.changedMemberships, [original])
+
+        let activeDuplicate = try await store.importWords(
+            GuardianWordImportRequest(rawText: "dog", learningMode: .read)
+        )
+
+        XCTAssertEqual(activeDuplicate.profileID, profile.id)
+        XCTAssertEqual(activeDuplicate.alreadyActiveMemberships, [original])
+        XCTAssertTrue(activeDuplicate.insertedMemberships.isEmpty)
+        XCTAssertTrue(activeDuplicate.reactivatedMemberships.isEmpty)
+        XCTAssertTrue(activeDuplicate.changedMemberships.isEmpty)
     }
 
     func testPracticeSettingsPersistExactlyWithoutChangingPools()
@@ -486,6 +583,124 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
             isActive: true
         )
         XCTAssertEqual(restored.readPool.map(\.normalizedText), ["cat", "dog", "fox"])
+    }
+
+    func testBatchRemovalCanClearOnePoolWithoutAffectingOtherMode() async throws {
+        let repository = InMemoryWordPoolRepository()
+        let profile = makeProfile(number: 1, name: "Ava")
+        let store = makeStore(profile: profile, repository: repository)
+        _ = try await store.importWords(
+            GuardianWordImportRequest(
+                rawText: "cat dog fox",
+                learningMode: .read
+            )
+        )
+        _ = try await store.importWords(
+            GuardianWordImportRequest(
+                rawText: "sun moon",
+                learningMode: .write
+            )
+        )
+        let original = try await store.dashboardSnapshot()
+
+        let removed = try await store.setWordsActive(
+            ids: original.readPool.map(\.id),
+            learningMode: .read,
+            isActive: false
+        )
+
+        XCTAssertTrue(removed.readPool.isEmpty)
+        XCTAssertEqual(removed.writePool, original.writePool)
+
+        let restored = try await store.setWordsActive(
+            ids: original.readPool.map(\.id),
+            learningMode: .read,
+            isActive: true
+        )
+        XCTAssertEqual(restored.readPool, original.readPool)
+        XCTAssertEqual(restored.writePool, original.writePool)
+    }
+
+    func testDeleteAllKeepsLegacyRecommendationsHidden() async throws {
+        let repository = InMemoryWordPoolRepository()
+        let profile = makeProfile(number: 1, name: "Ava")
+        let manualPrompt = try WordPrompt(learningMode: .read, text: "cat")
+        let legacyPrompt = try WordPrompt(learningMode: .read, text: "legacy")
+        _ = try await repository.upsert([
+            WordPoolEntryDraft(
+                profileID: profile.id,
+                prompt: manualPrompt,
+                addedAt: testDate,
+                source: .guardianManual,
+                positionInBatch: 0
+            ),
+            WordPoolEntryDraft(
+                profileID: profile.id,
+                prompt: legacyPrompt,
+                addedAt: testDate,
+                source: .gradeRecommendation,
+                positionInBatch: 1
+            ),
+        ])
+        let store = makeStore(profile: profile, repository: repository)
+        let initialWords = try await store.dashboardSnapshot().readPool
+        XCTAssertEqual(initialWords.map(\.normalizedText), ["cat"])
+
+        let removed = try await store.setWordsActive(
+            ids: [manualPrompt.id],
+            learningMode: .read,
+            isActive: false
+        )
+        let refreshed = try await store.dashboardSnapshot()
+
+        XCTAssertTrue(removed.readPool.isEmpty)
+        XCTAssertTrue(refreshed.readPool.isEmpty)
+    }
+
+    func testDeleteAllAndUndoRecomputeWaitingCountAndAttention() async throws {
+        let repository = InMemoryWordPoolRepository()
+        let learningRepository = InMemoryLearningRecordRepository()
+        let profile = makeProfile(number: 1, name: "Ava")
+        let store = makeStore(
+            profile: profile,
+            repository: repository,
+            learningRepository: learningRepository
+        )
+        _ = try await store.importWords(
+            GuardianWordImportRequest(rawText: "cat dog", learningMode: .read)
+        )
+        let original = try await store.dashboardSnapshot()
+        let cat = try XCTUnwrap(
+            original.readPool.first { $0.normalizedText == "cat" }
+        )
+        try await saveMissedEvidence(
+            prompt: cat,
+            profileID: profile.id,
+            in: learningRepository
+        )
+        let withAttention = try await store.dashboardSnapshot()
+        XCTAssertEqual(withAttention.todaySummary.read.waitingPoolCount, 2)
+        XCTAssertEqual(withAttention.needsAttention.map(\.prompt.id), [cat.id])
+
+        let removed = try await store.setWordsActive(
+            ids: withAttention.readPool.map(\.id),
+            learningMode: .read,
+            isActive: false
+        )
+
+        XCTAssertTrue(removed.readPool.isEmpty)
+        XCTAssertEqual(removed.todaySummary.read.waitingPoolCount, 0)
+        XCTAssertTrue(removed.needsAttention.isEmpty)
+
+        let restored = try await store.setWordsActive(
+            ids: withAttention.readPool.map(\.id),
+            learningMode: .read,
+            isActive: true
+        )
+
+        XCTAssertEqual(restored.readPool, withAttention.readPool)
+        XCTAssertEqual(restored.todaySummary.read.waitingPoolCount, 2)
+        XCTAssertEqual(restored.needsAttention.map(\.prompt.id), [cat.id])
     }
 
     func testAmbiguousWordUsesCanonicalPronunciationWithoutContext()
@@ -762,6 +977,34 @@ private actor FailingGuardianPracticeSettingsRepository: PracticeSettingsReposit
         _ = profileID
         throw GuardianWordStoreTestFailure.unavailable
     }
+}
+
+private actor FailOnSettingsReadNumber: PracticeSettingsRepository {
+    private let failingRead: Int
+    private var reads = 0
+
+    init(failingRead: Int) {
+        self.failingRead = failingRead
+    }
+
+    func settings(for profileID: ProfileID) async throws -> ProfilePracticeSettings? {
+        _ = profileID
+        reads += 1
+        if reads == failingRead {
+            throw GuardianWordStoreTestFailure.unavailable
+        }
+        return nil
+    }
+
+    func save(_ settings: ProfilePracticeSettings) async throws {
+        _ = settings
+    }
+
+    func delete(for profileID: ProfileID) async throws {
+        _ = profileID
+    }
+
+    func readCount() -> Int { reads }
 }
 
 private enum GuardianWordStoreTestFailure: Error {

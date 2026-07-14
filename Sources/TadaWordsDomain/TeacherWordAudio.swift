@@ -1,28 +1,39 @@
 import Foundation
 
-/// The only word-pronunciation contract exposed by the app. The service owns
-/// the canonical ElevenLabs voice and its credentials; a child profile cannot
-/// select or override either one.
+public enum TeacherWordAudioUsage: String, Codable, Hashable, Sendable {
+    case readHint = "read_hint"
+    case writePrompt = "write_prompt"
+}
+
+/// The only word-pronunciation contract exposed by the app. The bundled pack
+/// owns the canonical Cartesia voice; a child profile cannot select or override
+/// it. The usage keeps Read and Write pacing explicit without leaking a vendor
+/// API into feature code.
 public struct TeacherWordAudioRequest: Hashable, Sendable {
-    /// ElevenLabs currently accepts speeds from 0.7 through 1.2. The slowest
-    /// supported value is closest to the requested 1.5x-slower delivery.
-    public static let canonicalSpeed = 0.7
-    public static let contractVersion = "canonical-teacher-v1"
+    public static let contractVersion = "canonical-teacher-v2"
 
     public let spokenText: String
     public let pronunciationKey: String?
+    public let usage: TeacherWordAudioUsage
 
-    public var speed: Double { Self.canonicalSpeed }
+    public var speed: Double {
+        switch usage {
+        case .readHint: 0.90
+        case .writePrompt: 0.82
+        }
+    }
     public var voiceContractVersion: String { Self.contractVersion }
 
     public init(prompt: WordPrompt) {
         spokenText = prompt.audioCue.spokenContext ?? prompt.displayText
         pronunciationKey = prompt.audioCue.pronunciationKey
+        usage = prompt.learningMode == .write ? .writePrompt : .readHint
     }
 
     public init(
         spokenText: String,
-        pronunciationKey: String? = nil
+        pronunciationKey: String? = nil,
+        usage: TeacherWordAudioUsage = .readHint
     ) throws {
         let normalizedText = spokenText.trimmingCharacters(
             in: .whitespacesAndNewlines
@@ -35,6 +46,7 @@ public struct TeacherWordAudioRequest: Hashable, Sendable {
         self.pronunciationKey = pronunciationKey?.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
+        self.usage = usage
     }
 }
 
@@ -65,6 +77,7 @@ public enum TeacherWordAudioError: Error, Equatable, Sendable {
     case responseTooLarge(maximumByteCount: Int)
     case serverRejected(statusCode: Int)
     case unsupportedContentType(String?)
+    case unavailableOfflineClip
 }
 
 public protocol TeacherWordAudioProviding: Sendable {
@@ -107,5 +120,32 @@ public actor CachingTeacherWordAudioProvider: TeacherWordAudioProviding {
         let downloaded = try await upstream.audio(for: request)
         try? await cache.store(downloaded, for: request)
         return downloaded
+    }
+}
+
+/// Tries providers in priority order. This keeps the app offline-first while
+/// preserving the existing optional Tada Words backend before Apple TTS takes
+/// over. Provider-specific failures are intentionally hidden from the child.
+public actor FirstAvailableTeacherWordAudioProvider: TeacherWordAudioProviding {
+    private let providers: [any TeacherWordAudioProviding]
+
+    public init(providers: [any TeacherWordAudioProviding]) {
+        precondition(!providers.isEmpty)
+        self.providers = providers
+    }
+
+    public func audio(
+        for request: TeacherWordAudioRequest
+    ) async throws -> TeacherWordAudioClip {
+        for provider in providers {
+            do {
+                return try await provider.audio(for: request)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                continue
+            }
+        }
+        throw TeacherWordAudioError.unavailableOfflineClip
     }
 }

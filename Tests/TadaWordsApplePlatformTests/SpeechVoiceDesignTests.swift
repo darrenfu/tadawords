@@ -222,8 +222,11 @@ final class SpeechVoiceDesignTests: XCTestCase {
         XCTAssertGreaterThan(brand.rate, learning.rate)
         XCTAssertGreaterThan(brand.pitchMultiplier, learning.pitchMultiplier)
         XCTAssertLessThan(brand.volume, learning.volume)
-        XCTAssertGreaterThanOrEqual(learning.rate, 0.39)
-        XCTAssertLessThanOrEqual(learning.rate, 0.41)
+        XCTAssertEqual(
+            learning.rate,
+            AVSpeechUtteranceDefaultSpeechRate / 1.5,
+            accuracy: 0.001
+        )
         XCTAssertEqual(learning.pitchMultiplier, 1.0, accuracy: 0.001)
     }
 
@@ -244,17 +247,45 @@ final class SpeechVoiceDesignTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(write.postUtteranceDelay, 0.35)
     }
 
-    func testLocalFallbackAvoidsRatesThatSmearShortWords() {
+    func testAppleIsolatedWordRateIsOnePointFiveTimesSlowerThanDefault() {
         let read = SpeechUtteranceDesignPolicy.design(text: "at", role: .learning)
         let write = SpeechUtteranceDesignPolicy.design(
             text: "at",
             role: .writeLearning
         )
 
-        XCTAssertEqual(read.rate, 0.40, accuracy: 0.001)
-        XCTAssertEqual(write.rate, 0.40, accuracy: 0.001)
+        XCTAssertEqual(
+            SpeechUtteranceDesignPolicy.appleIsolatedWordRate,
+            AVSpeechUtteranceDefaultSpeechRate / 1.5,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            read.rate,
+            SpeechUtteranceDesignPolicy.appleIsolatedWordRate,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            write.rate,
+            SpeechUtteranceDesignPolicy.appleIsolatedWordRate,
+            accuracy: 0.001
+        )
         XCTAssertGreaterThanOrEqual(read.postUtteranceDelay, 0.30)
         XCTAssertGreaterThanOrEqual(write.postUtteranceDelay, 0.38)
+    }
+
+    func testSlowerIsolatedWordRateDoesNotChangeOtherSpeechRoles() {
+        let brand = SpeechUtteranceDesignPolicy.design(
+            text: "Tada Words!",
+            role: .brand
+        )
+        let enrollment = SpeechUtteranceDesignPolicy.design(
+            text: "I see a happy dog.",
+            role: .voiceEnrollment
+        )
+
+        XCTAssertEqual(brand.rate, 0.54, accuracy: 0.001)
+        XCTAssertEqual(enrollment.rate, 0.37, accuracy: 0.001)
+        XCTAssertEqual(LaunchVoiceDesignPolicy.utterance.rate, 0.42, accuracy: 0.001)
     }
 
     func testRegressionWordsUseReviewedPronunciationPlan() {

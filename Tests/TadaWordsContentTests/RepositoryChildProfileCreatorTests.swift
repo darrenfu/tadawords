@@ -29,12 +29,15 @@ final class RepositoryChildProfileCreatorTests: XCTestCase {
 
         let created = try await creator.createProfile(
             displayName: "  Coco  ",
+            ageYears: 4,
             existingProfiles: [existing]
         )
 
         XCTAssertEqual(created.displayName, "Coco")
         XCTAssertEqual(created.avatar, .cartoonAnimal(assetID: "fox"))
         XCTAssertEqual(created.selectedWorld, .buildItBay)
+        XCTAssertEqual(created.ageYears, 4)
+        XCTAssertEqual(created.schoolGrade, .preK)
         XCTAssertEqual(created.createdAt, CreatorTestClock.testDate)
         let persistedProfile = try await profiles.profile(id: created.id)
         let createdSettings = try await settings.settings(for: created.id)
@@ -62,12 +65,37 @@ final class RepositoryChildProfileCreatorTests: XCTestCase {
         do {
             _ = try await creator.createProfile(
                 displayName: "Coco",
+                ageYears: 4,
                 existingProfiles: []
             )
             XCTFail("Expected settings persistence to fail.")
         } catch let error as ChildProfileCreationError {
             XCTAssertEqual(error, .settingsPersistenceFailed)
         }
+        let persistedProfiles = try await profiles.profiles()
+        XCTAssertTrue(persistedProfiles.isEmpty)
+    }
+
+    func testUnsupportedAgeDoesNotPublishProfileOrSettings() async throws {
+        let profiles = InMemoryKidProfileRepository()
+        let settings = InMemoryPracticeSettingsRepository()
+        let creator = RepositoryChildProfileCreator(
+            profileRepository: profiles,
+            practiceSettingsRepository: settings,
+            clock: CreatorTestClock()
+        )
+
+        do {
+            _ = try await creator.createProfile(
+                displayName: "Coco",
+                ageYears: 19,
+                existingProfiles: []
+            )
+            XCTFail("Expected an unsupported age to be rejected.")
+        } catch let error as ChildProfileCreationError {
+            XCTAssertEqual(error, .invalidAge)
+        }
+
         let persistedProfiles = try await profiles.profiles()
         XCTAssertTrue(persistedProfiles.isEmpty)
     }
@@ -84,6 +112,7 @@ final class RepositoryChildProfileCreatorTests: XCTestCase {
         do {
             _ = try await creator.createProfile(
                 displayName: "Coco",
+                ageYears: 4,
                 existingProfiles: []
             )
             XCTFail("Expected profile persistence to fail.")
@@ -109,6 +138,7 @@ final class RepositoryChildProfileCreatorTests: XCTestCase {
 
         let created = try await creator.createProfile(
             displayName: "Eighth Kid",
+            ageYears: 4,
             existingProfiles: existingProfiles
         )
 

@@ -115,6 +115,7 @@ final class ApplicationCompositionTests: XCTestCase {
         )
         let created = try await creator.createProfile(
             displayName: "Coco",
+            ageYears: 4,
             existingProfiles: firstEnvironment.profiles
         )
         try await firstEnvironment.childSessionRepository

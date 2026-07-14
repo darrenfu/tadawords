@@ -1,0 +1,739 @@
+{
+  "roots": [
+    {
+      "id": "sight-words",
+      "title": "Sight Words",
+      "summary": "Short, useful words children benefit from recognizing quickly in books, directions, and classroom talk.",
+      "lists": [
+        {
+          "id": "sight-pre-k-starters",
+          "title": "Pre-K Starters",
+          "summary": "A gentle first set of very common words for shared reading and early independent recognition.",
+          "audience": {
+            "grades": ["preK"],
+            "minimumAge": 3,
+            "maximumAge": 5
+          },
+          "words": [
+            "a", "I", "am", "my", "me", "we", "you", "yes", "no", "go",
+            "stop", "up", "down", "in", "out", "on", "off", "at", "it", "is",
+            "see", "look", "can", "do", "like", "want", "help", "play", "come", "here",
+            "there", "this", "that", "big", "little", "one", "two", "red", "blue", "the"
+          ],
+          "sourceIDs": ["tada-original", "ies-foundational-reading", "head-start-language", "common-core-ela"]
+        },
+        {
+          "id": "sight-kindergarten-everyday",
+          "title": "Kindergarten Everyday Words",
+          "summary": "Common words for simple sentences, classroom directions, and beginning books.",
+          "audience": {
+            "grades": ["kindergarten"],
+            "minimumAge": 5,
+            "maximumAge": 6
+          },
+          "words": [
+            "and", "are", "be", "he", "she", "they", "was", "have", "has", "with",
+            "for", "from", "to", "of", "all", "some", "more", "said", "say", "what",
+            "where", "who", "how", "when", "why", "not", "now", "went", "get", "make",
+            "good", "new", "first", "three", "four", "under", "over", "into", "our", "your"
+          ],
+          "sourceIDs": ["tada-original", "ies-foundational-reading", "common-core-ela"]
+        },
+        {
+          "id": "sight-grade-1-fluency",
+          "title": "Grade 1 Fluency Words",
+          "summary": "High-utility words that support smoother reading across stories and school subjects.",
+          "audience": {
+            "grades": ["grade1"],
+            "minimumAge": 6,
+            "maximumAge": 7
+          },
+          "words": [
+            "again", "also", "always", "another", "around", "because", "before", "both", "could", "does",
+            "were", "each", "every", "first", "found", "give", "goes", "great", "had", "has",
+            "her", "him", "his", "how", "its", "know", "made", "many", "more", "only",
+            "other", "should", "something", "than", "them", "then", "think", "through", "very", "would"
+          ],
+          "sourceIDs": ["tada-original", "ies-foundational-reading", "common-core-ela"]
+        },
+        {
+          "id": "sight-grade-2-fluency",
+          "title": "Grade 2 Fluency Words",
+          "summary": "Frequent words that appear in longer sentences and early chapter-style reading.",
+          "audience": {
+            "grades": ["grade2"],
+            "minimumAge": 7,
+            "maximumAge": 8
+          },
+          "words": [
+            "across", "almost", "along", "already", "although", "answer", "anyone", "anything", "become", "behind",
+            "being", "bring", "change", "children", "different", "during", "enough", "even", "everyone", "everything",
+            "example", "family", "few", "important", "inside", "maybe", "might", "morning", "myself", "never",
+            "next", "often", "outside", "really", "school", "sometimes", "still", "together", "until", "while"
+          ],
+          "sourceIDs": ["tada-original", "ies-foundational-reading", "common-core-ela"]
+        },
+        {
+          "id": "sight-grade-3-fluency",
+          "title": "Grade 3 Fluency Words",
+          "summary": "Useful words for an eight-year-old building speed with more varied independent reading.",
+          "audience": {
+            "grades": ["grade3"],
+            "minimumAge": 8,
+            "maximumAge": 8
+          },
+          "words": [
+            "actually", "against", "among", "away", "believe", "better", "carry", "complete", "course", "decide",
+            "early", "either", "finally", "follow", "general", "however", "instead", "later", "learn", "least",
+            "listen", "perhaps", "probably", "problem", "question", "remember", "several", "since", "sure", "thought",
+            "though", "toward", "understand", "usually", "whole", "without", "world", "young", "yourself", "enough"
+          ],
+          "sourceIDs": ["tada-original", "ies-foundational-reading", "common-core-ela"]
+        },
+        {
+          "id": "sight-school-talk-connectors",
+          "title": "School Talk and Connectors",
+          "summary": "Direction, position, time, and connecting words heard throughout the school day.",
+          "audience": {
+            "grades": ["kindergarten", "grade1", "grade2", "grade3"],
+            "minimumAge": 5,
+            "maximumAge": 8
+          },
+          "words": [
+            "about", "above", "also", "before", "below", "between", "both", "each", "end", "first",
+            "if", "last", "left", "more", "most", "near", "next", "only", "other", "right",
+            "same", "start", "than", "through", "today", "together", "tomorrow", "until", "very", "what",
+            "when", "where", "which", "while", "who", "why", "with", "without", "yesterday", "yet"
+          ],
+          "sourceIDs": ["tada-original", "head-start-language", "common-core-ela"]
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "phonics-spelling",
+      "title": "Phonics and Spelling",
+      "summary": "Decodable word families and spelling patterns organized from simple short vowels to useful word parts.",
+      "lists": [],
+      "children": [
+        {
+          "id": "phonics-short-vowels",
+          "title": "Short Vowels",
+          "summary": "Compact consonant-vowel-consonant words for blending sounds.",
+          "lists": [
+            {
+              "id": "phonics-cvc-short-a-i",
+              "title": "Short A and Short I",
+              "summary": "Simple CVC words for hearing, blending, reading, and writing short a and i.",
+              "audience": {
+                "grades": ["preK", "kindergarten"],
+                "minimumAge": 4,
+                "maximumAge": 6
+              },
+              "words": [
+                "cat", "bat", "hat", "mat", "rat", "sat", "cap", "map", "nap", "tap",
+                "bag", "rag", "tag", "wag", "jam", "ham", "ram", "van", "fan", "man",
+                "pig", "dig", "fig", "wig", "big", "fin", "pin", "win", "sit", "fit",
+                "hit", "kit", "lip", "dip", "rip", "sip", "tip", "mix", "fix", "six"
+              ],
+              "sourceIDs": ["tada-original", "ufli-foundations", "ies-foundational-reading", "common-core-ela"]
+            },
+            {
+              "id": "phonics-cvc-short-e-o-u",
+              "title": "Short E, O, and U",
+              "summary": "Simple CVC words for contrasting the remaining short vowel sounds.",
+              "audience": {
+                "grades": ["preK", "kindergarten"],
+                "minimumAge": 4,
+                "maximumAge": 6
+              },
+              "words": [
+                "bed", "red", "led", "fed", "den", "hen", "pen", "ten", "web", "leg",
+                "jet", "net", "pet", "set", "yes", "dog", "log", "fog", "hog", "cot",
+                "dot", "hot", "pot", "top", "mop", "pop", "box", "fox", "rod", "nod",
+                "bug", "dug", "hug", "jug", "mug", "sun", "fun", "run", "bun", "cup",
+                "pup", "cut", "nut", "bus", "tub"
+              ],
+              "sourceIDs": ["tada-original", "ufli-foundations", "ies-foundational-reading", "common-core-ela"]
+            }
+          ],
+          "children": []
+        },
+        {
+          "id": "phonics-consonants",
+          "title": "Consonant Teams",
+          "summary": "Digraphs and blends that children can hear and map to letters.",
+          "lists": [
+            {
+              "id": "phonics-consonant-digraphs",
+              "title": "Consonant Digraphs",
+              "summary": "Words featuring ch, sh, th, wh, ng, and ck spellings.",
+              "audience": {
+                "grades": ["kindergarten", "grade1"],
+                "minimumAge": 5,
+                "maximumAge": 7
+              },
+              "words": [
+                "chat", "chop", "chin", "chip", "much", "such", "rich", "lunch", "ship", "shop",
+                "shut", "fish", "dish", "wish", "bath", "math", "path", "thin", "thick", "moth",
+                "that", "them", "then", "this", "when", "whip", "which", "shell", "shed", "ring",
+                "king", "sing", "song", "long", "duck", "rock", "sock", "back", "neck", "kick"
+              ],
+              "sourceIDs": ["tada-original", "ufli-foundations", "ies-foundational-reading", "common-core-ela"]
+            },
+            {
+              "id": "phonics-beginning-ending-blends",
+              "title": "Beginning and Ending Blends",
+              "summary": "Words that keep each consonant sound audible inside a blend.",
+              "audience": {
+                "grades": ["kindergarten", "grade1"],
+                "minimumAge": 5,
+                "maximumAge": 7
+              },
+              "words": [
+                "clap", "clip", "clock", "crab", "crib", "crop", "drum", "drop", "flag", "flat",
+                "flip", "frog", "glad", "grin", "plan", "plum", "sled", "slip", "slug", "snap",
+                "spin", "spot", "stop", "swim", "twin", "black", "brick", "brush", "chest", "fresh",
+                "grass", "green", "snack", "stand", "truck", "blend", "frost", "plant", "skunk", "twist"
+              ],
+              "sourceIDs": ["tada-original", "ufli-foundations", "ies-foundational-reading", "common-core-ela"]
+            }
+          ],
+          "children": []
+        },
+        {
+          "id": "phonics-long-vowels",
+          "title": "Long Vowels",
+          "summary": "Silent-e and common vowel-team patterns for growing readers.",
+          "lists": [
+            {
+              "id": "phonics-silent-e",
+              "title": "Silent E",
+              "summary": "Long-vowel words built with the vowel-consonant-e pattern.",
+              "audience": {
+                "grades": ["grade1"],
+                "minimumAge": 6,
+                "maximumAge": 7
+              },
+              "words": [
+                "cake", "bake", "lake", "make", "game", "name", "same", "late", "gate", "wave",
+                "bike", "hike", "like", "time", "five", "nine", "kite", "ride", "side", "smile",
+                "home", "bone", "cone", "hope", "nose", "note", "rope", "rose", "stone", "joke",
+                "cube", "cute", "dune", "fume", "huge", "mule", "rule", "tube", "tune", "use"
+              ],
+              "sourceIDs": ["tada-original", "ufli-foundations", "ies-foundational-reading", "common-core-ela"]
+            },
+            {
+              "id": "phonics-vowel-teams",
+              "title": "Vowel Teams",
+              "summary": "Common vowel pairs and related patterns in familiar one-syllable words.",
+              "audience": {
+                "grades": ["grade1", "grade2"],
+                "minimumAge": 6,
+                "maximumAge": 8
+              },
+              "words": [
+                "rain", "mail", "tail", "sail", "wait", "day", "play", "stay", "tray", "gray",
+                "see", "bee", "feet", "seed", "tree", "green", "sleep", "team", "meat", "seat",
+                "boat", "coat", "goat", "road", "soap", "snow", "grow", "show", "blow", "float",
+                "blue", "clue", "fruit", "moon", "food", "room", "book", "look", "boy", "toy"
+              ],
+              "sourceIDs": ["tada-original", "ufli-foundations", "ies-foundational-reading", "common-core-ela"]
+            }
+          ],
+          "children": []
+        },
+        {
+          "id": "phonics-word-parts",
+          "title": "Word Parts",
+          "summary": "R-controlled vowels, endings, prefixes, suffixes, and inflectional changes.",
+          "lists": [
+            {
+              "id": "phonics-r-controlled-endings",
+              "title": "R-Controlled Vowels and Endings",
+              "summary": "Useful r-controlled patterns followed by common plural, tense, and comparison endings.",
+              "audience": {
+                "grades": ["grade1", "grade2"],
+                "minimumAge": 6,
+                "maximumAge": 8
+              },
+              "words": [
+                "car", "far", "jar", "park", "farm", "star", "arm", "art", "her", "fern",
+                "term", "germ", "bird", "girl", "first", "shirt", "third", "dirt", "corn", "fork",
+                "storm", "horse", "short", "north", "turn", "burn", "curl", "hurt", "nurse", "purple",
+                "cats", "dogs", "jumps", "runs", "jumped", "played", "looking", "wishes", "boxes", "faster"
+              ],
+              "sourceIDs": ["tada-original", "ufli-foundations", "ies-foundational-reading", "common-core-ela"]
+            },
+            {
+              "id": "phonics-grade-3-morphology",
+              "title": "Grade 3 Word Building",
+              "summary": "Prefixes, suffixes, inflections, and base-word changes for an eight-year-old reader.",
+              "audience": {
+                "grades": ["grade3"],
+                "minimumAge": 8,
+                "maximumAge": 8
+              },
+              "words": [
+                "hopeful", "hopeless", "helpful", "unhelpful", "playful", "replay", "preview", "unhappy", "unfair", "unlock",
+                "dislike", "rewrite", "return", "careful", "careless", "kindness", "sadness", "darkness", "movement", "payment",
+                "teacher", "singer", "runner", "farmer", "jumped", "jumping", "wishes", "boxes", "carried", "tries",
+                "puppies", "bigger", "fastest", "slowly", "safely", "joyful", "colorful", "readable", "impossible", "incorrect"
+              ],
+              "sourceIDs": ["tada-original", "ufli-foundations", "ies-foundational-reading", "common-core-ela"]
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "nouns-topics",
+      "title": "People, Places, and Things",
+      "summary": "Concrete topic vocabulary children can connect to pictures, play, books, and the world around them.",
+      "lists": [],
+      "children": [
+        {
+          "id": "nouns-animals",
+          "title": "Animals",
+          "summary": "Animal families grouped by habitats and child interests.",
+          "lists": [
+            {
+              "id": "nouns-pets-farm-animals",
+              "title": "Pets and Farm Animals",
+              "summary": "Familiar animals found at home, on farms, and in beginning storybooks.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1"],
+                "minimumAge": 3,
+                "maximumAge": 7
+              },
+              "words": [
+                "dog", "cat", "puppy", "kitten", "rabbit", "hamster", "gerbil", "mouse", "rat", "fish",
+                "turtle", "parrot", "canary", "horse", "pony", "cow", "calf", "bull", "pig", "piglet",
+                "goat", "sheep", "lamb", "chicken", "chick", "rooster", "duck", "duckling", "goose", "donkey",
+                "llama", "alpaca", "turkey", "ferret", "lizard", "snake", "frog", "snail", "bee", "worm"
+              ],
+              "sourceIDs": ["tada-original", "head-start-language", "wordnet"]
+            },
+            {
+              "id": "nouns-wild-animals",
+              "title": "Wild Animals",
+              "summary": "Mammals children encounter in zoos, wildlife books, and nature programs.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1", "grade2"],
+                "minimumAge": 3,
+                "maximumAge": 8
+              },
+              "words": [
+                "lion", "tiger", "leopard", "cheetah", "jaguar", "panther", "bear", "panda", "koala", "kangaroo",
+                "elephant", "giraffe", "zebra", "rhino", "hippo", "gorilla", "monkey", "chimpanzee", "orangutan", "baboon",
+                "wolf", "fox", "coyote", "deer", "moose", "elk", "bison", "buffalo", "camel", "hyena",
+                "meerkat", "sloth", "otter", "beaver", "raccoon", "skunk", "porcupine", "hedgehog", "antelope", "gazelle"
+              ],
+              "sourceIDs": ["tada-original", "head-start-language", "wordnet", "wikidata"]
+            },
+            {
+              "id": "nouns-ocean-animals",
+              "title": "Ocean Animals",
+              "summary": "Sea mammals, fish, birds, and invertebrates for ocean-themed learning.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1", "grade2"],
+                "minimumAge": 4,
+                "maximumAge": 8
+              },
+              "words": [
+                "whale", "dolphin", "shark", "orca", "seal", "walrus", "manatee", "dugong", "octopus", "squid",
+                "jellyfish", "starfish", "seahorse", "eel", "ray", "crab", "lobster", "shrimp", "clam", "oyster",
+                "mussel", "scallop", "coral", "sponge", "tuna", "salmon", "cod", "marlin", "swordfish", "sardine",
+                "anchovy", "herring", "pufferfish", "angelfish", "clownfish", "narwhal", "penguin", "pelican", "albatross", "urchin"
+              ],
+              "sourceIDs": ["tada-original", "head-start-language", "wordnet", "wikidata"]
+            },
+            {
+              "id": "nouns-birds-bugs-small-creatures",
+              "title": "Birds, Bugs, and Small Creatures",
+              "summary": "Backyard birds and tiny creatures that invite close observation.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1", "grade2"],
+                "minimumAge": 4,
+                "maximumAge": 8
+              },
+              "words": [
+                "eagle", "hawk", "owl", "crow", "raven", "robin", "sparrow", "finch", "bluebird", "cardinal",
+                "swan", "crane", "stork", "peacock", "flamingo", "ostrich", "hummingbird", "woodpecker", "pigeon", "seagull",
+                "ant", "bee", "beetle", "butterfly", "moth", "caterpillar", "ladybug", "dragonfly", "grasshopper", "cricket",
+                "mosquito", "fly", "spider", "tick", "flea", "centipede", "millipede", "worm", "snail", "slug"
+              ],
+              "sourceIDs": ["tada-original", "head-start-language", "wordnet", "wikidata"]
+            },
+            {
+              "id": "nouns-dinosaurs-prehistoric",
+              "title": "Dinosaurs and Prehistoric Life",
+              "summary": "Dinosaur names plus concrete paleontology words for curious young experts.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1", "grade2", "grade3"],
+                "minimumAge": 4,
+                "maximumAge": 8
+              },
+              "words": [
+                "dinosaur", "fossil", "tyrannosaurus", "triceratops", "stegosaurus", "brachiosaurus", "apatosaurus", "diplodocus", "velociraptor", "ankylosaurus",
+                "spinosaurus", "allosaurus", "iguanodon", "parasaurolophus", "pachycephalosaurus", "compsognathus", "carnotaurus", "deinonychus", "oviraptor", "gallimimus",
+                "archaeopteryx", "pteranodon", "mosasaurus", "plesiosaurus", "dimetrodon", "ammonite", "skeleton", "bone", "claw", "horn",
+                "tail", "egg", "nest", "herd", "predator", "herbivore", "extinction", "footprint", "volcano", "asteroid"
+              ],
+              "sourceIDs": ["tada-original", "wordnet", "wikidata"]
+            }
+          ],
+          "children": []
+        },
+        {
+          "id": "nouns-vehicles",
+          "title": "Vehicles and Machines",
+          "summary": "Machines for building, helping, and traveling.",
+          "lists": [
+            {
+              "id": "nouns-construction-emergency",
+              "title": "Construction and Emergency Machines",
+              "summary": "Big working vehicles, their important parts, and tools used on busy jobs.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1", "grade2"],
+                "minimumAge": 3,
+                "maximumAge": 8
+              },
+              "words": [
+                "excavator", "bulldozer", "crane", "loader", "forklift", "tractor", "backhoe", "grader", "scraper", "paver",
+                "roller", "trencher", "compactor", "drill", "mixer", "hauler", "dozer", "digger", "truck", "trailer",
+                "tanker", "ambulance", "firetruck", "engine", "ladder", "rescue", "siren", "hose", "helmet", "bucket",
+                "shovel", "wrench", "cone", "barrier", "wheel", "tire", "cab", "boom", "blade", "pump"
+              ],
+              "sourceIDs": ["tada-original", "head-start-language", "wordnet", "wikidata"]
+            },
+            {
+              "id": "nouns-travel-vehicles",
+              "title": "Road, Rail, Air, and Water Vehicles",
+              "summary": "Ways people travel on streets, tracks, in the sky, on water, and in space.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1", "grade2"],
+                "minimumAge": 3,
+                "maximumAge": 8
+              },
+              "words": [
+                "car", "bus", "van", "taxi", "truck", "bicycle", "tricycle", "scooter", "motorcycle", "skateboard",
+                "wagon", "jeep", "sedan", "coupe", "minivan", "limousine", "train", "subway", "tram", "trolley",
+                "monorail", "locomotive", "airplane", "jet", "helicopter", "glider", "balloon", "rocket", "shuttle", "boat",
+                "ship", "ferry", "canoe", "kayak", "raft", "yacht", "submarine", "sailboat", "rowboat", "spaceship"
+              ],
+              "sourceIDs": ["tada-original", "head-start-language", "wordnet", "wikidata"]
+            }
+          ],
+          "children": []
+        },
+        {
+          "id": "nouns-places",
+          "title": "Places and Communities",
+          "summary": "Local places, community helpers, countries, and the wider world.",
+          "lists": [
+            {
+              "id": "nouns-city-places-helpers",
+              "title": "City Places and Helpers",
+              "summary": "Places and people children may notice while exploring a town or city.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1", "grade2"],
+                "minimumAge": 4,
+                "maximumAge": 8
+              },
+              "words": [
+                "city", "town", "street", "road", "bridge", "tunnel", "sidewalk", "crosswalk", "station", "airport",
+                "harbor", "park", "playground", "school", "library", "museum", "hospital", "clinic", "bakery", "market",
+                "store", "restaurant", "theater", "stadium", "hotel", "apartment", "office", "bank", "factory", "courthouse",
+                "plaza", "firefighter", "doctor", "nurse", "teacher", "baker", "pilot", "driver", "mayor", "cashier"
+              ],
+              "sourceIDs": ["tada-original", "head-start-language", "wordnet", "wikidata"]
+            },
+            {
+              "id": "nouns-countries-world",
+              "title": "Countries Around the World",
+              "summary": "A geographically varied starter set of single-word country names for map exploration.",
+              "audience": {
+                "grades": ["kindergarten", "grade1", "grade2", "grade3"],
+                "minimumAge": 5,
+                "maximumAge": 8
+              },
+              "words": [
+                "Canada", "Mexico", "Brazil", "Argentina", "Chile", "Peru", "Colombia", "Cuba", "Jamaica", "Haiti",
+                "France", "Spain", "Italy", "Germany", "Greece", "Ireland", "Norway", "Sweden", "Finland", "Iceland",
+                "Egypt", "Kenya", "Nigeria", "Ghana", "Morocco", "Tanzania", "Uganda", "India", "China", "Japan",
+                "Pakistan", "Thailand", "Vietnam", "Nepal", "Australia", "Fiji", "Samoa", "Turkey", "Israel", "Jordan"
+              ],
+              "sourceIDs": ["tada-original", "wikidata"]
+            }
+          ],
+          "children": []
+        },
+        {
+          "id": "nouns-everyday-life",
+          "title": "Everyday Life",
+          "summary": "Vocabulary from home, health, school, and meals.",
+          "lists": [
+            {
+              "id": "nouns-home-family",
+              "title": "Home and Family",
+              "summary": "People, rooms, furniture, and everyday objects found around home.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1"],
+                "minimumAge": 3,
+                "maximumAge": 7
+              },
+              "words": [
+                "home", "house", "room", "door", "window", "wall", "floor", "roof", "stairs", "kitchen",
+                "bedroom", "bathroom", "closet", "garden", "table", "chair", "couch", "bed", "lamp", "rug",
+                "shelf", "clock", "mirror", "sink", "tub", "shower", "towel", "soap", "cup", "plate",
+                "bowl", "spoon", "fork", "parent", "mother", "father", "sister", "brother", "baby", "family"
+              ],
+              "sourceIDs": ["tada-original", "head-start-language", "wordnet"]
+            },
+            {
+              "id": "nouns-body-health",
+              "title": "Body and Health",
+              "summary": "Body parts and concrete words children hear during basic health routines.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1", "grade2"],
+                "minimumAge": 3,
+                "maximumAge": 8
+              },
+              "words": [
+                "head", "face", "hair", "eye", "ear", "nose", "mouth", "tooth", "tongue", "neck",
+                "shoulder", "arm", "elbow", "hand", "finger", "thumb", "chest", "back", "belly", "hip",
+                "leg", "knee", "ankle", "foot", "toe", "skin", "heart", "brain", "lung", "bone",
+                "muscle", "blood", "bandage", "medicine", "dentist", "fever", "cough", "sneeze", "germ", "toothbrush"
+              ],
+              "sourceIDs": ["tada-original", "head-start-language", "wordnet"]
+            },
+            {
+              "id": "nouns-school-learning",
+              "title": "School and Learning",
+              "summary": "People, supplies, and ideas used in a classroom or learning space.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1", "grade2"],
+                "minimumAge": 3,
+                "maximumAge": 8
+              },
+              "words": [
+                "school", "class", "teacher", "student", "desk", "chair", "book", "page", "story", "word",
+                "letter", "number", "pencil", "pen", "crayon", "marker", "eraser", "ruler", "paper", "notebook",
+                "folder", "backpack", "scissors", "glue", "paint", "brush", "chalk", "board", "computer", "tablet",
+                "keyboard", "puzzle", "block", "map", "globe", "clock", "calendar", "lesson", "question", "answer"
+              ],
+              "sourceIDs": ["tada-original", "head-start-language", "wordnet", "common-core-ela"]
+            },
+            {
+              "id": "nouns-food-kitchen",
+              "title": "Food and Kitchen",
+              "summary": "Familiar fruits, vegetables, meals, snacks, and table objects.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1"],
+                "minimumAge": 3,
+                "maximumAge": 7
+              },
+              "words": [
+                "apple", "banana", "orange", "grape", "berry", "cherry", "peach", "pear", "plum", "melon",
+                "lemon", "carrot", "potato", "tomato", "corn", "pea", "bean", "broccoli", "lettuce", "pumpkin",
+                "bread", "rice", "pasta", "noodle", "cereal", "egg", "milk", "cheese", "yogurt", "butter",
+                "chicken", "fish", "soup", "pizza", "sandwich", "cookie", "cup", "plate", "spoon", "fork"
+              ],
+              "sourceIDs": ["tada-original", "head-start-language", "wordnet"]
+            }
+          ],
+          "children": []
+        },
+        {
+          "id": "nouns-nature-science",
+          "title": "Nature and Science",
+          "summary": "Visible features of weather, landscapes, seasons, and space.",
+          "lists": [
+            {
+              "id": "nouns-nature-weather-space",
+              "title": "Nature, Weather, and Space",
+              "summary": "Concrete science and nature words children can observe or explore in pictures.",
+              "audience": {
+                "grades": ["preK", "kindergarten", "grade1", "grade2", "grade3"],
+                "minimumAge": 4,
+                "maximumAge": 8
+              },
+              "words": [
+                "sun", "moon", "star", "sky", "cloud", "rain", "snow", "wind", "storm", "thunder",
+                "lightning", "rainbow", "ice", "frost", "river", "lake", "ocean", "sea", "beach", "sand",
+                "rock", "mountain", "hill", "valley", "forest", "tree", "flower", "grass", "leaf", "seed",
+                "earth", "planet", "comet", "asteroid", "rocket", "space", "spring", "summer", "autumn", "winter"
+              ],
+              "sourceIDs": ["tada-original", "head-start-language", "wordnet", "wikidata"]
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "verbs-actions",
+      "title": "Action Words",
+      "summary": "Verbs children can act out, use in routines, and hear in learning conversations.",
+      "lists": [
+        {
+          "id": "verbs-movement-play",
+          "title": "Movement and Play",
+          "summary": "Active words children can demonstrate through whole-body play.",
+          "audience": {
+            "grades": ["preK", "kindergarten", "grade1"],
+            "minimumAge": 3,
+            "maximumAge": 7
+          },
+          "words": [
+            "run", "walk", "jump", "hop", "skip", "crawl", "climb", "slide", "swing", "spin",
+            "roll", "throw", "catch", "kick", "bounce", "dance", "swim", "skate", "ski", "ride",
+            "race", "chase", "hide", "seek", "clap", "wave", "march", "stomp", "tiptoe", "stretch",
+            "bend", "turn", "lift", "push", "pull", "drag", "carry", "toss", "leap", "balance"
+          ],
+          "sourceIDs": ["tada-original", "head-start-language", "wordnet", "common-core-ela"]
+        },
+        {
+          "id": "verbs-daily-routines",
+          "title": "Daily Routines",
+          "summary": "Useful action words from getting ready, eating, cleaning, resting, and moving through the day.",
+          "audience": {
+            "grades": ["preK", "kindergarten", "grade1"],
+            "minimumAge": 3,
+            "maximumAge": 7
+          },
+          "words": [
+            "wake", "rise", "wash", "brush", "comb", "dress", "eat", "drink", "cook", "bake",
+            "clean", "sweep", "mop", "wipe", "fold", "pack", "open", "close", "sit", "stand",
+            "sleep", "rest", "bathe", "shower", "dry", "pour", "stir", "cut", "peel", "chew",
+            "share", "help", "wait", "visit", "leave", "enter", "arrive", "start", "finish", "tidy"
+          ],
+          "sourceIDs": ["tada-original", "head-start-language", "wordnet"]
+        },
+        {
+          "id": "verbs-making-thinking-talking",
+          "title": "Making, Thinking, and Talking",
+          "summary": "Words for learning, creating, communicating, solving, and imagining.",
+          "audience": {
+            "grades": ["kindergarten", "grade1", "grade2", "grade3"],
+            "minimumAge": 5,
+            "maximumAge": 8
+          },
+          "words": [
+            "make", "build", "draw", "paint", "write", "read", "count", "spell", "learn", "think",
+            "know", "remember", "forget", "guess", "choose", "plan", "solve", "ask", "answer", "tell",
+            "say", "talk", "speak", "listen", "hear", "watch", "look", "see", "find", "show",
+            "give", "take", "use", "try", "fix", "break", "create", "imagine", "wonder", "explain"
+          ],
+          "sourceIDs": ["tada-original", "head-start-language", "wordnet", "common-core-ela"]
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "adjectives-concepts",
+      "title": "Describing Words and Concepts",
+      "summary": "Words for emotions, social qualities, appearance, senses, comparison, and condition.",
+      "lists": [
+        {
+          "id": "adjectives-emotions-social",
+          "title": "Emotions and Social Traits",
+          "summary": "Feeling words and qualities children can use to talk about themselves and others.",
+          "audience": {
+            "grades": ["preK", "kindergarten", "grade1", "grade2", "grade3"],
+            "minimumAge": 3,
+            "maximumAge": 8
+          },
+          "words": [
+            "happy", "sad", "angry", "scared", "excited", "calm", "proud", "shy", "brave", "kind",
+            "nice", "silly", "funny", "tired", "sleepy", "bored", "surprised", "worried", "lonely", "grumpy",
+            "cheerful", "upset", "curious", "gentle", "helpful", "friendly", "patient", "honest", "fair", "careful",
+            "thankful", "loving", "jealous", "nervous", "safe", "sorry", "quiet", "loud", "polite", "ready"
+          ],
+          "sourceIDs": ["tada-original", "head-start-language", "wordnet", "common-core-ela"]
+        },
+        {
+          "id": "adjectives-size-shape-color",
+          "title": "Size, Shape, and Color",
+          "summary": "Visual describing words for sorting, comparing, drawing, and explaining.",
+          "audience": {
+            "grades": ["preK", "kindergarten", "grade1"],
+            "minimumAge": 3,
+            "maximumAge": 7
+          },
+          "words": [
+            "big", "small", "tall", "short", "long", "wide", "narrow", "thick", "thin", "heavy",
+            "light", "huge", "tiny", "round", "square", "oval", "flat", "curved", "straight", "red",
+            "orange", "yellow", "green", "blue", "purple", "pink", "brown", "black", "white", "gray",
+            "gold", "silver", "bright", "dark", "pale", "deep", "high", "low", "full", "empty"
+          ],
+          "sourceIDs": ["tada-original", "head-start-language", "wordnet", "common-core-ela"]
+        },
+        {
+          "id": "adjectives-senses-speed-condition",
+          "title": "Senses, Speed, and Condition",
+          "summary": "Touch, taste, sound, speed, age, and condition words for precise descriptions.",
+          "audience": {
+            "grades": ["kindergarten", "grade1", "grade2", "grade3"],
+            "minimumAge": 5,
+            "maximumAge": 8
+          },
+          "words": [
+            "hot", "cold", "warm", "cool", "wet", "dry", "soft", "hard", "smooth", "rough",
+            "fuzzy", "sticky", "sweet", "sour", "salty", "bitter", "spicy", "fresh", "loud", "quiet",
+            "fast", "slow", "quick", "still", "clean", "dirty", "new", "old", "young", "broken",
+            "open", "closed", "sharp", "dull", "strong", "weak", "hungry", "thirsty", "sleepy", "sick"
+          ],
+          "sourceIDs": ["tada-original", "head-start-language", "wordnet", "common-core-ela"]
+        }
+      ],
+      "children": []
+    }
+  ],
+  "sources": [
+    {
+      "id": "tada-original",
+      "title": "Tada Words Original Editorial Catalog",
+      "url": "https://github.com/darrenfu/tadawords",
+      "note": "All list membership, ordering, category boundaries, and child-facing summaries are an independent Tada Words editorial selection. The catalog does not reproduce or claim to be any branded commercial word list."
+    },
+    {
+      "id": "ies-foundational-reading",
+      "title": "IES What Works Clearinghouse: Foundational Skills to Support Reading for Understanding in Kindergarten Through 3rd Grade",
+      "url": "https://ies.ed.gov/ncee/WWC/PracticeGuide/21/Published",
+      "note": "Used only for the evidence-based progression from sound awareness and decoding toward word recognition, vocabulary, and reading connected text; it is not used as a word-list source."
+    },
+    {
+      "id": "head-start-language",
+      "title": "Head Start Early Learning Outcomes Framework: Language for Preschoolers",
+      "url": "https://www.headstart.gov/school-readiness/article/language-preschool",
+      "note": "Used as developmental scope for preschool vocabulary involving actions, emotions, things, ideas, categories, and everyday conversation; actual words are independently curated."
+    },
+    {
+      "id": "ufli-foundations",
+      "title": "University of Florida Literacy Institute: UFLI Foundations",
+      "url": "https://ufli.education.ufl.edu/foundations/",
+      "note": "Used only to validate a broad phonics progression such as short vowels, digraphs, blends, silent e, vowel teams, and word endings. No proprietary lesson list or sequence is copied."
+    },
+    {
+      "id": "common-core-ela",
+      "title": "Common Core State Standards: English Language Arts Standards",
+      "url": "https://corestandards.org/english-language-arts-standards/",
+      "note": "Used as grade-band scope for print concepts, phonics, word recognition, vocabulary, language categories, and morphology. The standards do not prescribe this catalog's word membership."
+    },
+    {
+      "id": "wordnet",
+      "title": "Princeton WordNet",
+      "url": "https://wordnet.princeton.edu/",
+      "note": "Used as a lexical reference when checking ordinary English meanings and semantic grouping; category choices and child suitability remain Tada Words editorial decisions."
+    },
+    {
+      "id": "wikidata",
+      "title": "Wikidata Knowledge Base",
+      "url": "https://www.wikidata.org/",
+      "note": "Used as a factual naming reference for entities such as animals, dinosaurs, vehicles, and countries, not as a source for educational sequencing or list ranking."
+    }
+  ]
+}

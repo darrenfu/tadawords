@@ -27,8 +27,27 @@ final class TadaWorldSceneDecorationPolicyTests: XCTestCase {
 
             XCTAssertLessThanOrEqual(rainbowFrame.maxX, canvas.width * 0.25)
             XCTAssertGreaterThanOrEqual(unicornFrame.minX, canvas.width * 0.75)
+            XCTAssertLessThanOrEqual(unicornFrame.maxX, canvas.width)
             XCTAssertGreaterThan(rainbowFrame.width, 0)
             XCTAssertGreaterThan(unicornFrame.height, 0)
+
+            let verticalOffset = TadaWorldStoryArtLayoutPolicy.verticalOffset(
+                canvasHeight: canvas.height
+            )
+            XCTAssertGreaterThan(verticalOffset, 0)
+            XCTAssertLessThanOrEqual(
+                unicornFrame.maxY + verticalOffset
+                    + TadaWorldStoryArtLayoutPolicy.moonpetalUnicornAdditionalOffset
+                    + TadaWorldStoryArtLayoutPolicy.moonpetalMaximumDownwardMotion,
+                canvas.height
+            )
+            XCTAssertLessThanOrEqual(
+                canvas.height
+                    * (0.80
+                        + TadaWorldStoryArtLayoutPolicy.moonpetalCastleHeightRatio * 0.5)
+                    + verticalOffset,
+                canvas.height
+            )
         }
     }
 
@@ -63,6 +82,10 @@ final class TadaWorldSceneDecorationPolicyTests: XCTestCase {
         for canvas in landscapeCanvases {
             let layout = TadaExpandedWorldSceneLayout(canvasSize: canvas)
 
+            XCTAssertGreaterThanOrEqual(
+                TadaExpandedWorldSceneLayout.minimumDownwardMotion,
+                0
+            )
             XCTAssertGreaterThanOrEqual(layout.leftStoryFrame.minX, 0)
             XCTAssertLessThanOrEqual(layout.leftStoryFrame.maxX, canvas.width * 0.25)
             XCTAssertGreaterThanOrEqual(layout.rightStoryFrame.minX, canvas.width * 0.75)
@@ -70,7 +93,48 @@ final class TadaWorldSceneDecorationPolicyTests: XCTestCase {
             XCTAssertGreaterThan(layout.leftStoryFrame.width, 0)
             XCTAssertGreaterThan(layout.rightStoryFrame.height, 0)
             XCTAssertLessThanOrEqual(layout.groundHeight, canvas.height * 0.14)
+            XCTAssertEqual(
+                layout.storyVerticalOffset,
+                TadaWorldStoryArtLayoutPolicy.verticalOffset(canvasHeight: canvas.height),
+                accuracy: 0.001
+            )
+            XCTAssertLessThanOrEqual(
+                layout.leftStoryFrame.maxY + layout.storyVerticalOffset
+                    + TadaExpandedWorldSceneLayout.maximumDownwardMotion,
+                canvas.height
+            )
+            XCTAssertLessThanOrEqual(
+                layout.rightStoryFrame.maxY + layout.storyVerticalOffset
+                    + TadaExpandedWorldSceneLayout.maximumDownwardMotion,
+                canvas.height
+            )
         }
+    }
+
+    func testStoryArtVerticalOffsetIsSmallAndCapped() {
+        XCTAssertGreaterThanOrEqual(
+            TadaWorldStoryArtLayoutPolicy.moonpetalMinimumDownwardMotion,
+            0
+        )
+        XCTAssertGreaterThanOrEqual(
+            TadaWorldStoryArtLayoutPolicy.moonpetalMaximumDownwardMotion,
+            TadaWorldStoryArtLayoutPolicy.moonpetalMinimumDownwardMotion
+        )
+        XCTAssertEqual(
+            TadaWorldStoryArtLayoutPolicy.verticalOffset(canvasHeight: 400),
+            20,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            TadaWorldStoryArtLayoutPolicy.verticalOffset(canvasHeight: 1_024),
+            32,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            TadaWorldStoryArtLayoutPolicy.verticalOffset(canvasHeight: -100),
+            0,
+            accuracy: 0.001
+        )
     }
 
     func testEveryMascotPoseHasARecognizableFriendlyExpression() {

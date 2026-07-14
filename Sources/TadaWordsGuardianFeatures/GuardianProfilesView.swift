@@ -1,4 +1,5 @@
 import SwiftUI
+import TadaWordsDesignSystem
 import TadaWordsDomain
 
 #if os(iOS)
@@ -131,7 +132,7 @@ struct GuardianProfileEditorView: View {
     @State private var avatar: ProfileAvatar
     @State private var selectedWorld: WorldTheme
     @State private var schoolGrade: ProfileSchoolGrade
-    @State private var ageYears: Int
+    @State private var ageYears: Int?
     @State private var guardianUnlockedWorlds: Set<WorldTheme>
     @State private var confirmsDeletion = false
     #if os(iOS)
@@ -157,7 +158,7 @@ struct GuardianProfileEditorView: View {
             initialValue: existingProfile?.selectedWorld ?? .moonpetalKingdom
         )
         _schoolGrade = State(initialValue: existingProfile?.schoolGrade ?? .preK)
-        _ageYears = State(initialValue: existingProfile?.ageYears ?? 4)
+        _ageYears = State(initialValue: existingProfile?.ageYears)
         _guardianUnlockedWorlds = State(
             initialValue: existingProfile?.guardianUnlockedWorlds ?? []
         )
@@ -204,6 +205,13 @@ struct GuardianProfileEditorView: View {
                     normalizedName.isEmpty
                         || normalizedName.count
                             > RepositoryGuardianFamilyStore.maximumDisplayNameCharacterCount
+                        || (existingProfile == nil
+                            && ageYears.map(ProfileAgePolicy.isSupported) != true)
+                )
+                .accessibilityHint(
+                    existingProfile == nil && ageYears == nil
+                        ? "Choose the child’s age before creating the profile"
+                        : "Saves this kid profile"
                 )
 
                 if existingProfile != nil {
@@ -324,8 +332,21 @@ struct GuardianProfileEditorView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                Stepper("Age \(ageYears)", value: $ageYears, in: 2...18)
-                    .font(.system(.headline, design: .rounded, weight: .semibold))
+                TadaAgePicker(
+                    selection: $ageYears,
+                    ages: existingProfile == nil
+                        ? ProfileAgePolicy.supportedAges
+                        : ProfileAgePolicy.durableAges,
+                    prompt: "Age",
+                    tint: GuardianSemanticTokens.primary
+                )
+                Text(
+                    existingProfile == nil
+                        ? "Choose an age from 3 to 8. Changing age never changes the grade above."
+                        : "Changing age never changes the grade above. Legacy profiles may keep ages from 2 to 18."
+                )
+                .font(.system(.caption, design: .rounded, weight: .medium))
+                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
             }
         }
     }
@@ -405,6 +426,8 @@ struct GuardianProfileEditorView: View {
     }
 
     private func save() {
+        guard existingProfile != nil || ageYears.map(ProfileAgePolicy.isSupported) == true
+        else { return }
         onSave(
             GuardianProfileDraft(
                 displayName: normalizedName,
@@ -540,7 +563,7 @@ extension WorldTheme {
         case .dinoDiscovery:
             "lizard.fill"
         case .firehouseHeroes:
-            "firetruck.fill"
+            "truck.box.fill"
         case .brickworkCity:
             "square.grid.3x3.fill"
         case .frostlightWorld:

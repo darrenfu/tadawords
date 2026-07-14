@@ -8,6 +8,7 @@ enum GuardianDestination {
     case profiles
     case profileEditor(KidProfile?)
     case quickAdd
+    case presetWords
     case pool(LearningMode)
     case reports
     case settings
@@ -37,7 +38,7 @@ final class GuardianDashboardViewModel: ObservableObject {
         VoiceprintEnrollmentScript.sentences.count
     @Published private(set) var isPlayingVoiceprintPrompt = false
     @Published private(set) var voiceprintGuidanceMessage: String?
-    @Published var hasConfirmedWordRemovalThisSession = false
+    @Published private(set) var hasConfirmedWordRemovalThisSession = false
     @Published private(set) var undoWordsByMode: [LearningMode: [WordPrompt]] = [:]
     @Published private(set) var isUpdatingWordPool = false
 
@@ -51,6 +52,8 @@ final class GuardianDashboardViewModel: ObservableObject {
     private let requestSpeechAuthorization: @Sendable () async -> Bool
     private let sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing
     private let pictureHintProvider: any WordPictureHintProviding
+    private var confirmedWordRemovalProfileIDs = Set<ProfileID>()
+    private var undoWordsByProfile: [ProfileID: [LearningMode: [WordPrompt]]] = [:]
     private var voiceprintSentences: [String] = []
     private var voiceprintPromptTask: Task<Void, Never>?
 
@@ -93,6 +96,8 @@ final class GuardianDashboardViewModel: ObservableObject {
             "profile-editor-\(profile?.id.description ?? "new")"
         case .quickAdd:
             "quick-add"
+        case .presetWords:
+            "preset-words"
         case .pool(let mode):
             "pool-\(mode.rawValue)"
         case .reports:
@@ -109,15 +114,13 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func unlockGuardianArea() {
-        hasConfirmedWordRemovalThisSession = false
-        undoWordsByMode = [:]
+        resetWordRemovalSession()
         destination = .dashboard
         refresh()
     }
 
     func lockGuardianArea() {
-        hasConfirmedWordRemovalThisSession = false
-        undoWordsByMode = [:]
+        resetWordRemovalSession()
         destination = .parentGate
     }
 
@@ -127,6 +130,10 @@ final class GuardianDashboardViewModel: ObservableObject {
 
     func showQuickAdd() {
         destination = .quickAdd
+    }
+
+    func showPresetWords() {
+        destination = .presetWords
     }
 
     func showProfiles() {
@@ -201,6 +208,7 @@ final class GuardianDashboardViewModel: ObservableObject {
                     loadedDashboard
                 )
                 familySnapshot = family
+                showWordRemovalState(for: dashboard.profile.id)
                 snapshot = dashboard
                 await applyAudioSnapshot()
             } catch {
@@ -216,7 +224,9 @@ final class GuardianDashboardViewModel: ObservableObject {
         Task {
             defer { isLoading = false }
             do {
-                snapshot = try await store.selectProfile(id: profile.id)
+                let selectedDashboard = try await store.selectProfile(id: profile.id)
+                showWordRemovalState(for: selectedDashboard.profile.id)
+                snapshot = selectedDashboard
                 await applyAudioSnapshot()
                 familySnapshot = try await store.familySnapshot()
                 destination = .dashboard
@@ -236,14 +246,17 @@ final class GuardianDashboardViewModel: ObservableObject {
         Task {
             defer { isLoading = false }
             do {
+                let savedDashboard: GuardianDashboardSnapshot
                 if let existingProfile {
-                    snapshot = try await store.updateProfile(
+                    savedDashboard = try await store.updateProfile(
                         id: existingProfile.id,
                         from: draft
                     )
                 } else {
-                    snapshot = try await store.createProfile(from: draft)
+                    savedDashboard = try await store.createProfile(from: draft)
                 }
+                showWordRemovalState(for: savedDashboard.profile.id)
+                snapshot = savedDashboard
                 familySnapshot = try await store.familySnapshot()
                 await applyAudioSnapshot()
                 destination = .dashboard
@@ -267,6 +280,9 @@ final class GuardianDashboardViewModel: ObservableObject {
                 let deletion = try await store.deleteProfile(id: profile.id)
                 try? await voiceprintRepository?.delete(for: profile.id)
                 await notificationScheduler?.removeNotifications(for: profile.id)
+                undoWordsByProfile[profile.id] = nil
+                confirmedWordRemovalProfileIDs.remove(profile.id)
+                showWordRemovalState(for: deletion.dashboard.profile.id)
                 snapshot = deletion.dashboard
                 familySnapshot = try await store.familySnapshot()
                 destination = .dashboard
@@ -324,27 +340,89 @@ final class GuardianDashboardViewModel: ObservableObject {
     func addWords(
         _ request: GuardianWordImportRequest
     ) async -> GuardianWordImportReport? {
+        guard let profileID = await currentProfileID() else { return nil }
+        return await performWordImport(request, for: profileID)
+    }
+
+    func addPresetWords(
+        _ request: GuardianWordImportRequest,
+        for profileID: ProfileID
+    ) async -> GuardianWordImportReport? {
+        await performWordImport(request, for: profileID)
+    }
+
+    private func performWordImport(
+        _ request: GuardianWordImportRequest,
+        for profileID: ProfileID
+    ) async -> GuardianWordImportReport? {
         guard !isUpdatingWordPool else { return nil }
         isUpdatingWordPool = true
         defer { isUpdatingWordPool = false }
 
         let report: GuardianWordImportReport
         do {
-            report = try await store.importWords(request)
+            report = try await store.importWords(request, for: profileID)
         } catch {
             errorMessage = "Those words could not be added. Your existing pools are unchanged."
+            return nil
+        }
+        guard report.profileID == profileID else {
+            errorMessage = "Those words could not be added to the selected kid. Please try again."
             return nil
         }
 
         prefetchPictures(for: report)
 
         do {
-            snapshot = try await store.dashboardSnapshot()
+            let refreshed = try await store.dashboardSnapshot(for: profileID)
+            if snapshot == nil || snapshot?.profile.id == profileID {
+                snapshot = refreshed
+            }
         } catch {
             errorMessage =
                 "The words were added, but the list could not refresh. Reopen Manage Words to try again."
         }
         return report
+    }
+
+    /// Reverses only memberships changed by an incomplete preset import. This
+    /// deliberately does not publish a user-facing Undo action: the parent
+    /// already receives a retryable preset selection after the rollback.
+    func rollbackPresetAdditions(
+        _ request: GuardianPresetRollbackRequest
+    ) async -> Bool {
+        guard !isUpdatingWordPool else { return false }
+        guard !request.membershipIDs.isEmpty else { return true }
+
+        isUpdatingWordPool = true
+        defer { isUpdatingWordPool = false }
+        do {
+            try await store.setMembershipsActive(
+                ids: request.membershipIDs,
+                learningMode: request.learningMode,
+                isActive: false,
+                for: request.profileID
+            )
+            do {
+                let refreshed = try await store.dashboardSnapshot(
+                    for: request.profileID
+                )
+                if snapshot == nil || snapshot?.profile.id == request.profileID {
+                    snapshot = refreshed
+                }
+            } catch {
+                // The exact-ID rollback already committed. A dashboard refresh
+                // is best-effort and must never turn a successful rollback into
+                // a false partial-import warning.
+                errorMessage =
+                    "The preset Add was rolled back, but the list could not refresh. Reopen Manage Words to try again."
+            }
+            return true
+        } catch {
+            errorMessage =
+                "An incomplete preset import could not be rolled back. Review both pools before trying again."
+            return false
+        }
     }
 
     private func prefetchPictures(for report: GuardianWordImportReport) {
@@ -390,7 +468,11 @@ final class GuardianDashboardViewModel: ObservableObject {
         _ prompts: [WordPrompt],
         isActive: Bool
     ) async -> Bool {
-        guard !isUpdatingWordPool, let mode = prompts.first?.learningMode else {
+        guard let profileID = await currentProfileID() else { return false }
+        guard
+            !isUpdatingWordPool,
+            let mode = prompts.first?.learningMode
+        else {
             return false
         }
         guard prompts.allSatisfy({ $0.learningMode == mode }) else {
@@ -401,19 +483,20 @@ final class GuardianDashboardViewModel: ObservableObject {
         isUpdatingWordPool = true
         defer { isUpdatingWordPool = false }
         do {
-            snapshot = try await store.setWordsActive(
+            let updatedSnapshot = try await store.setWordsActive(
                 ids: prompts.map(\.id),
                 learningMode: mode,
-                isActive: isActive
+                isActive: isActive,
+                for: profileID
             )
-            if isActive {
-                undoWordsByMode[mode] = nil
-            } else {
-                // Keep the latest successful removal in the long-lived model.
-                // A dashboard snapshot publish can rebuild the manager view, so
-                // view-local state is not a reliable home for a usable Undo.
-                undoWordsByMode[mode] = prompts
+            if snapshot == nil || snapshot?.profile.id == profileID {
+                snapshot = updatedSnapshot
             }
+            saveUndoWords(
+                isActive ? nil : prompts,
+                mode: mode,
+                profileID: profileID
+            )
             return true
         } catch {
             errorMessage =
@@ -422,6 +505,16 @@ final class GuardianDashboardViewModel: ObservableObject {
                 : "Those words could not be removed. Please try again."
             return false
         }
+    }
+
+    func setWordRemovalConfirmation(_ isConfirmed: Bool) {
+        guard let profileID = snapshot?.profile.id else { return }
+        if isConfirmed {
+            confirmedWordRemovalProfileIDs.insert(profileID)
+        } else {
+            confirmedWordRemovalProfileIDs.remove(profileID)
+        }
+        hasConfirmedWordRemovalThisSession = isConfirmed
     }
 
     func savePracticeSettings(_ settings: ProfilePracticeSettings) {
@@ -605,13 +698,15 @@ final class GuardianDashboardViewModel: ObservableObject {
             defer { isLoading = false }
             do {
                 let template = try await voiceprintEnrollmentService.finalize()
-                snapshot = try await store.updateVoiceprintStatus(
+                let updatedDashboard = try await store.updateVoiceprintStatus(
                     profileID: profile.id,
                     status: .enrolled(
                         modelVersion: template.embedding.modelIdentifier,
                         enrolledAt: template.enrolledAt
                     )
                 )
+                showWordRemovalState(for: updatedDashboard.profile.id)
+                snapshot = updatedDashboard
                 familySnapshot = try await store.familySnapshot()
                 destination = .profiles
             } catch {
@@ -733,6 +828,41 @@ final class GuardianDashboardViewModel: ObservableObject {
             preferences: snapshot.practiceSettings.audio
         )
         await audioExperienceService.stopAmbientAudio()
+    }
+
+    private func currentProfileID() async -> ProfileID? {
+        if let profileID = snapshot?.profile.id { return profileID }
+        return try? await store.familySnapshot().selectedProfileID
+    }
+
+    private func resetWordRemovalSession() {
+        confirmedWordRemovalProfileIDs = []
+        undoWordsByProfile = [:]
+        hasConfirmedWordRemovalThisSession = false
+        undoWordsByMode = [:]
+    }
+
+    private func showWordRemovalState(for profileID: ProfileID) {
+        hasConfirmedWordRemovalThisSession =
+            confirmedWordRemovalProfileIDs.contains(profileID)
+        undoWordsByMode = undoWordsByProfile[profileID, default: [:]]
+    }
+
+    private func saveUndoWords(
+        _ prompts: [WordPrompt]?,
+        mode: LearningMode,
+        profileID: ProfileID
+    ) {
+        var profileUndoWords = undoWordsByProfile[profileID, default: [:]]
+        profileUndoWords[mode] = prompts
+        if profileUndoWords.isEmpty {
+            undoWordsByProfile[profileID] = nil
+        } else {
+            undoWordsByProfile[profileID] = profileUndoWords
+        }
+        if snapshot?.profile.id == profileID {
+            undoWordsByMode = profileUndoWords
+        }
     }
 
     private static func profileErrorMessage(

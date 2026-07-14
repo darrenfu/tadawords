@@ -24,7 +24,8 @@ final class FamilyApplicationCompositionTests: XCTestCase {
             from: GuardianProfileDraft(
                 displayName: "Leo",
                 avatarAssetID: "dog",
-                selectedWorld: .buildItBay
+                selectedWorld: .buildItBay,
+                ageYears: 4
             )
         )
         let secondProfile = secondDashboard.profile

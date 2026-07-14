@@ -88,7 +88,10 @@ final class TadaWordsAppModelTests: XCTestCase {
             )
         )
 
-        let didCreate = await model.createChildProfileAndWait(nickname: "  Coco ")
+        let didCreate = await model.createChildProfileAndWait(
+            nickname: "  Coco ",
+            ageYears: 5
+        )
         XCTAssertTrue(didCreate)
 
         let created = try XCTUnwrap(model.selectedProfile)
@@ -96,6 +99,8 @@ final class TadaWordsAppModelTests: XCTestCase {
         let createdSettings = try await settings.settings(for: created.id)
         let rememberedProfileID = try await session.lastSelectedProfileID()
         XCTAssertEqual(created.displayName, "Coco")
+        XCTAssertEqual(created.ageYears, 5)
+        XCTAssertEqual(created.schoolGrade, .kindergarten)
         XCTAssertEqual(model.profiles.count, 2)
         XCTAssertEqual(persistedProfile, created)
         XCTAssertEqual(
@@ -109,6 +114,27 @@ final class TadaWordsAppModelTests: XCTestCase {
         }
     }
 
+    func testChildCreationRequiresAnExplicitAgeSelection() async {
+        let existing = TestFixture.profile(name: "Mia", number: 906)
+        let model = TadaWordsAppModel(
+            profiles: [existing],
+            childProfileCreator: nil
+        )
+
+        let didCreate = await model.createChildProfileAndWait(
+            nickname: "Coco",
+            ageYears: nil
+        )
+
+        XCTAssertFalse(didCreate)
+        XCTAssertEqual(model.profiles, [existing])
+        XCTAssertNil(model.selectedProfile)
+        XCTAssertEqual(
+            model.childProfileCreationError,
+            "Choose your age, then try again."
+        )
+    }
+
     func testChildCreationFailureDoesNotAddOrSelectPhantomProfile() async {
         let existing = TestFixture.profile(name: "Mia", number: 905)
         let model = TadaWordsAppModel(
@@ -116,7 +142,10 @@ final class TadaWordsAppModelTests: XCTestCase {
             childProfileCreator: FailingChildProfileCreator()
         )
 
-        let didCreate = await model.createChildProfileAndWait(nickname: "Coco")
+        let didCreate = await model.createChildProfileAndWait(
+            nickname: "Coco",
+            ageYears: 4
+        )
         XCTAssertFalse(didCreate)
 
         XCTAssertEqual(model.profiles, [existing])
@@ -901,9 +930,11 @@ private actor FailingChildSessionRepository: ChildSessionRepository {
 private actor FailingChildProfileCreator: ChildProfileCreating {
     func createProfile(
         displayName: String,
+        ageYears: Int,
         existingProfiles: [KidProfile]
     ) async throws -> KidProfile {
         _ = displayName
+        _ = ageYears
         _ = existingProfiles
         throw ChildProfileCreationError.profilePersistenceFailed
     }

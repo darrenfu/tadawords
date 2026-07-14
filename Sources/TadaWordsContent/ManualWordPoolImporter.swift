@@ -3,16 +3,19 @@ import TadaWordsDomain
 
 public struct ManualWordPoolImportResult: Sendable {
     public let inserted: [WordPoolEntry]
-    public let requeuedExisting: [WordPoolEntry]
+    public let reactivated: [WordPoolEntry]
+    public let alreadyActive: [WordPoolEntry]
     public let rejected: [ManualWordRejection]
 
     public init(
         inserted: [WordPoolEntry],
-        requeuedExisting: [WordPoolEntry],
+        reactivated: [WordPoolEntry],
+        alreadyActive: [WordPoolEntry],
         rejected: [ManualWordRejection]
     ) {
         self.inserted = inserted
-        self.requeuedExisting = requeuedExisting
+        self.reactivated = reactivated
+        self.alreadyActive = alreadyActive
         self.rejected = rejected
     }
 }
@@ -55,19 +58,23 @@ public struct ManualWordPoolImporter: Sendable {
         let outcomes = try await repository.upsert(drafts)
 
         var inserted: [WordPoolEntry] = []
-        var requeuedExisting: [WordPoolEntry] = []
+        var reactivated: [WordPoolEntry] = []
+        var alreadyActive: [WordPoolEntry] = []
         for outcome in outcomes {
             switch outcome {
             case .inserted(let entry):
                 inserted.append(entry)
-            case .requeuedExisting(let entry):
-                requeuedExisting.append(entry)
+            case .reactivated(let entry):
+                reactivated.append(entry)
+            case .alreadyActive(let entry):
+                alreadyActive.append(entry)
             }
         }
 
         return ManualWordPoolImportResult(
             inserted: inserted,
-            requeuedExisting: requeuedExisting,
+            reactivated: reactivated,
+            alreadyActive: alreadyActive,
             rejected: parseResult.rejected
         )
     }

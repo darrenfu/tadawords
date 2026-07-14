@@ -1,9 +1,12 @@
 import Foundation
+import TadaWordsContent
 import TadaWordsDomain
 
 public enum GuardianWordStoreError: Error, Equatable, Sendable {
     case profileMismatch(expected: ProfileID, received: ProfileID)
     case wordNotFound(WordPromptID)
+    case membershipNotFound(WordPoolEntryID)
+    case membershipCompensationFailed
 }
 
 public enum GuardianFamilyStoreError: Error, Equatable, Sendable {
@@ -441,26 +444,91 @@ public struct GuardianRejectedWord: Identifiable, Equatable, Sendable {
     }
 }
 
+/// Exact, stable identity for one imported Read or Write pool membership.
+///
+/// Preset transactions keep these identities instead of looking words up again
+/// by text. That makes rollback independent from a possibly stale dashboard and
+/// prevents it from touching a same-spelled membership owned by another child.
+public struct GuardianWordPoolMembership: Equatable, Sendable {
+    public let entryID: WordPoolEntryID
+    public let promptID: WordPromptID
+    public let normalizedText: String
+
+    public init(
+        entryID: WordPoolEntryID,
+        promptID: WordPromptID,
+        normalizedText: String
+    ) {
+        self.entryID = entryID
+        self.promptID = promptID
+        self.normalizedText = normalizedText
+    }
+
+    init(entry: WordPoolEntry) {
+        self.init(
+            entryID: entry.id,
+            promptID: entry.prompt.id,
+            normalizedText: entry.normalizedText
+        )
+    }
+}
+
 public struct GuardianWordImportReport: Equatable, Sendable {
+    public let profileID: ProfileID
     public let learningMode: LearningMode
-    public let accepted: [String]
-    public let duplicates: [String]
+    public let insertedMemberships: [GuardianWordPoolMembership]
+    public let reactivatedMemberships: [GuardianWordPoolMembership]
+    public let alreadyActiveMemberships: [GuardianWordPoolMembership]
+    public let duplicateInputWords: [String]
     public let rejected: [GuardianRejectedWord]
 
     public init(
+        profileID: ProfileID,
         learningMode: LearningMode,
-        accepted: [String],
-        duplicates: [String],
+        insertedMemberships: [GuardianWordPoolMembership],
+        reactivatedMemberships: [GuardianWordPoolMembership],
+        alreadyActiveMemberships: [GuardianWordPoolMembership],
+        duplicateInputWords: [String] = [],
         rejected: [GuardianRejectedWord]
     ) {
+        self.profileID = profileID
         self.learningMode = learningMode
-        self.accepted = accepted
-        self.duplicates = duplicates
+        self.insertedMemberships = insertedMemberships
+        self.reactivatedMemberships = reactivatedMemberships
+        self.alreadyActiveMemberships = alreadyActiveMemberships
+        self.duplicateInputWords = duplicateInputWords
         self.rejected = rejected
     }
 
+    /// Compatibility projection used by existing Guardian import UI.
+    public var accepted: [String] {
+        insertedMemberships.map(\.normalizedText)
+    }
+
+    public var restored: [String] {
+        reactivatedMemberships.map(\.normalizedText)
+    }
+
+    public var alreadyPresent: [String] {
+        alreadyActiveMemberships.map(\.normalizedText) + duplicateInputWords
+    }
+
+    /// Compatibility projection: restored memberships historically appeared in
+    /// the duplicate bucket. Transaction code must use the typed collections.
+    public var duplicates: [String] {
+        restored + alreadyPresent
+    }
+
+    public var changedMemberships: [GuardianWordPoolMembership] {
+        insertedMemberships + reactivatedMemberships
+    }
+
     public var processedCount: Int {
-        accepted.count + duplicates.count + rejected.count
+        insertedMemberships.count
+            + reactivatedMemberships.count
+            + alreadyActiveMemberships.count
+            + duplicateInputWords.count
+            + rejected.count
     }
 }
 
@@ -715,6 +783,31 @@ public protocol GuardianWordStore: Sendable {
 
 public protocol GuardianFamilyStore: GuardianWordStore {
     func familySnapshot() async throws -> GuardianFamilySnapshot
+
+    /// Profile-bound variants are used by long-running parent operations. They
+    /// must never consult a mutable "currently selected" pointer after awaiting.
+    func dashboardSnapshot(
+        for profileID: ProfileID
+    ) async throws -> GuardianDashboardSnapshot
+
+    func importWords(
+        _ request: GuardianWordImportRequest,
+        for profileID: ProfileID
+    ) async throws -> GuardianWordImportReport
+
+    func setWordsActive(
+        ids: [WordPromptID],
+        learningMode: LearningMode,
+        isActive: Bool,
+        for profileID: ProfileID
+    ) async throws -> GuardianDashboardSnapshot
+
+    func setMembershipsActive(
+        ids: [WordPoolEntryID],
+        learningMode: LearningMode,
+        isActive: Bool,
+        for profileID: ProfileID
+    ) async throws
 
     func selectProfile(id: ProfileID) async throws -> GuardianDashboardSnapshot
 
