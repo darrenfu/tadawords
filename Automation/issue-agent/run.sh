@@ -14,6 +14,10 @@ fi
 : "${TADA_AGENT_STATE_DIR:=/Users/macmini-dofu/Library/Application Support/TadaWordsIssueAgent/state}"
 : "${TADA_AGENT_LOG_DIR:=/Users/macmini-dofu/Library/Logs/TadaWordsIssueAgent}"
 : "${TADA_AGENT_MAX_ACTIVE_BATCHES:=2}"
+: "${TADA_AGENT_MODEL:=gpt-5.6-sol}"
+if test -z "${TADA_AGENT_CODEX_BIN:-}"; then
+    TADA_AGENT_CODEX_BIN=$(command -v codex)
+fi
 
 mkdir -p "$TADA_AGENT_STATE_DIR" "$TADA_AGENT_LOG_DIR" "$TADA_AGENT_WORKTREE_ROOT"
 
@@ -65,7 +69,9 @@ fi
     printf '\n\n## Immutable preflight snapshot\n\n```json\n'
     cat "$snapshot"
     printf '```\n'
-} | codex --ask-for-approval never exec \
+} | "$TADA_AGENT_CODEX_BIN" --ask-for-approval never exec \
+    --ignore-user-config \
+    --model "$TADA_AGENT_MODEL" \
     --cd "$TADA_AGENT_CONTROL_REPO" \
     --add-dir "$TADA_AGENT_WORKTREE_ROOT" \
     --sandbox danger-full-access \

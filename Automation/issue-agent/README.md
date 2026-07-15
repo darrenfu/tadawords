@@ -11,9 +11,14 @@ in its own worktree. Only one new batch is started per poll, and physical-device
 deployment remains serialized. Set `TADA_AGENT_MAX_ACTIVE_BATCHES` before
 installation to choose a different bounded limit.
 
-Installation also parses the unattended `codex exec` approval/sandbox flags
-before loading the LaunchAgent, so a local CLI compatibility change fails at
-install time rather than silently leaving actionable Issues unclaimed.
+Installation prefers the CLI bundled with the installed ChatGPT/Codex app over
+an older shell `PATH` copy, then parses the unattended approval/sandbox flags
+and runs one cached model round trip before loading the LaunchAgent. The worker
+uses an isolated config plus the explicit `gpt-5.6-sol` default, so unrelated
+user plugins and a stale local model setting cannot strand actionable Issues.
+Set `TADA_AGENT_CODEX_BIN` or `TADA_AGENT_MODEL` before installation to override
+either value. The model probe reruns only when the selected CLI version or model
+changes.
 
 ## Install
 
