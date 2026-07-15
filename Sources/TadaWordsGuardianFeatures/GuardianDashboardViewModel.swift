@@ -2,19 +2,100 @@ import Foundation
 import SwiftUI
 import TadaWordsDomain
 
+enum GuardianParentSection: String, CaseIterable, Equatable {
+    case wordsAndPractice
+    case progressAndPerformance
+    case appAndFamily
+}
+
+enum GuardianSettingsSection: String, CaseIterable, Equatable {
+    case practicePlan
+    case soundAndAccessibility
+    case notifications
+
+    var parentSection: GuardianParentSection {
+        switch self {
+        case .practicePlan:
+            .wordsAndPractice
+        case .soundAndAccessibility, .notifications:
+            .appAndFamily
+        }
+    }
+}
+
+enum GuardianSettingsMergePolicy {
+    static func merging(
+        edited: ProfilePracticeSettings,
+        section: GuardianSettingsSection,
+        into current: ProfilePracticeSettings
+    ) -> ProfilePracticeSettings? {
+        guard edited.profileID == current.profileID else { return nil }
+
+        switch section {
+        case .practicePlan:
+            return ProfilePracticeSettings(
+                profileID: current.profileID,
+                read: edited.read,
+                write: edited.write,
+                audio: current.audio,
+                notifications: current.notifications,
+                interface: current.interface,
+                wordRecommendationMode: current.wordRecommendationMode
+            )
+        case .soundAndAccessibility:
+            return ProfilePracticeSettings(
+                profileID: current.profileID,
+                read: current.read,
+                write: current.write,
+                audio: edited.audio,
+                notifications: current.notifications,
+                interface: edited.interface,
+                wordRecommendationMode: current.wordRecommendationMode
+            )
+        case .notifications:
+            return ProfilePracticeSettings(
+                profileID: current.profileID,
+                read: current.read,
+                write: current.write,
+                audio: current.audio,
+                notifications: edited.notifications,
+                interface: current.interface,
+                wordRecommendationMode: current.wordRecommendationMode
+            )
+        }
+    }
+}
+
 enum GuardianDestination {
     case parentGate
     case dashboard
+    case parentSection(GuardianParentSection)
     case profiles
     case profileEditor(KidProfile?)
     case quickAdd
     case presetWords
     case pool(LearningMode)
     case reports
-    case settings
+    case settings(GuardianSettingsSection)
     case familySync
     case voiceprint(KidProfile)
     case importReport(GuardianWordImportReport)
+
+    var parentSectionForBack: GuardianParentSection? {
+        switch self {
+        case .quickAdd, .presetWords, .pool, .importReport:
+            .wordsAndPractice
+        case .reports:
+            .progressAndPerformance
+        case .settings(let section):
+            section.parentSection
+        case .familySync:
+            .appAndFamily
+        case .parentGate, .dashboard, .parentSection, .profiles, .profileEditor,
+            .voiceprint:
+            nil
+        }
+    }
 }
 
 @MainActor
@@ -90,6 +171,8 @@ final class GuardianDashboardViewModel: ObservableObject {
             "parent-gate"
         case .dashboard:
             "dashboard"
+        case .parentSection(let section):
+            "parent-section-\(section.rawValue)"
         case .profiles:
             "profiles"
         case .profileEditor(let profile):
@@ -102,8 +185,8 @@ final class GuardianDashboardViewModel: ObservableObject {
             "pool-\(mode.rawValue)"
         case .reports:
             "reports-\(reportPeriod.rawValue)"
-        case .settings:
-            "settings"
+        case .settings(let section):
+            "settings-\(section.rawValue)"
         case .familySync:
             "family-sync"
         case .voiceprint(let profile):
@@ -126,6 +209,26 @@ final class GuardianDashboardViewModel: ObservableObject {
 
     func showDashboard() {
         destination = .dashboard
+    }
+
+    func showWordsAndPractice() {
+        destination = .parentSection(.wordsAndPractice)
+    }
+
+    func showProgressAndPerformance() {
+        destination = .parentSection(.progressAndPerformance)
+    }
+
+    func showAppAndFamily() {
+        destination = .parentSection(.appAndFamily)
+    }
+
+    func returnToParentSection() {
+        guard let parentSection = destination.parentSectionForBack else {
+            destination = .dashboard
+            return
+        }
+        destination = .parentSection(parentSection)
     }
 
     func showQuickAdd() {
@@ -152,8 +255,8 @@ final class GuardianDashboardViewModel: ObservableObject {
         destination = .pool(mode)
     }
 
-    func showSettings() {
-        destination = .settings
+    func showSettings(_ section: GuardianSettingsSection) {
+        destination = .settings(section)
     }
 
     func showReports() {
@@ -517,18 +620,35 @@ final class GuardianDashboardViewModel: ObservableObject {
         hasConfirmedWordRemovalThisSession = isConfirmed
     }
 
-    func savePracticeSettings(_ settings: ProfilePracticeSettings) {
+    func savePracticeSettings(
+        _ settings: ProfilePracticeSettings,
+        section: GuardianSettingsSection
+    ) {
         guard !isLoading else { return }
+        guard let currentSettings = snapshot?.practiceSettings else {
+            errorMessage = "Practice settings could not be loaded. Please try again."
+            return
+        }
+        guard
+            let scopedSettings = GuardianSettingsMergePolicy.merging(
+                edited: settings,
+                section: section,
+                into: currentSettings
+            )
+        else {
+            errorMessage = "Practice settings belong to a different Kid profile."
+            return
+        }
         isLoading = true
 
         Task {
             defer { isLoading = false }
             do {
-                let updated = try await store.updatePracticeSettings(settings)
+                let updated = try await store.updatePracticeSettings(scopedSettings)
                 snapshot = updated
                 await reconcileNotifications(for: updated)
                 await applyAudioSnapshot()
-                destination = .dashboard
+                destination = .parentSection(section.parentSection)
             } catch {
                 errorMessage = "Practice settings could not be saved. Please try again."
             }

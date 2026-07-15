@@ -36,9 +36,9 @@ public struct QuestConfiguration: Codable, Hashable, Sendable {
 
     public static let defaultWrite = QuestConfiguration(
         learningMode: .write,
-        newWordLimit: 3,
-        reviewWordLimit: 3,
-        attentionBudget: 6,
+        newWordLimit: 5,
+        reviewWordLimit: 5,
+        attentionBudget: 10,
         contentOrder: .newThenReview
     )
 }

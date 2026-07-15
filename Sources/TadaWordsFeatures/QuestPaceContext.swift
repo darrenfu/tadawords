@@ -1,13 +1,19 @@
 import TadaWordsDomain
 
 extension WordPrompt {
-    /// Current V1 input context. Pencil handwriting remains a separate future
-    /// context and will not be mixed into today's finger-writing baseline.
-    func paceContext(deviceClass: DeviceClass) -> PaceContext {
+    /// Creates a comparable pace bucket without changing the shared learning
+    /// mode. Typed spelling and handwriting therefore contribute to the same
+    /// word mastery while keeping independent timing baselines.
+    func paceContext(
+        deviceClass: DeviceClass,
+        writeInputMethod: WriteQuestInputMethod = .handwriting
+    ) -> PaceContext {
         PaceContext(
             learningMode: learningMode,
             deviceClass: deviceClass,
-            inputMethod: learningMode == .read ? .speech : .fingerWriting,
+            inputMethod: learningMode == .read
+                ? .speech
+                : writeInputMethod.defaultLearningInputMethod,
             wordLength: normalizedText.count
         )
     }

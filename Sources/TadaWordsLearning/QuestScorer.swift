@@ -279,9 +279,8 @@ public struct QuestScorer: Sendable {
 
         let measurements = correctAttempts.compactMap { attempt -> PaceMeasurement? in
             guard
-                let context = input.paceContextByWordID[
-                    attempt.original.wordPromptID
-                ],
+                let context = attempt.original.paceContext
+                    ?? input.paceContextByWordID[attempt.original.wordPromptID],
                 let measurement = AttemptPaceMeasurementExtractor().measurement(
                     from: attempt.original,
                     context: context

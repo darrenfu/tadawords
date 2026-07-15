@@ -46,7 +46,8 @@ enum TestFixture {
         at date: Date = now,
         responseSeconds: TimeInterval? = 2,
         replayCount: Int = 0,
-        questID: QuestID? = questID
+        questID: QuestID? = questID,
+        paceContext: PaceContext? = nil
     ) -> AttemptEvent {
         let elapsed = responseSeconds.map(ElapsedTime.init(seconds:))
         let timing: AttemptTiming
@@ -70,7 +71,8 @@ enum TestFixture {
             outcome: outcome,
             timing: timing,
             occurredAt: date,
-            replayCount: replayCount
+            replayCount: replayCount,
+            paceContext: paceContext
         )
     }
 

@@ -25,6 +25,28 @@ public enum LearningInputMethod: String, Codable, CaseIterable, Hashable, Sendab
     case speech
     case fingerWriting
     case pencilWriting
+    /// A theme-skinned, in-app A-Z keyboard. This is intentionally distinct
+    /// from the system keyboard and from handwriting so personal pace history
+    /// never compares typing with drawing letterforms.
+    case letterKeyboard
+}
+
+/// The child-facing way to answer a Write quest.
+///
+/// Both choices use the same `.write` pool, scheduler, completion, and mastery
+/// records. Only the response surface and comparable pace context differ.
+public enum WriteQuestInputMethod: String, Codable, CaseIterable, Hashable, Sendable {
+    case handwriting
+    case letterKeyboard
+
+    public var defaultLearningInputMethod: LearningInputMethod {
+        switch self {
+        case .handwriting:
+            .fingerWriting
+        case .letterKeyboard:
+            .letterKeyboard
+        }
+    }
 }
 
 public enum WritingInputMethod: String, Codable, CaseIterable, Hashable, Sendable {

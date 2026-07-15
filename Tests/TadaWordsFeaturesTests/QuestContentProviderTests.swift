@@ -181,10 +181,10 @@ final class QuestContentProviderTests: XCTestCase {
         XCTAssertFalse(prepared.orderedPrompts.contains { $0.id == futureEntry.prompt.id })
     }
 
-    func testWriteDefaultsSelectThreeNewThenThreeDueReviewWords() async throws {
+    func testWriteDefaultsSelectFiveNewThenFiveDueReviewWords() async throws {
         let fixture = ProviderFixture()
         _ = try await ManualWordPoolImporter(repository: fixture.wordPool).importBatch(
-            "look play jump stop run big",
+            "look play jump stop run big red cat dog sun",
             profileID: fixture.profile.id,
             learningMode: .write,
             addedAt: fixture.clock.now
@@ -194,7 +194,7 @@ final class QuestContentProviderTests: XCTestCase {
             learningMode: .write,
             includingInactive: false
         )
-        for entry in entries.prefix(3) {
+        for entry in entries.prefix(5) {
             try await fixture.records.save(
                 fixture.progress(
                     for: entry.prompt,
@@ -209,11 +209,11 @@ final class QuestContentProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(prepared.plan.configuration, .defaultWrite)
-        XCTAssertEqual(prepared.plan.newWordIDs, entries.suffix(3).map(\.prompt.id))
-        XCTAssertEqual(prepared.plan.reviewWordIDs, entries.prefix(3).map(\.prompt.id))
+        XCTAssertEqual(prepared.plan.newWordIDs, entries.suffix(5).map(\.prompt.id))
+        XCTAssertEqual(prepared.plan.reviewWordIDs, entries.prefix(5).map(\.prompt.id))
         XCTAssertEqual(
             prepared.orderedPrompts.map(\.id),
-            entries.suffix(3).map(\.prompt.id) + entries.prefix(3).map(\.prompt.id)
+            entries.suffix(5).map(\.prompt.id) + entries.prefix(5).map(\.prompt.id)
         )
     }
 

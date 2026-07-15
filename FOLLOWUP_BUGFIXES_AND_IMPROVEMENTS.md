@@ -299,3 +299,35 @@ Branch: `v0.3.1`
 - All 1,008 files decode as mono 44.1 kHz AAC-LC; combined audio size is 6,811,003 bytes. The teacher pack duration is 674.80 seconds and Aurora duration is 9.04 seconds.
 - A full 1,000-clip Apple Speech audit was reviewed with a second Whisper pass for true suspects. Homophone spelling differences were ignored; `near` and `chick` were corrected through IPA, and `bun` now uses a manifest-documented Aurora override after both recognizers rejected Katie. The final targeted clips pass both recognizers. Aurora's launch and transition outputs were also transcription-checked; the launch has no detected `da`→`words` gap and a lengthened `words` segment, while exact musical pitch remains device-listening QA.
 - Swift 6 package suite passes 595/595 with bundled manifest, variant routing, fallback, and Aurora resource checks. Physical speaker fatigue, mix, and child reaction remain manual acceptance items.
+
+## v0.5 — 2026-07-14
+
+Target release: `v0.5.0`
+
+Branch: `v0.5`
+
+Baseline: `v0.3.2` LocalQA device baseline plus its unmerged QA fixes.
+Overall state: implementation and automated verification in progress; physical
+iPad child/parent acceptance remains open.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V05-UX-001 | UX redesign | Parent navigation | Replace the long Parent dashboard with one compact `Parent Home`: a single `Kids` Profile entrance, `Words & Practice`, `Progress & Performance`, `App & Family`, and `Lock`. Word management and child performance must never share a category. Remove duplicate Pool/Manage/Preset entrances and return every detail page to its owning category hub. | Automated pass; visual device QA pending | On iPhone and iPad in both Parent orientations, reach every existing Parent capability exactly once, verify Back returns to the owning hub, and confirm no card text wraps or clips at supported Dynamic Type sizes. |
+| V05-FEAT-001 | Feature | Write spelling | Opening Write asks the child to choose `Write by Hand` or `Spell with Letters`. Either choice completes the same Daily Write Quest (rule B), uses the same Write Pool/mastery/review schedule, and earns only one completion/reward. Spelling uses a theme-colored, fixed-position QWERTY A–Z keyboard built entirely in SwiftUI; it never opens the iOS keyboard. Case is ignored, apostrophes/hyphens are structural, and typed pace is never compared with handwriting pace. Focused Replay preserves the chosen input method. | Automated pass; physical child QA pending | Complete both choices, verify exactly one Daily Write completion/reward, check all 26 letter keys plus Delete/Done in every World, assert no system keyboard, test case and punctuation, wrong-answer guided retry, Replay, relaunch recovery, VoiceOver order, and both landscape directions. |
+| V05-IMP-001 | Improvement | Practice defaults | New Profiles default to 5 new and 5 review Write words instead of 3 and 3. Existing Profiles keep every saved custom value; there is no migration that overwrites parent choices. | Automated pass | Create a new Profile and see 5/5; reopen an existing Profile with custom Write limits and confirm the saved values are unchanged. |
+
+### 2026-07-14 v0.5 notes
+
+- Reorganized Parent tools into three category hubs while retaining every word,
+  report, calendar, Profile, notification, audio, accessibility, and sync feature.
+- Split the former all-in-one settings page into Practice Plan, Sound &
+  Accessibility, and Notifications. Each save performs a scoped merge against
+  the latest Profile settings so hidden values cannot be overwritten.
+- Added a child-facing Write input chooser and a theme-matched A–Z keyboard.
+  Handwriting and typed spelling share the Write learning contract, while
+  attempt pace remains separated by input method.
+- Raised only the defaults for newly created Profile settings to 5/5; persisted
+  Profile settings remain authoritative.
+- Registered and signed the newly connected iPad with Personal Team
+  `6S245NCUPQ`; v0.3.2 (`2026071406`) was reinstalled and launched successfully
+  before the v0.5 candidate replaced it.

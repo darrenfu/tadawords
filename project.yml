@@ -40,8 +40,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app
         PRODUCT_NAME: Tada Words
-        MARKETING_VERSION: 0.3.1
-        CURRENT_PROJECT_VERSION: 2026071405
+        MARKETING_VERSION: 0.5.0
+        CURRENT_PROJECT_VERSION: 2026071407
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: false
@@ -59,8 +59,8 @@ targets:
       path: Apps/TadaWordsApp/Info.plist
       properties:
         CFBundleDisplayName: Tada Words
-        CFBundleShortVersionString: "0.3.1"
-        CFBundleVersion: "2026071405"
+        CFBundleShortVersionString: "0.5.0"
+        CFBundleVersion: "2026071407"
         CKSharingSupported: true
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: Tada Words uses the microphone after a child taps Record to check a spoken practice word or capture a voice-setup sample. Raw audio is not saved or uploaded.

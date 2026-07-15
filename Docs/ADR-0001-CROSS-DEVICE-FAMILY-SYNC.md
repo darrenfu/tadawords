@@ -99,6 +99,18 @@ Status, pending count, last success, and privacy-safe error category survive an 
 
 Malformed or identity-conflicting incoming data is quarantined instead of overwriting valid local data. The Parent screen reports that sync needs attention and offers retry/exported diagnostics; the child can continue practicing.
 
+### Client and schema compatibility
+
+v0.5 adds `letterKeyboard` to the persisted attempt pace context so typed
+spelling and handwriting can share Write mastery without sharing pace. A v0.5
+client decodes all earlier attempt values, but a pre-v0.5 client does not know
+the new enum case. Until record schema negotiation and tolerant unknown-value
+handling ship, Family Sync must require every participating device to run v0.5
+or later before a letter-keyboard attempt is uploaded. LocalQA remains
+device-only and is unaffected. Do not silently encode a typed attempt as
+handwriting merely to satisfy an older client, because that would corrupt the
+child's pace baseline.
+
 ## Existing implementation audit
 
 | Area | Present in the repository | Gap before completion |
@@ -118,7 +130,9 @@ Malformed or identity-conflicting incoming data is quarantined instead of overwr
 ## Minimal implementation sequence
 
 1. Make Profile deletion unconditional in conflict resolution and add a deletion ledger plus CloudKit child-record erasure.
-2. Add record schema versions, logical revisions, and a durable profile-level sync journal/status snapshot.
+2. Add record schema versions, minimum-client negotiation, tolerant unknown
+   attempt-context decoding, and a durable profile-level sync journal/status
+   snapshot.
 3. Add per-entry pool revisions and split settings into independently mergeable groups.
 4. Stop treating synced `WordProgress` as authoritative; rebuild all progress from the merged attempts and corrections.
 5. Introduce stable daily-plan, Today-completion, and reward business record names; add order-independent two-device convergence tests.
@@ -140,4 +154,3 @@ Live acceptance requires:
 7. Confirm voiceprints remain independently enrolled per device and picture/teacher-audio caches re-download instead of syncing.
 
 Until all seven live steps pass, product copy and release notes must describe Family Sync as under acceptance, not complete.
-

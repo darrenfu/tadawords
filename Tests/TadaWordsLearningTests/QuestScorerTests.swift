@@ -4,6 +4,46 @@ import XCTest
 @testable import TadaWordsLearning
 
 final class QuestScorerTests: XCTestCase {
+    func testPersistedAttemptContextKeepsTypedPaceOutOfHandwritingBand() {
+        let typedContext = PaceContext(
+            learningMode: .write,
+            deviceClass: .tablet,
+            inputMethod: .letterKeyboard,
+            wordLength: 3
+        )
+        let handwritingContext = TestFixture.paceContext(
+            mode: .write,
+            wordLength: 3
+        )
+        let attempt = TestFixture.attempt(
+            number: 1,
+            wordNumber: 1,
+            mode: .write,
+            outcome: .correct,
+            responseSeconds: 2,
+            paceContext: typedContext
+        )
+
+        let score = QuestScorer().score(
+            QuestScoringInput(
+                plan: makePlan(
+                    wordIDs: [attempt.wordPromptID],
+                    mode: .write
+                ),
+                completedWordIDs: [attempt.wordPromptID],
+                attempts: [attempt],
+                paceContextByWordID: [
+                    attempt.wordPromptID: handwritingContext
+                ],
+                personalPaceBands: [
+                    TestFixture.paceBand(context: typedContext)
+                ]
+            )
+        )
+
+        XCTAssertEqual(score.personalPaceAssessment, .withinPersonalBand)
+    }
+
     func testEightyPercentAccuracyAndComfortablePaceEarnAllStars() {
         let wordIDs = (1...5).map(TestFixture.wordID)
         let plan = makePlan(wordIDs: wordIDs)
@@ -597,11 +637,14 @@ final class QuestScorerTests: XCTestCase {
         XCTAssertEqual(score.stars.earned, [.completion, .accuracy])
     }
 
-    private func makePlan(wordIDs: [WordPromptID]) -> QuestPlan {
+    private func makePlan(
+        wordIDs: [WordPromptID],
+        mode: LearningMode = .read
+    ) -> QuestPlan {
         QuestPlan(
             id: TestFixture.questID,
             profileID: TestFixture.profileID,
-            configuration: .defaultRead,
+            configuration: mode == .read ? .defaultRead : .defaultWrite,
             reviewWordIDs: [],
             newWordIDs: wordIDs,
             createdAt: TestFixture.now

@@ -10,13 +10,14 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.3.1%20device%20QA-6D48D7" alt="v0.3.1 device QA">
+  <img src="https://img.shields.io/badge/status-v0.5%20development-6D48D7" alt="v0.5 development">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
 
 - **Read:** See a word and say it aloud.
-- **Write:** Hear a word and write the whole word by hand.
+- **Write:** Hear a word, then either write it by hand or spell it with the
+  app's theme-matched A–Z keyboard.
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
@@ -32,12 +33,14 @@ music, sound cues, and 25-item reward collection.
 | Route | Prompt | Child response | Evidence |
 |---|---|---|---|
 | Read Quest | The app shows a sight word | The child says the word | On-device speech recognition plus optional device voiceprint confidence |
-| Write Quest | The app speaks a sight word | The child writes the complete word | Vision handwriting recognition from the drawing canvas |
+| Write Quest | The app speaks a sight word | The child chooses handwriting or the in-app A–Z spelling keyboard | Vision handwriting recognition or exact case-insensitive typed spelling; both complete the same Write Quest while pace stays separate |
 | Review | The scheduler selects due and weak words | The child retrieves the word again | Accuracy, elapsed time, help, replay, and retry history |
 
 Read never speaks the target before the child's first independent response. After two valid wrong readings it reveals only child-triggered **Hear it**; technical retries never reveal help early. Covered words use the bundled Katie Read-hint recording, while other guardian-entered words use Apple speech. Each World owns one coordinated, high-contrast word color, so every Read word stays visually consistent until the child changes Worlds.
 
-Write plays the bundled Katie isolated-word recording at 0.82× for the first 500 covered words and never pre-shows the spelling. The separate Read-hint version uses 0.90×. Apple speech is the offline fallback for words outside the pack and keeps a neutral pitch plus enough release time to preserve final consonants. The `?` control reveals the word on demand. After the first genuine mismatch, a concrete word such as `dog` can show a tappable picture hint; abstract and function words such as `the` receive no image. Children can choose Pencil, Chalk, or Brush; ink is always black and the selected tool persists per Profile. The 4× local eraser restores the prior pen after a blank-canvas tap. The canvas is 10% wider, keeps fixed coordinates during feedback and word transitions, and preserves dots, later letters, and connected strokes. Vision uses two bounded raster passes, target-informed alternatives, and exact case-normalized matching, so `of/Of/OF` and `go/Go/GO` share one spelling decision while neighboring words and literal `90` remain rejected. Technical speech or recognition failures do not reduce the child's score.
+Write plays the bundled Katie isolated-word recording at 0.82× for the first 500 covered words and never pre-shows the spelling. The child first chooses **Write by Hand** or **Spell with Letters**; either choice completes the same Daily Write Quest and shares its Pool, mastery, review schedule, score, and reward. Typed pace is recorded in a separate input-method band so fast key taps never make handwriting look slow. The spelling surface is a fixed-position, theme-colored QWERTY A–Z keyboard built in SwiftUI, so the system keyboard, predictive text, numbers, and symbols never appear. Comparison ignores capitalization, while apostrophes and hyphens are supplied as structural parts of the prompt. Focused Replay keeps the selected input method.
+
+For handwriting, the `?` control reveals the word on demand. After the first genuine mismatch, a concrete word such as `dog` can show a tappable picture hint; abstract and function words such as `the` receive no image. Children can choose Pencil, Chalk, or Brush; ink is always black and the selected tool persists per Profile. The 4× local eraser restores the prior pen after a blank-canvas tap. The canvas is 10% wider, keeps fixed coordinates during feedback and word transitions, and preserves dots, later letters, and connected strokes. Vision uses two bounded raster passes, target-informed alternatives, and exact case-normalized matching, so `of/Of/OF` and `go/Go/GO` share one spelling decision while neighboring words and literal `90` remain rejected. Technical speech or recognition failures do not reduce the child's score.
 
 Child-facing stars reward completion, accurate retrieval, and a comfortable personal pace. One immediate unaided recovery can still earn the Accuracy Star, calibration can earn Pace, and the post-calibration slow side gets 50% grace. Guardian accuracy and mastery evidence stay strict.
 
@@ -79,11 +82,11 @@ Preset imports also stay bound to the initiating Profile. An import to **Both** 
 
 | Area | Included |
 |---|---|
-| Practice | Separate Read and Write pools, independent Today Quest buttons, New and Review ordering, timer, Rescue state, score, stars, and mastery |
+| Practice | Separate Read and Write pools, independent Today Quest buttons, Write-by-hand or theme A–Z spelling, New and Review ordering, timer, Rescue state, score, stars, and mastery |
 | Word setup | One-word Return-to-add; multi-photo Camera/Photo OCR; 34 offline preset lists with explicit word selection; numbered review; 500 words per image; added-order, A-Z, and most-practiced sort; type-ahead search with Hear/Delete; de-duplication; session-scoped delete confirmation; bulk delete; per-Pool Delete All and Undo; no automatic additions |
 | Profiles | Profile-first launch, multiple children, nickname entry, age capture from 3 through 8, last-profile highlight, animal/photo/collected-treasure avatar, earned icon, grade, and preferred world |
 | Motivation | Eight original worlds, 20 small rewards and five milestones per world, 200 distinct treasure icons, Double-Quest next-day Theme/Icon unlocks, My Collection, and a monthly calendar |
-| Guardian tools | Single-tap `Parents` → auto-checking math Parent Gate, Today dashboard, Word Manager, reports, corrections, settings, CSV export, and Lock-to-Kid-selection navigation |
+| Guardian tools | Single-tap `Parents` → auto-checking math Parent Gate, compact Parent Home with separate Words, Performance, and App/Family hubs, Word Manager, reports, corrections, settings, CSV export, and Lock-to-Kid-selection navigation |
 | Accessibility | Landscape child routes plus rotatable parent routes, shared 44-point minimum targets, VoiceOver labels and announcements, Reduce Motion, left-handed writing, Reduced Sound, and Calm Rescue; physical accessibility acceptance remains open |
 | Platform | Offline-first Katie teacher audio with an Apple Speech fallback, bundled Aurora launch/transitions, repeat-after-me Keychain voiceprints, target-informed Vision handwriting recognition, local notifications, local JSON snapshots, device-only LocalQA, and explicitly enabled CloudKit family sync |
 
