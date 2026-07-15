@@ -65,11 +65,10 @@ fi
     printf '\n\n## Immutable preflight snapshot\n\n```json\n'
     cat "$snapshot"
     printf '```\n'
-} | codex exec \
+} | codex --ask-for-approval never exec \
     --cd "$TADA_AGENT_CONTROL_REPO" \
     --add-dir "$TADA_AGENT_WORKTREE_ROOT" \
     --sandbox danger-full-access \
-    --ask-for-approval never \
     --ephemeral \
     --color never \
     --json \

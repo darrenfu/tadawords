@@ -11,6 +11,10 @@ in its own worktree. Only one new batch is started per poll, and physical-device
 deployment remains serialized. Set `TADA_AGENT_MAX_ACTIVE_BATCHES` before
 installation to choose a different bounded limit.
 
+Installation also parses the unattended `codex exec` approval/sandbox flags
+before loading the LaunchAgent, so a local CLI compatibility change fails at
+install time rather than silently leaving actionable Issues unclaimed.
+
 ## Install
 
 ```sh

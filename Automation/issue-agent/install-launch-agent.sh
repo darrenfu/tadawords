@@ -21,6 +21,9 @@ for command in git gh codex python3; do
 done
 gh auth status >/dev/null
 codex login status >/dev/null
+codex --ask-for-approval never exec \
+    --sandbox danger-full-access \
+    --version >/dev/null
 
 mkdir -p "$BIN_DIR" "$STATE_DIR" "$LOG_DIR" "$WORKTREE_ROOT" \
     "${LAUNCH_AGENT:h}"
