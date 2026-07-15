@@ -28,6 +28,7 @@ generate_clip() {
   local dictionary_id="$4"
   local output="$5"
   local emotion="${6:-}"
+  local tail_padding_seconds="${7:-0}"
 
   if is_valid_m4a "$output"; then
     return 0
@@ -78,14 +79,28 @@ generate_clip() {
 
     if [[ "$status" == "200" ]]; then
       mv "$response" "$wav"
-      ffmpeg -v error -y \
-        -i "$wav" \
-        -map_metadata -1 \
-        -ac 1 \
-        -ar 44100 \
-        -c:a aac \
-        -b:a 64k \
-        "$temporary"
+      if awk -v padding="$tail_padding_seconds" \
+        'BEGIN {exit !(padding > 0)}'
+      then
+        ffmpeg -v error -y \
+          -i "$wav" \
+          -af "apad=pad_dur=$tail_padding_seconds" \
+          -map_metadata -1 \
+          -ac 1 \
+          -ar 44100 \
+          -c:a aac \
+          -b:a 64k \
+          "$temporary"
+      else
+        ffmpeg -v error -y \
+          -i "$wav" \
+          -map_metadata -1 \
+          -ac 1 \
+          -ar 44100 \
+          -c:a aac \
+          -b:a 64k \
+          "$temporary"
+      fi
       mv "$temporary" "$output"
       if ! is_valid_m4a "$output"; then
         rm -f "$payload" "$wav" "$response" "$output"
@@ -115,6 +130,7 @@ generate_clip() {
 worker() {
   local encoded="$1"
   local task text speed voice dictionary relative_path emotion
+  local tail_padding_seconds
   task="$(printf '%s' "$encoded" | base64 -D)"
   text="$(jq -r '.text' <<< "$task")"
   speed="$(jq -r '.speed' <<< "$task")"
@@ -122,9 +138,11 @@ worker() {
   dictionary="$(jq -r '.dictionary_id' <<< "$task")"
   relative_path="$(jq -r '.relative_path' <<< "$task")"
   emotion="$(jq -r '.emotion // ""' <<< "$task")"
+  tail_padding_seconds="$(jq -r \
+    '.tail_padding_seconds // 0' <<< "$task")"
   generate_clip \
     "$text" "$speed" "$voice" "$dictionary" \
-    "$AUDIO_ROOT/$relative_path" "$emotion"
+    "$AUDIO_ROOT/$relative_path" "$emotion" "$tail_padding_seconds"
 }
 
 export -f is_valid_m4a generate_clip worker
@@ -320,6 +338,7 @@ generate_teacher_words() {
         $manifest.voice_overrides[$word].id // $manifest.voice.id
       ),
       dictionary_id: $manifest.pronunciation_dictionary_id,
+      tail_padding_seconds: $variant.value.tail_padding_seconds,
       relative_path: (
         "TeacherWords/Katie-500-v1/" + $variant.value.directory + "/" + $word + ".m4a"
       )

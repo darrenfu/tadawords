@@ -677,18 +677,18 @@ Todo Math 仅作为“儿童可以独立理解、游戏反馈即时、背景音�
 - 正常状态使用轻快但低密度的循环，不与 TTS、孩子朗读或书写节奏争夺注意力。
 - 紧急状态使用同一原创主题的加速或加层版本，平滑切换；不突然增大音量、不加入警报声。
 - TTS、Help 和标准发音播放时，背景乐自动 ducking。
-- Read `Hear it`、Write 自动提示和 Parent 试听优先使用 500 词离线包：Katie 是 canonical teacher，Read 为清晰自然的 0.90×，Write 为保留尾音的 0.82×。若双识别审计确认某个孤立词的 canonical 输出不清楚，允许在 manifest 中记录单词级 voice/speed override；首包仅 `bun` 使用 Aurora。每词两个版本不可互换；未覆盖词使用同一条 Apple 美式女声 fallback。播放期间切到 spoken-audio session 并同时压低 App 音乐与外部音频，结束后再恢复混音。
+- Read `Hear it`、Write 自动提示和 Parent 试听优先使用 500 词离线包：Katie 是 canonical teacher，Read 与 Write 均按正常语速的 `1/1.5 ≈ 0.67×` 生成，并在文件尾保留 120ms 安全 padding，确保 `at` 的 `/t/` 等尾辅音释放完成后才结束播放。若双识别审计确认某个孤立词的 canonical 输出不清楚，允许在 manifest 中记录单词级 voice/speed override；首包仅 `bun` 使用 Aurora。每词两个版本不可互换；未覆盖词使用同一条 Apple 美式女声 fallback。播放期间切到 spoken-audio session 并同时压低 App 音乐与外部音频，结束后再恢复混音。
 - Read 开始录音前快速淡出背景乐和非必要环境音；录音结束后再平滑恢复，避免影响降噪和识别。
 
 #### 功能音效
 
 - 点击、正确、重试、星星和收藏品使用相同的功能语义，但具体音色与短旋律跟随当前 World。
 - 点击：短、柔和、低刺激的触感音。
-- 正确：先立即播放当前 World 的原创上行短音型，再依序轮换六条 Aurora 微庆祝语（如 `Ta-da!`、`Yes!`、`You did it!`），避免连续重复同一句；Reduced Sound 只保留必要非语言反馈并关闭这些装饰口播。
+- 正确：先立即播放当前 World 的原创上行短音型，再依序轮换五条 Aurora 微庆祝语（如 `Yes!`、`You did it!`、`Nice one!`），避免连续重复同一句；transition 不使用 `Ta-da!` 一类感叹词。Reduced Sound 只保留必要非语言反馈并关闭这些装饰口播。
 - 有效错误：温和的“再试一次”提示，不使用蜂鸣器或失败号角。
 - `technicalRetry`：使用中性提示音，必须与孩子答错的声音明显不同。
 - 三颗星：三段可区分但属于同一声音家族的揭晓音。
-- Quest 结算：星星仍使用当前 World 的专属音色，完成时增加 Aurora 的短句 `Quest complete! Ta-da!`；不做随机稀有度音效。
+- Quest 结算：星星仍使用当前 World 的专属音色，完成时增加 Aurora 的短句 `Quest complete!`；不追加 `Ta-da!`，也不做随机稀有度音效。
 - 三种书写工具使用原创的短促摩擦/颗粒音色，并按实际移动节流；Reduced Sound 关闭这些装饰性书写音，提示发音播放时也不叠加。
 
 #### 首发 World 的声音方向

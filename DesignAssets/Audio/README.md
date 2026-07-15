@@ -3,12 +3,13 @@
 ## Bundled spoken audio v1 — 2026-07-14
 
 - Vendor/model: Cartesia Sonic 3.5 under the project's paid commercial plan.
-- Teacher role: Katie leads 500 unique words with separate Read hint (0.90×)
-  and Write prompt (0.82×) recordings. `bun` uses a manifest-documented Aurora
+- Teacher role: Katie leads 500 unique words with separate Read hint and Write
+  prompt recordings, both at 0.67× with 120 ms protected tails. `bun` uses a manifest-documented Aurora
   override because two recognizers rejected Katie's isolated rendering.
-- Brand/transition role: Aurora, one launch line, six rotating correct-answer
-  micro-celebrations, and one Quest-complete line.
-- Delivery: 1,008 mono 44.1 kHz AAC-LC files, approximately 6.8 MB total.
+- Brand/transition role: Aurora, one launch line, five rotating correct-answer
+  micro-celebrations, one Quest-complete line, and one launch-generation source
+  clip that is not selected as a transition.
+- Delivery: 1,008 mono 44.1 kHz AAC-LC files, approximately 7.4 MB total.
 - Runtime behavior: bundled and offline-first. No Cartesia key or runtime vendor
   request is shipped in the App. Apple en-US speech remains the fallback for a
   missing asset or a guardian-entered word outside the 500-word manifest.
@@ -111,9 +112,10 @@ never repeats a vowel slice. `words` falls across three
 stages and connects through only an 8 ms click-safe crossfade. This makes the
 prosody deterministic instead of asking TTS punctuation to infer the brand
 contour.
-Katie Read prompts use 0.90× and Write prompts use 0.82× to keep short vowels and
-final consonants clear. Words outside the versioned manifest pass unchanged to
-Apple fallback synthesis.
+Katie Read and Write prompts use 0.67×, with a 120 ms encoded tail after each
+clip to keep final consonants clear. Words outside the versioned manifest pass
+unchanged to Apple fallback synthesis at the same one-and-a-half-times-slower
+cadence.
 
 ## Safety mix
 

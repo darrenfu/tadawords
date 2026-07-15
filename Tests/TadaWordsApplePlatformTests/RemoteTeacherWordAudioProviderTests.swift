@@ -68,12 +68,12 @@ final class RemoteTeacherWordAudioProviderTests: XCTestCase {
         XCTAssertEqual(payload["usage"] as? String, "read_hint")
         XCTAssertEqual(
             try XCTUnwrap(payload["speed"] as? Double),
-            0.90,
+            0.67,
             accuracy: 0.000_1
         )
         XCTAssertEqual(
             payload["contractVersion"] as? String,
-            "canonical-teacher-v2"
+            "canonical-teacher-v3"
         )
         XCTAssertNil(payload["voiceID"])
         XCTAssertNil(payload["apiKey"])

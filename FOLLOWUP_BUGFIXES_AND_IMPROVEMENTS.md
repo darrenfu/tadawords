@@ -294,3 +294,23 @@ Branch: `agent/v0.4-offline-audio`
 - A full 1,000-clip Apple Speech audit was reviewed with a second Whisper pass for true suspects. Homophone spelling differences were ignored; `near` and `chick` were corrected through IPA, and `bun` now uses a manifest-documented Aurora override after both recognizers rejected Katie. The final targeted clips pass both recognizers.
 - The owner rejected the first direct-TTS launch render because `da` did not rise and the connection sounded too long, then rejected the staged replacement because the first syllable sounded like falling-tone “塔” instead of light “他” and a repeated source slice produced an extra stressed `a` after `da`. Aurora pack 1.0.2 keeps only the naturally level-to-rising onset for a short `/tə/` (approximately 332→334 Hz), stretches one unrepeated continuous `/dɑː/` window through approximately 380→394→459 Hz, and uses only an 8 ms click-safe join into `words`. Silence detection finds no internal pause. Exact character and naturalness remain owner device-listening QA.
 - Swift 6 package suite passes 594/594 with bundled manifest, variant routing, fallback, and Aurora resource checks. Physical speaker fatigue, mix, and child reaction remain manual acceptance items.
+
+## v0.4.1 — 2026-07-14
+
+Target release: `v0.4.1`
+
+Branch: `agent/v0.4.1-slower-teacher-audio`
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| AUDIO-FIX-003 | Improvement | Teacher word audio | Generate both Read and Write isolated words at `1/1.5 ≈ 0.67×`; preserve terminal consonants such as the `/t/` in `at`. | Implemented; automated acoustic and recognition pass | On iPhone and iPad, listen to `at`, `cat`, `sit`, `dog`, `help`, `look`, and `with` in both modes. Confirm the pace is comfortable for Pre-K and no final consonant is masked by speaker response or music recovery. |
+| AUDIO-FIX-004 | Improvement | Spoken transitions | Remove `Ta-da!` as a correct-answer interjection and from the Quest-complete line. The `Tada Words` cold-launch brand name remains separate. | Implemented; automated manifest and recognition pass | Complete enough words to rotate through every correct-answer phrase, then finish one Quest. Confirm no transition says `Ta-da`; cold launch must still say the product name. |
+
+### v0.4.1 implementation evidence
+
+- Regenerated all 1,000 Katie/Aurora-override teacher clips from manifest version 1.1.0 at 0.67×. Each clip receives 120 ms of post-waveform padding before AAC encoding; playback already waits for the full `AVAudioPlayer` completion callback.
+- All 1,000 teacher files decode as mono 44.1 kHz AAC-LC. Teacher duration is 863.12 seconds; all 1,008 audio resources total 7,428,104 bytes.
+- The new `at` clips are 0.68–0.76 seconds versus 0.48–0.56 seconds before the change. Silence/energy inspection shows the stop closure, a following `/t/` release, and then the protected tail.
+- Whisper independently transcribed both Read and Write samples for `at`, `it`, `cat`, `hat`, `sit`, `hit`, `get`, `cut`, `hot`, `not`, `dog`, `big`, `red`, `stop`, `help`, `look`, `fish`, `duck`, `back`, `off`, and `with` with their terminal consonants intact. Across 50 available curated clips, 43 were exact words; seven differed only in the vowel or initial consonant while retaining the expected terminal consonant. Three requested audit words were not members of the parent-approved 500-word manifest and were excluded rather than silently added.
+- The correct-answer manifest now exposes five lines and no longer exposes `Ta-da!`. The regenerated Quest-complete clip contains only `Quest complete!`; Whisper transcribes it as `Quest complete.` The private `correct/ta-da.m4a` resource remains solely as the reproducible source component for the separate cold-launch brand mark and is not reachable by transition rotation.
+- Strict Swift formatting, the full 594-test package suite, and a fresh generic iOS Simulator build pass. The built App contains all 1,008 resources, and its bundled `at` hash matches the reviewed source asset.
