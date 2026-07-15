@@ -16,7 +16,10 @@ struct GuardianProfilesView: View {
     let onAdd: () -> Void
 
     private let columns = [
-        GridItem(.adaptive(minimum: 280), spacing: GuardianPrimitiveTokens.Spacing.medium)
+        GridItem(
+            .adaptive(minimum: GuardianProfileCardLayoutPolicy.minimumCardWidth),
+            spacing: GuardianProfileCardLayoutPolicy.cardSpacing
+        )
     ]
 
     var body: some View {
@@ -45,7 +48,10 @@ struct GuardianProfilesView: View {
                 }
                 .buttonStyle(GuardianPrimaryButtonStyle())
             }
-            .frame(maxWidth: 960, alignment: .leading)
+            .frame(
+                maxWidth: GuardianProfileCardLayoutPolicy.maximumContentWidth,
+                alignment: .leading
+            )
             .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
             .padding(.vertical, GuardianPrimitiveTokens.Spacing.large)
             .frame(maxWidth: .infinity)
@@ -94,20 +100,35 @@ private struct GuardianProfileManagementCard: View {
                     }
                 }
 
-                HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
-                    Button(isSelected ? "Selected" : "Manage", action: onSelect)
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isSelected)
-                    Button("Edit", action: onEdit)
-                        .buttonStyle(.bordered)
-                    Button(action: onVoiceprint) {
-                        Label(voiceprintTitle, systemImage: "waveform.badge.mic")
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                        actionButtons
                     }
-                    .buttonStyle(.bordered)
+                    .fixedSize(horizontal: true, vertical: false)
+
+                    VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.small) {
+                        actionButtons
+                    }
                 }
                 .controlSize(.large)
             }
         }
+        .accessibilityIdentifier("guardian.profile.\(profile.id)")
+    }
+
+    @ViewBuilder private var actionButtons: some View {
+        Button(isSelected ? "Selected" : "Manage", action: onSelect)
+            .buttonStyle(.borderedProminent)
+            .disabled(isSelected)
+            .accessibilityIdentifier("guardian.profile.\(profile.id).manage")
+        Button("Edit", action: onEdit)
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("guardian.profile.\(profile.id).edit")
+        Button(action: onVoiceprint) {
+            Label(voiceprintTitle, systemImage: "waveform.badge.mic")
+        }
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier("guardian.profile.\(profile.id).voice")
     }
 
     private var voiceprintTitle: String {

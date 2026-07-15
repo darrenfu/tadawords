@@ -106,14 +106,12 @@ struct GuardianWordManagerView: View {
         undoWordsByMode[selectedMode, default: []]
     }
 
-    #if DEBUG
-        private var isDebugOCRFixtureEnabled: Bool {
-            let arguments = ProcessInfo.processInfo.arguments
-            return arguments.contains("--demo-mode")
-                && arguments.contains("--ui-testing")
-                && arguments.contains("--ui-testing-ocr-fixture")
-        }
-    #endif
+    private var isDebugOCRFixtureEnabled: Bool {
+        let arguments = ProcessInfo.processInfo.arguments
+        return arguments.contains("--demo-mode")
+            && arguments.contains("--ui-testing")
+            && arguments.contains("--ui-testing-ocr-fixture")
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -317,24 +315,22 @@ struct GuardianWordManagerView: View {
                 }
             }
 
-            #if DEBUG
-                if isDebugOCRFixtureEnabled {
-                    Button {
-                        Task {
-                            await recognizeWords(
-                                in: [Data("ui-testing-ocr-fixture".utf8)],
-                                appending: false
-                            )
-                        }
-                    } label: {
-                        Label("Import test word sheet", systemImage: "doc.text.viewfinder")
-                            .frame(maxWidth: .infinity, minHeight: 44)
+            if isDebugOCRFixtureEnabled {
+                Button {
+                    Task {
+                        await recognizeWords(
+                            in: [Data("ui-testing-ocr-fixture".utf8)],
+                            appending: false
+                        )
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(isRecognizing)
-                    .accessibilityIdentifier("guardian.ocr-fixture")
+                } label: {
+                    Label("Import test word sheet", systemImage: "doc.text.viewfinder")
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
-            #endif
+                .buttonStyle(.bordered)
+                .disabled(isRecognizing)
+                .accessibilityIdentifier("guardian.ocr-fixture")
+            }
         #else
             Text("Photo import is available on iPhone and iPad.")
                 .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
