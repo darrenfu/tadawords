@@ -202,22 +202,24 @@ Target release: `v0.3.1`
 
 Branch: `v0.3.1`
 Baseline: `main` at `cc42e17`, which merged v0.3 through PR #2.
-Overall state: production fix, automated regression, signed iPhone and iPad installation, physical-device production Vision tests, and physical-iPad critical UI pass. Child handwriting, audio, layout, rotation, and accessibility acceptance remain open.
+Overall state: production fix, automated regression, signed iPhone and iPad installation, physical-device production Vision tests, physical-iPad critical UI pass, offline teacher-audio candidate, and simulator-verified World-art clearance. Child handwriting, audio listening, rotation, and accessibility acceptance remain open.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
 | V031-BUG-001 | Bug | Write recognition | Real handwriting recognition must accept `of` and `go` independent of lowercase, initial-cap, or all-caps input. Tests must exercise the production renderer and Vision service rather than fabricated OCR candidates or the demo recognizer. Literal `90` and neighboring words must not pass as `go` or `of`. | Automated physical iPhone and iPad synthetic pass; child handwriting pending | Physical production-service tests have passed on iPhone and iPad. Next, have the child write `of`, `Of`, `OF`, `go`, `Go`, and `GO` twice each without Help; require 12/12 or capture a privacy-safe failure diagnostic. |
-| V031-IMP-001 | Improvement | Learning audio | Read `Hear it`, Write reference speech, and Parent preview use one canonical isolated-word contract at approximately 1.5× slower delivery. The Apple fallback uses the system default rate divided by 1.5; remote teacher audio keeps its provider-supported slowest value. Spoken prompts temporarily use a spoken-audio playback session, duck App music and external audio, then restore the normal mix without interrupting recording. | Automated pass; physical listening pending | On the target iPhone, listen to `of`, `at`, `cat`, `come`, and `look` in Read, Write, and Parent preview. Confirm one clear utterance, audible final consonants, no clipped start/end, and smooth music duck/recovery. |
+| V031-IMP-001 | Improvement | Learning audio | Read `Hear it` and Write reference speech use one canonical offline teacher contract. The 500-word Katie pack provides separate 0.90× Read and 0.82× Write clips; a documented `bun` voice/speed override fixes an objectively unclear rendering. Pack misses fail closed to Apple en-US TTS. Spoken prompts use a spoken-audio playback session, duck App music and external audio, then restore the normal mix without interrupting recording. | Automated decode, bundle, and transcription pass; physical listening pending | On the target iPhone and iPad, listen to `of`, `at`, `cat`, `come`, `look`, `bun`, and one pack-miss word. Confirm the intended voice, one clear utterance, audible final consonants, no clipped start/end, and smooth music duck/recovery. |
 | V031-FEAT-001 | Feature | Profiles and preset words | Every new Profile path requires an explicit age from 3 through 8. Parent setup retains explicit grade control; Kid self-create derives the currently supported grade suggestion from age. Parents may browse an offline, versioned catalog ranked by age/grade, search or navigate its hierarchy, select individual/all words, and explicitly add to Read, Write, or Both. No recommendation auto-adds. Each import remains bound to the Profile that initiated it. A Both import compensates if either Pool fails, returns a partial result, or returns mismatched membership IDs. Compensation reverses only memberships inserted or reactivated by that request and preserves already-active words. | Automated pass; physical iPad explicit-approval flow pass; manual layout pending | Create Profiles through first-run, Kid self-create, and Parents; verify saved age and grade. Browse all roots, search a word, open one list without any Pool mutation, then explicitly add to each destination and confirm normalized de-duplication. Exercise failure, partial-result, mismatch, refresh-failure, concurrent activation, and cross-Profile cases for Both. |
 | V031-FEAT-002 | Feature | Preset catalog content | Ship an independently curated 3–8 / Pre-K–Grade 3 catalog with 34 leaf presets, 1,365 word references, and 1,166 normalized unique words. Each leaf contains 40–45 valid single words across sight vocabulary, phonics/spelling, fine noun topics, verbs, emotions, and concepts. Keep one generated Obsidian Markdown catalog aligned with the App JSON and disclose methodology sources. | Automated content audit pass | Run the bundled-catalog auditor, verify every leaf remains within 30–50 words and every source ID resolves, then sample review age/grade fit, child safety, spelling, category relevance, and the generated Obsidian note. |
 | V031-FEAT-003 | Feature | Parent word deletion | Read and Write each expose `Delete all N words`. The action always confirms the exact count/mode, deactivates the Pool without erasing learning history, leaves the other mode untouched, and offers full Undo. First-delete confirmation and Undo state remain isolated per Profile. A snapshot failure compensates the membership mutation before reporting failure. | Automated pass; physical iPad Delete All/restore and sequential-delete flows pass; manual layout pending | Clear each mode with mixed history, cancel once, confirm once, Undo once, then switch Profiles. Verify the other mode/Profile plus historical reports are unchanged and a failed post-mutation snapshot leaves no hidden Pool change. |
+| V031-NIT-001 | UI polish | World scenes | Move castle, unicorn, vehicle, animal, and expansion-World story art farther into the lower side bands without moving foreground controls. Ambient art may drift only downward from its safe baseline. Moonpetal's unicorn must remain fully on-canvas and visibly separated from the Write card and shadow at every animation frame. | Implemented; focused geometry 5/5 and iPhone/iPad simulator visual pass | On iPhone 17 Pro Max and iPad landscape, wait through a full ambient cycle in Moonpetal and one expansion World. Require a visible background gap around every Quest card and no bottom/side clipping. |
 
 ### 2026-07-14 v0.3.1 notes
 
 - Added the offline 3–8 / Pre-K–Grade 3 Preset Catalog, explicit age capture, and generated Obsidian catalog. Age and grade rank suggestions but never add words.
 - Bound preset imports to the initiating Profile. Both imports now compensate exact inserted/reactivated memberships after failure, partial success, mismatched results, or refresh errors while preserving already-active words.
 - Added per-Pool Delete All with exact confirmation and complete Undo. Confirmation and Undo state now stay isolated per Profile, and snapshot failures compensate the Pool mutation.
-- Expanded regression coverage to 588 Swift tests. Installed and launched signed build `2026071403` on the iPad Air 13-inch (M4), then passed 2/2 production DeviceTests and 7/7 critical XCUITest flows. Child handwriting, audio, layout, rotation, and accessibility acceptance remain pending.
+- Expanded regression coverage to 595 Swift tests. The 1,008 bundled audio files decode cleanly as mono 44.1 kHz AAC-LC, and fresh iPhone/iPad app bundles contain byte-identical resource trees with no credential-shaped token.
+- Shifted World story art down into safe side bands. Moonpetal additionally shortens and right-shifts the unicorn enough to preserve a visible gap below the Write card throughout the ambient cycle. iPhone Moonpetal and full-screen iPad Dino simulator captures pass without clipping or foreground overlap.
 
 ### What the earlier tests missed
 
@@ -247,7 +249,7 @@ Overall state: production fix, automated regression, signed iPhone and iPad inst
 
 ### Verification
 
-- Strict Swift formatting and the full Swift suite pass: 588/588, zero failures.
+- Strict Swift formatting and the full Swift suite pass: 595/595, zero failures.
 - The focused macOS actual-Vision suite passes 15/15, including six `of`/`go`
   case variants and real rendered negatives `on`, `if`, `off`, `do`, `no`, and
   literal `90`.
@@ -262,6 +264,10 @@ Overall state: production fix, automated regression, signed iPhone and iPad inst
 - The same iPad passes the LocalQA critical XCUITest target 7/7: OCR Add All,
   Delete All/restore, explicit Preset approval, sequential deletes/sort, Photo
   picker/sort, and Read/Write completion dismissal.
+- The final [iPhone Moonpetal](QAArtifacts/v0.3.1-2026-07-14/iPhone17ProMax-moonpetal-clearance.jpg)
+  and [iPad Dino](QAArtifacts/v0.3.1-2026-07-14/iPadPro13-dino-clearance.jpg)
+  captures keep all lower story art visibly clear of the foreground Quest cards
+  after waiting through the ambient motion cycle.
 - Fresh LocalQA simulator builds pass for iPhone 17 Pro Max and iPad Pro 13-inch
   (M5). Signed `Tada Words QA` v0.3.1 (`2026071402`) was installed and launched on
   the connected iPhone.
@@ -313,4 +319,5 @@ Branch: `agent/v0.4.1-slower-teacher-audio`
 - The new `at` clips are 0.68–0.76 seconds versus 0.48–0.56 seconds before the change. Silence/energy inspection shows the stop closure, a following `/t/` release, and then the protected tail.
 - Whisper independently transcribed both Read and Write samples for `at`, `it`, `cat`, `hat`, `sit`, `hit`, `get`, `cut`, `hot`, `not`, `dog`, `big`, `red`, `stop`, `help`, `look`, `fish`, `duck`, `back`, `off`, and `with` with their terminal consonants intact. Across 50 available curated clips, 43 were exact words; seven differed only in the vowel or initial consonant while retaining the expected terminal consonant. Three requested audit words were not members of the parent-approved 500-word manifest and were excluded rather than silently added.
 - The correct-answer manifest now exposes five lines and no longer exposes `Ta-da!`. The regenerated Quest-complete clip contains only `Quest complete!`; Whisper transcribes it as `Quest complete.` The private `correct/ta-da.m4a` resource remains solely as the reproducible source component for the separate cold-launch brand mark and is not reachable by transition rotation.
-- Strict Swift formatting, the full 594-test package suite, and a fresh generic iOS Simulator build pass. The built App contains all 1,008 resources, and its bundled `at` hash matches the reviewed source asset.
+- Integrated current `origin/main` (`02e23aa`) before release so the v0.3.1/v0.3.2 World-art, device-QA, Vision, UI-copy, and project-setting changes remain the baseline. Only the newer v0.4.1 audio resources and audio contract supersede their earlier counterparts.
+- Strict Swift formatting and the full post-integration 595-test package suite pass. The earlier generic iOS Simulator build contains all 1,008 resources, and its bundled `at` hash matches the reviewed source asset; a fresh merged-tree iOS build is required before merge.

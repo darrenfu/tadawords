@@ -20,7 +20,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** PR #2 merged v0.3 to `main` at `cc42e17`, and v0.3.1 carries the production Vision fixes verified on iPhone and iPad. The stacked v0.4/v0.4.1 audio candidates add a fully bundled 500-word teacher pack, Aurora launch/transition speech, and Apple speech fallback without a runtime vendor dependency. The iOS Simulator build contains all **1,008** expected audio resources. Signed v0.3.1 remains installed on the connected devices; the audio candidates still need installation and human listening approval for voice character, launch prosody, speaker mix, and child fatigue. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** `main` at `02e23aa` contains the v0.3.1 production Vision fixes, physical iPhone/iPad regression results, and final Moonpetal/Dino World-art clearance. The v0.4.1 integration candidate preserves that baseline and adds a fully bundled 500-word teacher pack at 0.67×, Aurora launch/transition speech, and Apple speech fallback without a runtime vendor dependency. The merged tree passes **595/595** Swift tests; its signed LocalQA build is installed on the iPhone for listening review. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -126,7 +126,7 @@ make check
 open TadaWords.xcodeproj
 ```
 
-`make check` runs strict Swift formatting checks and the Swift package test suite. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and v0.3.1 contained **588**. The v0.4 audio candidate contains **594 tests with zero failures**. The Xcode UI target adds seven critical end-to-end flows for Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, and OCR Review → Add All → Pool → Sort. A separate physical-device target calls the public production handwriting service with six positive case variants and four negative controls; it does not use the demo recognizer.
+`make check` runs strict Swift formatting checks and the Swift package test suite. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and the complete v0.3.1 baseline contains **595 tests with zero failures**. The v0.4.1 merged tree also passes **595 tests with zero failures**, including the v0.3.1 World-layout coverage and the updated audio contract. The Xcode UI target adds seven critical end-to-end flows for Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, and OCR Review → Add All → Pool → Sort. A separate physical-device target calls the public production handwriting service with six positive case variants and four negative controls; it does not use the demo recognizer.
 
 Run the device-readiness script before installing on an iPhone or iPad:
 
@@ -159,13 +159,13 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Swift tests | v0.4 audio candidate: 594 passed, 0 failures; v0.3.1 focused actual-Vision suite 15/15 |
+| Swift tests | v0.4.1 merged tree: 595 passed, 0 failures; focused actual-Vision suite 15/15; focused World-layout suite 5/5 |
 | Critical XCUITest flows | 7 passed, 0 failures on iPhone 17 Pro Max simulator |
 | Physical iPhone production Vision | 2/2 device tests passed: 6/6 `of/go` case variants and 4/4 negative controls; synthetic vectors only |
 | Physical iPad production Vision | 2/2 device tests passed: wrong-word rejection and `of/go` case variants; synthetic vectors only |
 | Physical iPad critical XCUITest | 7/7 passed: OCR Add All, Delete All/restore, explicit Preset approval, sequential deletes/sort, Photos picker/sort, and Read/Write completion dismissal |
-| iPhone 17 Pro Max LocalQA simulator | Fresh v0.3.1 build passed |
-| iPad Pro 13-inch (M5) LocalQA simulator | Fresh v0.3.1 build passed |
+| iPhone 17 Pro Max LocalQA simulator | Fresh v0.3.1 build `2026071405` passed; Moonpetal full ambient-cycle clearance passed |
+| iPad Pro 13-inch (M5) LocalQA simulator | Fresh v0.3.1 build `2026071405` passed; full-screen Dino clearance passed |
 | Connected iPhone 17 Pro Max | Signed `Tada Words QA` v0.3.1 (`2026071402`) installed and launched; child 12-attempt handwriting gate, audio, rotation, and accessibility remain |
 | Darren iPad Air 13-inch (M4), iPadOS 26.5 | Team `6S245NCUPQ` signed `Tada Words QA` v0.3.1 (`2026071403`), installed and launched; child handwriting, audio, layout, rotation, and accessibility remain |
 | Pre-K visual hierarchy | v0.2 Profile, Lobby, Read, and Result captures pass on both simulators; physical child, VoiceOver, and Dynamic Type acceptance remain open |

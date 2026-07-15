@@ -84,6 +84,7 @@ V1 是 Universal iOS App。
 - iPhone 家长路线支持 Portrait 与两个 Landscape，不支持 Portrait Upside Down；iPad 家长路线支持四个方向。
 - 离开家长路线后，App 必须通过 route-level geometry update 立即恢复横屏；孩子页面左右两个横屏方向都要验收。
 - iPhone Kid Quest 会减少背景装饰，优先保证大单词、麦克风和完整书写区。
+- Kid Lobby 的大型故事装饰固定在左右下方安全带，前景 Quest 卡片和按钮坐标不移动；装饰动画只能从安全基线向下漂浮，不能上浮回卡片阴影。Moonpetal 独角兽在 iPhone 横屏最紧凑帧也必须与 Write 卡片保留可见背景间隙，且任何 World 的装饰都不能在底部或侧边被裁切。
 
 Write 支持手指；Apple Pencil 仅在兼容设备上启用，并使用防误触。Apple 官方当前的 Pencil 兼容设备为 iPad，因此 iPhone 17 Pro Max 的 Write 输入使用手指。[Apple Pencil compatibility](https://support.apple.com/en-am/108937)
 

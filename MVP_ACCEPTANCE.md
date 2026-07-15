@@ -32,12 +32,12 @@ make check
 
 通过标准：格式检查、单元与组合测试、iPhone 17 Pro Max LocalQA 模拟器构建、iPad Pro 13-inch (M5) LocalQA 模拟器构建全部通过。设备准备脚本可以在未配置签名 Team 时报告签名阻塞。
 
-PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当前 v0.3.1 修复证据如下。V1 的 367 项、v0.2 的 480 项和 v0.3 的 548 项测试保留为历史基线；v0.3.1 全量为 588/588：
+PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当前 v0.3.1 修复证据如下。V1 的 367 项、v0.2 的 480 项和 v0.3 的 548 项测试保留为历史基线；v0.3.1 全量为 595/595：
 
 | 检查 | 结果 |
 |---|---|
 | Swift formatter 严格检查 | 通过 |
-| Swift 单元与组合测试 | v0.3.1 全量 588/588 通过，0 failure；其中 actual-Vision 手写识别 focused suite 为 15/15 |
+| Swift 单元与组合测试 | v0.3.1 全量 595/595 通过，0 failure；其中 actual-Vision 手写识别 focused suite 为 15/15，World 布局 focused suite 为 5/5 |
 | Critical XCUITest | iPhone 17 Pro Max 模拟器 7/7 通过：Read/Write 连续反馈、两次删除/Undo、Delete All/完整恢复、Preset 明确批准后才加入、Photos 退出后排序、OCR Review → Add All → Pool → Sort |
 | iPhone 17 Pro Max production Vision 真机测试 | iOS 26.5.1 上 2/2 XCTest 通过：`of/go` 六种大小写正例 6/6，错词与 literal `90` 负例 4/4；使用匿名合成 vector 和真实 production service，不使用 mock/demo |
 | iPad Air 13-inch (M4) production Vision 真机测试 | iPadOS 26.5 上 2/2 DeviceTests 通过：wrong-word rejection 与 `of/go` case variants；使用真实 production service 与匿名合成 vector |
