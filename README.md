@@ -21,7 +21,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** The `v0.5.1` branch packages version `0.5.1` (build `2026071503`). It adds a World-themed Parent Home with Back navigation and reduced copy, a 1.8s launch page with the official Tada Words and Pawgoo marks, and bounded recovery paths for connected, mixed-case, or target-aligned numeric-zero `of` handwriting. The tree passes **638/638** Swift tests and strict format lint. The complete nine-flow simulator UI matrix passes on phone and tablet; physical child/Parent acceptance remains open. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** The `v0.5.1` branch packages version `0.5.1` (build `2026071504`). It adds a World-themed Parent Home with Back navigation and reduced copy, a 1.8s launch page with the official Tada Words and Pawgoo marks, and bounded recovery paths for connected, mixed-case, or target-aligned numeric-zero `of` handwriting. The tree passes **638/638** Swift tests and strict format lint. The complete nine-flow simulator UI matrix passes on phone and tablet; physical child/Parent acceptance remains open. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -162,7 +162,7 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Version and build | v0.5.1 (`2026071503`) in source Plists and generated project settings |
+| Version and build | v0.5.1 (`2026071504`) in source Plists and generated project settings |
 | Swift tests | v0.5.1: 638 passed, 0 failures |
 | Critical XCUITest flows | v0.5.1: 9/9 passed on iPhone 17 Pro Max and 9/9 passed on iPad Pro 13-inch simulators |
 | Parent Home | Back navigation, World theme, shared tactile components, and reduced copy passed targeted simulator verification |
@@ -173,9 +173,9 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 | Physical iPad critical XCUITest | 7/7 passed: OCR Add All, Delete All/restore, explicit Preset approval, sequential deletes/sort, Photos picker/sort, and Read/Write completion dismissal |
 | iPhone 17 Pro Max LocalQA simulator | Fresh v0.5.1 build `2026071501`; critical XCUITest matrix 9/9 passed |
 | iPad Pro 13-inch (M5) LocalQA simulator | Fresh v0.5.1 build `2026071501`; critical XCUITest matrix 9/9 passed |
-| Connected iPhone 17 Pro Max | Team `6S245NCUPQ` signed `Tada Words QA` v0.5.1 (`2026071503`) installed and inventory-verified; launch is waiting for device unlock, then child `of`/`0f`, audio, rotation, and accessibility acceptance remain |
-| Darren's reading iPad Air 11-inch (M2), iPadOS 26.5.2 | The same verified v0.5.1 (`2026071503`) package is installed and inventory-verified; launch is waiting for device unlock, then child/Parent acceptance remains |
-| Darren iPad Air 13-inch (M4), iPadOS 26.5 | The v0.5.1 (`2026071503`) install command succeeded over its paired Wi-Fi tunnel, but the tunnel disconnected before the follow-up inventory query; wake/unlock or reconnect it to independently verify the installed version and run acceptance |
+| Connected iPhone 17 Pro Max | The unique v0.5.1 (`2026071504`) package is signed and ready, but the phone became unavailable before installation; reconnect it, then install/inventory-verify before child `of`/`0f`, audio, rotation, and accessibility acceptance |
+| Darren's reading iPad Air 11-inch (M2), iPadOS 26.5.2 | Team `6S245NCUPQ` signed `Tada Words QA` v0.5.1 (`2026071504`) installed and inventory-verified; launch is waiting for device unlock, then child/Parent acceptance remains |
+| Darren iPad Air 13-inch (M4), iPadOS 26.5 | Provisioning includes the device, but its paired Wi-Fi tunnel timed out before the corrected `2026071504` package could install; wake/unlock or reconnect it, then install and inventory-verify before acceptance |
 | Pre-K visual hierarchy | v0.2 Profile, Lobby, Read, and Result captures pass on both simulators; physical child, VoiceOver, and Dynamic Type acceptance remain open |
 | Route-based orientation | v0.2 Plist and runtime-policy checks passed. iPad simulator window shapes show Parents rotating while child routes remain landscape. Raw iPhone simulator framebuffer captures are inconclusive, so physical rotation remains open. |
 | Persisted, default-off CloudKit guardian opt-in | Implemented; live-device acceptance open |

@@ -379,7 +379,7 @@ Target release: `v0.5.1`
 
 Branch: `v0.5.1`
 
-Build: `2026071503`
+Build: `2026071504`
 
 Overall state: implementation is complete, and 638/638 Swift tests pass.
 The full nine-flow simulator UI matrix passes on phone and tablet; physical
@@ -412,14 +412,16 @@ child/Parent acceptance remains open.
   `of`. Thirty paired `ot/on/or/off/if` controls stay rejected. Other words
   retain their v0.5 two-pass/top-five behavior, with no fuzzy matching or
   global-threshold change.
-- Set the release and LocalQA identity to v0.5.1 (`2026071503`). The tree passes
+- Set the release and LocalQA identity to v0.5.1 (`2026071504`). The tree passes
   638/638 Swift tests and strict format lint. The critical XCUITest matrix passes
   9/9 on iPhone 17 Pro Max and 9/9 on iPad Pro 13-inch simulators.
-- Verified the signed physical bundle directly as v0.5.1 (`2026071503`), LocalQA
+- Moved the corrected package to build `2026071504` after detecting that the
+  parallel automation PR had reserved `2026071503`, preventing two release
+  lines from sharing one LocalQA build identity.
+- Verified the signed physical bundle directly as v0.5.1 (`2026071504`), LocalQA
   bundle ID `com.tadawords.app.localqa`, Team `6S245NCUPQ`; its provisioning
   profile includes the registered iPhone and both iPads. Installation and
-  installed-version verification succeeded on the iPhone 17 Pro Max and reading
-  iPad. Both are locked, so automated launch and physical acceptance remain.
-  Installation also succeeded on the iPad Air 13-inch (M4), but its paired
-  Wi-Fi tunnel disconnected before the follow-up inventory query; wake/unlock
-  or reconnect it to verify the installed version and run acceptance.
+  installed-version verification succeeded on the reading iPad. The iPhone
+  became unavailable before the corrected package could install, and the iPad
+  Air 13-inch (M4) paired Wi-Fi tunnel timed out. Reconnect those two devices,
+  install `2026071504`, and inventory-verify before physical acceptance.
