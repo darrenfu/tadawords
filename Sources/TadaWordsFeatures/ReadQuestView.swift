@@ -24,6 +24,7 @@ struct ReadQuestView: View {
     @State private var permissionWasDenied = false
     @State private var listeningTask: Task<Void, Never>?
     @State private var completionTask: Task<Void, Never>?
+    @State private var feedbackPlaybackTask: Task<Void, Never>?
     @State private var answerPlaybackTask: Task<Void, Never>?
     @State private var hintPlaybackTask: Task<Void, Never>?
     @State private var completionFeedbackLifecycle:
@@ -113,6 +114,7 @@ struct ReadQuestView: View {
         .onDisappear {
             listeningTask?.cancel()
             completionTask?.cancel()
+            feedbackPlaybackTask?.cancel()
             answerPlaybackTask?.cancel()
             hintPlaybackTask?.cancel()
             attemptState.cancelAttempt()
@@ -539,7 +541,7 @@ struct ReadQuestView: View {
 
     private func receive(_ result: RecognitionResult) {
         isListening = false
-        playFeedback(for: result.decision)
+        let feedbackPlayback = playFeedback(for: result.decision)
         attemptState.receive(
             result,
             timing: pendingAttemptTiming,
@@ -553,9 +555,9 @@ struct ReadQuestView: View {
             if summary.completion == .needsPractice,
                 summary.records.contains(where: { $0.outcome == .incorrect })
             {
-                playAnswerThenComplete(summary)
+                playAnswerThenComplete(summary, after: feedbackPlayback)
             } else {
-                showCompletion(summary)
+                showCompletion(summary, after: feedbackPlayback)
             }
         } else {
             // Every retry starts a fresh response-time window. Recognition,
@@ -569,7 +571,9 @@ struct ReadQuestView: View {
         }
     }
 
-    private func playFeedback(for decision: RecognitionDecision) {
+    private func playFeedback(
+        for decision: RecognitionDecision
+    ) -> Task<Void, Never> {
         let cue: FunctionalAudioCue
         switch decision {
         case .matched:
@@ -579,19 +583,27 @@ struct ReadQuestView: View {
         case .uncertain, .technicalFailure:
             cue = .technicalRetry
         }
-        Task {
+        feedbackPlaybackTask?.cancel()
+        let task = Task {
             await audioExperienceService.play(cue)
         }
+        feedbackPlaybackTask = task
+        return task
     }
 
-    private func playAnswerThenComplete(_ summary: QuestAttemptSummary) {
+    private func playAnswerThenComplete(
+        _ summary: QuestAttemptSummary,
+        after feedbackPlayback: Task<Void, Never>
+    ) {
         questTimer.suspend(for: .promptPlayback)
         answerPlaybackTask?.cancel()
         answerPlaybackTask = Task { @MainActor in
+            await feedbackPlayback.value
+            guard !Task.isCancelled else { return }
             await onSpeak()
             guard !Task.isCancelled else { return }
             questTimer.resume(from: .promptPlayback)
-            showCompletion(summary)
+            showCompletion(summary, after: feedbackPlayback)
         }
     }
 
@@ -681,7 +693,10 @@ struct ReadQuestView: View {
         #endif
     }
 
-    private func showCompletion(_ summary: QuestAttemptSummary) {
+    private func showCompletion(
+        _ summary: QuestAttemptSummary,
+        after feedbackPlayback: Task<Void, Never>? = nil
+    ) {
         let completedItemID = session.prompt.id
         let announcement =
             summary.completion == .needsPractice
@@ -704,7 +719,13 @@ struct ReadQuestView: View {
         completionTask?.cancel()
         completionTask = Task { @MainActor in
             do {
-                try await Task.sleep(for: .milliseconds(reduceMotion ? 40 : 430))
+                try await QuestAdvanceTimingPolicy.waitBeforeAdvance(
+                    minimumFeedbackVisibility: .milliseconds(
+                        reduceMotion ? 40 : 430
+                    ),
+                    feedbackPlayback: feedbackPlayback,
+                    hasNextItem: session.currentItem < session.totalItems
+                )
             } catch {
                 return
             }

@@ -321,3 +321,13 @@ Branch: `agent/v0.4.1-slower-teacher-audio`
 - The correct-answer manifest now exposes five lines and no longer exposes `Ta-da!`. The regenerated Quest-complete clip contains only `Quest complete!`; Whisper transcribes it as `Quest complete.` The private `correct/ta-da.m4a` resource remains solely as the reproducible source component for the separate cold-launch brand mark and is not reachable by transition rotation.
 - Integrated current `origin/main` (`02e23aa`) before release so the v0.3.1/v0.3.2 World-art, device-QA, Vision, UI-copy, and project-setting changes remain the baseline. Only the newer v0.4.1 audio resources and audio contract supersede their earlier counterparts.
 - Strict Swift formatting and the full post-integration 595-test package suite pass. The earlier generic iOS Simulator build contains all 1,008 resources, and its bundled `at` hash matches the reviewed source asset; a fresh merged-tree iOS build is required before merge.
+
+## v0.4.2 — 2026-07-14
+
+Target release: `v0.4.2`
+
+Branch: `agent/v0.4.2-transition-pause`
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| AUDIO-FIX-005 | Improvement | Inter-word audio timing | A new word must never attach directly to the end of correct-answer transition audio. Await the complete transition, keep the existing visible feedback minimum, then leave 700ms of silence before advancing to any non-final Read/Write item. Do not add the inter-item pause before Quest results. | Implemented; automated pass pending | Complete consecutive Write items with Voice on, Voice off, Reduced Sound, and normal Sound Effects. Confirm every next prompt starts after a distinct pause and no transition is truncated; repeat Read to confirm its word card does not advance early. |

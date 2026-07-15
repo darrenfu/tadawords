@@ -5,6 +5,20 @@ import XCTest
 @testable import TadaWordsFeatures
 
 final class WriteQuestControlLayoutPolicyTests: XCTestCase {
+    func testNextWordGetsBreathingRoomAfterTransitionAudio() {
+        XCTAssertEqual(
+            QuestAdvanceTimingPolicy.breathingRoom(hasNextItem: true),
+            .milliseconds(700)
+        )
+    }
+
+    func testFinalWordDoesNotAddAnInterItemPause() {
+        XCTAssertEqual(
+            QuestAdvanceTimingPolicy.breathingRoom(hasNextItem: false),
+            .zero
+        )
+    }
+
     func testRightHandedLayoutKeepsPromptLeadingAndActionsTrailing() {
         XCTAssertEqual(
             WriteQuestControlLayoutPolicy.sideRails(
