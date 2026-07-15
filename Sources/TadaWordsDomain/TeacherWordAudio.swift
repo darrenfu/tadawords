@@ -8,19 +8,18 @@ public enum TeacherWordAudioUsage: String, Codable, Hashable, Sendable {
 /// The only word-pronunciation contract exposed by the app. The bundled pack
 /// owns the canonical Cartesia voice; a child profile cannot select or override
 /// it. The usage keeps Read and Write pacing explicit without leaking a vendor
-/// API into feature code.
+/// API into feature code. Read and Write retain separate resource variants even
+/// though v3 intentionally gives both the same one-and-a-half-times-slower pace.
 public struct TeacherWordAudioRequest: Hashable, Sendable {
-    public static let contractVersion = "canonical-teacher-v2"
+    public static let contractVersion = "canonical-teacher-v3"
+    public static let practiceSpeed = 0.67
 
     public let spokenText: String
     public let pronunciationKey: String?
     public let usage: TeacherWordAudioUsage
 
     public var speed: Double {
-        switch usage {
-        case .readHint: 0.90
-        case .writePrompt: 0.82
-        }
+        Self.practiceSpeed
     }
     public var voiceContractVersion: String { Self.contractVersion }
 

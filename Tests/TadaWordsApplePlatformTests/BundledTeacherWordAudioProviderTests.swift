@@ -9,7 +9,10 @@ final class BundledTeacherWordAudioProviderTests: XCTestCase {
         let provider = try XCTUnwrap(BundledTeacherWordAudioProvider.production())
 
         XCTAssertEqual(provider.bundledWordCount, 500)
-        for word in ["a", "i", "at", "cat", "come", "of", "swordfish"] {
+        for word in [
+            "a", "i", "at", "bun", "cat", "chick", "come", "near", "of",
+            "swordfish",
+        ] {
             for usage in [
                 TeacherWordAudioUsage.readHint,
                 TeacherWordAudioUsage.writePrompt,

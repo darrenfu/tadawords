@@ -12,6 +12,19 @@ The generator is resumable. It skips valid AAC files, limits concurrency to
 the Cartesia Pro TTS limit of three, retries rate limits/server failures, and
 keeps partial responses out of the app bundle.
 
+Teacher variant speed and tail padding are manifest-owned. v1.1 uses 0.67× for
+both Read and Write plus 120 ms of silence after the complete generated waveform;
+the padding protects a terminal stop release from AAC boundaries without
+stretching or fabricating the consonant.
+
+The Aurora launch mark is not a single unconstrained TTS render. The generator
+uses the versioned Aurora `Ta-da!` clip plus a temporary `words` render, trims
+their silence, makes `ta` light and level, and applies a continuous rising pitch
+map to one unrepeated `da` vowel. `words` falls across three stages and joins
+through an 8 ms click-safe crossfade. FFmpeg must include the `rubberband`
+filter, and the Rubber Band CLI must be installed for dynamic pitch maps.
+Temporary component files are deleted and never enter the App bundle.
+
 After changing a pronunciation dictionary, regenerate only selected words with
 a comma-separated filter:
 

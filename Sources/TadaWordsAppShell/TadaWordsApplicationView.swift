@@ -106,7 +106,6 @@ public struct TadaWordsApplicationView: View {
     public init(
         applicationSupportDirectory: @escaping @Sendable () throws -> URL,
         defaultProfile: KidProfile,
-        productionUITestFixture: ProductionUITestFixture? = nil,
         clock: any AppClock = SystemAppClock(),
         timeZone: TimeZone = .current,
         audioPromptService: any AudioPromptService,
@@ -130,7 +129,7 @@ public struct TadaWordsApplicationView: View {
     ) {
         let resolvedFamilySyncTransport =
             familySyncTransport ?? LocalOnlyFamilySyncTransport()
-        let productionBootstrapper = ProductionApplicationBootstrapper(
+        let bootstrapper = ProductionApplicationBootstrapper(
             applicationSupportDirectory: applicationSupportDirectory,
             defaultProfile: defaultProfile,
             clock: clock,
@@ -138,16 +137,6 @@ public struct TadaWordsApplicationView: View {
             familySyncTransport: resolvedFamilySyncTransport,
             notificationScheduler: notificationScheduler
         )
-        let bootstrapper: any ApplicationBootstrapping =
-            if let productionUITestFixture {
-                ProductionUITestFixtureBootstrapper(
-                    fixture: productionUITestFixture,
-                    applicationSupportDirectory: applicationSupportDirectory,
-                    productionBootstrapper: productionBootstrapper
-                )
-            } else {
-                productionBootstrapper
-            }
         launchMode = .production
         self.audioPromptService = audioPromptService
         self.audioExperienceService = audioExperienceService
