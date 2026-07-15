@@ -503,36 +503,32 @@ public struct TadaWordsApplicationView: View {
     private static func makeDemoImageTextRecognitionService()
         -> any ImageTextRecognizing
     {
-        #if DEBUG
-            if DebugOCRFixtureLaunchPolicy.isEnabled {
-                return DebugOCRFixtureRecognitionService()
-            }
-        #endif
+        if DemoOCRFixtureLaunchPolicy.isEnabled {
+            return DemoOCRFixtureRecognitionService()
+        }
         return NoImageTextRecognitionService()
     }
 }
 
-#if DEBUG
-    private enum DebugOCRFixtureLaunchPolicy {
-        static var isEnabled: Bool {
-            let arguments = ProcessInfo.processInfo.arguments
-            return arguments.contains("--demo-mode")
-                && arguments.contains("--ui-testing")
-                && arguments.contains("--ui-testing-ocr-fixture")
-        }
+private enum DemoOCRFixtureLaunchPolicy {
+    static var isEnabled: Bool {
+        let arguments = ProcessInfo.processInfo.arguments
+        return arguments.contains("--demo-mode")
+            && arguments.contains("--ui-testing")
+            && arguments.contains("--ui-testing-ocr-fixture")
     }
+}
 
-    /// A deterministic test seam for the Parent OCR review flow. It is absent
-    /// from non-Debug builds and requires both explicit UI-test launch flags.
-    private struct DebugOCRFixtureRecognitionService: ImageTextRecognizing {
-        func recognizeText(in imageData: Data) async throws -> [String] {
-            guard !imageData.isEmpty else {
-                throw ImageTextRecognitionError.invalidImage
-            }
-            return ["cat read bow to"]
+/// A deterministic test seam for the Parent OCR review flow. The service only
+/// activates when all three explicit demo UI-test flags are present.
+private struct DemoOCRFixtureRecognitionService: ImageTextRecognizing {
+    func recognizeText(in imageData: Data) async throws -> [String] {
+        guard !imageData.isEmpty else {
+            throw ImageTextRecognitionError.invalidImage
         }
+        return ["cat read bow to"]
     }
-#endif
+}
 
 private struct ApplicationLoadingView: View {
     var body: some View {
