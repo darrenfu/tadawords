@@ -49,6 +49,7 @@ final class AppleHandwritingDeviceTests: XCTestCase {
 
         let prompt = try WordPrompt(learningMode: .write, text: "of")
         let samples = [
+            ("numeric zero + f", SyntheticHandwritingFixture.numericZeroFOfSample()),
             ("open o", SyntheticHandwritingFixture.openOfSample()),
             ("double-loop o", SyntheticHandwritingFixture.doubleLoopOfSample()),
             ("tight connected", SyntheticHandwritingFixture.tightConnectedOfSample()),
@@ -105,6 +106,11 @@ final class AppleHandwritingDeviceTests: XCTestCase {
                 targetWord: "go",
                 sample: SyntheticHandwritingFixture.numericNinetySample()
             ),
+            (
+                sampleWord: "90",
+                targetWord: "of",
+                sample: SyntheticHandwritingFixture.numericNinetySample()
+            ),
         ]
 
         for control in controls {
@@ -135,6 +141,8 @@ final class AppleHandwritingDeviceTests: XCTestCase {
 
         let prompt = try WordPrompt(learningMode: .write, text: "of")
         let samples = [
+            ("numeric zero + t", SyntheticHandwritingFixture.numericZeroTOfSample()),
+            ("numeric zero + ff", SyntheticHandwritingFixture.numericZeroFFOfSample()),
             ("open-o off", SyntheticHandwritingFixture.openOffSample()),
             ("double-loop-o off", SyntheticHandwritingFixture.doubleLoopOffSample()),
             ("tight on", SyntheticHandwritingFixture.tightOnSample()),
@@ -201,6 +209,28 @@ private enum SyntheticHandwritingFixture {
 
     static func openOfSample() -> HandwritingSample {
         sample(strokes: openO(centerX: 0.27) + lowercaseF(centerX: 0.68))
+    }
+
+    static func numericZeroFOfSample() -> HandwritingSample {
+        sample(
+            strokes: numericZero(centerX: 0.27)
+                + lowercaseF(centerX: 0.68)
+        )
+    }
+
+    static func numericZeroTOfSample() -> HandwritingSample {
+        sample(
+            strokes: numericZero(centerX: 0.27)
+                + lowercaseT(centerX: 0.68)
+        )
+    }
+
+    static func numericZeroFFOfSample() -> HandwritingSample {
+        sample(
+            strokes: numericZero(centerX: 0.18)
+                + lowercaseF(centerX: 0.50)
+                + lowercaseF(centerX: 0.79)
+        )
     }
 
     static func doubleLoopOfSample() -> HandwritingSample {
@@ -321,6 +351,10 @@ private enum SyntheticHandwritingFixture {
 
     private static func lowercaseO(centerX: Double) -> [[HandwritingPoint]] {
         [ellipse(centerX: centerX, centerY: 0.48, radiusX: 0.14, radiusY: 0.20)]
+    }
+
+    private static func numericZero(centerX: Double) -> [[HandwritingPoint]] {
+        [ellipse(centerX: centerX, centerY: 0.48, radiusX: 0.11, radiusY: 0.31)]
     }
 
     private static func openO(centerX: Double) -> [[HandwritingPoint]] {

@@ -607,7 +607,9 @@ enum AppleHandwritingTranscriptResolver {
                         let normalizedCandidate =
                             AppleHandwritingCandidateNormalizer.normalize(
                                 candidate.text,
-                                corroborating: fragment.candidates
+                                corroborating: fragment.candidates,
+                                normalizedTarget: normalizedTarget,
+                                startingAt: partial.normalizedSequence.count
                             )
                     else { continue }
 
@@ -644,14 +646,17 @@ private struct AppleHandwritingPartialTranscript: Sendable {
 }
 
 /// Vision can emit `0` for a handwritten O and `9` for a single-storey g. Zero
-/// is shape-equivalent to O. Nine is accepted as g only when another candidate
-/// of the same length contains a literal g at that position. The final sequence
-/// must still equal the complete target, so neighboring words and literal `90`
-/// remain mismatches.
+/// is shape-equivalent only where the requested target contains `o`; it cannot
+/// substitute for another letter or add a letter. Nine is accepted as g only
+/// when another candidate of the same length contains a literal g at that
+/// position. The final sequence must still equal the complete target, so
+/// neighboring words and literal `90` remain mismatches.
 private enum AppleHandwritingCandidateNormalizer {
     static func normalize(
         _ candidate: String,
-        corroborating candidates: [AppleRecognizedTextCandidate]
+        corroborating candidates: [AppleRecognizedTextCandidate],
+        normalizedTarget: String,
+        startingAt targetOffset: Int
     ) -> String? {
         let compact = candidate.components(
             separatedBy: .whitespacesAndNewlines
@@ -660,9 +665,14 @@ private enum AppleHandwritingCandidateNormalizer {
             return normalized
         }
         var glyphs = Array(compact)
+        let targetGlyphs = Array(normalizedTarget)
         guard glyphs.contains("0") || glyphs.contains("9") else { return nil }
         for index in glyphs.indices {
             if glyphs[index] == "0" {
+                let targetIndex = targetOffset + index
+                guard targetGlyphs.indices.contains(targetIndex),
+                    targetGlyphs[targetIndex] == "o"
+                else { return nil }
                 glyphs[index] = "o"
             } else if glyphs[index] == "9" {
                 guard

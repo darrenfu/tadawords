@@ -5,10 +5,10 @@ import XCTest
 
 @MainActor
 final class AppLaunchPresentationPolicyTests: XCTestCase {
-    func testLaunchPageWaitsNineTenthsOfASecond() {
+    func testLaunchPageWaitsOnePointEightSeconds() {
         XCTAssertEqual(
             AppLaunchPresentationPolicy.minimumDisplayDuration,
-            .milliseconds(900)
+            .milliseconds(1_800)
         )
     }
 
@@ -40,7 +40,7 @@ final class AppLaunchPresentationPolicyTests: XCTestCase {
         await waitForDismissal(of: coordinator)
 
         XCTAssertEqual(events, ["configured", "signature", "countdown"])
-        XCTAssertEqual(requestedDuration, .milliseconds(900))
+        XCTAssertEqual(requestedDuration, .milliseconds(1_800))
         XCTAssertFalse(coordinator.isShowingLaunchPage)
     }
 

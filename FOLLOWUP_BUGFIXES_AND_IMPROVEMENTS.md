@@ -379,17 +379,17 @@ Target release: `v0.5.1`
 
 Branch: `v0.5.1`
 
-Build: `2026071501`
+Build: `2026071503`
 
-Overall state: implementation is complete, and 635/635 Swift tests pass.
+Overall state: implementation is complete, and 638/638 Swift tests pass.
 The full nine-flow simulator UI matrix passes on phone and tablet; physical
 child/Parent acceptance remains open.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
 | V051-UX-001 | UX improvement | Parent Home | Replace the visible `Lock` control with `Back`. Back returns to the prior child page and restores the Parent Gate for the next visit. Match the active kid World with the existing scene, panel, color, and tactile-button components. Remove the tagline and redundant labels; shorten the Progress title and count summaries. | Automated pass; device visual QA pending | Enter Parents from Kid selection, complete the gate, confirm `Back` replaces `Lock`, then return to the prior child page. Re-enter Parents and confirm the gate still appears. Inspect all eight World themes on phone and tablet in supported Parent orientations. |
-| V051-UX-002 | UX improvement | Launch | Show a branded launch page for at least 0.9s, play the bundled `Tada Words` launch signature, then fade into the app. Use the official Tada Words and Pawgoo marks with responsive phone/tablet sizing and one combined accessibility label. | Automated pass; device visual/listening QA pending | Cold-launch on phone and tablet in supported orientations. Confirm both official marks, spoken brand signature, minimum duration, fade, VoiceOver label, and no interaction with hidden app content. |
-| V051-BUG-001 | Bug | Write recognition | Improve exact `of` recovery without fuzzy acceptance. For `of` only, collect three render-and-recognize scales, inspect up to 10 Vision candidates, include mixed-case `oF`, cover six child-like stroke styles, require two-scale corroboration for lower-ranked target evidence, and veto a match when any scale exposes a strong complete `off`. Other targets retain the v0.5 two-pass/top-five behavior. | Automated pass; child handwriting pending | Have the child write separated and connected `of`, `Of`, `OF`, and `oF` twice on each target device. Reject `if`, `on`, `or`, `ot`, `off`, and literal `90`; capture a privacy-safe diagnostic for any false rejection. |
+| V051-UX-002 | UX improvement | Launch | Show a branded launch page for at least 1.8s, play the bundled `Tada Words` launch signature, then fade into the app. Use the official Tada Words and Pawgoo marks with responsive phone/tablet sizing and one combined accessibility label. | Automated pass; device visual/listening QA pending | Cold-launch on phone and tablet in supported orientations. Confirm both official marks, spoken brand signature, minimum duration, fade, VoiceOver label, and no interaction with hidden app content. |
+| V051-BUG-001 | Bug | Write recognition | Improve exact `of` recovery without fuzzy acceptance. For `of` only, collect three render-and-recognize scales, inspect up to 10 Vision candidates, include mixed-case `oF`, cover six child-like stroke styles, and accept numeric `0` only at a target position containing `o`. Require two-scale corroboration for lower-ranked target evidence and veto a match when any scale exposes a strong complete `off`. Other targets retain the v0.5 two-pass/top-five behavior. | Automated pass; child handwriting pending | Have the child write separated and connected `of`, `Of`, `OF`, `oF`, `0f`, and `0F` twice on each target device. Reject `if`, `on`, `or`, `ot`, `off`, `00`, `90`, `0t`, `0ff`, `+0`, and `f0`; capture a privacy-safe diagnostic for any false rejection. |
 
 ### 2026-07-15 v0.5.1 notes
 
@@ -398,25 +398,28 @@ child/Parent acceptance remains open.
 - Reused the active kid World's background scene, colors, panels, and tactile
   controls on Parent Home. Removed the tagline, redundant `Kids` label, and
   longer summaries; renamed `Progress & Performance` to `Progress`.
-- Added a 0.9s minimum launch page with the official Tada Words and Pawgoo
+- Added a 1.8s minimum launch page with the official Tada Words and Pawgoo
   marks, the bundled spoken brand signature, a short fade, and one combined
   accessibility label. The production launch countdown starts only after audio
   preferences are configured, while a warm native launch color avoids a cold
   blue flash before the branded page.
 - Added target-specific three-scale evidence for `of`, expanded only its Vision
   observations from five to 10 candidates, added mixed-case `oF`, and covered
-  six child-like styles. A lower-ranked exact target must recur at two scales;
-  any strong complete `off` evidence vetoes a match even when it appears after
-  an early `of`. Thirty paired `ot/on/or/off/if` controls stay rejected. Other
-  words retain their v0.5 two-pass/top-five behavior, with no fuzzy matching or
+  six child-like styles. Numeric `0` normalizes to `o` only at a target-aligned
+  `o`, allowing `0f` and `0F` while rejecting `00`, `90`, `0t`, `0ff`, `+0`,
+  and `f0`. A lower-ranked exact target must recur at two scales; any strong
+  complete `off` evidence vetoes a match even when it appears after an early
+  `of`. Thirty paired `ot/on/or/off/if` controls stay rejected. Other words
+  retain their v0.5 two-pass/top-five behavior, with no fuzzy matching or
   global-threshold change.
-- Set the release and LocalQA identity to v0.5.1 (`2026071501`). The tree passes
-  635/635 Swift tests and strict format lint. The critical XCUITest matrix passes
+- Set the release and LocalQA identity to v0.5.1 (`2026071503`). The tree passes
+  638/638 Swift tests and strict format lint. The critical XCUITest matrix passes
   9/9 on iPhone 17 Pro Max and 9/9 on iPad Pro 13-inch simulators.
-- Verified the signed physical bundle directly as v0.5.1 (`2026071501`), LocalQA
+- Verified the signed physical bundle directly as v0.5.1 (`2026071503`), LocalQA
   bundle ID `com.tadawords.app.localqa`, Team `6S245NCUPQ`; its provisioning
   profile includes the registered iPhone and both iPads. Installation and
   installed-version verification succeeded on the iPhone 17 Pro Max and reading
   iPad. Both are locked, so automated launch and physical acceptance remain.
-  The iPad Air 13-inch (M4) stayed paired but its Wi-Fi device tunnel timed out
-  twice; wake/unlock or reconnect it before retrying the same verified package.
+  Installation also succeeded on the iPad Air 13-inch (M4), but its paired
+  Wi-Fi tunnel disconnected before the follow-up inventory query; wake/unlock
+  or reconnect it to verify the installed version and run acceptance.

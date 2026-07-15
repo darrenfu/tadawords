@@ -180,6 +180,45 @@ final class AppleHandwritingRecognitionTests: XCTestCase {
         XCTAssertEqual(callCount, 3)
     }
 
+    func testInjectedOfAcceptsZeroFAsTargetAlignedOShape() async throws {
+        let (service, recorder) = makeInjectedOfService(passFragments: [
+            [fragment("0F", confidence: 0.86, x: 0.1)],
+            [],
+            [],
+        ])
+
+        let result = try await service.recognize(
+            sample: minimalHandwritingSample(),
+            prompt: try WordPrompt(learningMode: .write, text: "of"),
+            for: ProfileID()
+        )
+
+        XCTAssertEqual(result.decision, .matched)
+        XCTAssertEqual(result.recognizedText, "of")
+        XCTAssertEqual(result.confidence, RecognitionConfidence(0.86))
+        let callCount = await recorder.callCount()
+        XCTAssertEqual(callCount, 3)
+    }
+
+    func testInjectedOfZeroFFStillTriggersOffVeto() async throws {
+        let (service, recorder) = makeInjectedOfService(passFragments: [
+            [fragment("0f", confidence: 1, x: 0.1)],
+            [fragment("0ff", confidence: 1, x: 0.1)],
+            [],
+        ])
+
+        let result = try await service.recognize(
+            sample: minimalHandwritingSample(),
+            prompt: try WordPrompt(learningMode: .write, text: "of"),
+            for: ProfileID()
+        )
+
+        XCTAssertNotEqual(result.decision, .matched)
+        XCTAssertEqual(result.recognizedText, "off")
+        let callCount = await recorder.callCount()
+        XCTAssertEqual(callCount, 3)
+    }
+
     func testLazyPassTraversalPropagatesCancellationWithoutExecutingLaterPasses() async {
         var executedPasses: [Int] = []
 
@@ -275,13 +314,24 @@ final class AppleHandwritingRecognitionTests: XCTestCase {
         let dogPrompt = try WordPrompt(learningMode: .write, text: "dog")
         let resolver = makeResultResolver()
 
-        XCTAssertEqual(
-            resolver.resolve(
-                fragments: [fragment("0f", confidence: 0.84, x: 0.1)],
+        for equivalent in ["0f", "0F"] {
+            let result = resolver.resolve(
+                fragments: [fragment(equivalent, confidence: 0.84, x: 0.1)],
                 target: ofPrompt
-            ).decision,
-            .matched
-        )
+            )
+            XCTAssertEqual(result.decision, .matched)
+            XCTAssertEqual(result.recognizedText, "of")
+        }
+        for invalid in ["00", "90", "0t", "0ff", "+0", "f0"] {
+            XCTAssertNotEqual(
+                resolver.resolve(
+                    fragments: [fragment(invalid, confidence: 0.98, x: 0.1)],
+                    target: ofPrompt
+                ).decision,
+                .matched,
+                "Unexpected of match for \(invalid)"
+            )
+        }
         XCTAssertEqual(
             resolver.resolve(
                 fragments: [fragment("d0g", confidence: 0.81, x: 0.1)],
@@ -398,6 +448,24 @@ final class AppleHandwritingRecognitionTests: XCTestCase {
             result.decision,
             .matched,
             "Expected connected lowercase of to match; received "
+                + String(describing: result.recognizedText)
+                + " at "
+                + String(describing: result.confidence)
+        )
+    }
+
+    func testProductionVisionAcceptsNumericZeroFShapeForOf() async throws {
+        let prompt = try WordPrompt(learningMode: .write, text: "of")
+        let result = try await AppleHandwritingRecognitionService().recognize(
+            sample: numericZeroFOfFixture(),
+            prompt: prompt,
+            for: ProfileID()
+        )
+
+        XCTAssertEqual(
+            result.decision,
+            .matched,
+            "Expected a numeric-zero shape followed by f to match of; got "
                 + String(describing: result.recognizedText)
                 + " at "
                 + String(describing: result.confidence)
@@ -1070,6 +1138,19 @@ final class AppleHandwritingRecognitionTests: XCTestCase {
                 ),
             ],
             inputMethod: .finger
+        )
+    }
+
+    private func numericZeroFOfFixture() -> HandwritingSample {
+        sample(
+            strokes: [
+                ellipse(
+                    centerX: 0.27,
+                    centerY: 0.48,
+                    radiusX: 0.11,
+                    radiusY: 0.31
+                )
+            ] + lowercaseF(centerX: 0.68)
         )
     }
 

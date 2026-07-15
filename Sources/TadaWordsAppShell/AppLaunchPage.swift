@@ -2,7 +2,7 @@ import SwiftUI
 import TadaWordsDesignSystem
 
 enum AppLaunchPresentationPolicy {
-    static let minimumDisplayDuration = Duration.milliseconds(900)
+    static let minimumDisplayDuration = Duration.milliseconds(1_800)
     static let fadeDuration = TadaPrimitiveTokens.Motion.quick
 }
 
