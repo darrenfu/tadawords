@@ -365,9 +365,10 @@ child/parent acceptance remains open.
   `6S245NCUPQ`; v0.3.2 (`2026071406`) was installed and launched successfully.
 - Recovered the device-tested v0.3.2 QA fixes through PR #7, then merged them
   into v0.4.2 PR #6 before bringing the resulting `main` baseline into v0.5.
-- The integrated v0.5 tree passes 619/619 Swift tests, strict format lint, and a
-  fresh generic iOS Simulator build. Its Lobby → Write → Spell UI test confirms
-  all 26 custom keys, no native keyboard, first-word entry, and item advance.
-- A requested repeat install of exact v0.3.2 remains pending only because the
-  connected reading iPad reports itself locked; the signed 0.3.2 package and
-  device pairing are otherwise ready.
+- The integrated v0.5 tree passes 619/619 Swift tests, strict format lint, a
+  fresh generic iOS Simulator build, and all 8/8 critical simulator UI flows.
+  Its Lobby → Write → Spell flow confirms all 26 custom keys, no native
+  keyboard, first-word entry, and item advance.
+- Exact v0.3.2 (`2026071406`) was reinstalled successfully on the connected
+  reading iPad. Mac-side auto-launch was denied only because the iPad remained
+  locked; the installed app is ready to open directly after unlock.

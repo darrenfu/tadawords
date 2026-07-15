@@ -21,7 +21,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** `main` at `973ac9a` contains the recovered v0.3.2 iPad QA fixes, the bundled 500-word teacher pack at 0.67×, and v0.4.2 feedback-aware inter-word timing. The `v0.5` branch adds the simplified Parent category hubs, a child-owned Write input chooser, and the theme-matched A–Z spelling keyboard without removing the handwriting path. The integrated tree passes **619/619** Swift tests and a fresh generic iOS Simulator build; physical v0.5 child/Parent acceptance remains open. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** `main` at `973ac9a` contains the recovered v0.3.2 iPad QA fixes, the bundled 500-word teacher pack at 0.67×, and v0.4.2 feedback-aware inter-word timing. The `v0.5` branch adds the simplified Parent category hubs, a child-owned Write input chooser, and the theme-matched A–Z spelling keyboard without removing the handwriting path. The integrated tree passes **619/619** Swift tests, **8/8** critical simulator UI tests, and a fresh generic iOS Simulator build; physical v0.5 child/Parent acceptance remains open. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -129,7 +129,7 @@ make check
 open TadaWords.xcodeproj
 ```
 
-`make check` runs strict Swift formatting checks and the Swift package test suite. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and the complete v0.3.1 baseline contains **595 tests with zero failures**. The v0.4.1 merged tree also passes **595 tests with zero failures**, including the v0.3.1 World-layout coverage and the updated audio contract. The Xcode UI target adds seven critical end-to-end flows for Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, and OCR Review → Add All → Pool → Sort. A separate physical-device target calls the public production handwriting service with six positive case variants and four negative controls; it does not use the demo recognizer.
+`make check` runs strict Swift formatting checks and the Swift package test suite. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and the complete v0.3.1 baseline contains **595 tests with zero failures**. The v0.4.1 merged tree also passes **595 tests with zero failures**, including the v0.3.1 World-layout coverage and the updated audio contract. The merged baseline Xcode UI target has seven critical end-to-end flows for Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, and OCR Review → Add All → Pool → Sort. The v0.5 branch adds an eighth flow for Lobby → Write → Spell, all 26 custom keys, native-keyboard exclusion, and item advance. A separate physical-device target calls the public production handwriting service with six positive case variants and four negative controls; it does not use the demo recognizer.
 
 Run the device-readiness script before installing on an iPhone or iPad:
 
@@ -163,7 +163,7 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 |---|---|
 | Strict Swift format lint | Passed |
 | Swift tests | v0.4.1 merged tree: 595 passed, 0 failures; focused actual-Vision suite 15/15; focused World-layout suite 5/5 |
-| Critical XCUITest flows | 7 passed, 0 failures on iPhone 17 Pro Max simulator |
+| Critical XCUITest flows | Merged baseline: 7/7; integrated v0.5: 8/8 passed with 0 failures on iPhone 17 Pro simulator |
 | Physical iPhone production Vision | 2/2 device tests passed: 6/6 `of/go` case variants and 4/4 negative controls; synthetic vectors only |
 | Physical iPad production Vision | 2/2 device tests passed: wrong-word rejection and `of/go` case variants; synthetic vectors only |
 | Physical iPad critical XCUITest | 7/7 passed: OCR Add All, Delete All/restore, explicit Preset approval, sequential deletes/sort, Photos picker/sort, and Read/Write completion dismissal |

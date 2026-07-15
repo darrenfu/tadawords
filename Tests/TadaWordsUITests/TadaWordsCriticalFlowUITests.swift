@@ -269,12 +269,15 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
             app.staticTexts["Help with pronunciation"].exists,
             "Canonical pronunciation should not require a context editor."
         )
+        let scrollToBottom = app.buttons["Scroll to bottom"]
         for word in ["cat", "read", "bow", "to"] {
-            let field = app.textFields.matching(
-                NSPredicate(format: "value == %@", word)
-            ).firstMatch
+            let rowAction = app.buttons["Remove \(word)"]
+            if !rowAction.exists {
+                XCTAssertTrue(scrollToBottom.waitForExistence(timeout: 3))
+                scrollToBottom.tap()
+            }
             XCTAssertTrue(
-                field.waitForExistence(timeout: 3),
+                rowAction.waitForExistence(timeout: 3),
                 "OCR Review should contain \(word)."
             )
         }
