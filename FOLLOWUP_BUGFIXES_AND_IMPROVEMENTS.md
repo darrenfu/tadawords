@@ -413,3 +413,10 @@ child/Parent acceptance remains open.
 - Set the release and LocalQA identity to v0.5.1 (`2026071501`). The tree passes
   635/635 Swift tests and strict format lint. The critical XCUITest matrix passes
   9/9 on iPhone 17 Pro Max and 9/9 on iPad Pro 13-inch simulators.
+- Verified the signed physical bundle directly as v0.5.1 (`2026071501`), LocalQA
+  bundle ID `com.tadawords.app.localqa`, Team `6S245NCUPQ`; its provisioning
+  profile includes the registered iPhone and both iPads. Installation and
+  installed-version verification succeeded on the iPhone 17 Pro Max and reading
+  iPad. Both are locked, so automated launch and physical acceptance remain.
+  The iPad Air 13-inch (M4) stayed paired but its Wi-Fi device tunnel timed out
+  twice; wake/unlock or reconnect it before retrying the same verified package.

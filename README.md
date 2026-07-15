@@ -173,8 +173,9 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 | Physical iPad critical XCUITest | 7/7 passed: OCR Add All, Delete All/restore, explicit Preset approval, sequential deletes/sort, Photos picker/sort, and Read/Write completion dismissal |
 | iPhone 17 Pro Max LocalQA simulator | Fresh v0.5.1 build `2026071501`; critical XCUITest matrix 9/9 passed |
 | iPad Pro 13-inch (M5) LocalQA simulator | Fresh v0.5.1 build `2026071501`; critical XCUITest matrix 9/9 passed |
-| Connected iPhone 17 Pro Max | Signed `Tada Words QA` v0.3.1 (`2026071402`) installed and launched; child 12-attempt handwriting gate, audio, rotation, and accessibility remain |
-| Darren iPad Air 13-inch (M4), iPadOS 26.5 | Team `6S245NCUPQ` signed `Tada Words QA` v0.3.1 (`2026071403`), installed and launched; child handwriting, audio, layout, rotation, and accessibility remain |
+| Connected iPhone 17 Pro Max | Team `6S245NCUPQ` signed `Tada Words QA` v0.5.1 (`2026071501`) installed and verified; launch is waiting for device unlock, then child `of`, audio, rotation, and accessibility acceptance remain |
+| Darren's reading iPad Air 11-inch (M2), iPadOS 26.5.2 | The same verified v0.5.1 (`2026071501`) package is installed; launch is waiting for device unlock, then child/Parent acceptance remains |
+| Darren iPad Air 13-inch (M4), iPadOS 26.5 | Provisioning includes this device, but two v0.5.1 install attempts could not establish its paired Wi-Fi tunnel; wake/unlock or reconnect it before retrying |
 | Pre-K visual hierarchy | v0.2 Profile, Lobby, Read, and Result captures pass on both simulators; physical child, VoiceOver, and Dynamic Type acceptance remain open |
 | Route-based orientation | v0.2 Plist and runtime-policy checks passed. iPad simulator window shapes show Parents rotating while child routes remain landscape. Raw iPhone simulator framebuffer captures are inconclusive, so physical rotation remains open. |
 | Persisted, default-off CloudKit guardian opt-in | Implemented; live-device acceptance open |
