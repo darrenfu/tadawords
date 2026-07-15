@@ -133,6 +133,7 @@ struct WriteQuestView: View {
     @State private var recognitionTask: Task<Void, Never>?
     @State private var pictureHintTask: Task<Void, Never>?
     @State private var completionTask: Task<Void, Never>?
+    @State private var feedbackPlaybackTask: Task<Void, Never>?
     @State private var completionFeedbackLifecycle:
         QuestItemFeedbackLifecycle<
             WordPromptID,
@@ -258,6 +259,7 @@ struct WriteQuestView: View {
             recognitionTask?.cancel()
             pictureHintTask?.cancel()
             completionTask?.cancel()
+            feedbackPlaybackTask?.cancel()
             attemptState.cancelAttempt()
             questTimer.resume(from: .handwritingRecognition)
             Task {
@@ -770,7 +772,7 @@ struct WriteQuestView: View {
             usedGuidance: attemptState.usedGuidance
         )
         isChecking = false
-        playFeedback(for: result.decision)
+        let feedbackPlayback = playFeedback(for: result.decision)
         let attemptReplayCount = replayCountSinceLastAttempt
         replayCountSinceLastAttempt = 0
         attemptState.receive(
@@ -783,7 +785,7 @@ struct WriteQuestView: View {
         }
 
         if let summary = attemptState.completedSummary {
-            showCompletion(summary)
+            showCompletion(summary, after: feedbackPlayback)
         } else {
             if case .feedback(.rewriteAfterAnswer) = attemptState.phase {
                 showGuidedWord = false
@@ -800,7 +802,9 @@ struct WriteQuestView: View {
         }
     }
 
-    private func playFeedback(for decision: RecognitionDecision) {
+    private func playFeedback(
+        for decision: RecognitionDecision
+    ) -> Task<Void, Never> {
         let cue: FunctionalAudioCue
         switch decision {
         case .matched:
@@ -810,9 +814,12 @@ struct WriteQuestView: View {
         case .uncertain, .technicalFailure:
             cue = .technicalRetry
         }
-        Task {
+        feedbackPlaybackTask?.cancel()
+        let task = Task {
             await audioExperienceService.play(cue)
         }
+        feedbackPlaybackTask = task
+        return task
     }
 
     private func moveOnAfterTechnicalIssues() {
@@ -871,7 +878,10 @@ struct WriteQuestView: View {
         pendingAttemptTiming = .unmeasured
     }
 
-    private func showCompletion(_ summary: QuestAttemptSummary) {
+    private func showCompletion(
+        _ summary: QuestAttemptSummary,
+        after feedbackPlayback: Task<Void, Never>? = nil
+    ) {
         let completedItemID = session.prompt.id
         let announcement =
             summary.completion == .needsPractice
@@ -894,8 +904,11 @@ struct WriteQuestView: View {
         completionTask?.cancel()
         completionTask = Task { @MainActor in
             do {
-                try await Task.sleep(
-                    for: WriteQuestTimingPolicy.completionFeedbackVisibility
+                try await QuestAdvanceTimingPolicy.waitBeforeAdvance(
+                    minimumFeedbackVisibility:
+                        WriteQuestTimingPolicy.completionFeedbackVisibility,
+                    feedbackPlayback: feedbackPlayback,
+                    hasNextItem: session.currentItem < session.totalItems
                 )
             } catch {
                 return
