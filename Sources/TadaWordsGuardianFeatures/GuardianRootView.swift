@@ -149,7 +149,7 @@ public struct GuardianRootView: View {
             if let snapshot = model.snapshot {
                 GuardianTodayView(
                     snapshot: snapshot,
-                    onLock: lockAndReturnToKids,
+                    onBack: returnToPreviousPage,
                     onOpenProfiles: model.showProfiles,
                     onOpenWordsAndPractice: model.showWordsAndPractice,
                     onOpenProgressAndPerformance: model.showProgressAndPerformance,
@@ -368,7 +368,8 @@ public struct GuardianRootView: View {
         return settings.route(for: mode)
     }
 
-    private func lockAndReturnToKids() {
+    private func returnToPreviousPage() {
+        // Leaving parent tools still restores the gate for the next visit.
         model.lockGuardianArea()
         onExit()
     }

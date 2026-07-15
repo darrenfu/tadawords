@@ -6,7 +6,6 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        XCUIDevice.shared.orientation = .landscapeLeft
         app = XCUIApplication()
     }
 
@@ -63,12 +62,15 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         // DemoQuestContentProvider deterministically presents `look` first.
         for letter in "LOOK" {
             let key = app.buttons["spell.key.\(letter)"]
-            XCTAssertTrue(key.isHittable)
-            key.tap()
+            XCTAssertTrue(
+                waitUntil(timeout: 5) { key.isEnabled },
+                "The letter key should become interactive after prompt audio finishes."
+            )
+            tapCenter(of: key)
         }
         let done = app.buttons["spell.done"]
-        XCTAssertTrue(waitUntil(timeout: 3) { done.isEnabled && done.isHittable })
-        done.tap()
+        XCTAssertTrue(waitUntil(timeout: 3) { done.isEnabled })
+        tapCenter(of: done)
 
         let progress = element(label: "Quest progress")
         XCTAssertTrue(
@@ -92,6 +94,23 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         XCTAssertTrue(startListeningButton.waitForExistence(timeout: 5))
         startListeningButton.tap()
         assertReadSuccessDismissesAndAdvances(toItem: 3)
+    }
+
+    /// Parent Home uses ordinary back navigation while restoring the gate for
+    /// the next visit; the old lock control is no longer presented.
+    func testParentHomeBackReturnsToPreviousChildPage() throws {
+        launchDemo()
+        unlockParentArea()
+
+        let back = app.buttons["guardian.home.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["guardian.home.lock"].exists)
+
+        back.tap()
+
+        XCTAssertTrue(
+            app.buttons["profile-chooser.grown-ups"].waitForExistence(timeout: 8)
+        )
     }
 
     /// Covers the parent-session delete contract: only the first deletion asks
@@ -341,7 +360,11 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
     private func completeCurrentWriteWord() {
         let canvas = element(label: "Handwriting area")
         XCTAssertTrue(canvas.waitForExistence(timeout: 5))
-        XCTAssertTrue(canvas.isHittable)
+        let showWord = app.buttons["Show the word"]
+        XCTAssertTrue(
+            waitUntil(timeout: 5) { showWord.isEnabled },
+            "The canvas should become interactive after prompt audio finishes."
+        )
 
         canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.28, dy: 0.58))
             .press(
@@ -352,8 +375,8 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
             )
 
         let done = app.buttons["Done"]
-        XCTAssertTrue(waitUntil(timeout: 3) { done.isEnabled && done.isHittable })
-        done.tap()
+        XCTAssertTrue(waitUntil(timeout: 3) { done.isEnabled })
+        tapCenter(of: done)
     }
 
     private func assertWriteSuccessDismissesAndAdvances(toItem item: Int) {
@@ -422,6 +445,15 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         app.descendants(matching: .any).matching(
             NSPredicate(format: "label == %@", label)
         ).firstMatch
+    }
+
+    private func tapCenter(of element: XCUIElement) {
+        // XCTest can expose portrait-space frames for controls after an app-
+        // owned landscape handoff. A direct center coordinate sends the real
+        // touch while state assertions still prove that the control responded.
+        element.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+        ).tap()
     }
 
     private var startListeningButton: XCUIElement {

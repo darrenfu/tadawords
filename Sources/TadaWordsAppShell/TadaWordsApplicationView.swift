@@ -47,6 +47,7 @@ public struct TadaWordsApplicationView: View {
     @State private var refreshedChildState: RefreshedChildState?
     @State private var childProfileRevision = UUID()
     @State private var hasCompletedFirstRunOnboarding = false
+    @StateObject private var launchPresentation = AppLaunchPresentationCoordinator()
     @StateObject private var bootstrapModel: ApplicationBootstrapModel
 
     private let launchMode: LaunchMode
@@ -161,27 +162,42 @@ public struct TadaWordsApplicationView: View {
     }
 
     public var body: some View {
-        Group {
-            switch launchMode {
-            case .demo:
-                demoView
-            case .production:
-                productionView
-                    .task {
-                        bootstrapModel.startIfNeeded()
-                    }
-            case .unconfigured:
-                UnconfiguredApplicationView()
-                    .onAppear {
-                        applyOrientation(for: .child)
-                    }
+        ZStack {
+            applicationContent
+                .allowsHitTesting(!launchPresentation.isShowingLaunchPage)
+                .accessibilityHidden(launchPresentation.isShowingLaunchPage)
+
+            if launchPresentation.isShowingLaunchPage {
+                AppLaunchPage()
+                    .transition(.opacity)
             }
         }
         .preferredColorScheme(.light)
+        .onAppear {
+            startImmediateLaunchPresentationIfNeeded()
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             applyOrientation(for: currentOrientationRoute)
             synchronizeIfReady()
+        }
+    }
+
+    @ViewBuilder
+    private var applicationContent: some View {
+        switch launchMode {
+        case .demo:
+            demoView
+        case .production:
+            productionView
+                .task {
+                    bootstrapModel.startIfNeeded()
+                }
+        case .unconfigured:
+            UnconfiguredApplicationView()
+                .onAppear {
+                    applyOrientation(for: .child)
+                }
         }
     }
 
@@ -211,9 +227,6 @@ public struct TadaWordsApplicationView: View {
                 }
             }
         }
-        .task {
-            await audioExperienceService.playLaunchSignature()
-        }
     }
 
     @ViewBuilder
@@ -233,6 +246,7 @@ public struct TadaWordsApplicationView: View {
             )
             .onAppear {
                 applyOrientation(for: .child)
+                launchPresentation.startIfNeeded()
             }
         }
     }
@@ -341,6 +355,11 @@ public struct TadaWordsApplicationView: View {
             }
         }
         .task {
+            startProductionLaunchPresentationIfNeeded(
+                environment: environment,
+                profiles: childProfiles,
+                initialProfileID: initialProfileID
+            )
             if !environment.requiresFirstRunOnboarding
                 || hasCompletedFirstRunOnboarding
             {
@@ -354,11 +373,6 @@ public struct TadaWordsApplicationView: View {
                     try? await voiceprintRepository.delete(for: tombstone.profileID)
                 }
             }
-            await prepareLaunchAudio(
-                environment: environment,
-                profiles: childProfiles,
-                initialProfileID: initialProfileID
-            )
         }
     }
 
@@ -418,7 +432,41 @@ public struct TadaWordsApplicationView: View {
         }
     }
 
-    private func prepareLaunchAudio(
+    private func startImmediateLaunchPresentationIfNeeded() {
+        switch launchMode {
+        case .demo:
+            launchPresentation.startIfNeeded(
+                playSignature: playLaunchSignature
+            )
+        case .unconfigured:
+            launchPresentation.startIfNeeded()
+        case .production:
+            break
+        }
+    }
+
+    private func startProductionLaunchPresentationIfNeeded(
+        environment: ProductionApplicationEnvironment,
+        profiles: [KidProfile],
+        initialProfileID: ProfileID?
+    ) {
+        launchPresentation.startIfNeeded(
+            prepare: {
+                await configureLaunchAudio(
+                    environment: environment,
+                    profiles: profiles,
+                    initialProfileID: initialProfileID
+                )
+            },
+            playSignature: playLaunchSignature
+        )
+    }
+
+    private func playLaunchSignature() async {
+        await audioExperienceService.playLaunchSignature()
+    }
+
+    private func configureLaunchAudio(
         environment: ProductionApplicationEnvironment,
         profiles: [KidProfile],
         initialProfileID: ProfileID?
@@ -436,7 +484,6 @@ public struct TadaWordsApplicationView: View {
                 preferences: settings?.audio ?? .default
             )
         }
-        await audioExperienceService.playLaunchSignature()
     }
 
     private func refreshProfilesAndShowChild(
