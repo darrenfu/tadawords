@@ -71,6 +71,29 @@ class IssueAgentTests(unittest.TestCase):
             (0, 5, 3),
         )
 
+    def test_reservations_ignore_device_os_versions_in_prose(self):
+        issues = [
+            issue(
+                1,
+                "Device handoff",
+                ["release:v0.5.2", "build:2026071502"],
+                body="iPhone runs iOS 26.5.1 and iPad runs iPadOS 26.5.2.",
+            )
+        ]
+        prs = [
+            {
+                "title": "[v0.5.2] Device handoff",
+                "body": "- New version: `v0.5.2`\n- Build number: `2026071502`\n- Device: iOS 26.5.1",
+                "headRefName": "agent/batch-device-v0.5.2",
+                "labels": [],
+            }
+        ]
+        versions, builds = issue_agent.reserved_versions_and_builds(
+            issues, prs, "origin/v0.5.1"
+        )
+        self.assertEqual(versions, {(0, 5, 1), (0, 5, 2)})
+        self.assertEqual(builds, {"2026071502"})
+
     def test_build_number_is_monotonic_and_date_based(self):
         today = dt.date(2026, 7, 15)
         self.assertEqual(

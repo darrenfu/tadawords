@@ -221,22 +221,33 @@ def remote_ref_text(control_repo: Path) -> str:
 def reserved_versions_and_builds(
     issues: list[dict[str, Any]], prs: list[dict[str, Any]], refs: str
 ) -> tuple[set[tuple[int, int, int]], set[str]]:
-    text_parts = [refs]
+    version_text_parts = [refs]
+    build_text_parts: list[str] = []
     for item in [*issues, *prs]:
-        text_parts.extend(
-            [
-                str(item.get("title") or ""),
-                str(item.get("body") or ""),
-                " ".join(label_names(item)),
-                str(item.get("headRefName") or ""),
-            ]
+        labels = label_names(item)
+        version_text_parts.extend(
+            label for label in labels if label.startswith("release:v")
         )
-    text = "\n".join(text_parts)
+        build_text_parts.extend(
+            label for label in labels if label.startswith("build:")
+        )
+        version_text_parts.extend(
+            [str(item.get("title") or ""), str(item.get("headRefName") or "")]
+        )
+        for line in str(item.get("body") or "").splitlines():
+            normalized = line.strip().casefold()
+            if "new version:" in normalized or "planned version:" in normalized:
+                version_text_parts.append(line)
+            if "build number:" in normalized or "planned build:" in normalized:
+                build_text_parts.append(line)
+
+    version_text = "\n".join(version_text_parts)
+    build_text = "\n".join(build_text_parts)
     versions = {
         tuple(int(part) for part in match.groups())
-        for match in VERSION_RE.finditer(text)
+        for match in VERSION_RE.finditer(version_text)
     }
-    builds = {match.group(1) for match in BUILD_RE.finditer(text)}
+    builds = {match.group(1) for match in BUILD_RE.finditer(build_text)}
     return versions, builds
 
 
