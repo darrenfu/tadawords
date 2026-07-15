@@ -250,13 +250,8 @@ public struct TadaWordsRootView: View {
             clock: clock,
             timeZone: TimeZone(secondsFromGMT: 0) ?? .current
         )
-        #if DEBUG
-            let speechRecognitionService: any SpeechRecognitionService =
-                DemoSpeechRecognitionService()
-        #else
-            let speechRecognitionService: any SpeechRecognitionService =
-                UnavailableSpeechRecognitionService()
-        #endif
+        let speechRecognitionService: any SpeechRecognitionService =
+            DemoSpeechRecognitionService()
         return TadaWordsRootView(
             contentProvider: contentProvider,
             audioPromptService: audioPromptService,

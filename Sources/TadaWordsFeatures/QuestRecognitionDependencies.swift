@@ -42,40 +42,40 @@ struct UnavailableHandwritingRecognitionService: HandwritingRecognitionService {
     }
 }
 
-/// Debug and preview fixtures exercise the real quest UI without inventing
-/// production learning evidence.
-#if DEBUG
-    struct DemoSpeechRecognitionService: SpeechRecognitionService {
-        static let defaultDelay: Duration = .milliseconds(1_500)
+/// Preview and explicitly selected demo fixtures exercise the real quest UI
+/// without inventing production learning evidence. Release app composition
+/// cannot enter demo mode, so ordinary family sessions never select this
+/// deterministic adapter.
+struct DemoSpeechRecognitionService: SpeechRecognitionService {
+    static let defaultDelay: Duration = .milliseconds(1_500)
 
-        private let delay: Duration
-        private let wait: @Sendable (Duration) async throws -> Void
+    private let delay: Duration
+    private let wait: @Sendable (Duration) async throws -> Void
 
-        init(
-            delay: Duration = Self.defaultDelay,
-            wait: @escaping @Sendable (Duration) async throws -> Void = {
-                try await Task.sleep(for: $0)
-            }
-        ) {
-            self.delay = delay
-            self.wait = wait
+    init(
+        delay: Duration = Self.defaultDelay,
+        wait: @escaping @Sendable (Duration) async throws -> Void = {
+            try await Task.sleep(for: $0)
         }
-
-        func recognize(
-            _ request: SpeechRecognitionRequest
-        ) async throws -> RecognitionResult {
-            try Task.checkCancellation()
-            try await wait(delay)
-            try Task.checkCancellation()
-
-            return RecognitionResult(
-                decision: .matched,
-                recognizedText: request.prompt.normalizedText,
-                confidence: RecognitionConfidence(1)
-            )
-        }
+    ) {
+        self.delay = delay
+        self.wait = wait
     }
-#endif
+
+    func recognize(
+        _ request: SpeechRecognitionRequest
+    ) async throws -> RecognitionResult {
+        try Task.checkCancellation()
+        try await wait(delay)
+        try Task.checkCancellation()
+
+        return RecognitionResult(
+            decision: .matched,
+            recognizedText: request.prompt.normalizedText,
+            confidence: RecognitionConfidence(1)
+        )
+    }
+}
 
 struct DemoHandwritingRecognitionService: HandwritingRecognitionService {
     func recognize(
