@@ -42,8 +42,10 @@ public struct WordProgressReducer: Sendable {
             && attempt.outcome.isScorableResponse
         let attemptIncrement = isValidIndependentAttempt ? 1 : 0
         let correctIncrement = isValidIndependentAttempt && attempt.outcome.isCorrect ? 1 : 0
+        let usesLetterKeyboard =
+            attempt.original.paceContext?.inputMethod == .letterKeyboard
         let responseTime =
-            isValidIndependentAttempt
+            isValidIndependentAttempt && !usesLetterKeyboard
             ? attempt.original.timing.totalResponseTime
             : nil
         let helpedIncrement = attempt.original.evidence == .helped ? 1 : 0
@@ -57,7 +59,9 @@ public struct WordProgressReducer: Sendable {
                 from: progress.memoryState,
                 using: attempt,
                 signalContext: RetrievalSignalContext(
-                    comparableMeanResponseTime: progress.firstIndependentMeanResponseTime
+                    comparableMeanResponseTime: usesLetterKeyboard
+                        ? nil
+                        : progress.firstIndependentMeanResponseTime
                 )
             ),
             firstIndependentAttemptCount: progress.firstIndependentAttemptCount

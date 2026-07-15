@@ -121,7 +121,7 @@ final class DailyNewWordSelectorTests: XCTestCase {
         XCTAssertEqual(selected.map(\.id), [included.id])
     }
 
-    func testDefaultLimitsAreReadFiveAndWriteThree() throws {
+    func testDefaultLimitsAreReadFiveAndWriteFive() throws {
         let readEntries = try (1...6).map { number in
             try ContentTestFixture.entry(
                 "readword\(letter(for: number))",
@@ -130,7 +130,7 @@ final class DailyNewWordSelectorTests: XCTestCase {
                 position: number
             )
         }
-        let writeEntries = try (1...4).map { number in
+        let writeEntries = try (1...6).map { number in
             try ContentTestFixture.entry(
                 "writeword\(letter(for: number))",
                 number: number + 20,
@@ -159,7 +159,7 @@ final class DailyNewWordSelectorTests: XCTestCase {
         )
 
         XCTAssertEqual(readSelection.count, 5)
-        XCTAssertEqual(writeSelection.count, 3)
+        XCTAssertEqual(writeSelection.count, 5)
     }
 
     func testSelectionDoesNotDependOnRepositoryReturnOrder() throws {

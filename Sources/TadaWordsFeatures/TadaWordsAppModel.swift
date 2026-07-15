@@ -385,8 +385,42 @@ final class TadaWordsAppModel: ObservableObject {
         await loadCalendar(for: selectedProfile)
     }
 
-    func startQuest(_ mode: LearningMode) {
-        guard let request = beginPreparation(for: mode) else { return }
+    /// Routes Write through the child-facing response chooser while Read keeps
+    /// its direct one-tap launch.
+    func chooseQuest(_ mode: LearningMode) {
+        guard mode == .write else {
+            startQuest(mode)
+            return
+        }
+        guard let profile = selectedProfile else {
+            destination = .profileChooser
+            return
+        }
+        switch contentProvider.availability(for: .write, profile: profile) {
+        case .available:
+            abandonActiveQuest()
+            focusedReplaySeed = nil
+            destination = .writeInputChooser
+            Task { await audioExperienceService.play(.click) }
+        case .blocked:
+            startQuest(.write)
+        }
+    }
+
+    func startWriteQuest(using inputMethod: WriteQuestInputMethod) {
+        startQuest(.write, writeInputMethod: inputMethod)
+    }
+
+    func startQuest(
+        _ mode: LearningMode,
+        writeInputMethod: WriteQuestInputMethod = .handwriting
+    ) {
+        guard
+            let request = beginPreparation(
+                for: mode,
+                writeInputMethod: writeInputMethod
+            )
+        else { return }
         Task {
             await audioExperienceService.play(.click)
         }
@@ -427,8 +461,16 @@ final class TadaWordsAppModel: ObservableObject {
 
     /// Async test/integration seam that exercises the same preparation path as
     /// the UI without polling published state.
-    func prepareQuestAndWait(_ mode: LearningMode) async {
-        guard let request = beginPreparation(for: mode) else { return }
+    func prepareQuestAndWait(
+        _ mode: LearningMode,
+        writeInputMethod: WriteQuestInputMethod = .handwriting
+    ) async {
+        guard
+            let request = beginPreparation(
+                for: mode,
+                writeInputMethod: writeInputMethod
+            )
+        else { return }
         await loadPreparedQuest(request)
     }
 
@@ -518,7 +560,10 @@ final class TadaWordsAppModel: ObservableObject {
         await persistPendingCompletion(pendingCompletion.id)
     }
 
-    private func beginPreparation(for mode: LearningMode) -> QuestPreparationRequest? {
+    private func beginPreparation(
+        for mode: LearningMode,
+        writeInputMethod: WriteQuestInputMethod = .handwriting
+    ) -> QuestPreparationRequest? {
         guard let profile = selectedProfile else {
             destination = .profileChooser
             return nil
@@ -540,6 +585,7 @@ final class TadaWordsAppModel: ObservableObject {
         let request = QuestPreparationRequest(
             id: UUID(),
             mode: mode,
+            writeInputMethod: mode == .write ? writeInputMethod : .handwriting,
             profile: profile
         )
         activePreparationID = request.id
@@ -602,6 +648,7 @@ final class TadaWordsAppModel: ObservableObject {
                 profileID: request.profile.id,
                 world: request.seed.world,
                 mode: request.seed.mode,
+                writeInputMethod: request.seed.writeInputMethod,
                 prompts: request.seed.prompts,
                 deviceClass: request.seed.deviceClass,
                 personalPaceBands: request.seed.personalPaceBands,
@@ -711,6 +758,11 @@ final class TadaWordsAppModel: ObservableObject {
             let runAttempts = storedAttempts.filter {
                 $0.questID == launch.questPlan.id
             }
+            let recoveredWriteInputMethod = Self.recoveredWriteInputMethod(
+                requested: request.writeInputMethod,
+                mode: request.mode,
+                attempts: runAttempts
+            )
             let effectivePlan = ProblemNewReviewReplacement().adjustedPlan(
                 launch.questPlan,
                 attempts: runAttempts,
@@ -745,6 +797,7 @@ final class TadaWordsAppModel: ObservableObject {
                 profileID: request.profile.id,
                 world: request.profile.selectedWorld,
                 mode: request.mode,
+                writeInputMethod: recoveredWriteInputMethod,
                 prompts: prompts,
                 deviceClass: candidate.deviceClass,
                 personalPaceBands: candidate.personalPaceBands,
@@ -843,7 +896,8 @@ final class TadaWordsAppModel: ObservableObject {
                 replayCount: record.replayCount,
                 recognitionConfidence: record.confidence,
                 paceContext: quest.currentPrompt.paceContext(
-                    deviceClass: quest.deviceClass
+                    deviceClass: quest.deviceClass,
+                    writeInputMethod: quest.writeInputMethod
                 )
             )
         }
@@ -1053,6 +1107,7 @@ final class TadaWordsAppModel: ObservableObject {
                 id: quest.id,
                 profileID: quest.profileID,
                 mode: quest.mode,
+                writeInputMethod: quest.writeInputMethod,
                 prompt: quest.currentPrompt,
                 source: quest.currentItem.source,
                 currentItem: quest.currentIndex + 1,
@@ -1076,7 +1131,10 @@ final class TadaWordsAppModel: ObservableObject {
                     uniqueKeysWithValues: quest.prompts.map { prompt in
                         (
                             prompt.id,
-                            prompt.paceContext(deviceClass: quest.deviceClass)
+                            prompt.paceContext(
+                                deviceClass: quest.deviceClass,
+                                writeInputMethod: quest.writeInputMethod
+                            )
                         )
                     }
                 ),
@@ -1103,7 +1161,8 @@ final class TadaWordsAppModel: ObservableObject {
                 deviceClass: quest.deviceClass,
                 personalPaceBands: quest.personalPaceBands,
                 interfacePreferences: quest.interfacePreferences,
-                emergencyAfter: quest.emergencyAfter
+                emergencyAfter: quest.emergencyAfter,
+                writeInputMethod: quest.writeInputMethod
             )
         return PersistedQuestResult(
             persistedCompletion: writeResult.completion,
@@ -1308,6 +1367,43 @@ final class TadaWordsAppModel: ObservableObject {
         return lhs.id.rawValue.uuidString < rhs.id.rawValue.uuidString
     }
 
+    /// A resumed Write quest keeps one response surface for its full run.
+    /// Persisted attempts are authoritative only when every record carries a
+    /// valid, matching pace context and they all agree. Before the first
+    /// durable attempt (or for legacy/mixed evidence), the current chooser or
+    /// generic handwriting fallback remains in control.
+    private static func recoveredWriteInputMethod(
+        requested: WriteQuestInputMethod,
+        mode: LearningMode,
+        attempts: [AttemptEvent]
+    ) -> WriteQuestInputMethod {
+        guard mode == .write, !attempts.isEmpty else { return requested }
+
+        let inferredMethods = attempts.map { attempt -> WriteQuestInputMethod? in
+            guard
+                attempt.learningMode == .write,
+                let context = attempt.paceContext,
+                context.learningMode == .write
+            else { return nil }
+
+            return switch context.inputMethod {
+            case .letterKeyboard:
+                .letterKeyboard
+            case .fingerWriting, .pencilWriting:
+                .handwriting
+            case .speech:
+                nil
+            }
+        }
+        guard inferredMethods.allSatisfy({ $0 != nil }) else { return requested }
+
+        let uniqueMethods = Set(inferredMethods.compactMap { $0 })
+        guard uniqueMethods.count == 1, let recovered = uniqueMethods.first else {
+            return requested
+        }
+        return recovered
+    }
+
     private static let creationFailureMessage =
         "We couldn't save your kid profile. Ask a parent to try again."
 
@@ -1342,6 +1438,7 @@ final class TadaWordsAppModel: ObservableObject {
 private struct QuestPreparationRequest: Sendable {
     let id: UUID
     let mode: LearningMode
+    let writeInputMethod: WriteQuestInputMethod
     let profile: KidProfile
 }
 
@@ -1360,6 +1457,7 @@ private struct FocusedReplaySeed: Sendable {
     let personalPaceBands: [PersonalPaceBand]
     let interfacePreferences: PracticeInterfacePreferences
     let emergencyAfter: TimeInterval
+    let writeInputMethod: WriteQuestInputMethod
 }
 
 private struct ActiveQuest {
@@ -1368,6 +1466,7 @@ private struct ActiveQuest {
     let profileID: ProfileID
     let world: WorldTheme
     let mode: LearningMode
+    let writeInputMethod: WriteQuestInputMethod
     var prompts: [WordPrompt]
     let deviceClass: DeviceClass
     let personalPaceBands: [PersonalPaceBand]

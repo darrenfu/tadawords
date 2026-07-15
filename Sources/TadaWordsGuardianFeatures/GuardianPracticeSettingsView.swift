@@ -2,6 +2,7 @@ import SwiftUI
 import TadaWordsDomain
 
 struct GuardianPracticeSettingsView: View {
+    let section: GuardianSettingsSection
     let onBack: () -> Void
     let onSave: (ProfilePracticeSettings) -> Void
 
@@ -18,10 +19,12 @@ struct GuardianPracticeSettingsView: View {
 
     init(
         settings: ProfilePracticeSettings,
+        section: GuardianSettingsSection,
         onBack: @escaping () -> Void,
         onSave: @escaping (ProfilePracticeSettings) -> Void
     ) {
         profileID = settings.profileID
+        self.section = section
         self.onBack = onBack
         self.onSave = onSave
         _readDraft = State(
@@ -55,61 +58,14 @@ struct GuardianPracticeSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.large) {
                 GuardianNavigationHeader(
-                    title: "Practice settings",
+                    title: section.navigationTitle,
                     onBack: onBack
                 )
 
-                VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.small) {
-                    Text("Plan each practice route")
-                        .font(.system(.title3, design: .rounded, weight: .bold))
-                    Text(
-                        "Choose how many new and review words appear, their order, and when Rescue time begins."
-                    )
-                    .font(.system(.body, design: .rounded, weight: .medium))
-                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
-                    .frame(maxWidth: 680, alignment: .leading)
-                }
+                settingsContent
 
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: GuardianPrimitiveTokens.Spacing.medium) {
-                        routeCards
-                    }
-
-                    VStack(spacing: GuardianPrimitiveTokens.Spacing.medium) {
-                        routeCards
-                    }
-                }
-
-                audioSettingsCard
-                interfaceSettingsCard
-                notificationSettingsCard
-
-                Label(
-                    "Rescue time adds extra encouragement. It does not end practice.",
-                    systemImage: "info.circle"
-                )
-                .font(.system(.subheadline, design: .rounded, weight: .medium))
-                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
-
-                Button("Save practice settings") {
-                    onSave(
-                        ProfilePracticeSettings(
-                            profileID: profileID,
-                            read: readDraft.settings,
-                            write: writeDraft.settings,
-                            audio: AudioPreferences(
-                                voiceEnabled: voiceEnabled,
-                                musicEnabled: musicEnabled,
-                                soundEffectsEnabled: soundEffectsEnabled,
-                                reducedSoundEnabled: reducedSoundEnabled,
-                                calmEmergencyEnabled: calmRescueEnabled
-                            ),
-                            notifications: notificationDraft.settings,
-                            interface: PracticeInterfacePreferences(
-                                leftHandedLayoutEnabled: leftHandedWritingControlsEnabled
-                            )
-                        )
-                    )
+                Button(section.saveButtonTitle) {
+                    onSave(assembledSettings)
                 }
                 .buttonStyle(GuardianPrimaryButtonStyle())
             }
@@ -119,6 +75,68 @@ struct GuardianPracticeSettingsView: View {
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)
+    }
+
+    @ViewBuilder
+    private var settingsContent: some View {
+        switch section {
+        case .practicePlan:
+            VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.small) {
+                Text("Plan each practice route")
+                    .font(.system(.title3, design: .rounded, weight: .bold))
+                Text(
+                    "Choose how many new and review words appear, their order, and when Rescue time begins."
+                )
+                .font(.system(.body, design: .rounded, weight: .medium))
+                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                .frame(maxWidth: 680, alignment: .leading)
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: GuardianPrimitiveTokens.Spacing.medium) {
+                    routeCards
+                }
+
+                VStack(spacing: GuardianPrimitiveTokens.Spacing.medium) {
+                    routeCards
+                }
+            }
+
+            Label(
+                "Rescue time adds extra encouragement. It does not end practice.",
+                systemImage: "info.circle"
+            )
+            .font(.system(.subheadline, design: .rounded, weight: .medium))
+            .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+
+        case .soundAndAccessibility:
+            audioSettingsCard
+            interfaceSettingsCard
+
+        case .notifications:
+            notificationSettingsCard
+        }
+    }
+
+    /// The view emits a complete draft so controls remain reusable. The model
+    /// applies only this page's visible section to the latest stored settings.
+    private var assembledSettings: ProfilePracticeSettings {
+        ProfilePracticeSettings(
+            profileID: profileID,
+            read: readDraft.settings,
+            write: writeDraft.settings,
+            audio: AudioPreferences(
+                voiceEnabled: voiceEnabled,
+                musicEnabled: musicEnabled,
+                soundEffectsEnabled: soundEffectsEnabled,
+                reducedSoundEnabled: reducedSoundEnabled,
+                calmEmergencyEnabled: calmRescueEnabled
+            ),
+            notifications: notificationDraft.settings,
+            interface: PracticeInterfacePreferences(
+                leftHandedLayoutEnabled: leftHandedWritingControlsEnabled
+            )
+        )
     }
 
     @ViewBuilder
@@ -260,6 +278,30 @@ struct GuardianPracticeSettingsView: View {
             }
         }
         .frame(maxWidth: 680, alignment: .leading)
+    }
+}
+
+extension GuardianSettingsSection {
+    fileprivate var navigationTitle: String {
+        switch self {
+        case .practicePlan:
+            "Practice Plan"
+        case .soundAndAccessibility:
+            "Sound & Accessibility"
+        case .notifications:
+            "Notifications"
+        }
+    }
+
+    fileprivate var saveButtonTitle: String {
+        switch self {
+        case .practicePlan:
+            "Save practice plan"
+        case .soundAndAccessibility:
+            "Save sound & accessibility"
+        case .notifications:
+            "Save notifications"
+        }
     }
 }
 

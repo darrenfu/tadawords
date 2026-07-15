@@ -187,6 +187,67 @@ final class TadaWordsAppModelTests: XCTestCase {
         fixture.model.showLobby()
     }
 
+    func testWriteRouteOffersChoiceBeforePreparingSharedQuest() throws {
+        let fixture = try ModelFixture(wordCount: 1, mode: .write)
+
+        fixture.model.chooseQuest(.write)
+
+        guard case .writeInputChooser = fixture.model.destination else {
+            return XCTFail("Expected the Write response chooser")
+        }
+    }
+
+    func testLetterKeyboardChoiceReachesSessionAndPersistedPaceContext()
+        async throws
+    {
+        let fixture = try ModelFixture(wordCount: 1, mode: .write)
+        await fixture.model.prepareQuestAndWait(
+            .write,
+            writeInputMethod: .letterKeyboard
+        )
+        let session = try questSession(from: fixture.model.destination)
+        XCTAssertEqual(session.writeInputMethod, .letterKeyboard)
+
+        var attemptState = QuestAttemptStateMachine(policy: .write)
+        XCTAssertTrue(attemptState.beginAttempt())
+        attemptState.receive(
+            RecognitionResult(decision: .matched),
+            timing: AttemptTiming(
+                totalResponseTime: ElapsedTime(seconds: 2)
+            )
+        )
+        let summary = try XCTUnwrap(attemptState.completedSummary)
+
+        await fixture.model.finishItemAndWait(session, summary: summary)
+
+        let attempts = try await fixture.records.attempts(
+            for: fixture.profile.id,
+            wordPromptID: session.prompt.id
+        )
+        let context = try XCTUnwrap(attempts.first?.paceContext)
+        XCTAssertEqual(context.learningMode, .write)
+        XCTAssertEqual(context.inputMethod, .letterKeyboard)
+    }
+
+    func testFocusedReplayKeepsLetterKeyboardChoice() async throws {
+        let fixture = try ModelFixture(wordCount: 1, mode: .write)
+        await fixture.model.prepareQuestAndWait(
+            .write,
+            writeInputMethod: .letterKeyboard
+        )
+        let firstSession = try questSession(from: fixture.model.destination)
+        await fixture.model.finishItemAndWait(
+            firstSession,
+            summary: try TestFixture.summary(decisions: [.notMatched, .matched])
+        )
+
+        await fixture.model.replayMissedWordsAndWait()
+
+        let replaySession = try questSession(from: fixture.model.destination)
+        XCTAssertEqual(replaySession.writeInputMethod, .letterKeyboard)
+        XCTAssertEqual(replaySession.prompt.id, firstSession.prompt.id)
+    }
+
     func testInjectedProfileIDIsUsedForPreparationAndQuestSession() async throws {
         let profile = TestFixture.profile(name: "Nora", number: 42)
         let prompt = try TestFixture.prompt("cat", number: 42)
@@ -392,6 +453,81 @@ final class TadaWordsAppModelTests: XCTestCase {
             wordPromptID: nil
         )
         XCTAssertEqual(storedAttempts.count, 2)
+    }
+
+    func testRelaunchRecoversLetterKeyboardFromPersistedAttemptContext()
+        async throws
+    {
+        let records = InMemoryLearningRecordRepository()
+        let dailyRepository = InMemoryDailyQuestRepository()
+        let coordinator = DailyQuestCoordinator(
+            repository: dailyRepository,
+            timeZone: .gmt
+        )
+        let firstRun = try ModelFixture(
+            wordCount: 2,
+            mode: .write,
+            records: records,
+            dailyQuestCoordinator: coordinator
+        )
+        await firstRun.model.prepareQuestAndWait(
+            .write,
+            writeInputMethod: .letterKeyboard
+        )
+        let firstSession = try questSession(from: firstRun.model.destination)
+        await firstRun.model.finishItemAndWait(
+            firstSession,
+            summary: try TestFixture.summary(decisions: [.matched])
+        )
+        firstRun.model.showLobby()
+
+        let relaunched = try ModelFixture(
+            wordCount: 2,
+            mode: .write,
+            records: records,
+            dailyQuestCoordinator: coordinator
+        )
+        // A generic Recover path requests its documented handwriting
+        // fallback. Durable evidence from this same quest must win.
+        await relaunched.model.prepareQuestAndWait(.write)
+
+        let recovered = try questSession(from: relaunched.model.destination)
+        XCTAssertEqual(recovered.currentItem, 2)
+        XCTAssertEqual(recovered.writeInputMethod, .letterKeyboard)
+    }
+
+    func testWriteRelaunchBeforeFirstAttemptKeepsGenericHandwritingFallback()
+        async throws
+    {
+        let records = InMemoryLearningRecordRepository()
+        let dailyRepository = InMemoryDailyQuestRepository()
+        let coordinator = DailyQuestCoordinator(
+            repository: dailyRepository,
+            timeZone: .gmt
+        )
+        let firstRun = try ModelFixture(
+            wordCount: 1,
+            mode: .write,
+            records: records,
+            dailyQuestCoordinator: coordinator
+        )
+        await firstRun.model.prepareQuestAndWait(
+            .write,
+            writeInputMethod: .letterKeyboard
+        )
+        firstRun.model.showLobby()
+
+        let relaunched = try ModelFixture(
+            wordCount: 1,
+            mode: .write,
+            records: records,
+            dailyQuestCoordinator: coordinator
+        )
+        await relaunched.model.prepareQuestAndWait(.write)
+
+        let recovered = try questSession(from: relaunched.model.destination)
+        XCTAssertEqual(recovered.currentItem, 1)
+        XCTAssertEqual(recovered.writeInputMethod, .handwriting)
     }
 
     func testRelaunchWithEveryItemCheckpointCompletesAndGrantsRewardOnce()
@@ -950,6 +1086,7 @@ private struct ModelFixture {
     @MainActor
     init(
         wordCount: Int,
+        mode: LearningMode = .read,
         records: any AttemptEventRepository & WordProgressRepository =
             InMemoryLearningRecordRepository(),
         dailyQuestCoordinator: DailyQuestCoordinator = DailyQuestCoordinator(
@@ -966,12 +1103,16 @@ private struct ModelFixture {
         profile = TestFixture.profile(name: "Mia", number: 1)
         let words = ["cat", "dog", "fox", "hen", "pig"]
         prompts = try (1...wordCount).map { number in
-            try TestFixture.prompt(words[number - 1], number: number)
+            try TestFixture.prompt(
+                words[number - 1],
+                number: number,
+                mode: mode
+            )
         }
         plan = QuestPlan(
             id: TestFixture.questID,
             profileID: profile.id,
-            configuration: .defaultRead,
+            configuration: mode == .read ? .defaultRead : .defaultWrite,
             reviewWordIDs: wordCount > 1 ? [prompts[1].id] : [],
             newWordIDs: [prompts[0].id],
             createdAt: TestFixture.now

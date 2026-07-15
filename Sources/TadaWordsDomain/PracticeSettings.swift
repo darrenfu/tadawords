@@ -36,8 +36,8 @@ public struct LearningRouteSettings: Codable, Hashable, Sendable {
     )
 
     public static let defaultWrite = LearningRouteSettings(
-        newWordLimit: 3,
-        reviewWordLimit: 3,
+        newWordLimit: 5,
+        reviewWordLimit: 5,
         contentOrder: .newThenReview,
         emergencyAfterSeconds: 300
     )

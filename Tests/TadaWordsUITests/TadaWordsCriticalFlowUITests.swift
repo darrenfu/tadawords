@@ -34,6 +34,51 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         assertWriteSuccessDismissesAndAdvances(toItem: 3)
     }
 
+    /// Covers the child-facing Write fork end to end. The spelling surface is
+    /// a theme-matched in-app control, never a system text-entry keyboard.
+    func testLobbyWriteSpellWithLettersUsesCustomKeyboardAndAdvances() throws {
+        launchDemo(startingAt: "moonpetal")
+
+        let writeQuest = app.buttons["Write, Hear it. Write it."]
+        XCTAssertTrue(writeQuest.waitForExistence(timeout: 8))
+        writeQuest.tap()
+
+        let spellWithLetters = app.descendants(matching: .any)[
+            "write-method.letterKeyboard"
+        ]
+        XCTAssertTrue(spellWithLetters.waitForExistence(timeout: 5))
+        spellWithLetters.tap()
+
+        XCTAssertTrue(app.buttons["spell.key.A"].waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            app.keyboards.count,
+            0,
+            "The in-app letter board must not present a native iOS keyboard."
+        )
+        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
+            let key = app.buttons["spell.key.\(letter)"]
+            XCTAssertTrue(key.exists, "Missing custom letter key \(letter).")
+        }
+
+        // DemoQuestContentProvider deterministically presents `look` first.
+        for letter in "LOOK" {
+            let key = app.buttons["spell.key.\(letter)"]
+            XCTAssertTrue(key.isHittable)
+            key.tap()
+        }
+        let done = app.buttons["spell.done"]
+        XCTAssertTrue(waitUntil(timeout: 3) { done.isEnabled && done.isHittable })
+        done.tap()
+
+        let progress = element(label: "Quest progress")
+        XCTAssertTrue(
+            waitUntil(timeout: 4) {
+                (progress.value as? String)?.hasPrefix("Item 2 of ") == true
+            },
+            "Correct custom-keyboard spelling should advance to item 2."
+        )
+    }
+
     /// The same completion lifecycle powers Read Practice. This uses the
     /// deterministic demo speech recognizer and verifies two asynchronous
     /// recognition completions cannot leave "You got it!" over the next word.
@@ -123,9 +168,11 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         launchDemo()
         unlockParentArea()
 
-        let openPresets = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", "Choose preset words")
-        ).firstMatch
+        let wordsAndPractice = app.buttons["guardian.home.words-and-practice"]
+        XCTAssertTrue(wordsAndPractice.waitForExistence(timeout: 8))
+        wordsAndPractice.tap()
+
+        let openPresets = app.buttons["guardian.words.presets"]
         XCTAssertTrue(openPresets.waitForExistence(timeout: 8))
         openPresets.tap()
 
@@ -222,12 +269,15 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
             app.staticTexts["Help with pronunciation"].exists,
             "Canonical pronunciation should not require a context editor."
         )
+        let scrollToBottom = app.buttons["Scroll to bottom"]
         for word in ["cat", "read", "bow", "to"] {
-            let field = app.textFields.matching(
-                NSPredicate(format: "value == %@", word)
-            ).firstMatch
+            let rowAction = app.buttons["Remove \(word)"]
+            if !rowAction.exists {
+                XCTAssertTrue(scrollToBottom.waitForExistence(timeout: 3))
+                scrollToBottom.tap()
+            }
             XCTAssertTrue(
-                field.waitForExistence(timeout: 3),
+                rowAction.waitForExistence(timeout: 3),
                 "OCR Review should contain \(word)."
             )
         }
@@ -279,9 +329,11 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         launchDemo(additionalLaunchArguments: additionalLaunchArguments)
         unlockParentArea()
 
-        let manageWords = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", "Manage Words")
-        ).firstMatch
+        let wordsAndPractice = app.buttons["guardian.home.words-and-practice"]
+        XCTAssertTrue(wordsAndPractice.waitForExistence(timeout: 8))
+        wordsAndPractice.tap()
+
+        let manageWords = app.buttons["guardian.words.manage"]
         XCTAssertTrue(manageWords.waitForExistence(timeout: 8))
         manageWords.tap()
     }

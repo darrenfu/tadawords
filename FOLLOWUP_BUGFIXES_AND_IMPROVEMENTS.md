@@ -330,4 +330,45 @@ Branch: `agent/v0.4.2-transition-pause`
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
-| AUDIO-FIX-005 | Improvement | Inter-word audio timing | A new word must never attach directly to the end of correct-answer transition audio. Await the complete transition, keep the existing visible feedback minimum, then leave 700ms of silence before advancing to any non-final Read/Write item. Do not add the inter-item pause before Quest results. | Implemented; automated pass pending | Complete consecutive Write items with Voice on, Voice off, Reduced Sound, and normal Sound Effects. Confirm every next prompt starts after a distinct pause and no transition is truncated; repeat Read to confirm its word card does not advance early. |
+| AUDIO-FIX-005 | Improvement | Inter-word audio timing | A new word must never attach directly to the end of correct-answer transition audio. Await the complete transition, keep the existing visible feedback minimum, then leave 700ms of silence before advancing to any non-final Read/Write item. Do not add the inter-item pause before Quest results. | Implemented; 600/600 pre-merge tests and simulator build passed | Complete consecutive Write items with Voice on, Voice off, Reduced Sound, and normal Sound Effects. Confirm every next prompt starts after a distinct pause and no transition is truncated; repeat Read to confirm its word card does not advance early. |
+
+## v0.5 — 2026-07-14
+
+Target release: `v0.5.0`
+
+Branch: `v0.5`
+
+Baseline: merged `v0.4.2`, including the recovered v0.3.2 device-QA fixes and
+the v0.4.1 offline teacher-audio pack.
+Overall state: integrated automated verification passed; physical iPad
+child/parent acceptance remains open.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V05-UX-001 | UX redesign | Parent navigation | Replace the long Parent dashboard with one compact `Parent Home`: a single `Kids` Profile entrance, `Words & Practice`, `Progress & Performance`, `App & Family`, and `Lock`. Word management and child performance must never share a category. Remove duplicate Pool/Manage/Preset entrances and return every detail page to its owning category hub. | Automated pass; visual device QA pending | On iPhone and iPad in both Parent orientations, reach every existing Parent capability exactly once, verify Back returns to the owning hub, and confirm no card text wraps or clips at supported Dynamic Type sizes. |
+| V05-FEAT-001 | Feature | Write spelling | Opening Write asks the child to choose `Write by Hand` or `Spell with Letters`. Either choice completes the same Daily Write Quest (rule B), uses the same Write Pool/mastery/review schedule, and earns only one completion/reward. Spelling uses a theme-colored, fixed-position QWERTY A–Z keyboard built entirely in SwiftUI; it never opens the iOS keyboard. Case is ignored, apostrophes/hyphens are structural, and typed pace is never compared with handwriting pace. Focused Replay preserves the chosen input method. | Automated pass; physical child QA pending | Complete both choices, verify exactly one Daily Write completion/reward, check all 26 letter keys plus Delete/Done in every World, assert no system keyboard, test case and punctuation, wrong-answer guided retry, Replay, relaunch recovery, VoiceOver order, and both landscape directions. |
+| V05-IMP-001 | Improvement | Practice defaults | New Profiles default to 5 new and 5 review Write words instead of 3 and 3. Existing Profiles keep every saved custom value; there is no migration that overwrites parent choices. | Automated pass | Create a new Profile and see 5/5; reopen an existing Profile with custom Write limits and confirm the saved values are unchanged. |
+
+### 2026-07-14 v0.5 notes
+
+- Reorganized Parent tools into three category hubs while retaining every word,
+  report, calendar, Profile, notification, audio, accessibility, and sync feature.
+- Split the former all-in-one settings page into Practice Plan, Sound &
+  Accessibility, and Notifications. Each save performs a scoped merge against
+  the latest Profile settings so hidden values cannot be overwritten.
+- Added a child-facing Write input chooser and a theme-matched A–Z keyboard.
+  Handwriting and typed spelling share the Write learning contract, while
+  attempt pace remains separated by input method.
+- Raised only the defaults for newly created Profile settings to 5/5; persisted
+  Profile settings remain authoritative.
+- Registered and signed the newly connected iPad with Personal Team
+  `6S245NCUPQ`; v0.3.2 (`2026071406`) was installed and launched successfully.
+- Recovered the device-tested v0.3.2 QA fixes through PR #7, then merged them
+  into v0.4.2 PR #6 before bringing the resulting `main` baseline into v0.5.
+- The integrated v0.5 tree passes 619/619 Swift tests, strict format lint, a
+  fresh generic iOS Simulator build, and all 8/8 critical simulator UI flows.
+  Its Lobby → Write → Spell flow confirms all 26 custom keys, no native
+  keyboard, first-word entry, and item advance.
+- Exact v0.3.2 (`2026071406`) was reinstalled successfully on the connected
+  reading iPad. Mac-side auto-launch was denied only because the iPad remained
+  locked; the installed app is ready to open directly after unlock.

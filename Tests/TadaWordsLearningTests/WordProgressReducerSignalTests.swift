@@ -76,4 +76,67 @@ final class WordProgressReducerSignalTests: XCTestCase {
         XCTAssertEqual(progress.firstIndependentTimedAttemptCount, 0)
         XCTAssertNil(progress.firstIndependentMeanResponseTime)
     }
+
+    func testLetterKeyboardTimingDoesNotPolluteHandwritingAggregateOrSlowPenalty()
+        throws
+    {
+        let handwritingContext = TestFixture.paceContext(
+            mode: .write,
+            wordLength: 3
+        )
+        let keyboardContext = PaceContext(
+            learningMode: .write,
+            deviceClass: .tablet,
+            inputMethod: .letterKeyboard,
+            wordLength: 3
+        )
+        let handwriting = TestFixture.attempt(
+            number: 1,
+            wordNumber: 1,
+            mode: .write,
+            outcome: .correct,
+            at: TestFixture.now,
+            responseSeconds: 8,
+            paceContext: handwritingContext
+        )
+        let typedAt = TestFixture.now.addingTimeInterval(86_400)
+        let slowTyped = TestFixture.attempt(
+            number: 2,
+            wordNumber: 1,
+            mode: .write,
+            outcome: .correct,
+            at: typedAt,
+            responseSeconds: 80,
+            paceContext: keyboardContext
+        )
+        let untimedTyped = TestFixture.attempt(
+            number: 3,
+            wordNumber: 1,
+            mode: .write,
+            outcome: .correct,
+            at: typedAt,
+            responseSeconds: nil,
+            paceContext: keyboardContext
+        )
+
+        let timedProgress = try WordProgressReducer().rebuild(
+            profileID: TestFixture.profileID,
+            wordPromptID: TestFixture.wordID(1),
+            learningMode: .write,
+            from: [handwriting, slowTyped]
+        )
+        let untimedProgress = try WordProgressReducer().rebuild(
+            profileID: TestFixture.profileID,
+            wordPromptID: TestFixture.wordID(1),
+            learningMode: .write,
+            from: [handwriting, untimedTyped]
+        )
+
+        XCTAssertEqual(timedProgress.firstIndependentAttemptCount, 2)
+        XCTAssertEqual(timedProgress.firstIndependentCorrectCount, 2)
+        XCTAssertEqual(timedProgress.firstIndependentTimedAttemptCount, 1)
+        XCTAssertEqual(timedProgress.firstIndependentResponseTimeTotal.seconds, 8)
+        XCTAssertEqual(timedProgress.firstIndependentMeanResponseTime?.seconds, 8)
+        XCTAssertEqual(timedProgress.memoryState, untimedProgress.memoryState)
+    }
 }

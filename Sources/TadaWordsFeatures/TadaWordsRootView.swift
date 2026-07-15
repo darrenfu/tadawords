@@ -425,7 +425,7 @@ public struct TadaWordsRootView: View {
                         model.refreshWorldProgress()
                         isCollectionPresented = true
                     },
-                    onStart: model.startQuest
+                    onStart: model.chooseQuest
                 )
             } else {
                 ProfileChooserView(
@@ -439,6 +439,13 @@ public struct TadaWordsRootView: View {
                     onOpenGuardian: onOpenGuardian
                 )
             }
+
+        case .writeInputChooser:
+            WriteInputChooserView(
+                theme: model.selectedTheme,
+                onSelect: model.startWriteQuest,
+                onBack: model.showLobby
+            )
 
         case .loading(let mode, let phase):
             QuestLoadingView(
@@ -466,19 +473,34 @@ public struct TadaWordsRootView: View {
                     }
                 )
             case .write:
-                WriteQuestView(
-                    session: session,
-                    questTimer: session.timer,
-                    theme: model.selectedTheme,
-                    recognitionService: handwritingRecognitionService,
-                    audioExperienceService: audioExperienceService,
-                    pictureHintProvider: pictureHintProvider,
-                    onSpeak: { await model.speakAndWait(session.prompt) },
-                    onBack: model.showLobby,
-                    onComplete: { summary in
-                        model.finishItem(session, summary: summary)
-                    }
-                )
+                switch session.writeInputMethod {
+                case .handwriting:
+                    WriteQuestView(
+                        session: session,
+                        questTimer: session.timer,
+                        theme: model.selectedTheme,
+                        recognitionService: handwritingRecognitionService,
+                        audioExperienceService: audioExperienceService,
+                        pictureHintProvider: pictureHintProvider,
+                        onSpeak: { await model.speakAndWait(session.prompt) },
+                        onBack: model.showLobby,
+                        onComplete: { summary in
+                            model.finishItem(session, summary: summary)
+                        }
+                    )
+                case .letterKeyboard:
+                    SpellQuestView(
+                        session: session,
+                        questTimer: session.timer,
+                        theme: model.selectedTheme,
+                        audioExperienceService: audioExperienceService,
+                        onSpeak: { await model.speakAndWait(session.prompt) },
+                        onBack: model.showLobby,
+                        onComplete: { summary in
+                            model.finishItem(session, summary: summary)
+                        }
+                    )
+                }
             }
 
         case .blocked(let mode, let reason):
@@ -585,6 +607,8 @@ extension TadaWordsAppModel {
             "profiles"
         case .lobby:
             "lobby-\(selectedProfile?.id.description ?? "none")"
+        case .writeInputChooser:
+            "write-input-chooser-\(selectedProfile?.id.description ?? "none")"
         case .loading(let mode, let phase):
             "loading-\(mode.rawValue)-\(String(describing: phase))"
         case .quest(let session):

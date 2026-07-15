@@ -57,6 +57,8 @@ final class PracticeSettingsTests: XCTestCase {
 
         XCTAssertEqual(settings.read, .defaultRead)
         XCTAssertEqual(settings.write, .defaultWrite)
+        XCTAssertEqual(settings.write.newWordLimit, 5)
+        XCTAssertEqual(settings.write.reviewWordLimit, 5)
         XCTAssertEqual(
             settings.configuration(for: .read),
             PracticeModeConfiguration(

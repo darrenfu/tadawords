@@ -10,17 +10,18 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.4%20audio%20candidate-6D48D7" alt="v0.4 audio candidate">
+  <img src="https://img.shields.io/badge/status-v0.5%20development-6D48D7" alt="v0.5 development">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
 
 - **Read:** See a word and say it aloud.
-- **Write:** Hear a word and write the whole word by hand.
+- **Write:** Hear a word, then either write it by hand or spell it with the
+  app's theme-matched A–Z keyboard.
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** `main` at `02e23aa` contains the v0.3.1 production Vision fixes, physical iPhone/iPad regression results, and final Moonpetal/Dino World-art clearance. The v0.4.1 integration candidate preserves that baseline and adds a fully bundled 500-word teacher pack at 0.67×, Aurora launch/transition speech, and Apple speech fallback without a runtime vendor dependency. The merged tree passes **595/595** Swift tests; its signed LocalQA build is installed on the iPhone for listening review. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** `main` at `973ac9a` contains the recovered v0.3.2 iPad QA fixes, the bundled 500-word teacher pack at 0.67×, and v0.4.2 feedback-aware inter-word timing. The `v0.5` branch adds the simplified Parent category hubs, a child-owned Write input chooser, and the theme-matched A–Z spelling keyboard without removing the handwriting path. The integrated tree passes **619/619** Swift tests, **8/8** critical simulator UI tests, and a fresh generic iOS Simulator build; physical v0.5 child/Parent acceptance remains open. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -32,12 +33,14 @@ music, sound cues, and 25-item reward collection.
 | Route | Prompt | Child response | Evidence |
 |---|---|---|---|
 | Read Quest | The app shows a sight word | The child says the word | On-device speech recognition plus optional device voiceprint confidence |
-| Write Quest | The app speaks a sight word | The child writes the complete word | Vision handwriting recognition from the drawing canvas |
+| Write Quest | The app speaks a sight word | The child chooses handwriting or the in-app A–Z spelling keyboard | Vision handwriting recognition or exact case-insensitive typed spelling; both complete the same Write Quest while pace stays separate |
 | Review | The scheduler selects due and weak words | The child retrieves the word again | Accuracy, elapsed time, help, replay, and retry history |
 
 Read never speaks the target before the child's first independent response. After two valid wrong readings it reveals only child-triggered **Hear it**; technical retries never reveal help early. Covered words use the bundled Katie Read-hint recording, while other guardian-entered words use Apple speech. Each World owns one coordinated, high-contrast word color, so every Read word stays visually consistent until the child changes Worlds.
 
-Write plays the bundled Katie isolated-word recording at 0.67× for the first 500 covered words and never pre-shows the spelling. The separate Read-hint version uses the same one-and-a-half-times-slower cadence. Both variants retain 120 ms of encoding-safe tail padding so final consonants such as the `/t/` in `at` finish before playback completes. Apple speech is the offline fallback for words outside the pack and keeps a neutral pitch plus enough release time to preserve final consonants. The `?` control reveals the word on demand. After the first genuine mismatch, a concrete word such as `dog` can show a tappable picture hint; abstract and function words such as `the` receive no image. Children can choose Pencil, Chalk, or Brush; ink is always black and the selected tool persists per Profile. The 4× local eraser restores the prior pen after a blank-canvas tap. The canvas is 10% wider, keeps fixed coordinates during feedback and word transitions, and preserves dots, later letters, and connected strokes. Vision uses two bounded raster passes, target-informed alternatives, and exact case-normalized matching, so `of/Of/OF` and `go/Go/GO` share one spelling decision while neighboring words and literal `90` remain rejected. Technical speech or recognition failures do not reduce the child's score.
+Write plays the bundled Katie isolated-word recording at 0.67× for the first 500 covered words and never pre-shows the spelling. The separate Read-hint version uses the same one-and-a-half-times-slower cadence. Both variants retain 120 ms of encoding-safe tail padding so final consonants such as the `/t/` in `at` finish before playback completes. Apple speech is the offline fallback for words outside the pack and keeps a neutral pitch plus enough release time to preserve final consonants. The child first chooses **Write by Hand** or **Spell with Letters**; either choice completes the same Daily Write Quest and shares its Pool, mastery, review schedule, score, and reward. Typed pace is recorded in a separate input-method band so fast key taps never make handwriting look slow. The spelling surface is a fixed-position, theme-colored QWERTY A–Z keyboard built in SwiftUI, so the system keyboard, predictive text, numbers, and symbols never appear. Comparison ignores capitalization, while apostrophes and hyphens are supplied as structural parts of the prompt. Focused Replay keeps the selected input method.
+
+For handwriting, the `?` control reveals the word on demand. After the first genuine mismatch, a concrete word such as `dog` can show a tappable picture hint; abstract and function words such as `the` receive no image. Children can choose Pencil, Chalk, or Brush; ink is always black and the selected tool persists per Profile. The 4× local eraser restores the prior pen after a blank-canvas tap. The canvas is 10% wider, keeps fixed coordinates during feedback and word transitions, and preserves dots, later letters, and connected strokes. Vision uses two bounded raster passes, target-informed alternatives, and exact case-normalized matching, so `of/Of/OF` and `go/Go/GO` share one spelling decision while neighboring words and literal `90` remain rejected. Technical speech or recognition failures do not reduce the child's score.
 
 Child-facing stars reward completion, accurate retrieval, and a comfortable personal pace. One immediate unaided recovery can still earn the Accuracy Star, calibration can earn Pace, and the post-calibration slow side gets 50% grace. Guardian accuracy and mastery evidence stay strict.
 
@@ -79,11 +82,11 @@ Preset imports also stay bound to the initiating Profile. An import to **Both** 
 
 | Area | Included |
 |---|---|
-| Practice | Separate Read and Write pools, independent Today Quest buttons, New and Review ordering, timer, Rescue state, score, stars, and mastery |
+| Practice | Separate Read and Write pools, independent Today Quest buttons, Write-by-hand or theme A–Z spelling, New and Review ordering, timer, Rescue state, score, stars, and mastery |
 | Word setup | One-word Return-to-add; multi-photo Camera/Photo OCR; 34 offline preset lists with explicit word selection; numbered review; 500 words per image; added-order, A-Z, and most-practiced sort; type-ahead search with Hear/Delete; de-duplication; session-scoped delete confirmation; bulk delete; per-Pool Delete All and Undo; no automatic additions |
 | Profiles | Profile-first launch, multiple children, nickname entry, age capture from 3 through 8, last-profile highlight, animal/photo/collected-treasure avatar, earned icon, grade, and preferred world |
 | Motivation | Eight original worlds, 20 small rewards and five milestones per world, 200 distinct treasure icons, Double-Quest next-day Theme/Icon unlocks, My Collection, and a monthly calendar |
-| Guardian tools | Single-tap `Parents` → auto-checking math Parent Gate, Today dashboard, Word Manager, reports, corrections, settings, CSV export, and Lock-to-Kid-selection navigation |
+| Guardian tools | Single-tap `Parents` → auto-checking math Parent Gate, compact Parent Home with separate Words, Performance, and App/Family hubs, Word Manager, reports, corrections, settings, CSV export, and Lock-to-Kid-selection navigation |
 | Accessibility | Landscape child routes plus rotatable parent routes, shared 44-point minimum targets, VoiceOver labels and announcements, Reduce Motion, left-handed writing, Reduced Sound, and Calm Rescue; physical accessibility acceptance remains open |
 | Platform | Offline-first Katie teacher audio with an Apple Speech fallback, bundled Aurora launch/transitions, repeat-after-me Keychain voiceprints, target-informed Vision handwriting recognition, local notifications, local JSON snapshots, device-only LocalQA, and explicitly enabled CloudKit family sync |
 
@@ -126,7 +129,7 @@ make check
 open TadaWords.xcodeproj
 ```
 
-`make check` runs strict Swift formatting checks and the Swift package test suite. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and the complete v0.3.1 baseline contains **595 tests with zero failures**. The v0.4.1 merged tree also passes **595 tests with zero failures**, including the v0.3.1 World-layout coverage and the updated audio contract. The Xcode UI target adds seven critical end-to-end flows for Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, and OCR Review → Add All → Pool → Sort. A separate physical-device target calls the public production handwriting service with six positive case variants and four negative controls; it does not use the demo recognizer.
+`make check` runs strict Swift formatting checks and the Swift package test suite. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and the complete v0.3.1 baseline contains **595 tests with zero failures**. The v0.4.1 merged tree also passes **595 tests with zero failures**, including the v0.3.1 World-layout coverage and the updated audio contract. The merged baseline Xcode UI target has seven critical end-to-end flows for Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, and OCR Review → Add All → Pool → Sort. The v0.5 branch adds an eighth flow for Lobby → Write → Spell, all 26 custom keys, native-keyboard exclusion, and item advance. A separate physical-device target calls the public production handwriting service with six positive case variants and four negative controls; it does not use the demo recognizer.
 
 Run the device-readiness script before installing on an iPhone or iPad:
 
@@ -160,7 +163,7 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 |---|---|
 | Strict Swift format lint | Passed |
 | Swift tests | v0.4.1 merged tree: 595 passed, 0 failures; focused actual-Vision suite 15/15; focused World-layout suite 5/5 |
-| Critical XCUITest flows | 7 passed, 0 failures on iPhone 17 Pro Max simulator |
+| Critical XCUITest flows | Merged baseline: 7/7; integrated v0.5: 8/8 passed with 0 failures on iPhone 17 Pro simulator |
 | Physical iPhone production Vision | 2/2 device tests passed: 6/6 `of/go` case variants and 4/4 negative controls; synthetic vectors only |
 | Physical iPad production Vision | 2/2 device tests passed: wrong-word rejection and `of/go` case variants; synthetic vectors only |
 | Physical iPad critical XCUITest | 7/7 passed: OCR Add All, Delete All/restore, explicit Preset approval, sequential deletes/sort, Photos picker/sort, and Read/Write completion dismissal |

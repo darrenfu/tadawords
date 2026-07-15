@@ -150,15 +150,52 @@ public struct GuardianRootView: View {
                 GuardianTodayView(
                     snapshot: snapshot,
                     onLock: lockAndReturnToKids,
-                    onQuickAdd: model.showQuickAdd,
-                    onOpenPresets: model.showPresetWords,
-                    onOpenPool: model.showPool,
-                    onOpenSettings: model.showSettings,
                     onOpenProfiles: model.showProfiles,
-                    onOpenReports: model.showReports,
-                    onOpenFamilySync: model.showFamilySync,
+                    onOpenWordsAndPractice: model.showWordsAndPractice,
+                    onOpenProgressAndPerformance: model.showProgressAndPerformance,
+                    onOpenAppAndFamily: model.showAppAndFamily,
                     syncState: model.guardianSyncState
                 )
+            } else {
+                GuardianLoadingView(onRetry: model.refresh)
+            }
+
+        case .parentSection(let section):
+            if let snapshot = model.snapshot {
+                switch section {
+                case .wordsAndPractice:
+                    GuardianWordsAndPracticeView(
+                        snapshot: snapshot,
+                        onBack: model.showDashboard,
+                        onManageWords: model.showQuickAdd,
+                        onOpenPresets: model.showPresetWords,
+                        onOpenPracticePlan: {
+                            model.showSettings(.practicePlan)
+                        }
+                    )
+
+                case .progressAndPerformance:
+                    GuardianProgressAndPerformanceView(
+                        snapshot: snapshot,
+                        syncState: model.guardianSyncState,
+                        onBack: model.showDashboard,
+                        onOpenReports: model.showReports
+                    )
+
+                case .appAndFamily:
+                    GuardianAppAndFamilyView(
+                        snapshot: snapshot,
+                        syncState: model.guardianSyncState,
+                        onBack: model.showDashboard,
+                        onOpenSoundAndAccessibility: {
+                            model.showSettings(.soundAndAccessibility)
+                        },
+                        onOpenNotifications: {
+                            model.showSettings(.notifications)
+                        },
+                        onOpenFamilySync: model.showFamilySync
+                    )
+                }
             } else {
                 GuardianLoadingView(onRetry: model.refresh)
             }
@@ -205,7 +242,7 @@ public struct GuardianRootView: View {
                     get: { model.hasConfirmedWordRemovalThisSession },
                     set: { model.setWordRemovalConfirmation($0) }
                 ),
-                onBack: model.showDashboard,
+                onBack: model.returnToParentSection,
                 onSubmit: model.addWords,
                 onPlay: model.play,
                 onSetWordsActive: { prompts, isActive in
@@ -220,7 +257,7 @@ public struct GuardianRootView: View {
                     catalog: presetWordCatalog,
                     readWords: snapshot.readPool,
                     writeWords: snapshot.writePool,
-                    onBack: model.showDashboard,
+                    onBack: model.returnToParentSection,
                     onSubmit: { profileID, request in
                         await model.addPresetWords(request, for: profileID)
                     },
@@ -243,7 +280,7 @@ public struct GuardianRootView: View {
                     get: { model.hasConfirmedWordRemovalThisSession },
                     set: { model.setWordRemovalConfirmation($0) }
                 ),
-                onBack: model.showDashboard,
+                onBack: model.returnToParentSection,
                 onSubmit: model.addWords,
                 onPlay: model.play,
                 onSetWordsActive: { prompts, isActive in
@@ -251,12 +288,18 @@ public struct GuardianRootView: View {
                 }
             )
 
-        case .settings:
+        case .settings(let section):
             if let settings = model.snapshot?.practiceSettings {
                 GuardianPracticeSettingsView(
                     settings: settings,
-                    onBack: model.showDashboard,
-                    onSave: model.savePracticeSettings
+                    section: section,
+                    onBack: model.returnToParentSection,
+                    onSave: { settings in
+                        model.savePracticeSettings(
+                            settings,
+                            section: section
+                        )
+                    }
                 )
             } else {
                 GuardianLoadingView(onRetry: model.refresh)
@@ -268,7 +311,7 @@ public struct GuardianRootView: View {
                 isEnabled: model.isFamilySyncEnabled,
                 shareURL: model.shareURL,
                 shareURLText: $model.shareURLText,
-                onBack: model.showDashboard,
+                onBack: model.returnToParentSection,
                 onSetEnabled: model.setFamilySyncEnabled,
                 onSyncNow: model.syncNow,
                 onCreateShare: model.createFamilyShare,
@@ -298,7 +341,7 @@ public struct GuardianRootView: View {
             GuardianReportsView(
                 report: model.report,
                 selectedPeriod: model.reportPeriod,
-                onBack: model.showDashboard,
+                onBack: model.returnToParentSection,
                 onSelectPeriod: model.loadReport,
                 onCorrect: model.correctAttempt,
                 onAuthorizeExport: model.authorizeReportExport
@@ -308,7 +351,7 @@ public struct GuardianRootView: View {
             GuardianImportReportView(
                 report: report,
                 onAddMore: model.showQuickAdd,
-                onDone: model.showDashboard
+                onDone: model.returnToParentSection
             )
         }
     }

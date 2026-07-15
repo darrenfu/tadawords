@@ -100,12 +100,37 @@ struct QuestSession: Identifiable {
     let id: QuestID
     let profileID: ProfileID
     let mode: LearningMode
+    let writeInputMethod: WriteQuestInputMethod
     let prompt: WordPrompt
     let source: QuestItemSource
     let currentItem: Int
     let totalItems: Int
     let timer: QuestTimerModel
     let interfacePreferences: PracticeInterfacePreferences
+
+    init(
+        id: QuestID,
+        profileID: ProfileID,
+        mode: LearningMode,
+        writeInputMethod: WriteQuestInputMethod = .handwriting,
+        prompt: WordPrompt,
+        source: QuestItemSource,
+        currentItem: Int,
+        totalItems: Int,
+        timer: QuestTimerModel,
+        interfacePreferences: PracticeInterfacePreferences
+    ) {
+        self.id = id
+        self.profileID = profileID
+        self.mode = mode
+        self.writeInputMethod = mode == .write ? writeInputMethod : .handwriting
+        self.prompt = prompt
+        self.source = source
+        self.currentItem = currentItem
+        self.totalItems = totalItems
+        self.timer = timer
+        self.interfacePreferences = interfacePreferences
+    }
 }
 
 enum ReadPermissionTimingPolicy {
@@ -233,6 +258,7 @@ struct QuestResultViewState {
 enum AppDestination {
     case profileChooser
     case lobby
+    case writeInputChooser
     case loading(mode: LearningMode, phase: QuestLoadingPhase)
     case quest(QuestSession)
     case blocked(mode: LearningMode, reason: QuestBlockReason)
