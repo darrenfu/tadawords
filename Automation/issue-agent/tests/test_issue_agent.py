@@ -22,6 +22,19 @@ def issue(number, title, labels, body=""):
     }
 
 
+def pull_request(number, area):
+    return {
+        "number": number,
+        "title": f"Active {area} batch",
+        "body": "",
+        "headRefName": f"agent/batch-{area}-v0.5.{number}",
+        "labels": [
+            {"name": "agent-claimed"},
+            {"name": f"area:{area}"},
+        ],
+    }
+
+
 class IssueAgentTests(unittest.TestCase):
     def test_ready_requires_unclaimed_and_unblocked(self):
         self.assertTrue(issue_agent.is_ready(issue(1, "Audio", ["agent-ready"])))
@@ -62,6 +75,86 @@ class IssueAgentTests(unittest.TestCase):
         ]
         batches = issue_agent.suggested_batches(candidates, max_batch_size=5)
         self.assertEqual([len(batch["issue_numbers"]) for batch in batches], [5, 2])
+
+    def test_oldest_issue_batch_is_considered_first(self):
+        candidates = [
+            issue(20, "Audio issue", ["agent-ready", "area:audio"]),
+            issue(12, "Kid UI issue", ["agent-ready", "area:kid-ui"]),
+        ]
+        batches = issue_agent.suggested_batches(candidates)
+        self.assertEqual([batch["issue_numbers"] for batch in batches], [[12], [20]])
+
+    def test_unrelated_area_is_claimable_with_open_agent_pr(self):
+        batches = issue_agent.suggested_batches(
+            [issue(12, "Kid UI", ["agent-ready", "area:kid-ui"])]
+        )
+        admission = issue_agent.batch_admission(
+            batches,
+            [pull_request(10, "automation")],
+            max_active_batches=2,
+        )
+        self.assertEqual(
+            admission["claimable_batches"][0]["issue_numbers"], [12]
+        )
+        self.assertEqual(admission["active_areas"], ["automation"])
+        self.assertEqual(admission["available_batch_slots"], 1)
+
+    def test_same_area_waits_for_active_pr(self):
+        batches = issue_agent.suggested_batches(
+            [issue(13, "More audio", ["agent-ready", "area:audio"])]
+        )
+        admission = issue_agent.batch_admission(
+            batches,
+            [pull_request(11, "audio")],
+            max_active_batches=2,
+        )
+        self.assertEqual(admission["claimable_batches"], [])
+        self.assertEqual(admission["blocked_batches"][0]["reason"], "area_has_active_pr")
+        self.assertEqual(admission["blocked_batches"][0]["blocking_prs"], [11])
+
+    def test_global_active_batch_limit_blocks_an_unrelated_area(self):
+        batches = issue_agent.suggested_batches(
+            [issue(14, "Import polish", ["agent-ready", "area:import"])]
+        )
+        admission = issue_agent.batch_admission(
+            batches,
+            [pull_request(10, "automation"), pull_request(12, "kid-ui")],
+            max_active_batches=2,
+        )
+        self.assertEqual(admission["claimable_batches"], [])
+        self.assertEqual(
+            admission["blocked_batches"][0]["reason"],
+            "active_batch_limit_reached",
+        )
+        self.assertEqual(admission["available_batch_slots"], 0)
+
+    def test_only_one_new_batch_is_claimable_per_poll(self):
+        batches = issue_agent.suggested_batches(
+            [
+                issue(12, "Kid UI", ["agent-ready", "area:kid-ui"]),
+                issue(13, "Audio", ["agent-ready", "area:audio"]),
+            ]
+        )
+        admission = issue_agent.batch_admission(
+            batches,
+            [],
+            max_active_batches=2,
+        )
+        self.assertEqual(
+            [batch["issue_numbers"] for batch in admission["claimable_batches"]],
+            [[12]],
+        )
+        self.assertEqual(
+            admission["deferred_batches"][0]["reason"],
+            "one_new_batch_per_poll",
+        )
+
+    def test_agent_pr_detection_accepts_batch_label(self):
+        candidate = {
+            "headRefName": "feature/custom-name",
+            "labels": [{"name": "batch:kid-ui-v0.5.3"}],
+        }
+        self.assertTrue(issue_agent.is_agent_pull_request(candidate))
 
     def test_next_patch_skips_all_reservations(self):
         self.assertEqual(

@@ -5,6 +5,12 @@ read-only preflight, and starts Codex only when there is actionable work. An
 empty queue is a safe no-op. The worker uses a dedicated clean control clone and
 creates release worktrees outside the user's normal checkout.
 
+The default admission limit is two open agent Release Batches. An open PR blocks
+new work in the same `area`, but an unrelated area can claim the remaining slot
+in its own worktree. Only one new batch is started per poll, and physical-device
+deployment remains serialized. Set `TADA_AGENT_MAX_ACTIVE_BATCHES` before
+installation to choose a different bounded limit.
+
 ## Install
 
 ```sh
@@ -23,6 +29,7 @@ python3 Automation/issue-agent/issue_agent.py inspect \
   --control-repo '/path/to/a/clean/tadawords/clone' \
   --worktree-root '/Users/macmini-dofu/Documents/Tada Words Worktrees' \
   --state-dir '/tmp/tadawords-issue-agent-state' \
+  --max-active-batches 2 \
   --pretty
 ```
 

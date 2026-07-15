@@ -7,6 +7,7 @@ REPO_SLUG=${TADA_AGENT_REPO:-darrenfu/tadawords}
 INSTALL_ROOT=${TADA_AGENT_INSTALL_ROOT:-"/Users/macmini-dofu/Library/Application Support/TadaWordsIssueAgent"}
 WORKTREE_ROOT=${TADA_AGENT_WORKTREE_ROOT:-"/Users/macmini-dofu/Documents/Tada Words Worktrees"}
 LOG_DIR=${TADA_AGENT_LOG_DIR:-"/Users/macmini-dofu/Library/Logs/TadaWordsIssueAgent"}
+MAX_ACTIVE_BATCHES=${TADA_AGENT_MAX_ACTIVE_BATCHES:-2}
 STATE_DIR="$INSTALL_ROOT/state"
 CONTROL_REPO="$INSTALL_ROOT/control-repo"
 BIN_DIR="$INSTALL_ROOT/bin"
@@ -45,6 +46,7 @@ fi
     printf "export TADA_AGENT_WORKTREE_ROOT='%s'\n" "$WORKTREE_ROOT"
     printf "export TADA_AGENT_STATE_DIR='%s'\n" "$STATE_DIR"
     printf "export TADA_AGENT_LOG_DIR='%s'\n" "$LOG_DIR"
+    printf "export TADA_AGENT_MAX_ACTIVE_BATCHES='%s'\n" "$MAX_ACTIVE_BATCHES"
 } >"$BIN_DIR/agent.env"
 chmod 600 "$BIN_DIR/agent.env"
 

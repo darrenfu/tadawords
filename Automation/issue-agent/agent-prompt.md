@@ -33,7 +33,11 @@ skip fresh checks. Re-fetch GitHub and Git state before every mutation.
    is actually resolved before continuing.
 4. For `stale_claim`, inspect GitHub, branches, worktrees, running processes, and
    logs. Reclaim only if no live worker or PR owns the Issue. Otherwise leave it.
-5. Only when no agent PR is open may ready Issues start a new Release Batch.
+5. Only when there is no higher-priority event may a new Release Batch start.
+   Claim only a batch listed in the fresh snapshot's `claimable_batches`.
+   An open agent PR blocks its own `area`, but does not block an unrelated area
+   while an active-batch slot remains. Never bypass `blocked_batches` or the
+   configured global limit.
 
 ## Creating a Release Batch
 
@@ -48,6 +52,9 @@ Before claiming the first Issue:
    refactor, or includes high-risk work, comment with a concrete Batch Proposal,
    apply `needs-human-clarification`, and stop.
 5. Record included and explicitly excluded Issues on every selected Issue.
+6. Re-run preflight immediately before claiming. Confirm the selected area is
+   still claimable, the active-batch limit has not been reached, and no newer
+   same-area PR or claim exists. Start no more than one new batch per poll.
 
 Add `agent-claimed`, `batch:<id>`, and `release:vX.Y.Z`; remove `agent-ready`.
 Create missing batch/release labels with concise descriptions.
@@ -83,6 +90,13 @@ at least one available paired iPhone and one available paired iPad without
 uninstalling or clearing data. Record installation, launch smoke, automated
 device checks, and remaining human checks separately. Do not call installation
 success human acceptance.
+
+Code batches may coexist in separate worktrees, but physical-device deployment
+is a single global critical section. Before Xcode device build/install/test,
+check for another active `xcodebuild`, `devicectl`, XCTest run, or user-driven
+device deployment. If the device lane is not confidently idle, stop with exact
+evidence instead of racing it. Re-read on-device version/build after every
+install and test; any unexpected replacement invalidates the device evidence.
 
 If Developer Mode, trust, signing, provisioning, OTP, account state, or device
 availability blocks delivery, apply `agent-blocked`, comment exact evidence and

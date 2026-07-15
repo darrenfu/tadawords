@@ -19,6 +19,8 @@ READY_LABEL = "agent-ready"
 CLAIMED_LABEL = "agent-claimed"
 BLOCKING_LABELS = {"needs-human-clarification", "agent-blocked"}
 AGENT_PR_LABELS = {"awaiting-human-review", "human-approved"}
+DEFAULT_MAX_ACTIVE_BATCHES = 2
+MAX_CLAIMS_PER_POLL = 1
 VERSION_RE = re.compile(r"(?<![0-9])v?(\d+)\.(\d+)\.(\d+)(?![0-9])")
 BUILD_RE = re.compile(r"(?<![0-9])(20\d{8})(?![0-9])")
 MERGE_RE = re.compile(r"^/merge\s+([0-9a-fA-F]{7,40})\s*$")
@@ -159,7 +161,88 @@ def suggested_batches(
                     "requires_code_boundary_verification": True,
                 }
             )
-    return batches
+    return sorted(batches, key=lambda batch: batch["issue_numbers"][0])
+
+
+def is_agent_pull_request(pr: dict[str, Any]) -> bool:
+    labels = label_names(pr)
+    return (
+        str(pr.get("headRefName") or "").startswith("agent/")
+        or CLAIMED_LABEL in labels
+        or bool(labels.intersection(AGENT_PR_LABELS))
+        or any(label.startswith("batch:") for label in labels)
+    )
+
+
+def batch_admission(
+    batches: list[dict[str, Any]],
+    active_prs: list[dict[str, Any]],
+    max_active_batches: int,
+    max_claims_per_poll: int = MAX_CLAIMS_PER_POLL,
+) -> dict[str, Any]:
+    """Admit independent areas without allowing unbounded active PRs.
+
+    One poll launches at most one new batch. This keeps GitHub mutations and
+    version reservation deterministic while allowing unrelated batch PRs to
+    coexist in separate worktrees and wait independently for human review.
+    """
+
+    if max_active_batches < 1:
+        raise ValueError("max_active_batches must be at least 1")
+    if max_claims_per_poll < 1:
+        raise ValueError("max_claims_per_poll must be at least 1")
+
+    active_by_area: dict[str, list[int]] = {}
+    for pr in active_prs:
+        active_by_area.setdefault(infer_area(pr), []).append(int(pr["number"]))
+
+    available_slots = max(0, max_active_batches - len(active_prs))
+    eligible: list[dict[str, Any]] = []
+    blocked: list[dict[str, Any]] = []
+    for batch in batches:
+        active_numbers = active_by_area.get(str(batch["area"]), [])
+        if active_numbers:
+            blocked.append(
+                {
+                    **batch,
+                    "reason": "area_has_active_pr",
+                    "blocking_prs": sorted(active_numbers),
+                }
+            )
+        else:
+            eligible.append(batch)
+
+    if available_slots == 0:
+        blocked.extend(
+            {
+                **batch,
+                "reason": "active_batch_limit_reached",
+                "blocking_prs": sorted(int(pr["number"]) for pr in active_prs),
+            }
+            for batch in eligible
+        )
+        claimable: list[dict[str, Any]] = []
+        deferred: list[dict[str, Any]] = []
+    else:
+        claim_limit = min(available_slots, max_claims_per_poll)
+        claimable = eligible[:claim_limit]
+        deferred = [
+            {**batch, "reason": "one_new_batch_per_poll"}
+            for batch in eligible[claim_limit:]
+        ]
+
+    return {
+        "max_active_batches": max_active_batches,
+        "active_batch_count": len(active_prs),
+        "available_batch_slots": available_slots,
+        "active_areas": sorted(active_by_area),
+        "active_prs_by_area": {
+            area: sorted(numbers) for area, numbers in sorted(active_by_area.items())
+        },
+        "claimable_batches": claimable,
+        "blocked_batches": blocked,
+        "deferred_batches": deferred,
+    }
 
 
 def parse_version(value: str) -> tuple[int, int, int] | None:
@@ -460,12 +543,7 @@ def inspect(args: argparse.Namespace) -> dict[str, Any]:
     )
 
     ready = [issue for issue in issues if is_ready(issue)]
-    agent_prs = [
-        pr
-        for pr in prs
-        if str(pr.get("headRefName") or "").startswith("agent/")
-        or label_names(pr).intersection(AGENT_PR_LABELS)
-    ]
+    agent_prs = [pr for pr in prs if is_agent_pull_request(pr)]
     events = pull_request_events(args.repo, prs, acknowledged)
     events.extend(issue_resume_events(args.repo, issues, acknowledged))
     now = dt.datetime.now(dt.timezone.utc)
@@ -487,18 +565,36 @@ def inspect(args: argparse.Namespace) -> dict[str, Any]:
         current_build, reserved_builds, now=now.date()
     )
 
-    queue_paused = bool(agent_prs)
-    should_run = bool(events) or (bool(ready) and not queue_paused)
+    batches = suggested_batches(ready, args.max_batch_size)
+    admission = batch_admission(
+        batches,
+        agent_prs,
+        max_active_batches=args.max_active_batches,
+    )
+    if events:
+        admission["deferred_batches"] = [
+            {**batch, "reason": "actionable_event_has_priority"}
+            for batch in (
+                admission["claimable_batches"] + admission["deferred_batches"]
+            )
+        ]
+        admission["claimable_batches"] = []
+
+    claimable_batches = admission["claimable_batches"]
+    queue_paused = bool(ready) and not bool(claimable_batches)
+    should_run = bool(events) or bool(claimable_batches)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": now.isoformat(),
         "repo": args.repo,
         "control_repo": str(control_repo),
         "worktree_root": str(Path(args.worktree_root).resolve()),
         "should_run": should_run,
-        "queue_paused_by_open_agent_pr": queue_paused,
+        "queue_paused": queue_paused,
+        "queue_paused_by_open_agent_pr": queue_paused and bool(agent_prs),
         "ready_issues": ready,
-        "suggested_batches": suggested_batches(ready, args.max_batch_size),
+        "suggested_batches": batches,
+        **admission,
         "active_agent_prs": agent_prs,
         "events": events,
         "version_context": {
@@ -538,6 +634,9 @@ def parser() -> argparse.ArgumentParser:
     inspect_parser.add_argument("--worktree-root", required=True)
     inspect_parser.add_argument("--state-dir", required=True)
     inspect_parser.add_argument("--max-batch-size", type=int, default=5)
+    inspect_parser.add_argument(
+        "--max-active-batches", type=int, default=DEFAULT_MAX_ACTIVE_BATCHES
+    )
     inspect_parser.add_argument("--stale-hours", type=int, default=6)
     inspect_parser.add_argument("--pretty", action="store_true")
 

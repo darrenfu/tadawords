@@ -13,6 +13,7 @@ fi
 : "${TADA_AGENT_WORKTREE_ROOT:=/Users/macmini-dofu/Documents/Tada Words Worktrees}"
 : "${TADA_AGENT_STATE_DIR:=/Users/macmini-dofu/Library/Application Support/TadaWordsIssueAgent/state}"
 : "${TADA_AGENT_LOG_DIR:=/Users/macmini-dofu/Library/Logs/TadaWordsIssueAgent}"
+: "${TADA_AGENT_MAX_ACTIVE_BATCHES:=2}"
 
 mkdir -p "$TADA_AGENT_STATE_DIR" "$TADA_AGENT_LOG_DIR" "$TADA_AGENT_WORKTREE_ROOT"
 
@@ -48,6 +49,7 @@ python3 "$SCRIPT_DIR/issue_agent.py" inspect \
     --control-repo "$TADA_AGENT_CONTROL_REPO" \
     --worktree-root "$TADA_AGENT_WORKTREE_ROOT" \
     --state-dir "$TADA_AGENT_STATE_DIR" \
+    --max-active-batches "$TADA_AGENT_MAX_ACTIVE_BATCHES" \
     --pretty >"$snapshot"
 
 should_run=$(python3 -c 'import json,sys; print("true" if json.load(open(sys.argv[1]))["should_run"] else "false")' "$snapshot")

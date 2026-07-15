@@ -53,6 +53,14 @@ may use multiple focused commits; the final merge is squash-merge. Once work
 starts, newly arriving related Issues normally go to the next batch so scope
 does not grow without bound.
 
+Open agent PRs create per-area lanes, not a global stop-the-world lock. A new
+batch may start when its area has no open agent PR and the configured global
+active-batch limit has capacity. The default limit is two open agent batches,
+and only one new batch may be claimed per poll. Same-area work remains serial;
+unrelated work may coexist in separate worktrees while another PR waits for
+human review or an environment unblock. Actionable review, resume, stale-claim,
+and merge events take priority over starting a new batch.
+
 ## Version reservation
 
 Every PR increments `vMAJOR.MINOR.PATCH`, including documentation and internal
@@ -98,6 +106,12 @@ Before a PR becomes ready for human review, run:
 Physical installation is pre-authorized only for the isolated LocalQA app and
 must not remove existing data. Authentication, trust, Developer Mode, signing,
 provisioning, or device-availability blockers require a stop and human handoff.
+
+Physical Xcode build, install, launch, and device-test work is a single global
+lane even when code batches coexist. Before using that lane, check for another
+active Xcode/device deployment and stop on ambiguity. Recheck on-device
+version/build after every install or test; unexpected replacement invalidates
+the device evidence instead of being overwritten or ignored.
 
 Build the physical app from the PR's current HEAD with `TADA_GIT_COMMIT` set to
 the full HEAD SHA. Before installation, run
