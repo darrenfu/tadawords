@@ -39,18 +39,25 @@ public struct AppleHandwritingRecognitionService:
     HandwritingRecognitionService,
     Sendable
 {
-    private let rasterPassConfigurations: [AppleHandwritingRecognitionConfiguration]
+    private let configuration: AppleHandwritingRecognitionConfiguration
     private let visionRecognizer: AppleHandwritingVisionRecognizer
     private let resultResolver: AppleHandwritingRecognitionResultResolver
 
     public init(
         configuration: AppleHandwritingRecognitionConfiguration = .default
     ) {
-        self.rasterPassConfigurations =
-            AppleHandwritingRasterPassPolicy.configurations(
-                startingWith: configuration
-            )
-        self.visionRecognizer = AppleHandwritingVisionRecognizer()
+        self.init(
+            configuration: configuration,
+            visionRecognizer: AppleHandwritingVisionRecognizer()
+        )
+    }
+
+    init(
+        configuration: AppleHandwritingRecognitionConfiguration,
+        visionRecognizer: AppleHandwritingVisionRecognizer
+    ) {
+        self.configuration = configuration
+        self.visionRecognizer = visionRecognizer
         self.resultResolver = AppleHandwritingRecognitionResultResolver(
             thresholds: configuration.decisionThresholds
         )
@@ -64,73 +71,330 @@ public struct AppleHandwritingRecognitionService:
         _ = profileID
         try Task.checkCancellation()
 
-        let images: [CGImage]
-        do {
-            images = try rasterPassConfigurations.map {
-                try HandwritingSampleRenderer(configuration: $0).render(sample)
-            }
-        } catch {
-            return resultResolver.technicalFailure(.corruptedInput)
+        let rasterPassConfigurations =
+            AppleHandwritingRasterPassPolicy.configurations(
+                startingWith: configuration,
+                target: prompt
+            )
+        if AppleHandwritingOfEvidencePolicy.applies(to: prompt) {
+            return try await recognizeOf(
+                sample: sample,
+                prompt: prompt,
+                configurations: rasterPassConfigurations
+            )
         }
 
-        do {
-            var firstResult: RecognitionResult?
-            for (image, passConfiguration) in zip(
-                images,
-                rasterPassConfigurations
-            ) {
-                let fragments = try await visionRecognizer.recognize(
-                    image: image,
-                    prompt: prompt,
-                    minimumTextHeightFraction:
-                        passConfiguration.minimumTextHeightFraction
-                )
+        let result = try await AppleHandwritingPassTraversal.resolve(
+            passes: rasterPassConfigurations,
+            execute: { passConfiguration in
                 try Task.checkCancellation()
 
-                let result = resultResolver.resolve(
-                    fragments: fragments,
-                    target: prompt
-                )
-                if result.decision == .matched {
-                    return result
+                let image: CGImage
+                do {
+                    image = try HandwritingSampleRenderer(
+                        configuration: passConfiguration
+                    ).render(sample)
+                } catch {
+                    return resultResolver.technicalFailure(.corruptedInput)
                 }
-                if firstResult == nil {
-                    firstResult = result
+
+                do {
+                    let fragments = try await visionRecognizer.recognize(
+                        image: image,
+                        prompt: prompt,
+                        minimumTextHeightFraction:
+                            passConfiguration.minimumTextHeightFraction
+                    )
+                    try Task.checkCancellation()
+                    return resultResolver.resolve(
+                        fragments: fragments,
+                        target: prompt
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    return resultResolver.technicalFailure(.serviceUnavailable)
                 }
             }
-            return firstResult
-                ?? resultResolver.resolve(fragments: [], target: prompt)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            return resultResolver.technicalFailure(.serviceUnavailable)
+        )
+        return result ?? resultResolver.resolve(fragments: [], target: prompt)
+    }
+
+    /// `of` uses all three scales before deciding. This deliberately prevents
+    /// an early exact hit from hiding `off` evidence exposed only by a later
+    /// raster pass.
+    private func recognizeOf(
+        sample: HandwritingSample,
+        prompt: WordPrompt,
+        configurations: [AppleHandwritingRecognitionConfiguration]
+    ) async throws -> RecognitionResult {
+        var passFragments: [[AppleRecognizedTextFragment]] = []
+        passFragments.reserveCapacity(configurations.count)
+
+        for passConfiguration in configurations {
+            try Task.checkCancellation()
+
+            let image: CGImage
+            do {
+                image = try HandwritingSampleRenderer(
+                    configuration: passConfiguration
+                ).render(sample)
+            } catch {
+                return resultResolver.technicalFailure(.corruptedInput)
+            }
+
+            do {
+                passFragments.append(
+                    try await visionRecognizer.recognize(
+                        image: image,
+                        prompt: prompt,
+                        minimumTextHeightFraction:
+                            passConfiguration.minimumTextHeightFraction
+                    )
+                )
+                try Task.checkCancellation()
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                return resultResolver.technicalFailure(.serviceUnavailable)
+            }
         }
+
+        return AppleHandwritingOfEvidencePolicy(
+            thresholds: configuration.decisionThresholds
+        ).resolve(
+            passFragments: passFragments,
+            target: prompt,
+            resultResolver: resultResolver
+        )
+    }
+}
+
+enum AppleHandwritingPassTraversal {
+    /// Executes each complete render-and-recognize pass only after the previous
+    /// pass failed to match. A successful or technical terminal result prevents
+    /// later recovery passes from rendering at all.
+    static func resolve<Pass>(
+        passes: [Pass],
+        execute: (Pass) async throws -> RecognitionResult
+    ) async rethrows -> RecognitionResult? {
+        var firstResult: RecognitionResult?
+        for pass in passes {
+            let result = try await execute(pass)
+            if firstResult == nil {
+                firstResult = result
+            }
+            switch result.decision {
+            case .matched, .technicalFailure:
+                return result
+            case .notMatched, .uncertain:
+                continue
+            }
+        }
+        return firstResult
+    }
+}
+
+/// Target-specific evidence aggregation for the short, visually ambiguous word
+/// `of`. A complete top-ranked transcript can match at the normal handwriting
+/// threshold. A target found only among lower-ranked candidates must recur at
+/// two different raster scales. Any strong exact `off` transcript vetoes a
+/// match because Vision was observed collapsing that spelling into `of`.
+struct AppleHandwritingOfEvidencePolicy: Sendable {
+    private let thresholds: AppleRecognitionThresholds
+
+    init(thresholds: AppleRecognitionThresholds) {
+        self.thresholds = thresholds
+    }
+
+    static func applies(to target: WordPrompt) -> Bool {
+        target.normalizedText == targetText
+    }
+
+    func resolve(
+        passFragments: [[AppleRecognizedTextFragment]],
+        target: WordPrompt,
+        resultResolver: AppleHandwritingRecognitionResultResolver
+    ) -> RecognitionResult {
+        precondition(Self.applies(to: target))
+        let evidence = passFragments.map {
+            AppleHandwritingOfPassEvidence(
+                fragments: $0,
+                target: target,
+                resultResolver: resultResolver
+            )
+        }
+
+        if let collision = evidence.compactMap(\.offCollision).max(
+            by: { $0.confidence < $1.confidence }
+        ) {
+            return resultResolver.resolve(
+                transcript: collision.letterSequence,
+                confidence: collision.confidence,
+                target: target
+            )
+        }
+
+        if let directMatch = evidence.compactMap(\.topTarget).filter({
+            $0.confidence >= thresholds.minimumMatchConfidence
+        }).max(by: { $0.confidence < $1.confidence }) {
+            return resultResolver.resolve(
+                transcript: directMatch.letterSequence,
+                confidence: directMatch.confidence,
+                target: target
+            )
+        }
+
+        let corroboratingTargets = evidence.compactMap(\.anyTarget).filter {
+            $0.confidence >= Self.minimumCorroboratingConfidence
+        }.sorted { $0.confidence > $1.confidence }
+        if corroboratingTargets.count >= Self.requiredCorroboratingPasses {
+            let confidence = corroboratingTargets[
+                Self.requiredCorroboratingPasses - 1
+            ].confidence
+            return RecognitionResult(
+                decision: .matched,
+                recognizedText: target.normalizedText,
+                confidence: confidence,
+                targetSpeakerAssessment: .unavailable
+            )
+        }
+
+        if let singleTarget = evidence.compactMap(\.anyTarget).max(
+            by: { $0.confidence < $1.confidence }
+        ) {
+            return RecognitionResult(
+                decision: .uncertain,
+                recognizedText: target.normalizedText,
+                confidence: singleTarget.confidence,
+                targetSpeakerAssessment: .unavailable
+            )
+        }
+
+        return evidence.first?.fallback
+            ?? resultResolver.resolve(fragments: [], target: target)
+    }
+
+    /// Actual Vision traces use 0.50 for viable alternatives and 0.30 for weak
+    /// guesses. Across the six positive styles and thirty paired negatives,
+    /// 0.50 at two distinct scales recovered target evidence without admitting
+    /// a non-`off` neighbor; `off` is handled by the explicit collision veto.
+    private static let minimumCorroboratingConfidence =
+        RecognitionConfidence(0.50)
+    private static let requiredCorroboratingPasses = 2
+    private static let targetText = "of"
+}
+
+private struct AppleHandwritingOfPassEvidence: Sendable {
+    let topTarget: AppleHandwritingTranscript?
+    let anyTarget: AppleHandwritingTranscript?
+    let offCollision: AppleHandwritingTranscript?
+    let fallback: RecognitionResult
+
+    init(
+        fragments: [AppleRecognizedTextFragment],
+        target: WordPrompt,
+        resultResolver: AppleHandwritingRecognitionResultResolver
+    ) {
+        let topOnlyFragments: [AppleRecognizedTextFragment] = fragments.compactMap {
+            fragment -> AppleRecognizedTextFragment? in
+            guard let candidate = fragment.candidates.first else { return nil }
+            return AppleRecognizedTextFragment(
+                candidates: [candidate],
+                minimumX: fragment.minimumX,
+                verticalCenter: fragment.verticalCenter
+            )
+        }
+        self.topTarget = Self.exactTranscript(
+            topOnlyFragments,
+            matching: target.normalizedText
+        )
+        self.anyTarget = Self.exactTranscript(
+            fragments,
+            matching: target.normalizedText
+        )
+        let offTranscript = Self.exactTranscript(
+            fragments,
+            matching: "off"
+        )
+        self.offCollision =
+            if let offTranscript,
+                offTranscript.confidence >= Self.minimumOffCollisionConfidence
+            {
+                offTranscript
+            } else {
+                nil
+            }
+        self.fallback = resultResolver.resolve(
+            fragments: topOnlyFragments,
+            target: target
+        )
+    }
+
+    private static let minimumOffCollisionConfidence =
+        RecognitionConfidence(0.50)
+
+    private static func exactTranscript(
+        _ fragments: [AppleRecognizedTextFragment],
+        matching normalizedTarget: String
+    ) -> AppleHandwritingTranscript? {
+        guard
+            let transcript = AppleHandwritingTranscriptResolver.resolve(
+                fragments,
+                matching: normalizedTarget
+            ),
+            (try? EnglishWordNormalizer.normalize(transcript.letterSequence))
+                == normalizedTarget
+        else { return nil }
+        return transcript
     }
 }
 
 enum AppleHandwritingRasterPassPolicy {
-    /// One alternate raster is enough to recover thin, short lowercase words
-    /// that produce no Vision observation at the primary operating point. The
-    /// passes never vote or fuzzy-match: either pass must independently produce
-    /// the complete target spelling.
+    /// v0.5 uses a primary raster plus one 36-point recovery pass. `of` alone
+    /// adds a 60-point scale because actual connected and tightly overlapped
+    /// fixtures were invisible to Vision at both legacy scales.
     static func configurations(
-        startingWith primary: AppleHandwritingRecognitionConfiguration
+        startingWith primary: AppleHandwritingRecognitionConfiguration,
+        target: WordPrompt
     ) -> [AppleHandwritingRecognitionConfiguration] {
-        let fallbackLineWidth = max(Self.fallbackLineWidth, primary.lineWidth)
-        if fallbackLineWidth != primary.lineWidth {
-            return [
+        let legacyRecoveryLineWidth = max(
+            Self.legacyRecoveryLineWidth,
+            primary.lineWidth
+        )
+        var configurations: [AppleHandwritingRecognitionConfiguration]
+        if legacyRecoveryLineWidth != primary.lineWidth {
+            configurations = [
                 primary,
-                configuration(primary, lineWidth: fallbackLineWidth),
+                configuration(primary, lineWidth: legacyRecoveryLineWidth),
             ]
+        } else if primary.canvasPadding != fallbackCanvasPadding {
+            configurations = [
+                primary,
+                configuration(primary, canvasPadding: fallbackCanvasPadding),
+            ]
+        } else {
+            configurations = [primary]
         }
-        guard primary.canvasPadding != fallbackCanvasPadding else { return [primary] }
-        return [
-            primary,
-            configuration(primary, canvasPadding: fallbackCanvasPadding),
-        ]
+
+        guard AppleHandwritingOfEvidencePolicy.applies(to: target) else {
+            return configurations
+        }
+        let ofRecoveryLineWidth = max(Self.ofRecoveryLineWidth, primary.lineWidth)
+        guard ofRecoveryLineWidth != primary.lineWidth,
+            !configurations.contains(where: {
+                $0.lineWidth == ofRecoveryLineWidth
+                    && $0.canvasPadding == primary.canvasPadding
+            })
+        else { return configurations }
+        configurations.append(
+            configuration(primary, lineWidth: ofRecoveryLineWidth)
+        )
+        return configurations
     }
 
-    private static let fallbackLineWidth: CGFloat = 36
+    private static let legacyRecoveryLineWidth: CGFloat = 36
+    private static let ofRecoveryLineWidth: CGFloat = 60
     private static let fallbackCanvasPadding: CGFloat = 20
 
     private static func configuration(
@@ -150,11 +414,36 @@ enum AppleHandwritingRasterPassPolicy {
 }
 
 struct AppleHandwritingVisionRecognizer: Sendable {
+    typealias InjectedRecognition =
+        @Sendable (
+            _ image: CGImage,
+            _ prompt: WordPrompt,
+            _ minimumTextHeightFraction: Float
+        ) async throws -> [AppleRecognizedTextFragment]
+
+    private let injectedRecognition: InjectedRecognition?
+
+    init() {
+        self.injectedRecognition = nil
+    }
+
+    init(recognition: @escaping InjectedRecognition) {
+        self.injectedRecognition = recognition
+    }
+
     func recognize(
         image: CGImage,
         prompt: WordPrompt,
         minimumTextHeightFraction: Float
     ) async throws -> [AppleRecognizedTextFragment] {
+        if let injectedRecognition {
+            return try await injectedRecognition(
+                image,
+                prompt,
+                minimumTextHeightFraction
+            )
+        }
+
         var request = RecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = [Locale.Language(identifier: "en-US")]
@@ -164,11 +453,28 @@ struct AppleHandwritingVisionRecognizer: Sendable {
             for: prompt
         )
         request.minimumTextHeightFraction = minimumTextHeightFraction
-
-        return try await request.perform(on: image, orientation: .up).compactMap(
-            AppleRecognizedTextFragment.init(observation:)
+        let candidateLimit = AppleHandwritingVisionCandidatePolicy.limit(
+            for: prompt
         )
+
+        return try await request.perform(on: image, orientation: .up).compactMap {
+            AppleRecognizedTextFragment(
+                observation: $0,
+                candidateLimit: candidateLimit
+            )
+        }
     }
+}
+
+enum AppleHandwritingVisionCandidatePolicy {
+    static func limit(for target: WordPrompt) -> Int {
+        AppleHandwritingOfEvidencePolicy.applies(to: target)
+            ? ofCandidateLimit
+            : legacyCandidateLimit
+    }
+
+    private static let legacyCandidateLimit = 5
+    private static let ofCandidateLimit = 10
 }
 
 struct AppleRecognizedTextCandidate: Equatable, Sendable {
@@ -209,8 +515,8 @@ struct AppleRecognizedTextFragment: Equatable, Sendable {
         self.verticalCenter = verticalCenter
     }
 
-    init?(observation: RecognizedTextObservation) {
-        let candidates = observation.topCandidates(5).map {
+    init?(observation: RecognizedTextObservation, candidateLimit: Int) {
+        let candidates = observation.topCandidates(candidateLimit).map {
             AppleRecognizedTextCandidate(
                 text: $0.string,
                 confidence: RecognitionConfidence(Double($0.confidence))
@@ -301,7 +607,9 @@ enum AppleHandwritingTranscriptResolver {
                         let normalizedCandidate =
                             AppleHandwritingCandidateNormalizer.normalize(
                                 candidate.text,
-                                corroborating: fragment.candidates
+                                corroborating: fragment.candidates,
+                                normalizedTarget: normalizedTarget,
+                                startingAt: partial.normalizedSequence.count
                             )
                     else { continue }
 
@@ -338,14 +646,17 @@ private struct AppleHandwritingPartialTranscript: Sendable {
 }
 
 /// Vision can emit `0` for a handwritten O and `9` for a single-storey g. Zero
-/// is shape-equivalent to O. Nine is accepted as g only when another candidate
-/// of the same length contains a literal g at that position. The final sequence
-/// must still equal the complete target, so neighboring words and literal `90`
-/// remain mismatches.
+/// is shape-equivalent only where the requested target contains `o`; it cannot
+/// substitute for another letter or add a letter. Nine is accepted as g only
+/// when another candidate of the same length contains a literal g at that
+/// position. The final sequence must still equal the complete target, so
+/// neighboring words and literal `90` remain mismatches.
 private enum AppleHandwritingCandidateNormalizer {
     static func normalize(
         _ candidate: String,
-        corroborating candidates: [AppleRecognizedTextCandidate]
+        corroborating candidates: [AppleRecognizedTextCandidate],
+        normalizedTarget: String,
+        startingAt targetOffset: Int
     ) -> String? {
         let compact = candidate.components(
             separatedBy: .whitespacesAndNewlines
@@ -354,9 +665,14 @@ private enum AppleHandwritingCandidateNormalizer {
             return normalized
         }
         var glyphs = Array(compact)
+        let targetGlyphs = Array(normalizedTarget)
         guard glyphs.contains("0") || glyphs.contains("9") else { return nil }
         for index in glyphs.indices {
             if glyphs[index] == "0" {
+                let targetIndex = targetOffset + index
+                guard targetGlyphs.indices.contains(targetIndex),
+                    targetGlyphs[targetIndex] == "o"
+                else { return nil }
                 glyphs[index] = "o"
             } else if glyphs[index] == "9" {
                 guard
@@ -393,12 +709,18 @@ private enum AppleHandwritingCandidateNormalizer {
 enum AppleHandwritingRecognitionVocabulary {
     static func words(for prompt: WordPrompt) -> [String] {
         let locale = Locale(identifier: "en_US_POSIX")
-        let candidates = [
+        var candidates = [
             prompt.normalizedText,
             prompt.normalizedText.prefix(1).uppercased(with: locale)
                 + prompt.normalizedText.dropFirst(),
             prompt.normalizedText.uppercased(with: locale),
         ]
+        if AppleHandwritingOfEvidencePolicy.applies(to: prompt) {
+            candidates.append(
+                prompt.normalizedText.prefix(1)
+                    + prompt.normalizedText.dropFirst().uppercased(with: locale)
+            )
+        }
         var seen = Set<String>()
         return candidates.filter { seen.insert($0).inserted }
     }
@@ -432,6 +754,18 @@ struct AppleHandwritingRecognitionResultResolver: Sendable {
         return decisionPolicy.evaluate(
             transcript: transcript.letterSequence,
             confidence: transcript.confidence,
+            target: target
+        )
+    }
+
+    func resolve(
+        transcript: String?,
+        confidence: RecognitionConfidence?,
+        target: WordPrompt
+    ) -> RecognitionResult {
+        decisionPolicy.evaluate(
+            transcript: transcript,
+            confidence: confidence,
             target: target
         )
     }

@@ -372,3 +372,56 @@ child/parent acceptance remains open.
 - Exact v0.3.2 (`2026071406`) was reinstalled successfully on the connected
   reading iPad. Mac-side auto-launch was denied only because the iPad remained
   locked; the installed app is ready to open directly after unlock.
+
+## v0.5.1 — 2026-07-15
+
+Target release: `v0.5.1`
+
+Branch: `v0.5.1`
+
+Build: `2026071504`
+
+Overall state: implementation is complete, and 638/638 Swift tests pass.
+The full nine-flow simulator UI matrix passes on phone and tablet; physical
+child/Parent acceptance remains open.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V051-UX-001 | UX improvement | Parent Home | Replace the visible `Lock` control with `Back`. Back returns to the prior child page and restores the Parent Gate for the next visit. Match the active kid World with the existing scene, panel, color, and tactile-button components. Remove the tagline and redundant labels; shorten the Progress title and count summaries. | Automated pass; device visual QA pending | Enter Parents from Kid selection, complete the gate, confirm `Back` replaces `Lock`, then return to the prior child page. Re-enter Parents and confirm the gate still appears. Inspect all eight World themes on phone and tablet in supported Parent orientations. |
+| V051-UX-002 | UX improvement | Launch | Show a branded launch page for at least 1.8s, play the bundled `Tada Words` launch signature, then fade into the app. Use the official Tada Words and Pawgoo marks with responsive phone/tablet sizing and one combined accessibility label. | Automated pass; device visual/listening QA pending | Cold-launch on phone and tablet in supported orientations. Confirm both official marks, spoken brand signature, minimum duration, fade, VoiceOver label, and no interaction with hidden app content. |
+| V051-BUG-001 | Bug | Write recognition | Improve exact `of` recovery without fuzzy acceptance. For `of` only, collect three render-and-recognize scales, inspect up to 10 Vision candidates, include mixed-case `oF`, cover six child-like stroke styles, and accept numeric `0` only at a target position containing `o`. Require two-scale corroboration for lower-ranked target evidence and veto a match when any scale exposes a strong complete `off`. Other targets retain the v0.5 two-pass/top-five behavior. | Automated pass; child handwriting pending | Have the child write separated and connected `of`, `Of`, `OF`, `oF`, `0f`, and `0F` twice on each target device. Reject `if`, `on`, `or`, `ot`, `off`, `00`, `90`, `0t`, `0ff`, `+0`, and `f0`; capture a privacy-safe diagnostic for any false rejection. |
+
+### 2026-07-15 v0.5.1 notes
+
+- Replaced Parent Home `Lock` with `Back`. The visible action returns to the
+  prior child page while the route restores the Parent Gate for the next visit.
+- Reused the active kid World's background scene, colors, panels, and tactile
+  controls on Parent Home. Removed the tagline, redundant `Kids` label, and
+  longer summaries; renamed `Progress & Performance` to `Progress`.
+- Added a 1.8s minimum launch page with the official Tada Words and Pawgoo
+  marks, the bundled spoken brand signature, a short fade, and one combined
+  accessibility label. The production launch countdown starts only after audio
+  preferences are configured, while a warm native launch color avoids a cold
+  blue flash before the branded page.
+- Added target-specific three-scale evidence for `of`, expanded only its Vision
+  observations from five to 10 candidates, added mixed-case `oF`, and covered
+  six child-like styles. Numeric `0` normalizes to `o` only at a target-aligned
+  `o`, allowing `0f` and `0F` while rejecting `00`, `90`, `0t`, `0ff`, `+0`,
+  and `f0`. A lower-ranked exact target must recur at two scales; any strong
+  complete `off` evidence vetoes a match even when it appears after an early
+  `of`. Thirty paired `ot/on/or/off/if` controls stay rejected. Other words
+  retain their v0.5 two-pass/top-five behavior, with no fuzzy matching or
+  global-threshold change.
+- Set the release and LocalQA identity to v0.5.1 (`2026071504`). The tree passes
+  638/638 Swift tests and strict format lint. The critical XCUITest matrix passes
+  9/9 on iPhone 17 Pro Max and 9/9 on iPad Pro 13-inch simulators.
+- Moved the corrected package to build `2026071504` after detecting that the
+  parallel automation PR had reserved `2026071503`, preventing two release
+  lines from sharing one LocalQA build identity.
+- Verified the signed physical bundle directly as v0.5.1 (`2026071504`), LocalQA
+  bundle ID `com.tadawords.app.localqa`, Team `6S245NCUPQ`; its provisioning
+  profile includes the registered iPhone and both iPads. Installation and
+  installed-version verification succeeded on the reading iPad. The iPhone
+  became unavailable before the corrected package could install, and the iPad
+  Air 13-inch (M4) paired Wi-Fi tunnel timed out. Reconnect those two devices,
+  install `2026071504`, and inventory-verify before physical acceptance.

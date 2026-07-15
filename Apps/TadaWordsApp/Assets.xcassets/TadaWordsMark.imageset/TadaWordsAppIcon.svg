@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="sky" x1="96" y1="72" x2="928" y2="952" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7863D8"/>
+      <stop offset="0.55" stop-color="#D9699A"/>
+      <stop offset="1" stop-color="#F2A85E"/>
+    </linearGradient>
+    <linearGradient id="bubble" x1="252" y1="228" x2="768" y2="796" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDF5"/>
+      <stop offset="1" stop-color="#F8F1E8"/>
+    </linearGradient>
+    <filter id="shadow" x="120" y="120" width="784" height="792" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="32" stdDeviation="30" flood-color="#251E4C" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#sky)"/>
+  <circle cx="160" cy="174" r="116" fill="#FFFFFF" opacity="0.10"/>
+  <circle cx="894" cy="806" r="172" fill="#FFE68C" opacity="0.13"/>
+
+  <g filter="url(#shadow)">
+    <path d="M226 200C174 200 132 242 132 294V648C132 700 174 742 226 742H328L304 852L444 742H798C850 742 892 700 892 648V294C892 242 850 200 798 200H226Z" fill="url(#bubble)"/>
+  </g>
+
+  <path d="M482 288L518 384L614 420L518 456L482 552L446 456L350 420L446 384L482 288Z" fill="#6A51C8"/>
+  <circle cx="482" cy="420" r="42" fill="#FFFDF5"/>
+  <path d="M482 386V454M448 420H516" stroke="#6A51C8" stroke-width="26" stroke-linecap="round"/>
+
+  <path d="M302 620H548" stroke="#17233B" stroke-width="42" stroke-linecap="round"/>
+  <path d="M302 688H470" stroke="#17233B" stroke-width="42" stroke-linecap="round" opacity="0.72"/>
+
+  <g transform="rotate(-38 690 640)">
+    <rect x="642" y="446" width="96" height="334" rx="42" fill="#FFD05A"/>
+    <rect x="642" y="510" width="96" height="54" fill="#F18B52"/>
+    <path d="M642 780H738L690 870L642 780Z" fill="#F4D4B8"/>
+    <path d="M674 840H706L690 870L674 840Z" fill="#17233B"/>
+    <path d="M642 488V474C642 458 655 446 670 446H710C726 446 738 458 738 474V488H642Z" fill="#FFF4C8"/>
+  </g>
+
+  <path d="M814 126L832 174L880 192L832 210L814 258L796 210L748 192L796 174L814 126Z" fill="#FFE987"/>
+  <circle cx="180" cy="840" r="25" fill="#FFF2A7"/>
+  <circle cx="858" cy="340" r="18" fill="#FFFFFF" opacity="0.82"/>
+</svg>
