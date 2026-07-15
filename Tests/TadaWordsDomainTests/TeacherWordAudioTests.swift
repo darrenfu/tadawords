@@ -12,17 +12,17 @@ final class TeacherWordAudioTests: XCTestCase {
         XCTAssertEqual(request.spokenText, "Dog")
         XCTAssertNil(request.pronunciationKey)
         XCTAssertEqual(request.usage, .readHint)
-        XCTAssertEqual(request.speed, 0.90, accuracy: 0.000_1)
-        XCTAssertEqual(request.voiceContractVersion, "canonical-teacher-v2")
+        XCTAssertEqual(request.speed, 0.67, accuracy: 0.000_1)
+        XCTAssertEqual(request.voiceContractVersion, "canonical-teacher-v3")
     }
 
-    func testWritePromptUsesTheSlowerBundledVariant() throws {
+    func testWritePromptUsesTheOneAndAHalfTimesSlowerCadence() throws {
         let prompt = try WordPrompt(learningMode: .write, text: "at")
 
         let request = TeacherWordAudioRequest(prompt: prompt)
 
         XCTAssertEqual(request.usage, .writePrompt)
-        XCTAssertEqual(request.speed, 0.82, accuracy: 0.000_1)
+        XCTAssertEqual(request.speed, 0.67, accuracy: 0.000_1)
     }
 
     func testContextAndPronunciationKeyArePreserved() throws {

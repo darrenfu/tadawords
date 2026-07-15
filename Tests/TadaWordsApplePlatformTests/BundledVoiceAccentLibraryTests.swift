@@ -8,7 +8,12 @@ final class BundledVoiceAccentLibraryTests: XCTestCase {
         let library = BundledVoiceAccentLibrary.production()
 
         XCTAssertNotNil(library.launch)
-        XCTAssertEqual(library.correct.count, 6)
+        XCTAssertEqual(library.correct.count, 5)
+        XCTAssertFalse(
+            library.correct.contains {
+                $0.lastPathComponent == "ta-da.m4a"
+            }
+        )
         XCTAssertNotNil(library.questComplete)
     }
 

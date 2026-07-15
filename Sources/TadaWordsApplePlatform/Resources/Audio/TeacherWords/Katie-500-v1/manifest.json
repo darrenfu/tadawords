@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "pack_version": "1.0.0",
+  "pack_version": "1.1.0",
   "created_on": "2026-07-14",
   "locale": "en-US",
   "vendor": "Cartesia",
@@ -21,13 +21,15 @@
   "variants": {
     "read_hint": {
       "directory": "read-hint",
-      "speed": 0.9,
-      "purpose": "Standard pronunciation shown only after two Read errors"
+      "speed": 0.67,
+      "tail_padding_seconds": 0.12,
+      "purpose": "One-and-a-half-times-slower pronunciation shown only after two Read errors, with protected final consonants"
     },
     "write_prompt": {
       "directory": "write-prompt",
-      "speed": 0.82,
-      "purpose": "Slower prompt with clearly released final consonants"
+      "speed": 0.67,
+      "tail_padding_seconds": 0.12,
+      "purpose": "One-and-a-half-times-slower prompt with protected final consonants"
     }
   },
   "tts_text_overrides": {
@@ -36,8 +38,8 @@
   },
   "speed_overrides": {
     "bun": {
-      "read_hint": 1.0,
-      "write_prompt": 0.95
+      "read_hint": 0.67,
+      "write_prompt": 0.67
     }
   },
   "voice_overrides": {

@@ -282,11 +282,11 @@ Overall state: production fix, automated regression, signed iPhone and iPad inst
 | 2026-07-14 | iPhone 17 Pro Max, iOS 26.5.1 | `v0.3.1` (`2026071402`) LocalQA | Codex automated device test; Parent + child acceptance pending | Installed; synthetic production Vision pass | 6/6 positive case variants and 4/4 negative controls passed through the production service. Child manual `of`/`go` 12-attempt gate remains. |
 | 2026-07-14 | Darren iPad Air 13-inch (M4), iPadOS 26.5 | `v0.3.1` (`2026071403`) LocalQA, Team `6S245NCUPQ` | Codex automated device and UI tests; Parent + child acceptance pending | Installed and launched; DeviceTests 2/2; Critical XCUITest 7/7 | Production tests passed wrong-word rejection and `of/go` case variants. UI tests passed OCR Add All, Delete All/restore, explicit Preset approval, sequential deletes/sort, Photo picker/sort, and Read/Write completion dismissal. Child handwriting, audio, layout, rotation, Apple Pencil, and accessibility remain. |
 
-## v0.3.1 offline-audio follow-up — 2026-07-14
+## v0.4 — 2026-07-14
 
-Target release: `v0.3.1`
+Target release: `v0.4`
 
-Branch: `v0.3.1`
+Branch: `agent/v0.4-offline-audio`
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
@@ -296,6 +296,28 @@ Branch: `v0.3.1`
 ### Audio implementation evidence
 
 - Generated and manifest-checked 1,000 Katie word clips plus eight Aurora clips.
-- All 1,008 files decode as mono 44.1 kHz AAC-LC; combined audio size is 6,811,003 bytes. The teacher pack duration is 674.80 seconds and Aurora duration is 9.04 seconds.
-- A full 1,000-clip Apple Speech audit was reviewed with a second Whisper pass for true suspects. Homophone spelling differences were ignored; `near` and `chick` were corrected through IPA, and `bun` now uses a manifest-documented Aurora override after both recognizers rejected Katie. The final targeted clips pass both recognizers. Aurora's launch and transition outputs were also transcription-checked; the launch has no detected `da`→`words` gap and a lengthened `words` segment, while exact musical pitch remains device-listening QA.
-- Swift 6 package suite passes 595/595 with bundled manifest, variant routing, fallback, and Aurora resource checks. Physical speaker fatigue, mix, and child reaction remain manual acceptance items.
+- All 1,008 files decode as mono 44.1 kHz AAC-LC; combined audio size is 6,807,998 bytes. The teacher pack duration is 674.80 seconds and Aurora duration is 8.74 seconds.
+- A full 1,000-clip Apple Speech audit was reviewed with a second Whisper pass for true suspects. Homophone spelling differences were ignored; `near` and `chick` were corrected through IPA, and `bun` now uses a manifest-documented Aurora override after both recognizers rejected Katie. The final targeted clips pass both recognizers.
+- The owner rejected the first direct-TTS launch render because `da` did not rise and the connection sounded too long, then rejected the staged replacement because the first syllable sounded like falling-tone “塔” instead of light “他” and a repeated source slice produced an extra stressed `a` after `da`. Aurora pack 1.0.2 keeps only the naturally level-to-rising onset for a short `/tə/` (approximately 332→334 Hz), stretches one unrepeated continuous `/dɑː/` window through approximately 380→394→459 Hz, and uses only an 8 ms click-safe join into `words`. Silence detection finds no internal pause. Exact character and naturalness remain owner device-listening QA.
+- Swift 6 package suite passes 594/594 with bundled manifest, variant routing, fallback, and Aurora resource checks. Physical speaker fatigue, mix, and child reaction remain manual acceptance items.
+
+## v0.4.1 — 2026-07-14
+
+Target release: `v0.4.1`
+
+Branch: `agent/v0.4.1-slower-teacher-audio`
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| AUDIO-FIX-003 | Improvement | Teacher word audio | Generate both Read and Write isolated words at `1/1.5 ≈ 0.67×`; preserve terminal consonants such as the `/t/` in `at`. | Implemented; automated acoustic and recognition pass | On iPhone and iPad, listen to `at`, `cat`, `sit`, `dog`, `help`, `look`, and `with` in both modes. Confirm the pace is comfortable for Pre-K and no final consonant is masked by speaker response or music recovery. |
+| AUDIO-FIX-004 | Improvement | Spoken transitions | Remove `Ta-da!` as a correct-answer interjection and from the Quest-complete line. The `Tada Words` cold-launch brand name remains separate. | Implemented; automated manifest and recognition pass | Complete enough words to rotate through every correct-answer phrase, then finish one Quest. Confirm no transition says `Ta-da`; cold launch must still say the product name. |
+
+### v0.4.1 implementation evidence
+
+- Regenerated all 1,000 Katie/Aurora-override teacher clips from manifest version 1.1.0 at 0.67×. Each clip receives 120 ms of post-waveform padding before AAC encoding; playback already waits for the full `AVAudioPlayer` completion callback.
+- All 1,000 teacher files decode as mono 44.1 kHz AAC-LC. Teacher duration is 863.12 seconds; all 1,008 audio resources total 7,428,104 bytes.
+- The new `at` clips are 0.68–0.76 seconds versus 0.48–0.56 seconds before the change. Silence/energy inspection shows the stop closure, a following `/t/` release, and then the protected tail.
+- Whisper independently transcribed both Read and Write samples for `at`, `it`, `cat`, `hat`, `sit`, `hit`, `get`, `cut`, `hot`, `not`, `dog`, `big`, `red`, `stop`, `help`, `look`, `fish`, `duck`, `back`, `off`, and `with` with their terminal consonants intact. Across 50 available curated clips, 43 were exact words; seven differed only in the vowel or initial consonant while retaining the expected terminal consonant. Three requested audit words were not members of the parent-approved 500-word manifest and were excluded rather than silently added.
+- The correct-answer manifest now exposes five lines and no longer exposes `Ta-da!`. The regenerated Quest-complete clip contains only `Quest complete!`; Whisper transcribes it as `Quest complete.` The private `correct/ta-da.m4a` resource remains solely as the reproducible source component for the separate cold-launch brand mark and is not reachable by transition rotation.
+- Integrated current `origin/main` (`02e23aa`) before release so the v0.3.1/v0.3.2 World-art, device-QA, Vision, UI-copy, and project-setting changes remain the baseline. Only the newer v0.4.1 audio resources and audio contract supersede their earlier counterparts.
+- Strict Swift formatting and the full post-integration 595-test package suite pass. The earlier generic iOS Simulator build contains all 1,008 resources, and its bundled `at` hash matches the reviewed source asset; a fresh merged-tree iOS build is required before merge.
