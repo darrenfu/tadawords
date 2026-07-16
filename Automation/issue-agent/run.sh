@@ -15,6 +15,7 @@ fi
 : "${TADA_AGENT_LOG_DIR:=/Users/macmini-dofu/Library/Logs/TadaWordsIssueAgent}"
 : "${TADA_AGENT_MAX_ACTIVE_BATCHES:=2}"
 : "${TADA_AGENT_MODEL:=gpt-5.6-sol}"
+: "${TADA_AGENT_REASONING_EFFORT:=medium}"
 if test -z "${TADA_AGENT_CODEX_BIN:-}"; then
     TADA_AGENT_CODEX_BIN=$(command -v codex)
 fi
@@ -72,6 +73,7 @@ fi
 } | "$TADA_AGENT_CODEX_BIN" --ask-for-approval never exec \
     --ignore-user-config \
     --model "$TADA_AGENT_MODEL" \
+    --config "model_reasoning_effort=\"$TADA_AGENT_REASONING_EFFORT\"" \
     --cd "$TADA_AGENT_CONTROL_REPO" \
     --add-dir "$TADA_AGENT_WORKTREE_ROOT" \
     --sandbox danger-full-access \

@@ -9,6 +9,7 @@ WORKTREE_ROOT=${TADA_AGENT_WORKTREE_ROOT:-"/Users/macmini-dofu/Documents/Tada Wo
 LOG_DIR=${TADA_AGENT_LOG_DIR:-"/Users/macmini-dofu/Library/Logs/TadaWordsIssueAgent"}
 MAX_ACTIVE_BATCHES=${TADA_AGENT_MAX_ACTIVE_BATCHES:-2}
 CODEX_MODEL=${TADA_AGENT_MODEL:-gpt-5.6-sol}
+CODEX_REASONING_EFFORT=${TADA_AGENT_REASONING_EFFORT:-medium}
 STATE_DIR="$INSTALL_ROOT/state"
 CONTROL_REPO="$INSTALL_ROOT/control-repo"
 BIN_DIR="$INSTALL_ROOT/bin"
@@ -40,29 +41,33 @@ mkdir -p "$BIN_DIR" "$STATE_DIR" "$LOG_DIR" "$WORKTREE_ROOT" \
 gh auth status >/dev/null
 "$CODEX_BIN" login status >/dev/null
 "$CODEX_BIN" --ask-for-approval never exec \
+    --config "model_reasoning_effort=\"$CODEX_REASONING_EFFORT\"" \
     --sandbox danger-full-access \
     --version >/dev/null
 
-probe_key="$("$CODEX_BIN" --version)|$CODEX_MODEL"
+probe_key="$("$CODEX_BIN" --version)|$CODEX_MODEL|$CODEX_REASONING_EFFORT"
 probe_marker="$STATE_DIR/codex-runtime-probe"
 if ! grep -Fqx "$probe_key" "$probe_marker" 2>/dev/null; then
     if ! probe_output=$(printf 'Reply with exactly READY and do not use tools.\n' | \
         "$CODEX_BIN" --ask-for-approval never exec \
             --ignore-user-config \
             --model "$CODEX_MODEL" \
+            --config "model_reasoning_effort=\"$CODEX_REASONING_EFFORT\"" \
             --sandbox read-only \
             --ephemeral \
             --color never \
             --json \
             --cd "$SCRIPT_DIR" \
             - 2>&1); then
-        printf 'Codex runtime probe failed for %s with model %s:\n%s\n' \
-            "$CODEX_BIN" "$CODEX_MODEL" "$probe_output" >&2
+        printf 'Codex runtime probe failed for %s with model %s/%s:\n%s\n' \
+            "$CODEX_BIN" "$CODEX_MODEL" "$CODEX_REASONING_EFFORT" \
+            "$probe_output" >&2
         exit 1
     fi
     if ! grep -q '"type":"turn.completed"' <<<"$probe_output"; then
-        printf 'Codex runtime probe did not complete for %s with model %s:\n%s\n' \
-            "$CODEX_BIN" "$CODEX_MODEL" "$probe_output" >&2
+        printf 'Codex runtime probe did not complete for %s with model %s/%s:\n%s\n' \
+            "$CODEX_BIN" "$CODEX_MODEL" "$CODEX_REASONING_EFFORT" \
+            "$probe_output" >&2
         exit 1
     fi
     printf '%s\n' "$probe_key" >"$probe_marker"
@@ -93,6 +98,7 @@ fi
     printf "export TADA_AGENT_MAX_ACTIVE_BATCHES='%s'\n" "$MAX_ACTIVE_BATCHES"
     printf "export TADA_AGENT_CODEX_BIN='%s'\n" "$CODEX_BIN"
     printf "export TADA_AGENT_MODEL='%s'\n" "$CODEX_MODEL"
+    printf "export TADA_AGENT_REASONING_EFFORT='%s'\n" "$CODEX_REASONING_EFFORT"
 } >"$BIN_DIR/agent.env"
 chmod 600 "$BIN_DIR/agent.env"
 

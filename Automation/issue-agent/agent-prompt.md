@@ -44,7 +44,11 @@ skip fresh checks. Re-fetch GitHub and Git state before every mutation.
 Before claiming the first Issue:
 
 1. Read every open, unclaimed `agent-ready` Issue.
-2. Inspect the relevant repository modules with `rg` and existing tests.
+2. Run a bounded ownership scan of the relevant modules with `rg` and existing
+   tests. This pre-claim scan decides grouping, risk, and rollback boundaries;
+   it is not the full design, implementation, or evidence audit. Do not load a
+   plan-only skill, read its complete reference corpus, render screens, or build
+   a string/asset matrix before the claim is reserved.
 3. Group only Issues sharing a coherent capability, code boundary, test surface,
    device acceptance path, and rollback unit. Parent work and Audio work are
    separate batches even if submitted together.
@@ -55,6 +59,13 @@ Before claiming the first Issue:
 6. Re-run preflight immediately before claiming. Confirm the selected area is
    still claimable, the active-batch limit has not been reached, and no newer
    same-area PR or claim exists. Start no more than one new batch per poll.
+
+An `agent-ready` Issue with concrete acceptance criteria is prior human approval
+to implement that bounded scope. If a generally applicable design/review skill
+would normally pause for approval, perform its detailed audit only after the
+Issue, branch, version, and worktree are reserved. Pause before claiming only
+when the scan discovers a new material product choice, risk, or scope ambiguity
+that the Issue does not already resolve.
 
 Add `agent-claimed`, `batch:<id>`, and `release:vX.Y.Z`; remove `agent-ready`.
 Create missing batch/release labels with concise descriptions.

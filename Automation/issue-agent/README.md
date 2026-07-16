@@ -16,9 +16,11 @@ an older shell `PATH` copy, then parses the unattended approval/sandbox flags
 and runs one cached model round trip before loading the LaunchAgent. The worker
 uses an isolated config plus the explicit `gpt-5.6-sol` default, so unrelated
 user plugins and a stale local model setting cannot strand actionable Issues.
-Set `TADA_AGENT_CODEX_BIN` or `TADA_AGENT_MODEL` before installation to override
-either value. The model probe reruns only when the selected CLI version or model
-changes.
+Reasoning defaults to `medium` so a bounded intake scan cannot monopolize the
+single worker before it reserves the Issue. Set `TADA_AGENT_CODEX_BIN`,
+`TADA_AGENT_MODEL`, or `TADA_AGENT_REASONING_EFFORT` before installation to
+override them. The model probe reruns only when the selected CLI version, model,
+or effort changes.
 
 ## Install
 
