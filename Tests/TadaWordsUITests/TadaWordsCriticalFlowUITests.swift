@@ -38,7 +38,7 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
     func testLobbyWriteSpellWithLettersUsesCustomKeyboardAndAdvances() throws {
         launchDemo(startingAt: "moonpetal")
 
-        let writeQuest = app.buttons["Write, Hear it. Write it."]
+        let writeQuest = app.descendants(matching: .any)["child-lobby.quest.write"]
         XCTAssertTrue(writeQuest.waitForExistence(timeout: 8))
         writeQuest.tap()
 

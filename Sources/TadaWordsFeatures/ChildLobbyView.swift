@@ -338,7 +338,9 @@ private struct QuestEntranceCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint(
-            blockReason == nil ? "Starts a separate \(mode.title) quest" : "Opens help")
+            blockReason == nil ? "Starts a separate \(mode.title) quest" : "Opens help"
+        )
+        .accessibilityIdentifier("child-lobby.quest.\(mode.rawValue)")
     }
 
     @ViewBuilder
