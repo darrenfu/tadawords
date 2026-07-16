@@ -196,27 +196,27 @@ struct SpellQuestView: View {
         VStack(spacing: 12) {
             HStack(spacing: 12) {
                 TadaWorldMascot(theme: theme, pose: .encouraging, size: 44)
-                Text("Spell the word you hear")
-                    .font(.system(.title2, design: .rounded, weight: .heavy))
-                    .foregroundStyle(theme.ink)
 
                 Spacer()
 
                 Button {
                     playPrompt()
                 } label: {
-                    Label(
-                        isPlayingPrompt ? "Playing" : "Hear",
-                        systemImage: isPlayingPrompt
+                    Image(
+                        systemName: isPlayingPrompt
                             ? "speaker.wave.3.fill" : "speaker.wave.2.fill"
                     )
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                    .frame(minHeight: TadaPrimitiveTokens.TouchTarget.minimum)
+                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .frame(
+                        width: TadaChildScaleTokens.Action.primaryTouchDiameter,
+                        height: TadaChildScaleTokens.Action.primaryTouchDiameter
+                    )
                 }
                 .buttonStyle(
                     TadaPrimaryButtonStyle(fill: theme.primary, isCompact: true)
                 )
                 .disabled(isPlayingPrompt || isCompleted)
+                .accessibilityLabel(isPlayingPrompt ? "Playing" : "Hear the word")
                 .accessibilityHint("Plays the spelling prompt again")
             }
 
@@ -497,6 +497,7 @@ private struct ThemeLetterKeyboardView: View {
     ]
 
     var body: some View {
+        let submission = KidSubmissionControl.spelling
         VStack(spacing: 7) {
             ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
                 HStack(spacing: 7) {
@@ -525,18 +526,26 @@ private struct ThemeLetterKeyboardView: View {
 
             HStack(spacing: 12) {
                 Button(action: onDelete) {
-                    Label("Delete", systemImage: "delete.left.fill")
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                        .frame(maxWidth: .infinity, minHeight: 50)
+                    Image(systemName: "delete.left.fill")
+                        .font(.system(.title2, design: .rounded, weight: .bold))
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: submission.minimumTouchSize
+                        )
                 }
                 .buttonStyle(ThemeLetterKeyStyle(theme: theme))
                 .disabled(!isEnabled || !canDelete)
+                .accessibilityLabel("Delete last letter")
+                .accessibilityHint("Removes the last letter")
                 .accessibilityIdentifier("spell.delete")
 
                 Button(action: onDone) {
-                    Label("Done", systemImage: "checkmark.circle.fill")
-                        .font(.system(.headline, design: .rounded, weight: .heavy))
-                        .frame(maxWidth: .infinity, minHeight: 50)
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(.largeTitle, design: .rounded, weight: .heavy))
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: submission.minimumTouchSize
+                        )
                 }
                 .buttonStyle(
                     TadaPrimaryButtonStyle(
@@ -545,7 +554,9 @@ private struct ThemeLetterKeyboardView: View {
                     )
                 )
                 .disabled(!isEnabled || !canSubmit)
-                .accessibilityIdentifier("spell.done")
+                .accessibilityLabel(submission.accessibilityLabel)
+                .accessibilityHint(submission.accessibilityHint)
+                .accessibilityIdentifier(submission.accessibilityIdentifier)
             }
             .frame(maxWidth: 520)
         }

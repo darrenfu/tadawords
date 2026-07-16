@@ -127,7 +127,7 @@ struct QuestResultView: View {
     }
 
     private var completionHeader: some View {
-        VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+        VStack(spacing: 0) {
             HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
                 TadaWorldMascot(
                     theme: theme,
@@ -150,11 +150,6 @@ struct QuestResultView: View {
             }
             .accessibilityHidden(true)
 
-            Text(completionTitle)
-                .font(.system(.largeTitle, design: .rounded, weight: .heavy))
-            Text(completionMessage)
-                .font(.system(.title3, design: .rounded, weight: .medium))
-                .foregroundStyle(theme.ink.opacity(0.66))
         }
         .opacity(revealPhase >= 1 ? 1 : 0)
         .offset(y: revealPhase >= 1 ? 0 : 8)
@@ -187,13 +182,6 @@ struct QuestResultView: View {
             )
             .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(completionTitle)
-                    .font(.system(.title2, design: .rounded, weight: .heavy))
-                Text(completionMessage)
-                    .font(.system(.subheadline, design: .rounded, weight: .medium))
-                    .foregroundStyle(theme.ink.opacity(0.66))
-            }
         }
         .opacity(revealPhase >= 1 ? 1 : 0)
         .offset(y: revealPhase >= 1 ? 0 : 6)
@@ -206,10 +194,6 @@ struct QuestResultView: View {
     private var achievementPanel: some View {
         TadaPanel(theme: theme) {
             VStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                Text("Stars earned")
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                    .foregroundStyle(theme.ink.opacity(0.68))
-
                 TadaStarRow(
                     earned: result.earnedStarCount,
                     tint: theme.secondary,
@@ -255,10 +239,6 @@ struct QuestResultView: View {
     private var rewardPanel: some View {
         TadaPanel(theme: theme) {
             VStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                Text(result.showsNewCollectible ? "New collectible" : "Practice power-up")
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                    .foregroundStyle(theme.ink.opacity(0.68))
-
                 if result.showsNewCollectible {
                     TadaRewardBadge(
                         theme: theme,
@@ -284,13 +264,6 @@ struct QuestResultView: View {
                 )
                 .font(.system(.title2, design: .rounded, weight: .bold))
                 .multilineTextAlignment(.center)
-                Text(
-                    result.showsNewCollectible
-                        ? "Added to \(theme.name)"
-                        : practiceStatusMessage
-                )
-                .font(.system(.subheadline, design: .rounded, weight: .medium))
-                .foregroundStyle(theme.ink.opacity(0.62))
             }
             .frame(minWidth: 230, maxWidth: 260)
         }
@@ -303,12 +276,6 @@ struct QuestResultView: View {
         TadaPanel(theme: theme) {
             VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
                 HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                    Text("Stars earned")
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                        .foregroundStyle(theme.ink.opacity(0.68))
-
-                    Spacer(minLength: TadaPrimitiveTokens.Spacing.small)
-
                     TadaStarRow(
                         earned: result.earnedStarCount,
                         tint: theme.secondary,
@@ -373,28 +340,12 @@ struct QuestResultView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(
                         result.showsNewCollectible
-                            ? "New collectible"
-                            : "Practice power-up"
-                    )
-                    .font(.system(.caption, design: .rounded, weight: .bold))
-                    .foregroundStyle(theme.ink.opacity(0.68))
-                    Text(
-                        result.showsNewCollectible
                             ? rewardDisplayName
                             : practiceStatusTitle
                     )
                     .font(.system(.headline, design: .rounded, weight: .bold))
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
-                    Text(
-                        result.showsNewCollectible
-                            ? "Added to \(theme.name)"
-                            : practiceStatusMessage
-                    )
-                    .font(.system(.caption, design: .rounded, weight: .medium))
-                    .foregroundStyle(theme.ink.opacity(0.62))
-                    .lineLimit(2)
-
                     if result.showsNewCollectible {
                         TadaRewardShelf(
                             theme: theme,
@@ -490,22 +441,8 @@ struct QuestResultView: View {
             : "Quest complete"
     }
 
-    private var completionMessage: String {
-        result.runKind == .practiceAgain
-            ? "You practiced your \(result.mode.title) words again."
-            : "You finished today’s \(result.mode.title) quest."
-    }
-
     private var practiceStatusTitle: String {
         result.showsReplayAction ? "Tricky words ready" : "All words are strong"
-    }
-
-    private var practiceStatusMessage: String {
-        if result.showsReplayAction {
-            let noun = result.replayWordCount == 1 ? "word" : "words"
-            return "Replay only the \(result.replayWordCount) \(noun) that need another try"
-        }
-        return "Perfect first tries — nothing needs replay"
     }
 
     private var rewardDisplayName: String {

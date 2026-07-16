@@ -335,15 +335,11 @@ struct WriteQuestView: View {
             Button {
                 playPrompt()
             } label: {
-                VStack(spacing: 8) {
-                    Image(
-                        systemName: isPlayingPrompt ? "speaker.wave.3.fill" : "speaker.wave.2.fill"
-                    )
-                    .font(.system(size: isCompact ? 28 : 38, weight: .bold))
-                    .symbolEffect(.variableColor.iterative, isActive: isPlayingPrompt)
-                    Text("Hear")
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                }
+                Image(
+                    systemName: isPlayingPrompt ? "speaker.wave.3.fill" : "speaker.wave.2.fill"
+                )
+                .font(.system(size: isCompact ? 28 : 38, weight: .bold))
+                .symbolEffect(.variableColor.iterative, isActive: isPlayingPrompt)
                 .frame(maxWidth: .infinity, minHeight: isCompact ? 76 : 96)
             }
             .buttonStyle(TadaPrimaryButtonStyle(fill: theme.primary, isCompact: true))
@@ -376,9 +372,6 @@ struct WriteQuestView: View {
         VStack(spacing: 9) {
             HStack(spacing: TadaPrimitiveTokens.Spacing.small) {
                 TadaWorldMascot(theme: theme, pose: .encouraging, size: 42)
-                Label("Write the word you hear", systemImage: "pencil.line")
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                    .foregroundStyle(theme.primary)
 
                 Spacer(minLength: 4)
 
@@ -491,16 +484,16 @@ struct WriteQuestView: View {
     }
 
     private func actionRail(isCompact: Bool) -> some View {
+        let submission = KidSubmissionControl.handwriting
         let actionsAreDisabled = strokes.isEmpty || isChecking
         return VStack(spacing: isCompact ? 9 : 12) {
             Button(action: submit) {
-                VStack(spacing: 5) {
-                    Image(systemName: isChecking ? "hourglass" : "checkmark")
-                        .font(.system(size: isCompact ? 25 : 34, weight: .heavy))
-                    Text(isChecking ? "Checking" : "Done")
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                }
-                .frame(maxWidth: .infinity, minHeight: isCompact ? 72 : 94)
+                Image(systemName: isChecking ? "hourglass" : "checkmark.circle.fill")
+                    .font(.system(size: isCompact ? 34 : 44, weight: .heavy))
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: submission.minimumTouchSize
+                    )
             }
             .buttonStyle(
                 TadaPrimaryButtonStyle(
@@ -510,15 +503,16 @@ struct WriteQuestView: View {
                 strokes.isEmpty || isChecking || isPlayingPrompt
                     || attemptState.completedSummary != nil
             )
-            .accessibilityHint("Checks the whole handwritten word")
+            .accessibilityLabel(isChecking ? "Checking" : submission.accessibilityLabel)
+            .accessibilityHint(submission.accessibilityHint)
+            .accessibilityIdentifier(submission.accessibilityIdentifier)
 
             Button(action: toggleEraser) {
-                Label(
-                    handwritingSelection.isErasing ? "Erasing" : "Erase",
-                    systemImage: handwritingSelection.isErasing
+                Image(
+                    systemName: handwritingSelection.isErasing
                         ? "eraser.fill" : "eraser"
                 )
-                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                .font(.system(.title3, design: .rounded, weight: .bold))
                 .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.plain)
@@ -532,6 +526,7 @@ struct WriteQuestView: View {
             .accessibilityAddTraits(
                 handwritingSelection.isErasing ? .isSelected : []
             )
+            .accessibilityLabel(handwritingSelection.isErasing ? "Erasing" : "Eraser")
             .accessibilityHint("Draw over just the marks you want to remove")
 
             Button(action: clearWriting) {

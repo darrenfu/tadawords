@@ -17,13 +17,8 @@ struct ChildWorldPickerView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: TadaPrimitiveTokens.Spacing.large) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Choose a World")
-                            .font(.system(.largeTitle, design: .rounded, weight: .heavy))
-                        Text(progressText)
-                            .font(.system(.body, design: .rounded, weight: .semibold))
-                            .foregroundStyle(TadaPrimitiveTokens.ColorValue.softInk)
-                    }
+                    Text("Choose a World")
+                        .font(.system(.largeTitle, design: .rounded, weight: .heavy))
 
                     LazyVGrid(columns: columns, spacing: TadaPrimitiveTokens.Spacing.medium) {
                         ForEach(orderedStates, id: \.world) { state in
@@ -38,8 +33,13 @@ struct ChildWorldPickerView: View {
             .background(TadaPrimitiveTokens.ColorValue.neutralSky.opacity(0.36))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close", action: onClose)
-                        .frame(minWidth: 44, minHeight: 44)
+                    Button(action: onClose) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(.title2, design: .rounded, weight: .bold))
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("Close")
+                    .accessibilityHint("Returns to the Kid Lobby")
                 }
             }
         }
@@ -52,13 +52,6 @@ struct ChildWorldPickerView: View {
                 completions: [],
                 currentLocalDay: currentLocalDay
             ).states
-    }
-
-    private var progressText: String {
-        let count = progression?.qualifyingPriorDayCount ?? 0
-        let dayLabel = count == 1 ? "day" : "days"
-        return
-            "\(count) complete \(dayLabel) earned · Finish Read + Write today for tomorrow’s surprise."
     }
 
     private func worldCard(_ state: WorldUnlockState) -> some View {
@@ -75,10 +68,10 @@ struct ChildWorldPickerView: View {
                     .font(.system(.title2, design: .rounded, weight: .heavy))
                     .foregroundStyle(theme.ink)
                 if isCurrent {
-                    Label("Current world", systemImage: "checkmark.circle.fill")
+                    Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(theme.primary)
                 } else if state.isUnlocked {
-                    Label("Ready to explore", systemImage: "sparkles")
+                    Image(systemName: "sparkles")
                         .foregroundStyle(theme.primary)
                 } else {
                     Label(
@@ -178,21 +171,13 @@ struct ChildCollectionView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: TadaPrimitiveTokens.Spacing.large) {
                     HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("My Collection")
-                                .font(.system(.largeTitle, design: .rounded, weight: .heavy))
-                            Text("Finish both Today Quests. New looks arrive tomorrow!")
-                                .font(.system(.body, design: .rounded, weight: .semibold))
-                                .foregroundStyle(theme.ink.opacity(0.68))
-                        }
+                        Text("My Collection")
+                            .font(.system(.largeTitle, design: .rounded, weight: .heavy))
                         Spacer()
                         TadaWorldMascot(theme: theme, pose: .cheering, size: 76)
                     }
 
-                    collectionSectionHeader(
-                        "My Worlds",
-                        detail: "Tap an earned world to use it everywhere."
-                    )
+                    collectionSectionHeader("My Worlds")
                     LazyVGrid(
                         columns: worldColumns,
                         spacing: TadaPrimitiveTokens.Spacing.medium
@@ -202,10 +187,7 @@ struct ChildCollectionView: View {
                         }
                     }
 
-                    collectionSectionHeader(
-                        "My Icons",
-                        detail: "Your original picture is always safe."
-                    )
+                    collectionSectionHeader("My Icons")
                     LazyVGrid(
                         columns: iconColumns,
                         spacing: TadaPrimitiveTokens.Spacing.medium
@@ -221,8 +203,7 @@ struct ChildCollectionView: View {
                     treasureWorldPicker
 
                     collectionSectionHeader(
-                        "\(TadaWorldTheme.from(selectedWorld).name) Treasures",
-                        detail: collectionSummary
+                        "\(TadaWorldTheme.from(selectedWorld).name) Treasures"
                     )
                     LazyVGrid(
                         columns: treasureColumns,
@@ -251,8 +232,13 @@ struct ChildCollectionView: View {
             )
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close", action: onClose)
-                        .frame(minWidth: 44, minHeight: 44)
+                    Button(action: onClose) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(.title2, design: .rounded, weight: .bold))
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("Close")
+                    .accessibilityHint("Returns to the Kid Lobby")
                 }
             }
         }
@@ -322,24 +308,9 @@ struct ChildCollectionView: View {
             }
     }
 
-    private var collectionSummary: String {
-        guard let collection = collections[selectedWorld] else {
-            return "Complete a Today Quest here to find the first treasure."
-        }
-        return "\(collection.collectedCount) of \(collection.items.count) treasures found"
-    }
-
-    private func collectionSectionHeader(
-        _ title: String,
-        detail: String
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.system(.title2, design: .rounded, weight: .heavy))
-            Text(detail)
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                .foregroundStyle(theme.ink.opacity(0.68))
-        }
+    private func collectionSectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(.title2, design: .rounded, weight: .heavy))
     }
 
     private func worldCard(_ world: WorldTheme) -> some View {
@@ -359,13 +330,12 @@ struct ChildCollectionView: View {
                     Text(worldTheme.name)
                         .font(.system(.headline, design: .rounded, weight: .heavy))
                         .foregroundStyle(worldTheme.ink)
-                    Label(
-                        isCurrent ? "Using now" : (isUnlocked ? "Earned" : "Locked preview"),
-                        systemImage: isCurrent
+                    Image(
+                        systemName: isCurrent
                             ? "checkmark.circle.fill"
                             : (isUnlocked ? "sparkles" : "lock.fill")
                     )
-                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .font(.system(.title3, design: .rounded, weight: .bold))
                     .foregroundStyle(
                         isUnlocked ? worldTheme.primary : worldTheme.ink.opacity(0.60)
                     )
@@ -479,9 +449,6 @@ struct ChildCollectionView: View {
                 .font(.system(.caption, design: .rounded, weight: .bold))
                 .foregroundStyle(theme.ink)
                 .lineLimit(1)
-            Text(isCurrent ? "Using" : (isUnlocked ? "Earned" : "Locked"))
-                .font(.system(.caption2, design: .rounded, weight: .heavy))
-                .foregroundStyle(isUnlocked ? theme.primary : theme.ink.opacity(0.55))
         }
         .frame(maxWidth: .infinity, minHeight: 130)
         .padding(10)
@@ -549,13 +516,6 @@ struct ChildCollectionView: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
 
-                Text(presentation.statusText)
-                    .font(.system(.caption2, design: .rounded, weight: .heavy))
-                    .foregroundStyle(
-                        state.isCollected
-                            ? theme.primary
-                            : theme.ink.opacity(0.50)
-                    )
             }
             .frame(maxWidth: .infinity, minHeight: 148)
             .padding(10)

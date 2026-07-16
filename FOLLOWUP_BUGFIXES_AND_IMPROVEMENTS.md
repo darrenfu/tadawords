@@ -425,3 +425,35 @@ child/Parent acceptance remains open.
   became unavailable before the corrected package could install, and the iPad
   Air 13-inch (M4) paired Wi-Fi tunnel timed out. Reconnect those two devices,
   install `2026071504`, and inventory-verify before physical acceptance.
+
+## v0.6.0 — 2026-07-15
+
+Target release: `v0.6.0`
+
+Branch: `agent/batch-kid-ui-v0.6.0`
+
+Build: `2026071601`
+
+Overall state: implementation, strict lint, and 641/641 Swift tests pass.
+Exact-HEAD simulator, signed-device, and child-usability evidence remain required.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V060-UX-001 | UX improvement | Kid UI | Remove visible copy that repeats an obvious icon, target, state, or artwork across Profile, Lobby, Read, Write/Spell, Results, Worlds, Calendar, and Collection. Keep profile names, Read/Write identities, target words/slots, meaningful progress, destructive/recovery labels, and full VoiceOver meaning. | Implemented; simulator/device evidence pending | Use the copy matrix and before/after captures on iPhone 17 Pro Max and target iPad. Verify both Done controls are checkmark-first 72×72 pt actions with stable identifiers, VoiceOver label/hint, and unchanged behavior. Exercise VoiceOver, Dynamic Type, Reduce Motion, Reduced Sound, both landscape directions, error/loading/locked states, and the critical E2E matrix. |
+
+### 2026-07-15 v0.6.0 notes
+
+- Replaced repeated Profile, Lobby, quest, result, World, Calendar, and Collection
+  explanations with existing SF Symbols, state borders, mascots, stars, rewards,
+  and selection/lock badges.
+- Kept the visible `Read` and `Write` identities, profile names, target words and
+  letter slots, meaningful locked-world progress, destructive `Clear`, and all
+  loading, permission, technical retry, and parent-recovery copy.
+- Converted handwriting and Spell submission to checkmark-first controls using
+  a shared 72 pt Kid action token. Both keep `Done` as the VoiceOver label,
+  retain explicit hints, and expose stable `write.done` / `spell.done` hooks.
+- Added a route-by-route copy disposition matrix and focused regression tests
+  for idle Read copy suppression, stateful microphone feedback, submission
+  accessibility contracts, stable identifiers, and the 72 pt touch target.
+- Reserved version `0.6.0` and monotonic build `2026071601` across production,
+  LocalQA, XcodeGen configuration, generated project settings, and release docs.

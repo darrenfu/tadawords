@@ -1,6 +1,48 @@
 import Foundation
 import TadaWordsContent
+import TadaWordsDesignSystem
 import TadaWordsDomain
+
+enum KidSubmissionControl: CaseIterable {
+    case handwriting
+    case spelling
+
+    var accessibilityIdentifier: String {
+        switch self {
+        case .handwriting:
+            "write.done"
+        case .spelling:
+            "spell.done"
+        }
+    }
+
+    var accessibilityLabel: String { "Done" }
+
+    var accessibilityHint: String {
+        switch self {
+        case .handwriting:
+            "Checks the whole handwritten word"
+        case .spelling:
+            "Checks the whole spelled word"
+        }
+    }
+
+    var minimumTouchSize: CGFloat {
+        TadaChildScaleTokens.Action.primaryTouchDiameter
+    }
+}
+
+enum KidReadMicrophonePresentation {
+    static func visibleStatus(
+        isRequestingPermission: Bool,
+        isListening: Bool
+    ) -> String? {
+        if isRequestingPermission {
+            return "Checking microphone…"
+        }
+        return isListening ? "Listening…" : nil
+    }
+}
 
 enum QuestBlockReason: Equatable {
     case emptyPool

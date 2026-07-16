@@ -31,23 +31,21 @@ struct ChildQuestCalendarView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Quest Calendar")
                     .font(.system(.title, design: .rounded, weight: .heavy))
-                if let profile {
-                    Text("\(profile.displayName)’s completed quests")
-                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(theme.ink.opacity(0.65))
-                }
             }
             Spacer()
             Button(action: onClose) {
-                Label("Close", systemImage: "xmark.circle.fill")
-                    .font(.system(.headline, design: .rounded, weight: .bold))
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(.title2, design: .rounded, weight: .bold))
             }
             .buttonStyle(
                 TadaPrimaryButtonStyle(
                     fill: theme.surface,
                     foreground: theme.ink,
                     isCompact: true
-                ))
+                )
+            )
+            .accessibilityLabel("Close")
+            .accessibilityHint("Returns to the Kid Lobby")
         }
     }
 

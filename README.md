@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.5.1%20QA-6D48D7" alt="v0.5.1 QA">
+  <img src="https://img.shields.io/badge/status-v0.6.0%20QA-6D48D7" alt="v0.6.0 QA">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
@@ -21,7 +21,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** The `v0.5.1` branch packages version `0.5.1` (build `2026071504`). It adds a World-themed Parent Home with Back navigation and reduced copy, a 1.8s launch page with the official Tada Words and Pawgoo marks, and bounded recovery paths for connected, mixed-case, or target-aligned numeric-zero `of` handwriting. The tree passes **638/638** Swift tests and strict format lint. The complete nine-flow simulator UI matrix passes on phone and tablet; physical child/Parent acceptance remains open. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** The `agent/batch-kid-ui-v0.6.0` branch packages version `0.6.0` (build `2026071601`). It applies a visual-first, low-copy reduction to Kid Profile, Lobby, Read, Write/Spell, Results, Worlds, Calendar, and Collection while preserving full VoiceOver meaning and recovery copy. Strict format lint and 641/641 Swift tests pass; current-HEAD simulator and physical-device evidence remains required before human review. See the [Kid copy matrix](Docs/KID_UI_COPY_MATRIX_v0.6.0.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), and [acceptance checklist](MVP_ACCEPTANCE.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
