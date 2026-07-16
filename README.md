@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.5.1%20QA-6D48D7" alt="v0.5.1 QA">
+  <img src="https://img.shields.io/badge/status-v0.5.2%20QA-6D48D7" alt="v0.5.2 QA">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
@@ -144,7 +144,7 @@ build, commit, and bundle ID:
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.5.2 2026071502 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.5.2 2026071505 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 The local [Issue Agent](Automation/issue-agent/README.md) polls ready GitHub
