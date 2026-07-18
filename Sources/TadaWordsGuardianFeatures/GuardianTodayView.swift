@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import TadaWordsDesignSystem
 import TadaWordsDomain
@@ -429,6 +430,7 @@ struct GuardianAppAndFamilyView: View {
                 accessibilityIdentifier: "guardian.app.sync",
                 action: onOpenFamilySync
             )
+            GuardianPrivacyAndSupportSection()
         }
     }
 
@@ -440,6 +442,187 @@ struct GuardianAppAndFamilyView: View {
             snapshot.practiceSettings.interface.leftHandedLayoutEnabled
         let hand = usesLeftHandedControls ? "Left-handed controls" : "Right-handed controls"
         return "\(music) · \(voice) · \(hand)"
+    }
+}
+
+enum GuardianParentResource: String, CaseIterable, Equatable {
+    case privacyPolicy
+    case support
+
+    var title: String {
+        switch self {
+        case .privacyPolicy:
+            "Privacy Policy"
+        case .support:
+            "Support"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .privacyPolicy:
+            "How Tada Words handles family data"
+        case .support:
+            "Help, troubleshooting, and contact"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .privacyPolicy:
+            "hand.raised.fill"
+        case .support:
+            "questionmark.bubble.fill"
+        }
+    }
+
+    var destination: URL {
+        switch self {
+        case .privacyPolicy:
+            URL(string: "https://pawgoo.app/en/tadawords/privacy")!
+        case .support:
+            URL(string: "https://pawgoo.app/en/support")!
+        }
+    }
+
+    var accessibilityIdentifier: String {
+        switch self {
+        case .privacyPolicy:
+            "guardian.app.privacy-policy"
+        case .support:
+            "guardian.app.support"
+        }
+    }
+}
+
+enum GuardianDataControlCopy {
+    static let localProfileDeletion =
+        "From Parent Home, tap the child card, choose Edit, then Delete profile. "
+        + "This removes that child’s words, settings, quest history, rewards, and saved picture from this device."
+
+    static let permissionManagement =
+        "Open the iOS Settings app, choose Apps, then Tada Words to review Camera, Photos, Microphone, Speech Recognition, and Notifications."
+}
+
+private struct GuardianPrivacyAndSupportSection: View {
+    var body: some View {
+        GuardianCard {
+            VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.medium) {
+                VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.xSmall) {
+                    Text("Privacy & Support")
+                        .font(.system(.title3, design: .rounded, weight: .bold))
+                    Text(
+                        "Parent resources open outside Tada Words and require an internet connection."
+                    )
+                    .font(.system(.subheadline, design: .rounded, weight: .medium))
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                }
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                        resourceLinks
+                    }
+                    VStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                        resourceLinks
+                    }
+                }
+
+                Divider()
+
+                Text("Data controls")
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+
+                GuardianDataControlGuide(
+                    title: "Delete a local profile",
+                    detail: GuardianDataControlCopy.localProfileDeletion,
+                    symbol: "person.crop.circle.badge.minus",
+                    accessibilityIdentifier: "guardian.app.local-profile-deletion"
+                )
+                GuardianDataControlGuide(
+                    title: "Manage iOS permissions",
+                    detail: GuardianDataControlCopy.permissionManagement,
+                    symbol: "gearshape.fill",
+                    accessibilityIdentifier: "guardian.app.permission-management"
+                )
+            }
+        }
+        .accessibilityIdentifier("guardian.app.privacy-and-support")
+    }
+
+    @ViewBuilder private var resourceLinks: some View {
+        ForEach(GuardianParentResource.allCases, id: \.self) { resource in
+            GuardianParentResourceLink(resource: resource)
+        }
+    }
+}
+
+private struct GuardianParentResourceLink: View {
+    let resource: GuardianParentResource
+
+    var body: some View {
+        Link(destination: resource.destination) {
+            HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                Image(systemName: resource.symbol)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(resource.title)
+                        .font(.system(.headline, design: .rounded, weight: .bold))
+                    Text(resource.summary)
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: GuardianPrimitiveTokens.Spacing.xSmall)
+                Image(systemName: "arrow.up.right.square")
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity, minHeight: TadaPrimitiveTokens.TouchTarget.minimum)
+            .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
+            .padding(.vertical, GuardianPrimitiveTokens.Spacing.small)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(GuardianSemanticTokens.primary)
+        .background(
+            GuardianSemanticTokens.primary.opacity(0.08),
+            in: RoundedRectangle(
+                cornerRadius: GuardianPrimitiveTokens.Radius.medium,
+                style: .continuous
+            )
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(resource.title)
+        .accessibilityHint("Opens \(resource.title) in your web browser")
+        .accessibilityIdentifier(resource.accessibilityIdentifier)
+    }
+}
+
+private struct GuardianDataControlGuide: View {
+    let title: String
+    let detail: String
+    let symbol: String
+    let accessibilityIdentifier: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: GuardianPrimitiveTokens.Spacing.small) {
+            Image(systemName: symbol)
+                .font(.system(.headline, design: .rounded, weight: .semibold))
+                .foregroundStyle(GuardianSemanticTokens.primary)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                Text(detail)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title). \(detail)")
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
