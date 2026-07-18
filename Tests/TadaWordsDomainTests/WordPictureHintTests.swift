@@ -12,6 +12,11 @@ final class WordPictureHintTests: XCTestCase {
             WordPictureHintCatalog.descriptor(for: "Unicorn")?.assetCode,
             "1f984"
         )
+        XCTAssertEqual(
+            WordPictureHintCatalog.descriptor(for: "bike")?.assetCode,
+            WordPictureHintCatalog.descriptor(for: "bicycle")?.assetCode
+        )
+        XCTAssertEqual(WordPictureHintCatalog.assetCodes.count, 74)
     }
 
     func testAbstractAndFunctionWordsFailClosed() {

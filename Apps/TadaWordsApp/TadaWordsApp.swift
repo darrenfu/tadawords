@@ -25,18 +25,10 @@ struct TadaWordsApp: App {
     init() {
         let experience = AppleAudioExperienceService()
         let voiceprints = KeychainDeviceVoiceprintRepository()
-        let pictureCacheDirectory =
-            ((try? Self.cachesDirectory())
-            ?? FileManager.default.temporaryDirectory)
-            .appendingPathComponent("TadaWords/word-pictures", isDirectory: true)
         let teacherAudioCacheDirectory =
             ((try? Self.cachesDirectory())
             ?? FileManager.default.temporaryDirectory)
             .appendingPathComponent("TadaWords/teacher-audio", isDirectory: true)
-        try? FileManager.default.createDirectory(
-            at: pictureCacheDirectory,
-            withIntermediateDirectories: true
-        )
         #if targetEnvironment(simulator) || LOCAL_DEVICE_QA
             // CKContainer traps when an intentionally unsigned simulator build
             // has no iCloud entitlement. Simulator and Local Device QA builds
@@ -47,9 +39,7 @@ struct TadaWordsApp: App {
         #endif
         audioExperienceService = experience
         voiceprintRepository = voiceprints
-        pictureHintProvider = AppleWordPictureHintService(
-            cacheDirectory: pictureCacheDirectory
-        )
+        pictureHintProvider = AppleWordPictureHintService()
         voiceprintEnrollmentService = AppleVoiceprintEnrollmentService(
             repository: voiceprints,
             audioExperienceService: experience

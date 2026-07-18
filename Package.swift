@@ -65,7 +65,10 @@ let package = Package(
         .target(
             name: "TadaWordsApplePlatform",
             dependencies: ["TadaWordsDomain"],
-            resources: [.copy("Resources/Audio")]
+            resources: [
+                .copy("Resources/Audio"),
+                .copy("Resources/PictureHints"),
+            ]
         ),
         .executableTarget(
             name: "TadaWordsPreview",
