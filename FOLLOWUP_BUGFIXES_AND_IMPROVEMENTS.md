@@ -488,3 +488,49 @@ physical link opening and human accessibility acceptance remain open.
   resource flow passes on iPhone 17 Pro Max and iPad Pro 13-inch simulators.
   Physical Safari opening, offline behavior, VoiceOver, and large Dynamic Type
   remain human release acceptance work.
+
+## v0.6.7 — 2026-07-18
+
+Target release: `v0.6.7`
+
+Branch: `agent/batch-automation-v0.6.7`
+
+Build: `2026071804`
+
+Overall state: release-candidate preflight and Issue Agent scheduler changes
+pass the complete automated suite; live LaunchAgent installation and exact-HEAD
+runtime observation are recorded separately from PR merge acceptance.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| AUTO-020 | Feature | Release automation | Generate a deterministic release-candidate manifest only after source identity, signature, entitlement, resource, privacy, and clean-tree checks pass. | Automated pass | Run the preflight against a signed archive/export and retain its exact-HEAD manifest. |
+| AUTO-038 | Policy | Versioning | While the first public App Store release is incomplete, reject any current, reserved, or proposed version above `v1.0.0`; ordinary Issue examples are not reservations. | Automated pass | Accept `v0.9.9`, `v0.10.0`, and the ceiling; reject `v1.0.1`, `v1.1.0`, and `v2.0.0`; require complete owner evidence before the post-release transition. |
+| AUTO-047 | Reliability | Pickup ownership | Add `agent-reclaimed` before implementation and acquire a unique remote lease so overlapping workers cannot both implement one Issue. | Automated pass; live contention observation pending | Run overlapping polls and prove one lease winner, one safe skip, and no duplicate branch/PR. |
+| AUTO-048 | Reliability | PR reconciliation | Link exact open-PR ownership and close a stale Issue only for an exact closing reference merged into current `origin/main` with no later reopen. | Automated pass; live reconciliation pending | Exercise open PR, merged PR, reopened Issue, fuzzy mention, owner branch marker, and changed PR HEAD. |
+| AUTO-049 | Operations | Scheduler | Run every 900 seconds with `gpt-5.6-sol` and reasoning effort `ultra`, under one whole-worker macOS lock. | Automated pass; live LaunchAgent observation pending | Verify loaded plist interval/model/effort, overlapping ticks, empty queue no-op, and log/state retention. |
+| AUTO-050 | Process | Issue-first delivery | Every implementation/change request searches and deduplicates Issues, creates bounded missing Issues, then immediately reclaims before editing. Answer, diagnosis, review, and status requests remain read-only. | Automated pass | Review repo instructions and start a fresh implementation session through the same reclaim path. |
+| AUTO-051 | Reliability | Admission and blockers | Pickup order is P0→P1→P2→P3→unspecified, then dependencies/Issue number. A blocker produces a durable report, blocked state, claim removal, and verified lease release. | Automated pass; live blocked recovery pending | Prove P0 ordering, blocked release, companion-batch release, fresh reclaim requirement, active-PR serialization, and remote-branch duplicate prevention. |
+
+### 2026-07-18 v0.6.7 notes
+
+- Changed the LaunchAgent interval from 10 to 15 minutes and pinned unattended
+  execution to Sol Ultra after a local model-catalog check and real probe.
+- Replaced the PID-directory race with a whole-worker `lockf` lock. A two-runner
+  test proves the second process exits before inspection while the first owns
+  the lock through the simulated Codex phase.
+- Added exact open/merged PR reconciliation, owner-authored remote branch
+  ownership markers, fresh-main merge reachability, and reopen protection.
+  Fuzzy text and title similarity never close an Issue.
+- Added visible reclaim labels plus unique remote lease commits, live rechecks
+  before mutation, guarded lease deletion, failed-reservation cleanup, and
+  durable outcome verification before event acknowledgement.
+- Added priority-first, explicit-batch-only admission. Similar `area` labels no
+  longer combine unrelated Issues, and the default active implementation lane
+  is one exact-HEAD batch.
+- Added blocker reporting/release. The legacy blocked Audio Issue #13 was
+  released from its claim and version/build reservation; its unchanged remote
+  placeholder branch was removed while the blocker evidence remained.
+- Added a repository-owned pre-App-Store version policy and stopped treating
+  version examples in Issue prose as active reservations.
+- The full exact-tree gate passes: strict Swift format, 646/646 Swift tests,
+  37/37 Issue Agent tests, and 11/11 release-preflight tests.

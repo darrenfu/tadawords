@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "first_public_app_store_release": {
+    "status": "incomplete",
+    "version_ceiling": "1.0.0",
+    "public_app_store_url": null,
+    "released_version": null,
+    "released_build": null,
+    "release_manifest": null,
+    "owner_authorization": null
+  }
+}
