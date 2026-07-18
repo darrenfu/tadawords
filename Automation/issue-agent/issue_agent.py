@@ -41,6 +41,10 @@ BRANCH_MARKER_RE = re.compile(
     r"tada-issue-agent:coverage:branch-[^\s>]+.*?branch `([^`]+)` at `([0-9a-f]{7,40})`",
     re.IGNORECASE | re.DOTALL,
 )
+LEASE_COMMENT_RE = re.compile(
+    r"tada-issue-agent:lease:[^\s>]+.*?Remote lease `([^`]+)` is `([0-9a-f]{40})`",
+    re.IGNORECASE | re.DOTALL,
+)
 
 AREA_KEYWORDS: dict[str, tuple[str, ...]] = {
     "parent": (
@@ -626,6 +630,30 @@ def branch_coverage_from_comments(
     return coverage
 
 
+def lease_ownership_from_comments(
+    repo: str, issue_number: int
+) -> dict[str, str] | None:
+    for comment in reversed(issue_comments(repo, issue_number)):
+        if (comment.get("user") or {}).get("login") != owner_login(repo):
+            continue
+        match = LEASE_COMMENT_RE.search(str(comment.get("body") or ""))
+        if match:
+            branch, commit = match.groups()
+            return {
+                "lease_branch": branch,
+                "lease_ref": f"refs/heads/{branch}",
+                "lease_commit": commit,
+            }
+    return None
+
+
+def lease_issue_numbers(lease_branch: str, fallback: int) -> list[int]:
+    match = re.search(r"/batch-([0-9]+(?:-[0-9]+)*)$", lease_branch)
+    if not match:
+        return [fallback]
+    return sorted({int(value) for value in match.group(1).split("-")})
+
+
 def explicit_remote_branch_coverage(
     issue_number: int, control_repo: Path
 ) -> list[dict[str, Any]]:
@@ -968,6 +996,24 @@ def inspect(args: argparse.Namespace) -> dict[str, Any]:
         for coverage in entries
         if coverage.get("action") not in {None, "none"}
     ]
+    closing_issue_numbers = {
+        int(action["issue"])
+        for action in reconciliation_actions
+        if action.get("action") == "close_stale_issue"
+    }
+    reconciliation_actions.extend(
+        {
+            "issue": int(issue["number"]),
+            "action": "release_blocked_claim",
+            "type": "blocked_claim",
+            "blocking_labels": sorted(label_names(issue).intersection(BLOCKING_LABELS)),
+            "updated_at": issue.get("updatedAt"),
+        }
+        for issue in issues
+        if label_names(issue).intersection(CLAIMED_LABELS)
+        and label_names(issue).intersection(BLOCKING_LABELS)
+        and int(issue["number"]) not in closing_issue_numbers
+    )
 
     ready = [
         issue
@@ -1134,6 +1180,63 @@ def reconcile(args: argparse.Namespace) -> dict[str, Any]:
         issue = live_issue(args.repo, number)
         if issue.get("state") != "OPEN":
             results.append({"issue": number, "result": "already_closed"})
+            continue
+        if requested.get("action") == "release_blocked_claim":
+            blocking_labels = sorted(label_names(issue).intersection(BLOCKING_LABELS))
+            if not blocking_labels or not label_names(issue).intersection(
+                CLAIMED_LABELS
+            ):
+                results.append(
+                    {"issue": number, "result": "blocked_claim_already_released"}
+                )
+                continue
+            lease = lease_ownership_from_comments(args.repo, number)
+            companion_numbers = (
+                lease_issue_numbers(str(lease["lease_branch"]), number)
+                if lease
+                else [number]
+            )
+            marker = (
+                f"tada-issue-agent:blocker-release:observed-{number}-"
+                f"{requested.get('updated_at') or 'unknown'}"
+            )
+            comment_with_marker(
+                args.repo,
+                number,
+                marker,
+                (
+                    "The scheduler found this claimed Issue blocked by: "
+                    f"{', '.join(blocking_labels)}. It is releasing the visible "
+                    "claim and any owner-verified lease so it cannot occupy the "
+                    "priority queue. Resolve the blocker and perform a fresh reclaim "
+                    "before continuing."
+                ),
+            )
+            for companion in companion_numbers:
+                companion_issue = live_issue(args.repo, companion)
+                if companion_issue.get("state") == "OPEN":
+                    remove_claim_labels(args.repo, companion_issue)
+                if companion != number:
+                    comment_with_marker(
+                        args.repo,
+                        companion,
+                        f"tada-issue-agent:companion-release:observed-{number}",
+                        (
+                            f"The shared reservation was released because Issue #{number} "
+                            "is blocked. This Issue must be freshly reclaimed before work."
+                        ),
+                    )
+            if lease:
+                release_reservation_lease(lease, control_repo)
+            results.append(
+                {
+                    "issue": number,
+                    "result": "released_blocked_claim",
+                    "blocking_labels": blocking_labels,
+                    "released_issue_numbers": companion_numbers,
+                    "released_lease": lease.get("lease_branch") if lease else None,
+                }
+            )
             continue
         live_coverage = coverage_for_issue(args.repo, issue, control_repo)
         matching = next(

@@ -304,6 +304,59 @@ class ReservationTests(unittest.TestCase):
 
 
 class ReleaseAndAcknowledgementTests(unittest.TestCase):
+    def test_reconcile_reports_and_releases_preexisting_blocked_claim(self):
+        snapshot = {
+            "reconciliation_actions": [
+                {
+                    "issue": 47,
+                    "action": "release_blocked_claim",
+                    "type": "blocked_claim",
+                    "blocking_labels": ["agent-blocked"],
+                    "updated_at": "2026-07-18T16:00:00Z",
+                }
+            ]
+        }
+        blocked = issue(
+            47, ["agent-ready", "agent-claimed", "agent-reclaimed", "agent-blocked"]
+        )
+        removed: list[int] = []
+        comments: list[tuple] = []
+        args = Namespace(
+            snapshot="/snapshot.json", repo="owner/repo", control_repo="/control"
+        )
+        with (
+            mock.patch.object(issue_agent, "read_snapshot", return_value=snapshot),
+            mock.patch.object(issue_agent, "run", return_value=""),
+            mock.patch.object(issue_agent, "live_issue", side_effect=[blocked, blocked]),
+            mock.patch.object(
+                issue_agent, "lease_ownership_from_comments", return_value=None
+            ),
+            mock.patch.object(
+                issue_agent,
+                "remove_claim_labels",
+                side_effect=lambda _repo, value: removed.append(value["number"]),
+            ),
+            mock.patch.object(
+                issue_agent,
+                "comment_with_marker",
+                side_effect=lambda *values: comments.append(values),
+            ),
+        ):
+            result = issue_agent.reconcile(args)
+
+        self.assertEqual(result["results"][0]["result"], "released_blocked_claim")
+        self.assertEqual(removed, [47])
+        self.assertIn("agent-blocked", comments[0][3])
+
+    def test_lease_companions_are_derived_only_from_canonical_batch_ref(self):
+        self.assertEqual(
+            issue_agent.lease_issue_numbers("agent/leases/batch-47-48", 47),
+            [47, 48],
+        )
+        self.assertEqual(
+            issue_agent.lease_issue_numbers("agent/custom-branch", 47), [47]
+        )
+
     def test_blocker_release_reports_then_removes_claims_and_lease_durably(self):
         lease_commit = "d" * 40
         lease_ref = "refs/heads/agent/leases/batch-47-48"
