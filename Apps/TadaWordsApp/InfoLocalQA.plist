@@ -34,6 +34,8 @@
 	<string>Tada Words lets a parent choose a profile photo or a word-sheet photo for on-device text recognition.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Tada Words uses on-device speech recognition to compare the spoken practice word and give immediate feedback.</string>
+	<key>TadaWordsGitCommit</key>
+	<string>$(TADA_GIT_COMMIT)</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

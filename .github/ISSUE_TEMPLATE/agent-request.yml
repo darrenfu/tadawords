@@ -1,0 +1,103 @@
+name: Agent-ready product request
+description: Report a bug, improvement, or feature for release-batch delivery.
+title: "[Area] "
+labels:
+  - agent-ready
+body:
+  - type: dropdown
+    id: request-type
+    attributes:
+      label: Request type
+      options:
+        - Bug
+        - Improvement
+        - Feature
+        - Chore
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Product area
+      description: The worker verifies this selection against the affected code.
+      options:
+        - Parent / Guardian / Profiles
+        - Audio / Speech / Recording
+        - OCR / Import / Word Pools
+        - Child Read / Write / Rewards
+        - Automation / Release / QA
+        - Cross-cutting / Unknown
+    validations:
+      required: true
+
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Initial risk
+      options:
+        - Low
+        - Medium
+        - High — approval required before implementation
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and current behavior
+      description: Preserve concrete UI copy, observed behavior, and user impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Open …
+        2. Tap …
+        3. Observe …
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] …
+        - [ ] iPhone …
+        - [ ] iPad …
+    validations:
+      required: true
+
+  - type: textarea
+    id: edges
+    attributes:
+      label: Edge cases and failure states
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Explicitly out of scope
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots, recordings, logs, or source messages
+
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Readiness confirmation
+      options:
+        - label: The expected behavior is specific enough to test.
+          required: true
+        - label: No passwords, tokens, child recordings, or other secrets are included.
+          required: true
