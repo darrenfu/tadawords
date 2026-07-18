@@ -457,3 +457,34 @@ Exact-HEAD simulator, signed-device, and child-usability evidence remain require
   accessibility contracts, stable identifiers, and the 72 pt touch target.
 - Reserved version `0.6.0` and monotonic build `2026071601` across production,
   LocalQA, XcodeGen configuration, generated project settings, and release docs.
+
+## v0.6.1 — 2026-07-17
+
+Target release: `v0.6.1`
+
+Branch: `agent/batch-parent-v0.6.1`
+
+Build: `2026071701`
+
+Overall state: Issue #15 implementation and automated simulator coverage pass;
+physical link opening and human accessibility acceptance remain open.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| APPSTORE-015 | Improvement | Parent privacy/support | Expose Pawgoo's Privacy Policy and Support pages only after the Parent Gate, and explain how a parent deletes local Profile data or reviews iOS permissions without changing data behavior. | Automated pass; physical link QA pending | On iPhone and iPad, complete the Parent Gate, open App & Family, follow both links, return to the same Parent state, retry offline, and inspect VoiceOver plus large Dynamic Type. |
+
+### 2026-07-17 v0.6.1 notes
+
+- Added fixed HTTPS links for the Tada Words Privacy Policy and Pawgoo Support
+  page inside the protected App & Family surface. Link labels, browser-opening
+  hints, and stable accessibility identifiers are explicit.
+- Added parent-facing instructions for deleting one child's local Profile data
+  and for reviewing Camera, Photos, Microphone, Speech Recognition, and
+  Notifications in iOS Settings. No account, tracking, analytics, purchase, or
+  data-collection behavior changed.
+- Set release and LocalQA identity to v0.6.1 (`2026071701`) across source Plists,
+  `project.yml`, and the generated Xcode project.
+- Strict format lint, all 643 Swift tests, and all 14 Issue Agent tests pass. The focused App & Family
+  resource flow passes on iPhone 17 Pro Max and iPad Pro 13-inch simulators.
+  Physical Safari opening, offline behavior, VoiceOver, and large Dynamic Type
+  remain human release acceptance work.

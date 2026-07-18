@@ -65,6 +65,53 @@ final class GuardianParentNavigationTests: XCTestCase {
         )
     }
 
+    func testParentResourcesUseOnlyExpectedPawgooHTTPSDestinations() {
+        XCTAssertEqual(
+            GuardianParentResource.allCases,
+            [.privacyPolicy, .support]
+        )
+        XCTAssertEqual(
+            GuardianParentResource.privacyPolicy.destination.absoluteString,
+            "https://pawgoo.app/en/tadawords/privacy"
+        )
+        XCTAssertEqual(
+            GuardianParentResource.support.destination.absoluteString,
+            "https://pawgoo.app/en/support"
+        )
+
+        for resource in GuardianParentResource.allCases {
+            XCTAssertEqual(resource.destination.scheme, "https")
+            XCTAssertEqual(resource.destination.host, "pawgoo.app")
+            XCTAssertNil(resource.destination.query)
+            XCTAssertNil(resource.destination.fragment)
+            XCTAssertFalse(resource.accessibilityIdentifier.isEmpty)
+        }
+    }
+
+    func testDataControlCopyNamesExistingParentPathsAndIOSPermissions() {
+        XCTAssertTrue(
+            GuardianDataControlCopy.localProfileDeletion.contains(
+                "tap the child card, choose Edit, then Delete profile"
+            )
+        )
+        XCTAssertTrue(
+            GuardianDataControlCopy.localProfileDeletion.contains("from this device")
+        )
+
+        for permission in [
+            "Camera",
+            "Photos",
+            "Microphone",
+            "Speech Recognition",
+            "Notifications",
+        ] {
+            XCTAssertTrue(
+                GuardianDataControlCopy.permissionManagement.contains(permission),
+                "Permission guidance should name \(permission)."
+            )
+        }
+    }
+
     func testPracticePlanMergePreservesHiddenAppAndFamilySettings() throws {
         let settings = makeDistinctSettings()
         let merged = try XCTUnwrap(

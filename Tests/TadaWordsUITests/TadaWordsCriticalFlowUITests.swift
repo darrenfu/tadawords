@@ -113,6 +113,38 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         )
     }
 
+    /// App Store privacy and support resources stay parent-only while remaining
+    /// discoverable in both compact phone and regular-width iPad layouts.
+    func testParentAppAndFamilyExposesPrivacySupportAndDataControls() throws {
+        launchDemo()
+        unlockParentArea()
+
+        let appAndFamily = app.buttons["guardian.home.app-and-family"]
+        XCTAssertTrue(appAndFamily.waitForExistence(timeout: 8))
+        appAndFamily.tap()
+
+        let privacy = element(label: "Privacy Policy")
+        let support = element(label: "Support")
+        let localDeletion = element(labelPrefix: "Delete a local profile.")
+        let permissions = element(labelPrefix: "Manage iOS permissions.")
+
+        for _ in 0..<4 where !privacy.exists {
+            app.scrollViews.firstMatch.swipeUp()
+        }
+
+        XCTAssertTrue(privacy.waitForExistence(timeout: 5))
+        XCTAssertTrue(support.waitForExistence(timeout: 5))
+        XCTAssertEqual(privacy.label, "Privacy Policy")
+        XCTAssertEqual(support.label, "Support")
+
+        for _ in 0..<4 where !permissions.exists {
+            app.scrollViews.firstMatch.swipeUp()
+        }
+
+        XCTAssertTrue(localDeletion.waitForExistence(timeout: 5))
+        XCTAssertTrue(permissions.waitForExistence(timeout: 5))
+    }
+
     /// Covers the parent-session delete contract: only the first deletion asks
     /// for confirmation, every deletion exposes Undo, and sorting remains
     /// interactive after the list mutates.
@@ -444,6 +476,12 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
     private func element(label: String) -> XCUIElement {
         app.descendants(matching: .any).matching(
             NSPredicate(format: "label == %@", label)
+        ).firstMatch
+    }
+
+    private func element(labelPrefix: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(
+            NSPredicate(format: "label BEGINSWITH %@", labelPrefix)
         ).firstMatch
     }
 

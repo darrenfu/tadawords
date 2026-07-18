@@ -21,7 +21,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** The `agent/batch-import-v0.6.2` branch packages version `0.6.2` (build `2026071702`). It carries forward the human-controlled release loop and v0.6.0 visual-first Kid UI, bundles all 74 catalogued Twemoji picture hints for deterministic offline loading, and removes the shipping runtime CDN request. Missing, corrupt, and unexpectedly large picture assets fail closed without blocking practice. Full VoiceOver meaning and recovery copy remain intact; physical child/Parent acceptance remains open. See the [Kid copy matrix](Docs/KID_UI_COPY_MATRIX_v0.6.0.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** The `agent/batch-import-v0.6.2` branch packages version `0.6.2` (build `2026071702`). It carries forward v0.6.1 parent-only Privacy Policy, Support, local profile-deletion, and iOS permission guidance, then bundles all 74 catalogued Twemoji picture hints for deterministic offline loading and removes the shipping runtime CDN request. Missing, corrupt, and unexpectedly large picture assets fail closed without blocking practice. The rebased exact-HEAD validation matrix is recorded on the release PR. See the [Kid copy matrix](Docs/KID_UI_COPY_MATRIX_v0.6.0.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -115,7 +115,7 @@ The iOS target depends on `TadaWordsAppShell`, `TadaWordsApplePlatform`, and `Ta
 - A free Apple Account for direct LocalQA installation on personal devices
 - A paid Apple Developer Program team for TestFlight and CloudKit acceptance
 
-The current v0.6.2 automated run uses Xcode 26.6. Strict checks pass; the exact-HEAD phone/tablet simulator matrix and physical-device acceptance remain open.
+The current v0.6.2 release batch uses Xcode 26.6. Exact-HEAD automated, simulator, signed-device, and human acceptance evidence is recorded on its pull request.
 
 ## Build and test
 
@@ -129,7 +129,7 @@ make check
 open TadaWords.xcodeproj
 ```
 
-`make check` runs strict Swift formatting checks, the Swift package test suite, and the Issue Agent checks. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and the complete v0.3.1 baseline contains **595 tests with zero failures**. The v0.4.1 merged tree also passes **595 tests with zero failures**, including the v0.3.1 World-layout coverage and the updated audio contract. The v0.5 baseline passes **619 tests**, v0.5.1 passes **638**, v0.6.0 passes **641**, and v0.6.2 passes **644 Swift tests plus 14 Issue Agent tests with zero failures**. The Xcode UI target covers Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, OCR Review → Add All → Pool → Sort, and Lobby → Write → Spell. All nine critical flows pass on both the iPhone 17 Pro Max and iPad Pro 13-inch simulators for the merged v0.6.0 baseline; each agent PR records its exact-HEAD matrix separately. A physical-device target calls the public production handwriting service and does not use the demo recognizer.
+`make check` runs strict Swift formatting checks, the Swift package test suite, and the Issue Agent checks. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and the complete v0.3.1 baseline contains **595 tests with zero failures**. The v0.4.1 merged tree also passes **595 tests with zero failures**, including the v0.3.1 World-layout coverage and the updated audio contract. The v0.5 baseline passes **619 tests**, v0.5.1 passes **638**, v0.6.0 passes **641**, and v0.6.1 passes **643 Swift tests plus 14 Issue Agent tests with zero failures**. The Xcode UI target covers Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, OCR Review → Add All → Pool → Sort, Lobby → Write → Spell, and the Parent Privacy/Support/data-control surface. Each release PR records its new exact-HEAD test count and complete phone/tablet matrix. A separate physical-device target calls the public production handwriting service and does not use the demo recognizer.
 
 Run the device-readiness script before installing on an iPhone or iPad:
 
@@ -177,8 +177,9 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 |---|---|
 | Strict Swift format lint | Passed |
 | Version and build | v0.6.2 (`2026071702`) in source Plists and generated project settings |
-| Swift tests | v0.6.2: 644 passed, 0 failures; Issue Agent: 14 passed, 0 failures |
-| Critical XCUITest flows | v0.6.2: validation pending on iPhone and iPad simulators |
+| Swift tests | Exact-HEAD result recorded on PR #30 after integration with v0.6.1 |
+| Parent Privacy/Support XCUITest | v0.6.1 focused flow: 1/1 passed on iPhone 17 Pro Max and 1/1 passed on iPad Pro 13-inch simulators |
+| Critical XCUITest flows | Exact-HEAD v0.6.2 iPhone/iPad matrix recorded on PR #30 |
 | Parent Home | Back navigation, World theme, shared tactile components, and reduced copy passed targeted simulator verification |
 | Launch page | 1.8s minimum, official Tada Words and Pawgoo marks, warm native launch color, audio-before-countdown sequencing, bundled spoken brand signature, and fade policy passed simulator tests; physical listening QA pending |
 | `of` handwriting recovery | Three-scale evidence aggregation, 10-candidate inspection, mixed-case vocabulary, six child-like positive styles, target-aligned `0` → `o` normalization with a real Vision `0f` fixture, 30 paired neighbor controls, cross-scale corroboration, and the `off` veto passed automated tests; child handwriting pending |
