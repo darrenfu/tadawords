@@ -1,104 +1,69 @@
 @preconcurrency import Foundation
+import ImageIO
 import TadaWordsDomain
 
-/// Downloads only the catalogued Twemoji asset for a concrete word and keeps
-/// the tiny PNG in the app's private cache. No child/profile identifier or
-/// learning history is sent with the request.
+/// Resolves the deliberately small picture-hint catalog from the app bundle.
+/// Missing, corrupt, or unexpectedly large artwork fails closed because a
+/// picture is optional assistance and must never block a practice quest.
 public actor AppleWordPictureHintService: WordPictureHintProviding {
     static let attribution =
         "Twemoji graphics by X Corp. and contributors, licensed CC-BY 4.0."
     static let maximumAssetSize = 128 * 1_024
 
-    typealias DataLoader = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+    private static let productionRelativePath =
+        "PictureHints/Twemoji-17.0.3"
 
-    private let cacheDirectory: URL
-    private let dataLoader: DataLoader
+    private let resourceRoot: URL?
 
-    public init(
-        cacheDirectory: URL,
-        session: URLSession = .shared
-    ) {
-        self.cacheDirectory = cacheDirectory
-        dataLoader = { request in
-            try await session.data(for: request)
-        }
+    public init() {
+        resourceRoot = Self.productionResourceRoot()
     }
 
-    init(
-        cacheDirectory: URL,
-        dataLoader: @escaping DataLoader
-    ) {
-        self.cacheDirectory = cacheDirectory
-        self.dataLoader = dataLoader
+    static func productionResourceRoot() -> URL? {
+        Bundle.module.resourceURL?.appendingPathComponent(
+            Self.productionRelativePath,
+            isDirectory: true
+        )
+    }
+
+    init(resourceRoot: URL?) {
+        self.resourceRoot = resourceRoot
     }
 
     public func hint(for rawWord: String) async -> WordPictureHintAsset? {
-        guard let descriptor = WordPictureHintCatalog.descriptor(for: rawWord) else {
+        guard
+            let descriptor = WordPictureHintCatalog.descriptor(for: rawWord),
+            let resourceRoot
+        else {
             return nil
         }
 
-        let fileURL = cacheDirectory.appendingPathComponent(
-            "\(descriptor.assetCode).png",
-            isDirectory: false
-        )
-        if let data = Self.validPNG(at: fileURL) {
-            return Self.asset(data: data, descriptor: descriptor)
-        }
-
-        guard let remoteURL = Self.remoteURL(assetCode: descriptor.assetCode) else {
+        let fileURL =
+            resourceRoot
+            .appendingPathComponent(descriptor.assetCode)
+            .appendingPathExtension("png")
+        guard
+            let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe),
+            Self.isAcceptedAsset(data)
+        else {
             return nil
         }
-        var request = URLRequest(url: remoteURL)
-        request.timeoutInterval = 12
-        request.cachePolicy = .returnCacheDataElseLoad
-        request.setValue("image/png", forHTTPHeaderField: "Accept")
 
-        do {
-            let (data, response) = try await dataLoader(request)
-            guard Self.isAccepted(response: response, data: data) else { return nil }
-            try FileManager.default.createDirectory(
-                at: cacheDirectory,
-                withIntermediateDirectories: true
-            )
-            try data.write(to: fileURL, options: .atomic)
-            return Self.asset(data: data, descriptor: descriptor)
-        } catch {
-            // A picture is optional assistance. Offline/network failures must
-            // never block adding a word or starting a quest.
-            return nil
-        }
-    }
-
-    private static func asset(
-        data: Data,
-        descriptor: WordPictureHintDescriptor
-    ) -> WordPictureHintAsset {
-        WordPictureHintAsset(
+        return WordPictureHintAsset(
             imageData: data,
             accessibilityLabel: descriptor.accessibilityLabel,
-            attribution: attribution
+            attribution: Self.attribution
         )
     }
 
-    private static func remoteURL(assetCode: String) -> URL? {
-        URL(
-            string:
-                "https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.3/assets/72x72/\(assetCode).png"
-        )
-    }
-
-    private static func validPNG(at fileURL: URL) -> Data? {
-        guard let data = try? Data(contentsOf: fileURL), isPNG(data) else {
-            return nil
+    static func isAcceptedAsset(_ data: Data) -> Bool {
+        guard data.count <= maximumAssetSize, isPNG(data) else {
+            return false
         }
-        return data
-    }
-
-    private static func isAccepted(response: URLResponse, data: Data) -> Bool {
-        guard let response = response as? HTTPURLResponse,
-            response.statusCode == 200,
-            data.count <= maximumAssetSize,
-            isPNG(data)
+        guard
+            let source = CGImageSourceCreateWithData(data as CFData, nil),
+            CGImageSourceGetCount(source) == 1,
+            CGImageSourceCreateImageAtIndex(source, 0, nil) != nil
         else {
             return false
         }

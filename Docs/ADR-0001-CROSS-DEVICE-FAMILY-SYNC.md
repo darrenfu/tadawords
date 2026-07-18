@@ -41,11 +41,11 @@ The selected handwriting tool should move into the Profile's interface settings 
 
 - Raw microphone recordings.
 - Voiceprint templates, enrollment samples, or local voiceprint readiness. Each Profile enrolls separately on each device and the template remains in that device's Keychain.
-- Downloaded picture hints.
+- Bundled picture-hint assets, which ship with each app version and are never cloud records.
 - Downloaded canonical teacher-word audio.
 - Rendered music, sound-effect, OCR, or recognition caches.
 
-Picture and teacher-audio caches are disposable. A receiving device downloads an eligible asset on demand and continues with its offline fallback if the asset is unavailable.
+Picture hints arrive inside the app bundle and need no sync or download. Teacher-audio caches are disposable; a receiving device downloads eligible teacher audio on demand and continues with its offline fallback if that asset is unavailable.
 
 Profile photos are not disposable caches. When a parent opts in, the prepared source avatar is Profile data and syncs; move it to a bounded `CKAsset` before production acceptance rather than embedding an unbounded image in a general payload.
 

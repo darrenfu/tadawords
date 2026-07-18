@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.6.1%20QA-6D48D7" alt="v0.6.1 QA">
+  <img src="https://img.shields.io/badge/status-v0.6.2%20agent%20PR-6D48D7" alt="v0.6.2 agent PR">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
@@ -21,7 +21,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.6.1` (build `2026071701`) carries forward the human-controlled Issue → release-batch → versioned PR delivery loop and v0.6.0 visual-first Kid UI, then adds parent-only Privacy Policy and Support links plus local profile-deletion and iOS permission guidance inside App & Family. Full VoiceOver meaning, recovery copy, and the v0.5.1 learning behavior remain intact. The integrated tree passes strict format lint, **643/643** Swift tests, and **14/14** Issue Agent tests. The focused Parent resource flow passes on both iPhone 17 Pro Max and iPad Pro 13-inch simulators; physical link opening and child/Parent acceptance remain open. See the [Kid copy matrix](Docs/KID_UI_COPY_MATRIX_v0.6.0.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** The `agent/batch-import-v0.6.2` branch packages version `0.6.2` (build `2026071702`). It carries forward v0.6.1 parent-only Privacy Policy, Support, local profile-deletion, and iOS permission guidance, then bundles all 74 catalogued Twemoji picture hints for deterministic offline loading and removes the shipping runtime CDN request. Missing, corrupt, and unexpectedly large picture assets fail closed without blocking practice. The rebased exact-HEAD validation matrix is recorded on the release PR. See the [Kid copy matrix](Docs/KID_UI_COPY_MATRIX_v0.6.0.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -40,7 +40,7 @@ Read never speaks the target before the child's first independent response. Afte
 
 Write plays the bundled Katie isolated-word recording at 0.67× for the first 500 covered words and never pre-shows the spelling. The separate Read-hint version uses the same one-and-a-half-times-slower cadence. Both variants retain 120 ms of encoding-safe tail padding so final consonants such as the `/t/` in `at` finish before playback completes. Apple speech is the offline fallback for words outside the pack and keeps a neutral pitch plus enough release time to preserve final consonants. The child first chooses **Write by Hand** or **Spell with Letters**; either choice completes the same Daily Write Quest and shares its Pool, mastery, review schedule, score, and reward. Typed pace is recorded in a separate input-method band so fast key taps never make handwriting look slow. The spelling surface is a fixed-position, theme-colored QWERTY A–Z keyboard built in SwiftUI, so the system keyboard, predictive text, numbers, and symbols never appear. Comparison ignores capitalization, while apostrophes and hyphens are supplied as structural parts of the prompt. Focused Replay keeps the selected input method.
 
-For handwriting, the `?` control reveals the word on demand. After the first genuine mismatch, a concrete word such as `dog` can show a tappable picture hint; abstract and function words such as `the` receive no image. Children can choose Pencil, Chalk, or Brush; ink is always black and the selected tool persists per Profile. The 4× local eraser restores the prior pen after a blank-canvas tap. The canvas is 10% wider, keeps fixed coordinates during feedback and word transitions, and preserves dots, later letters, and connected strokes. Most words retain two lazy Vision raster passes and five candidates per observation. The visually ambiguous target `of` alone gathers three scales and up to 10 candidates before deciding: a lower-ranked exact spelling needs agreement across two scales, while any strong complete `off` spelling vetoes a match. Mixed-case `oF`, connected lowercase `of`, and six child-like shape variations receive this exact, target-specific recovery. A numeric `0` may stand for `o` only when its aligned target position is exactly `o`, so `0f` and `0F` are accepted while `00`, `90`, `0t`, `0ff`, `+0`, and `f0` remain rejected. Technical speech or recognition failures do not reduce the child's score.
+For handwriting, the `?` control reveals the word on demand. After the first genuine mismatch, a concrete word such as `dog` can show a tappable picture hint from the bundled Twemoji pack, including on a fresh offline install; abstract and function words such as `the` receive no image. Children can choose Pencil, Chalk, or Brush; ink is always black and the selected tool persists per Profile. The 4× local eraser restores the prior pen after a blank-canvas tap. The canvas is 10% wider, keeps fixed coordinates during feedback and word transitions, and preserves dots, later letters, and connected strokes. Most words retain two lazy Vision raster passes and five candidates per observation. The visually ambiguous target `of` alone gathers three scales and up to 10 candidates before deciding: a lower-ranked exact spelling needs agreement across two scales, while any strong complete `off` spelling vetoes a match. Mixed-case `oF`, connected lowercase `of`, and six child-like shape variations receive this exact, target-specific recovery. A numeric `0` may stand for `o` only when its aligned target position is exactly `o`, so `0f` and `0F` are accepted while `00`, `90`, `0t`, `0ff`, `+0`, and `f0` remain rejected. Technical speech or recognition failures do not reduce the child's score.
 
 Child-facing stars reward completion, accurate retrieval, and a comfortable personal pace. One immediate unaided recovery can still earn the Accuracy Star, calibration can earn Pace, and the post-calibration slow side gets 50% grace. Guardian accuracy and mastery evidence stay strict.
 
@@ -115,7 +115,7 @@ The iOS target depends on `TadaWordsAppShell`, `TadaWordsApplePlatform`, and `Ta
 - A free Apple Account for direct LocalQA installation on personal devices
 - A paid Apple Developer Program team for TestFlight and CloudKit acceptance
 
-The current v0.6.1 automated run uses Xcode 26.6. The focused Parent resource flow passes on phone and tablet simulators; physical-device acceptance remains open.
+The current v0.6.2 release batch uses Xcode 26.6. Exact-HEAD automated, simulator, signed-device, and human acceptance evidence is recorded on its pull request.
 
 ## Build and test
 
@@ -129,7 +129,7 @@ make check
 open TadaWords.xcodeproj
 ```
 
-`make check` runs strict Swift formatting checks, the Swift package test suite, and the Issue Agent checks. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and the complete v0.3.1 baseline contains **595 tests with zero failures**. The v0.4.1 merged tree also passes **595 tests with zero failures**, including the v0.3.1 World-layout coverage and the updated audio contract. The v0.5 baseline passes **619 tests**, v0.5.1 passes **638**, v0.6.0 passes **641**, and v0.6.1 passes **643 Swift tests plus 14 Issue Agent tests with zero failures**. The Xcode UI target covers Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, OCR Review → Add All → Pool → Sort, Lobby → Write → Spell, and the Parent Privacy/Support/data-control surface. The v0.6.0 nine-flow matrix passed on both simulators; the new v0.6.1 resource flow passes independently on both iPhone 17 Pro Max and iPad Pro 13-inch. A separate physical-device target calls the public production handwriting service and does not use the demo recognizer.
+`make check` runs strict Swift formatting checks, the Swift package test suite, and the Issue Agent checks. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and the complete v0.3.1 baseline contains **595 tests with zero failures**. The v0.4.1 merged tree also passes **595 tests with zero failures**, including the v0.3.1 World-layout coverage and the updated audio contract. The v0.5 baseline passes **619 tests**, v0.5.1 passes **638**, v0.6.0 passes **641**, and v0.6.1 passes **643 Swift tests plus 14 Issue Agent tests with zero failures**. The Xcode UI target covers Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, OCR Review → Add All → Pool → Sort, Lobby → Write → Spell, and the Parent Privacy/Support/data-control surface. Each release PR records its new exact-HEAD test count and complete phone/tablet matrix. A separate physical-device target calls the public production handwriting service and does not use the demo recognizer.
 
 Run the device-readiness script before installing on an iPhone or iPad:
 
@@ -144,7 +144,7 @@ build, commit, and bundle ID:
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.6.1 2026071701 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.6.2 2026071702 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 The local [Issue Agent](Automation/issue-agent/README.md) polls ready GitHub
@@ -160,7 +160,7 @@ Follow [DEVICE_DEPLOYMENT.md](DEVICE_DEPLOYMENT.md) for signing, Developer Mode,
 - Speech and enrollment audio buffers stay in memory. The app does not save or upload raw child recordings.
 - Voice setup shuffles six short Pre-K sentences for the child to hear and repeat. Each device stores only the resulting voiceprint template in Keychain. CloudKit does not sync the template, so each device needs its own enrollment.
 - Practice uses one canonical teacher-voice contract rather than a per-Profile style picker. A versioned offline pack covers 500 words with Katie as the canonical voice and one manifest-documented Aurora quality override for `bun`; other words use the clearest compatible American-English Apple voice already installed. Aurora launch and transition clips are also bundled. No Cartesia API key or runtime Cartesia request is present in the app.
-- Pool import prefetches picture hints only for a child-safe catalog of concrete words. The app requests a fixed Twemoji asset filename, caches the PNG privately, and sends no child name, Profile ID, learning history, or typed word to the content delivery network. Abstract words do not make a request.
+- Pool import prefetches only the child-safe concrete-word picture catalog. All 74 unique Twemoji PNGs are bundled with the app, so a fresh offline install needs no CDN request. Abstract words have no picture mapping.
 - Release builds keep iCloud Family Sync off by default. Completing onboarding does not enable it; a parent must explicitly turn it on in Guardian settings.
 - Turning Family Sync off prevents later lifecycle, manual, and invitation sync calls. It does not yet erase records that were already uploaded.
 - Profile deletion clears local learning data, reminders, and the local voiceprint. It uploads a tombstone that prevents profile resurrection, but it does not yet erase records already stored in CloudKit.
@@ -176,10 +176,10 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Version and build | v0.6.1 (`2026071701`) in source Plists and generated project settings |
-| Swift tests | v0.6.1: 643 passed, 0 failures; Issue Agent: 14 passed, 0 failures |
+| Version and build | v0.6.2 (`2026071702`) in source Plists and generated project settings |
+| Swift tests | Exact-HEAD result recorded on PR #30 after integration with v0.6.1 |
 | Parent Privacy/Support XCUITest | v0.6.1 focused flow: 1/1 passed on iPhone 17 Pro Max and 1/1 passed on iPad Pro 13-inch simulators |
-| Critical XCUITest flows | v0.6.0: 9/9 passed on iPhone 17 Pro Max and 9/9 passed on iPad Pro 13-inch simulators |
+| Critical XCUITest flows | Exact-HEAD v0.6.2 iPhone/iPad matrix recorded on PR #30 |
 | Parent Home | Back navigation, World theme, shared tactile components, and reduced copy passed targeted simulator verification |
 | Launch page | 1.8s minimum, official Tada Words and Pawgoo marks, warm native launch color, audio-before-countdown sequencing, bundled spoken brand signature, and fade policy passed simulator tests; physical listening QA pending |
 | `of` handwriting recovery | Three-scale evidence aggregation, 10-candidate inspection, mixed-case vocabulary, six child-like positive styles, target-aligned `0` → `o` normalization with a real Vision `0f` fixture, 30 paired neighbor controls, cross-scale corroboration, and the `off` veto passed automated tests; child handwriting pending |

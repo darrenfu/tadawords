@@ -20,6 +20,13 @@ public struct WordPictureHintDescriptor: Equatable, Hashable, Sendable {
 }
 
 public enum WordPictureHintCatalog {
+    /// The unique Twemoji filenames required by the shipping catalog.
+    /// Multiple spellings may intentionally share one asset (for example,
+    /// `bike` and `bicycle`).
+    public static var assetCodes: Set<String> {
+        Set(entries.values.map(\.assetCode))
+    }
+
     public static func descriptor(for rawWord: String) -> WordPictureHintDescriptor? {
         guard let normalized = try? EnglishWordNormalizer.normalize(rawWord),
             let entry = entries[normalized]
@@ -134,8 +141,8 @@ public struct WordPictureHintAsset: Equatable, Sendable {
 }
 
 public protocol WordPictureHintProviding: Sendable {
-    /// Returns a cached hint or downloads and caches the catalogued child-safe
-    /// asset. Ineligible/abstract words return nil without a network request.
+    /// Returns a bundled child-safe hint when one is available.
+    /// Ineligible/abstract words return nil.
     func hint(for rawWord: String) async -> WordPictureHintAsset?
 
     func prefetch(_ rawWords: [String]) async

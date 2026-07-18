@@ -1,13 +1,22 @@
 # Critical UI smoke tests
 
 `TadaWordsCriticalFlowUITests` uses the app's existing Debug-only demo
-composition. It covers five device-level regressions without microphone,
+composition. It covers ten device-level regressions without microphone,
 handwriting-recognition, network, or persistent-data dependencies:
 
 - two consecutive Write words advance after the transient completion card;
+- the custom letter keyboard completes and advances a Write word without
+  presenting the system keyboard;
 - two consecutive Read words advance after the transient `You got it!` card;
+- Parent Home back navigation returns to Kid selection and restores the gate;
+- parent-only Privacy Policy, Support, profile deletion, and iOS permission
+  guidance remain discoverable on compact and regular-width layouts;
 - two consecutive parent deletions retain Undo, skip the second confirmation,
   and leave the pool sort menu interactive;
+- Delete All names the affected pool and count, then restores the complete pool
+  through Undo;
+- preset lists add nothing until explicit parent approval, then de-duplicate
+  independently into both pools;
 - dismissing the same system Photos picker used by bulk import does not leave
   an invisible modal layer over the pool sort control;
 - a Debug-only OCR fixture exercises Review -> Add All -> visible pool rows ->
@@ -16,7 +25,7 @@ handwriting-recognition, network, or persistent-data dependencies:
 Generate the Xcode project after changing `project.yml`, then run:
 
 ```sh
-xcodegen generate
+make generate
 xcodebuild test \
   -project TadaWords.xcodeproj \
   -scheme TadaWords \

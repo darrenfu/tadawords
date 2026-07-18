@@ -41,8 +41,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app
         PRODUCT_NAME: Tada Words
-        MARKETING_VERSION: 0.6.1
-        CURRENT_PROJECT_VERSION: 2026071701
+        MARKETING_VERSION: 0.6.2
+        CURRENT_PROJECT_VERSION: 2026071702
         TADA_GIT_COMMIT: unknown
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -61,8 +61,8 @@ targets:
       path: Apps/TadaWordsApp/Info.plist
       properties:
         CFBundleDisplayName: Tada Words
-        CFBundleShortVersionString: "0.6.1"
-        CFBundleVersion: "2026071701"
+        CFBundleShortVersionString: "0.6.2"
+        CFBundleVersion: "2026071702"
         TadaWordsGitCommit: "$(TADA_GIT_COMMIT)"
         CKSharingSupported: true
         ITSAppUsesNonExemptEncryption: false
