@@ -115,7 +115,7 @@ The iOS target depends on `TadaWordsAppShell`, `TadaWordsApplePlatform`, and `Ta
 - A free Apple Account for direct LocalQA installation on personal devices
 - A paid Apple Developer Program team for TestFlight and CloudKit acceptance
 
-The current v0.6.0 automated run uses Xcode 26.6. The complete LocalQA phone/tablet simulator matrix passes; physical-device acceptance remains open.
+The current v0.6.2 automated run uses Xcode 26.6. Strict checks pass; the exact-HEAD phone/tablet simulator matrix and physical-device acceptance remain open.
 
 ## Build and test
 
@@ -129,7 +129,7 @@ make check
 open TadaWords.xcodeproj
 ```
 
-`make check` runs strict Swift formatting checks, the Swift package test suite, and the Issue Agent checks. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and the complete v0.3.1 baseline contains **595 tests with zero failures**. The v0.4.1 merged tree also passes **595 tests with zero failures**, including the v0.3.1 World-layout coverage and the updated audio contract. The v0.5 baseline passes **619 tests**, v0.5.1 passes **638**, and v0.6.0 passes **641 Swift tests plus 14 Issue Agent tests with zero failures**. The Xcode UI target covers Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, OCR Review → Add All → Pool → Sort, and Lobby → Write → Spell. All nine critical flows pass on both the iPhone 17 Pro Max and iPad Pro 13-inch simulators. A separate physical-device target calls the public production handwriting service and does not use the demo recognizer.
+`make check` runs strict Swift formatting checks, the Swift package test suite, and the Issue Agent checks. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and the complete v0.3.1 baseline contains **595 tests with zero failures**. The v0.4.1 merged tree also passes **595 tests with zero failures**, including the v0.3.1 World-layout coverage and the updated audio contract. The v0.5 baseline passes **619 tests**, v0.5.1 passes **638**, v0.6.0 passes **641**, and v0.6.2 passes **644 Swift tests plus 14 Issue Agent tests with zero failures**. The Xcode UI target covers Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, OCR Review → Add All → Pool → Sort, and Lobby → Write → Spell. All nine critical flows pass on both the iPhone 17 Pro Max and iPad Pro 13-inch simulators for the merged v0.6.0 baseline; each agent PR records its exact-HEAD matrix separately. A physical-device target calls the public production handwriting service and does not use the demo recognizer.
 
 Run the device-readiness script before installing on an iPhone or iPad:
 
@@ -144,7 +144,7 @@ build, commit, and bundle ID:
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.5.2 2026071505 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.6.2 2026071702 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 The local [Issue Agent](Automation/issue-agent/README.md) polls ready GitHub
@@ -177,7 +177,7 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 |---|---|
 | Strict Swift format lint | Passed |
 | Version and build | v0.6.2 (`2026071702`) in source Plists and generated project settings |
-| Swift tests | v0.6.2: validation pending on this agent branch |
+| Swift tests | v0.6.2: 644 passed, 0 failures; Issue Agent: 14 passed, 0 failures |
 | Critical XCUITest flows | v0.6.2: validation pending on iPhone and iPad simulators |
 | Parent Home | Back navigation, World theme, shared tactile components, and reduced copy passed targeted simulator verification |
 | Launch page | 1.8s minimum, official Tada Words and Pawgoo marks, warm native launch color, audio-before-countdown sequencing, bundled spoken brand signature, and fade policy passed simulator tests; physical listening QA pending |
