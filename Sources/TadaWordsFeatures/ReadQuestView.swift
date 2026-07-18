@@ -175,10 +175,6 @@ struct ReadQuestView: View {
 
     private var wordCard: some View {
         VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
-            Label("Read it aloud", systemImage: "mouth.fill")
-                .font(.system(.headline, design: .rounded, weight: .bold))
-                .foregroundStyle(theme.primary)
-
             HStack(spacing: 16) {
                 Text(session.prompt.displayText)
                     .font(
@@ -203,11 +199,6 @@ struct ReadQuestView: View {
                     .transition(.scale(scale: 0.92).combined(with: .opacity))
             }
 
-            Text("A word is shown on screen.")
-                .font(.system(.caption, design: .rounded, weight: .medium))
-                .foregroundStyle(theme.ink.opacity(0.001))
-                .frame(height: 1)
-                .accessibilityLabel("A word is shown. Tap the microphone and read it aloud.")
         }
         .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
         .padding(.vertical, verticalSizeClass == .compact ? 14 : 20)
@@ -319,9 +310,11 @@ struct ReadQuestView: View {
                 )
                 .shadow(color: theme.primary.opacity(0.24), radius: 16, y: 8)
 
-                Text(microphoneButtonTitle)
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                    .foregroundStyle(theme.ink)
+                if let microphoneStatusTitle {
+                    Text(microphoneStatusTitle)
+                        .font(.system(.headline, design: .rounded, weight: .bold))
+                        .foregroundStyle(theme.ink)
+                }
 
                 #if DEBUG
                     if showsSimulatedVoiceCheck {
@@ -356,11 +349,11 @@ struct ReadQuestView: View {
         return action
     }
 
-    private var microphoneButtonTitle: String {
-        if isRequestingPermission {
-            return "Checking microphone…"
-        }
-        return isListening ? "Listening…" : "Tap to read"
+    private var microphoneStatusTitle: String? {
+        KidReadMicrophonePresentation.visibleStatus(
+            isRequestingPermission: isRequestingPermission,
+            isListening: isListening
+        )
     }
 
     @ViewBuilder

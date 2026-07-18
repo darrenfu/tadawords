@@ -67,6 +67,11 @@ public enum TadaLayoutTokens {
 
 /// Centralized child-facing scale values for the most important playful UI elements.
 public enum TadaChildScaleTokens {
+    public enum Action {
+        /// Primary Kid actions stay unmistakable even when their visible copy is removed.
+        public static let primaryTouchDiameter: CGFloat = 72
+    }
+
     public enum Profile {
         public static let lastPlayedScale: CGFloat = 1.03
     }

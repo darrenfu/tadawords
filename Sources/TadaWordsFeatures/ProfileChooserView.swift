@@ -138,9 +138,10 @@ struct ProfileChooserView: View {
                     }
                     .scrollIndicators(.visible)
 
-                    Label("Swipe to see more kids", systemImage: "arrow.left.and.right")
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                    Image(systemName: "arrow.left.and.right")
+                        .font(.system(.caption, design: .rounded, weight: .bold))
                         .foregroundStyle(TadaPrimitiveTokens.ColorValue.softInk)
+                        .accessibilityLabel("Swipe to see more kids")
                 }
             }
         }
@@ -166,15 +167,10 @@ struct ProfileChooserView: View {
     }
 
     private var prompt: some View {
-        VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
-            Text("Who’s playing?")
-                .font(.system(.largeTitle, design: .rounded, weight: .bold))
-                .foregroundStyle(TadaPrimitiveTokens.ColorValue.ink)
-            Text("Tap your picture to begin.")
-                .font(.system(.title3, design: .rounded, weight: .medium))
-                .foregroundStyle(TadaPrimitiveTokens.ColorValue.softInk)
-        }
-        .multilineTextAlignment(.center)
+        Text("Who’s playing?")
+            .font(.system(.largeTitle, design: .rounded, weight: .bold))
+            .foregroundStyle(TadaPrimitiveTokens.ColorValue.ink)
+            .multilineTextAlignment(.center)
     }
 
     private var guardianButton: some View {
@@ -309,17 +305,6 @@ private struct ProfileCard: View {
                     .foregroundStyle(theme.ink)
                     .lineLimit(1)
 
-                if isLastPlayed {
-                    Label("Last played", systemImage: "sparkles")
-                        .font(.system(.caption, design: .rounded, weight: .bold))
-                        .foregroundStyle(theme.primary)
-                        .lineLimit(1)
-                } else {
-                    Label(theme.name, systemImage: theme.motifSymbol)
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .foregroundStyle(theme.primary)
-                        .lineLimit(1)
-                }
             }
             .frame(
                 minWidth: density == .compact ? 172 : nil,
@@ -354,6 +339,15 @@ private struct ProfileCard: View {
                     .frame(height: TadaPrimitiveTokens.Depth.tactileLip)
                     .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
                     .offset(y: TadaPrimitiveTokens.Depth.tactileLip * 0.40)
+            }
+            .overlay(alignment: .topTrailing) {
+                Image(systemName: isLastPlayed ? "sparkles" : theme.motifSymbol)
+                    .font(.system(size: 18, weight: .heavy))
+                    .foregroundStyle(theme.primary)
+                    .frame(width: 36, height: 36)
+                    .background(Color.white.opacity(0.94), in: Circle())
+                    .padding(10)
+                    .accessibilityHidden(true)
             }
             .shadow(color: theme.primary.opacity(0.16), radius: 18, y: 9)
         }
@@ -462,10 +456,6 @@ private struct NewPlayerCard: View {
                     .foregroundStyle(TadaPrimitiveTokens.ColorValue.ink)
                     .lineLimit(1)
 
-                Label("Nickname & age", systemImage: "pencil.line")
-                    .font(.system(.caption, design: .rounded, weight: .semibold))
-                    .foregroundStyle(TadaWorldTheme.pawsAndPines.primary)
-                    .lineLimit(1)
             }
             .frame(
                 minWidth: isCompact ? 172 : nil,

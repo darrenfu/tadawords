@@ -28,8 +28,6 @@ struct ChildLobbyView: View {
                     VStack(spacing: isCompactHeight ? 10 : TadaPrimitiveTokens.Spacing.large) {
                         lobbyHeader
 
-                        worldWelcome
-
                         ViewThatFits(in: .horizontal) {
                             HStack(
                                 spacing: isCompactHeight
@@ -98,7 +96,7 @@ struct ChildLobbyView: View {
 
     private var playersButton: some View {
         Button(action: onChooseProfile) {
-            Label("Kids", systemImage: "person.2.fill")
+            Label(profile.displayName, systemImage: "person.crop.circle.fill")
                 .font(.system(.subheadline, design: .rounded, weight: .bold))
         }
         .buttonStyle(
@@ -108,7 +106,7 @@ struct ChildLobbyView: View {
                 isCompact: true
             )
         )
-        .accessibilityLabel("Kids")
+        .accessibilityLabel("Choose profile. Current profile: \(profile.displayName)")
         .accessibilityHint("Choose a kid profile")
         .accessibilityIdentifier("child-lobby.kids")
     }
@@ -219,43 +217,6 @@ struct ChildLobbyView: View {
         .accessibilityIdentifier("child-lobby.badge")
     }
 
-    private var worldWelcome: some View {
-        HStack(spacing: isCompactHeight ? 12 : TadaPrimitiveTokens.Spacing.medium) {
-            TadaWorldMascot(
-                theme: theme,
-                pose: .encouraging,
-                size: isCompactHeight
-                    ? TadaChildScaleTokens.Lobby.mascotCompact
-                    : TadaChildScaleTokens.Lobby.mascotRegular
-            )
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Ready, \(profile.displayName)?")
-                    .font(
-                        .system(
-                            isCompactHeight ? .title2 : .largeTitle,
-                            design: .rounded,
-                            weight: .heavy
-                        )
-                    )
-                    .lineLimit(1)
-                Text("Choose today’s quest.")
-                    .font(
-                        .system(
-                            isCompactHeight ? .subheadline : .title3,
-                            design: .rounded,
-                            weight: .medium
-                        )
-                    )
-                    .foregroundStyle(theme.ink.opacity(0.68))
-            }
-        }
-        .padding(.horizontal, isCompactHeight ? 16 : 20)
-        .padding(.vertical, isCompactHeight ? 5 : 8)
-        .background(theme.surface.opacity(0.58), in: Capsule())
-        .accessibilityElement(children: .combine)
-    }
-
 }
 
 private struct QuestEntranceCard: View {
@@ -280,10 +241,6 @@ private struct QuestEntranceCard: View {
         return reason
     }
 
-    private var routeSubtitle: String {
-        status.action == .practiceAgain ? "Practice Again" : mode.instruction
-    }
-
     var body: some View {
         Button(action: action) {
             HStack(spacing: isCompact ? 14 : TadaPrimitiveTokens.Spacing.large) {
@@ -299,12 +256,9 @@ private struct QuestEntranceCard: View {
                             )
                         )
                         .foregroundStyle(theme.ink)
-                    Text(routeSubtitle)
-                        .font(.system(.headline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(theme.ink.opacity(0.65))
-
                     if status.action == .practiceAgain, blockReason == nil {
                         HStack(spacing: 8) {
+                            Image(systemName: "arrow.clockwise.circle.fill")
                             Label(
                                 "\(status.completedPoints ?? 0) pts",
                                 systemImage: "sparkles"
@@ -384,7 +338,9 @@ private struct QuestEntranceCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint(
-            blockReason == nil ? "Starts a separate \(mode.title) quest" : "Opens help")
+            blockReason == nil ? "Starts a separate \(mode.title) quest" : "Opens help"
+        )
+        .accessibilityIdentifier("child-lobby.quest.\(mode.rawValue)")
     }
 
     @ViewBuilder

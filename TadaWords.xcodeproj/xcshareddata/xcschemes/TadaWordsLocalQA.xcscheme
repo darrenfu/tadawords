@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "7324B700CEC4BF219B75AA40"
-               BuildableName = "TadaWords.app"
+               BuildableName = "Tada Words.app"
                BlueprintName = "TadaWords"
                ReferencedContainer = "container:TadaWords.xcodeproj">
             </BuildableReference>
@@ -33,7 +33,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "7324B700CEC4BF219B75AA40"
-            BuildableName = "TadaWords.app"
+            BuildableName = "Tada Words.app"
             BlueprintName = "TadaWords"
             ReferencedContainer = "container:TadaWords.xcodeproj">
          </BuildableReference>
@@ -58,7 +58,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "7324B700CEC4BF219B75AA40"
-            BuildableName = "TadaWords.app"
+            BuildableName = "Tada Words.app"
             BlueprintName = "TadaWords"
             ReferencedContainer = "container:TadaWords.xcodeproj">
          </BuildableReference>
@@ -77,7 +77,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "7324B700CEC4BF219B75AA40"
-            BuildableName = "TadaWords.app"
+            BuildableName = "Tada Words.app"
             BlueprintName = "TadaWords"
             ReferencedContainer = "container:TadaWords.xcodeproj">
          </BuildableReference>
