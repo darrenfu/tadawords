@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "bundle_id": "com.tadawords.app",
+  "source_entitlements": {
+    "com.apple.developer.icloud-container-identifiers": [
+      "iCloud.com.tadawords.app"
+    ],
+    "com.apple.developer.icloud-services": [
+      "CloudKit"
+    ],
+    "com.apple.developer.ubiquity-kvstore-identifier": "$(TeamIdentifierPrefix)com.tadawords.app"
+  },
+  "signed_entitlements": {
+    "required_exact": {
+      "application-identifier": "${TEAM_ID}.com.tadawords.app",
+      "com.apple.developer.icloud-container-environment": "Production",
+      "com.apple.developer.icloud-container-identifiers": [
+        "iCloud.com.tadawords.app"
+      ],
+      "com.apple.developer.icloud-services": [
+        "CloudKit"
+      ],
+      "com.apple.developer.team-identifier": "${TEAM_ID}",
+      "com.apple.developer.ubiquity-kvstore-identifier": "${TEAM_ID}.com.tadawords.app"
+    },
+    "optional_exact": {
+      "get-task-allow": false,
+      "keychain-access-groups": [
+        "${TEAM_ID}.com.tadawords.app"
+      ]
+    },
+    "artifact_allowed_values": {
+      "archive": {
+        "com.apple.developer.icloud-container-environment": [
+          "Development",
+          "Production"
+        ],
+        "get-task-allow": [
+          false,
+          true
+        ]
+      }
+    },
+    "allowed_keys": [
+      "application-identifier",
+      "beta-reports-active",
+      "com.apple.developer.icloud-container-environment",
+      "com.apple.developer.icloud-container-identifiers",
+      "com.apple.developer.icloud-services",
+      "com.apple.developer.team-identifier",
+      "com.apple.developer.ubiquity-kvstore-identifier",
+      "get-task-allow",
+      "keychain-access-groups"
+    ]
+  },
+  "required_source_files": [
+    "Apps/TadaWordsApp/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png",
+    "Apps/TadaWordsApp/Info.plist",
+    "Apps/TadaWordsApp/InfoLocalQA.plist",
+    "Apps/TadaWordsApp/PrivacyInfo.xcprivacy",
+    "Apps/TadaWordsApp/TadaWords.entitlements",
+    "Sources/TadaWordsApplePlatform/Resources/Audio/TeacherWords/Katie-500-v1/manifest.json",
+    "Sources/TadaWordsApplePlatform/Resources/Audio/VoiceAccents/Aurora-v1/manifest.json",
+    "Sources/TadaWordsContent/Resources/PresetWords.json"
+  ],
+  "required_app_resources": [
+    "PrivacyInfo.xcprivacy",
+    "Assets.car",
+    "AppIcon*.png",
+    "**/PresetWords.json",
+    "**/Katie-500-v1/manifest.json",
+    "**/Katie-500-v1/read-hint/*.m4a",
+    "**/Katie-500-v1/write-prompt/*.m4a",
+    "**/Aurora-v1/manifest.json",
+    "**/Aurora-v1/*.m4a"
+  ]
+}
