@@ -19,6 +19,8 @@ struct ApplicationDataPaths: Equatable, Sendable {
     let deviceIdentitySnapshot: URL
     let firstRunOnboardingSnapshot: URL
     let familySyncPreferenceSnapshot: URL
+    let familySyncJournalSnapshot: URL
+    let familySyncApplyTransactionsSnapshot: URL
 
     init(applicationSupportDirectory: URL) {
         dataDirectory = applicationSupportDirectory.appendingPathComponent(
@@ -65,6 +67,14 @@ struct ApplicationDataPaths: Equatable, Sendable {
             "family-sync-preference.json",
             isDirectory: false
         )
+        familySyncJournalSnapshot = dataDirectory.appendingPathComponent(
+            "family-sync-journal.json",
+            isDirectory: false
+        )
+        familySyncApplyTransactionsSnapshot = dataDirectory.appendingPathComponent(
+            "family-sync-apply-transactions.json",
+            isDirectory: false
+        )
     }
 }
 
@@ -79,6 +89,7 @@ struct ProductionApplicationEnvironment: Sendable {
     let lastSelectedProfileID: ProfileID?
     let guardianStore: RepositoryGuardianFamilyStore
     let familySyncCoordinator: LocalFirstFamilySyncCoordinator
+    let familySyncApplyTransactionRepository: LocalJSONFamilySyncApplyTransactionRepository
     let tombstoneRepository: LocalJSONProfileDeletionTombstoneRepository
     let notificationReconciler: ProductionLearningNotificationReconciler?
     let firstRunOnboardingRepository: LocalFirstRunOnboardingRepository
@@ -105,6 +116,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
     private let timeZone: TimeZone
     private let familySyncTransport: any FamilySyncTransport
     private let notificationScheduler: (any LearningNotificationScheduling)?
+    private let voiceprintRepository: (any DeviceVoiceprintRepository)?
     private let handwritingPreferenceRemover: any HandwritingPreferenceRemoving
 
     init(
@@ -114,6 +126,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         timeZone: TimeZone,
         familySyncTransport: any FamilySyncTransport = LocalOnlyFamilySyncTransport(),
         notificationScheduler: (any LearningNotificationScheduling)? = nil,
+        voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
         handwritingPreferenceRemover: any HandwritingPreferenceRemoving =
             HandwritingPreferenceStore()
     ) {
@@ -123,6 +136,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         self.timeZone = timeZone
         self.familySyncTransport = familySyncTransport
         self.notificationScheduler = notificationScheduler
+        self.voiceprintRepository = voiceprintRepository
         self.handwritingPreferenceRemover = handwritingPreferenceRemover
     }
 
@@ -130,26 +144,37 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         let dataPaths = ApplicationDataPaths(
             applicationSupportDirectory: try applicationSupportDirectory()
         )
+        let deviceID = try loadOrCreateDeviceID(
+            at: dataPaths.deviceIdentitySnapshot
+        )
+        let profileMutationGate = ProfileScopedMutationGate()
         let profileRepository = LocalJSONKidProfileRepository(
-            snapshotURL: dataPaths.profilesSnapshot
+            snapshotURL: dataPaths.profilesSnapshot,
+            mutationGate: profileMutationGate
         )
         let wordPoolRepository = LocalJSONWordPoolRepository(
-            snapshotURL: dataPaths.wordPoolSnapshot
+            snapshotURL: dataPaths.wordPoolSnapshot,
+            mutationGate: profileMutationGate,
+            deviceID: deviceID
         )
         let learningRecordRepository = LocalJSONLearningRecordRepository(
-            snapshotURL: dataPaths.learningRecordsSnapshot
+            snapshotURL: dataPaths.learningRecordsSnapshot,
+            mutationGate: profileMutationGate
         )
         let practiceSettingsRepository = LocalJSONPracticeSettingsRepository(
-            snapshotURL: dataPaths.practiceSettingsSnapshot
+            snapshotURL: dataPaths.practiceSettingsSnapshot,
+            mutationGate: profileMutationGate
         )
         let dailyQuestRepository = LocalJSONDailyQuestRepository(
-            snapshotURL: dataPaths.dailyQuestsSnapshot
+            snapshotURL: dataPaths.dailyQuestsSnapshot,
+            mutationGate: profileMutationGate
         )
         let childSessionRepository = LocalJSONChildSessionRepository(
             snapshotURL: dataPaths.childSessionSnapshot
         )
         let tombstoneRepository = LocalJSONProfileDeletionTombstoneRepository(
-            snapshotURL: dataPaths.profileDeletionTombstonesSnapshot
+            snapshotURL: dataPaths.profileDeletionTombstonesSnapshot,
+            mutationGate: profileMutationGate
         )
         let firstRunOnboardingRepository = LocalFirstRunOnboardingRepository(
             snapshotURL: dataPaths.firstRunOnboardingSnapshot
@@ -157,6 +182,33 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         let familySyncPreferenceRepository = LocalJSONFamilySyncPreferenceRepository(
             snapshotURL: dataPaths.familySyncPreferenceSnapshot
         )
+        let familySyncJournalRepository = LocalJSONFamilySyncJournalRepository(
+            snapshotURL: dataPaths.familySyncJournalSnapshot
+        )
+        let familySyncApplyTransactionRepository =
+            LocalJSONFamilySyncApplyTransactionRepository(
+                snapshotURL: dataPaths.familySyncApplyTransactionsSnapshot
+            )
+        let syncStore = RepositoryFamilySyncRecordStore(
+            profileRepository: profileRepository,
+            wordPoolRepository: wordPoolRepository,
+            practiceSettingsRepository: practiceSettingsRepository,
+            learningRepository: learningRecordRepository,
+            dailyQuestRepository: dailyQuestRepository,
+            tombstoneRepository: tombstoneRepository,
+            applyTransactionRepository: familySyncApplyTransactionRepository,
+            childSessionRepository: childSessionRepository,
+            voiceprintRepository: voiceprintRepository,
+            handwritingPreferenceRemover: handwritingPreferenceRemover,
+            mutationGate: profileMutationGate,
+            deviceID: deviceID,
+            clock: clock
+        )
+
+        // Finish an accepted remote batch before any Profile snapshot is read
+        // for onboarding or SwiftUI. A failed replay keeps the exact pending
+        // bytes and fails bootstrap closed instead of showing partial state.
+        try await syncStore.replayPendingApplyTransactions()
 
         try await recoverPendingProfileDeletions(
             tombstoneRepository: tombstoneRepository,
@@ -166,6 +218,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             learningRecordRepository: learningRecordRepository,
             dailyQuestRepository: dailyQuestRepository,
             childSessionRepository: childSessionRepository,
+            voiceprintRepository: voiceprintRepository,
             handwritingPreferenceRemover: handwritingPreferenceRemover
         )
 
@@ -211,11 +264,24 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             in: practiceSettingsRepository,
             profiles: profilesMissingSettings
         )
+        try await migrateLegacyHandwritingPreferences(
+            for: profiles,
+            in: practiceSettingsRepository,
+            preferenceStore: handwritingPreferenceRemover
+        )
         let lastSelectedProfileID = await validatedLastSelectedProfileID(
             in: childSessionRepository,
             profiles: profiles
         )
 
+        let familySyncCoordinator = LocalFirstFamilySyncCoordinator(
+            store: syncStore,
+            transport: familySyncTransport,
+            preferenceRepository: familySyncPreferenceRepository,
+            journalRepository: familySyncJournalRepository,
+            deviceID: deviceID,
+            clock: clock
+        )
         let guardianStore = RepositoryGuardianFamilyStore(
             profiles: profiles,
             profileRepository: profileRepository,
@@ -226,24 +292,15 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             tombstoneRepository: tombstoneRepository,
             childSessionRepository: childSessionRepository,
             handwritingPreferenceRemover: handwritingPreferenceRemover,
+            onLocalMutation: { _ in
+                Task {
+                    _ = await familySyncCoordinator.synchronize(
+                        trigger: .localMutation
+                    )
+                }
+            },
             clock: clock,
             timeZone: timeZone
-        )
-        let syncStore = RepositoryFamilySyncRecordStore(
-            profileRepository: profileRepository,
-            wordPoolRepository: wordPoolRepository,
-            practiceSettingsRepository: practiceSettingsRepository,
-            learningRepository: learningRecordRepository,
-            dailyQuestRepository: dailyQuestRepository,
-            tombstoneRepository: tombstoneRepository,
-            handwritingPreferenceRemover: handwritingPreferenceRemover,
-            deviceID: try loadOrCreateDeviceID(at: dataPaths.deviceIdentitySnapshot)
-        )
-        let familySyncCoordinator = LocalFirstFamilySyncCoordinator(
-            store: syncStore,
-            transport: familySyncTransport,
-            preferenceRepository: familySyncPreferenceRepository,
-            clock: clock
         )
         let notificationReconciler = notificationScheduler.map { scheduler in
             ProductionLearningNotificationReconciler(
@@ -269,6 +326,8 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             lastSelectedProfileID: lastSelectedProfileID,
             guardianStore: guardianStore,
             familySyncCoordinator: familySyncCoordinator,
+            familySyncApplyTransactionRepository:
+                familySyncApplyTransactionRepository,
             tombstoneRepository: tombstoneRepository,
             notificationReconciler: notificationReconciler,
             firstRunOnboardingRepository: firstRunOnboardingRepository,
@@ -329,12 +388,14 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         learningRecordRepository: any ProfileLearningRecordRepository,
         dailyQuestRepository: any DailyQuestHistoryRepository,
         childSessionRepository: LocalJSONChildSessionRepository,
+        voiceprintRepository: (any DeviceVoiceprintRepository)?,
         handwritingPreferenceRemover: any HandwritingPreferenceRemoving
     ) async throws {
         // Tombstones created by older builds may already be committed even
         // though their UserDefaults entry was never cleaned up. Sweeping every
         // tombstone is idempotent and repairs that historical residue.
         for tombstone in try await tombstoneRepository.tombstones() {
+            try await voiceprintRepository?.delete(for: tombstone.profileID)
             handwritingPreferenceRemover.remove(for: tombstone.profileID)
         }
         for tombstone in try await tombstoneRepository.pendingTombstones() {
@@ -386,6 +447,45 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         )
         try Data(value.utf8).write(to: url, options: .atomic)
         return value
+    }
+
+    private func migrateLegacyHandwritingPreferences(
+        for profiles: [KidProfile],
+        in repository: any PracticeSettingsRepository,
+        preferenceStore: any HandwritingPreferenceRemoving
+    ) async throws {
+        guard
+            let migrator = preferenceStore
+                as? any LegacyHandwritingPreferenceMigrating
+        else { return }
+
+        for profile in profiles {
+            guard let legacyTool = migrator.consumeLegacyTool(for: profile.id)
+            else { continue }
+            let current =
+                try await repository.settings(for: profile.id)
+                ?? .defaults(for: profile.id)
+            // A value already written into the synchronized settings is newer
+            // than the one-way UserDefaults residue.
+            guard current.interface.selectedHandwritingTool == .pencil,
+                legacyTool != .pencil
+            else { continue }
+            try await repository.save(
+                ProfilePracticeSettings(
+                    profileID: current.profileID,
+                    read: current.read,
+                    write: current.write,
+                    audio: current.audio,
+                    notifications: current.notifications,
+                    interface: PracticeInterfacePreferences(
+                        leftHandedLayoutEnabled:
+                            current.interface.leftHandedLayoutEnabled,
+                        selectedHandwritingTool: legacyTool
+                    ),
+                    wordRecommendationMode: current.wordRecommendationMode
+                )
+            )
+        }
     }
 
     private func validatedLastSelectedProfileID(

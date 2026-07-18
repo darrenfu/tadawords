@@ -1,12 +1,12 @@
 # Tada Words V1 backlog
 
-This backlog tracks release acceptance and external configuration. Physical-iPhone feedback and all subsequent iterations are versioned in `FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md`; the active branch is `v0.2`. Use `MVP_ACCEPTANCE.md` for the executable checklist.
+This backlog tracks release acceptance and external configuration. Physical-device feedback and all subsequent iterations are versioned in `FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md`; the active source batch is `v0.7.0`. Use `MVP_ACCEPTANCE.md` for the executable checklist.
 
 ## Release blockers
 
 ### DEVICE-01: Sign and install on physical devices
 
-**Status:** First iPhone LocalQA install/test completed; fresh v0.2 regression and iPad acceptance required
+**Status:** Earlier LocalQA installs exist; the exact-HEAD v0.7.0 signed iPhone/iPad regression and production Family Sync acceptance are required
 
 - Select an Apple development Team in Xcode
 - Confirm a valid signing identity
@@ -14,7 +14,7 @@ This backlog tracks release acceptance and external configuration. Physical-iPho
 - Install the canonical `TadaWords.xcodeproj` build
 - Complete one Read and one Write quest on each device
 
-### DEVICE-02: Re-test v0.2 physical-device follow-ups
+### DEVICE-02: Re-test physical-device follow-ups
 
 **Status:** Automated implementation pass complete; fresh physical-device regression required
 
@@ -32,19 +32,21 @@ This backlog tracks release acceptance and external configuration. Physical-iPho
 
 ### CLOUD-01: Add consent and erasure, then validate CloudKit
 
-**Status:** Privacy release blocker; persisted guardian opt-in complete, remote erasure missing
+**Status:** v0.7.0 source implementation complete; production schema, destructive test-only erasure, and physical-device acceptance remain privacy release blockers
 
 - [x] Add a persisted, default-off Family Sync choice
 - [x] Block launch, onboarding-completion, lifecycle, manual, and invitation synchronization until the guardian opts in
 - [x] Let the guardian disable future sync without blocking local quests
 - [x] Keep LocalQA visibly device-only with a separate bundle ID and no iCloud entitlement
-- Delete existing Profile, pool, attempt, progress, plan, reward, avatar, and settings records from private or shared CloudKit storage when a Profile is deleted
+- [x] Implement ledger-before-purge deletion, owner remote erasure, participant leave/revocation, restart retry, and unconditional stale-device non-resurrection
 - Create or attach `iCloud.com.tadawords.app` under the selected Team
 - Deploy the CloudKit development schema
 - Validate private-database sync on two devices using one Apple ID
 - Validate a CloudKit share between two Apple IDs
-- Test offline edits, conflict resolution, retry, invitation acceptance, and profile tombstones
-- Confirm quests never wait for CloudKit
+- [x] Add production-only Apple `CKShare` access-management UI routed to the persisted private-owner or shared-participant root/share
+- Validate owner removal, participant leave, and revocation on signed iPhone/iPad builds
+- [x] Cover offline edits, conflict resolution, retry, corrupt data, account changes, invitation routing, deletion dominance, crash replay, and two-device arrival permutations with deterministic source harnesses
+- [x] Confirm child Quest commits never wait for CloudKit
 
 Voiceprint templates remain device-scoped and do not sync through CloudKit.
 
@@ -106,7 +108,7 @@ The shipping soundscape synthesizes original procedural music and cues. It does 
 
 ### REPO-01: Remove stale generated Xcode artifacts
 
-**Status:** V1 baseline cleanup completed; v0.2 LocalQA files retained; full Swift suite is 480/480, with a final pre-commit artifact scan still required
+**Status:** V1 baseline cleanup completed; canonical LocalQA files retained; the current v0.7.0 batch passes 809 Swift and 14 Issue Agent tests, and the exact committed-HEAD simulator reruns plus final artifact scan must be recorded at merge time
 
 Keep:
 
@@ -138,5 +140,5 @@ The numbered projects were generated snapshots, not source inputs. A repository 
   Collection, and monthly Calendar
 - Guardian Today, Needs Attention, 7-day and 30-day reports, corrections, and CSV export
 - Crash-resumable profile deletion, local notifications, sensitive-action authentication, and device-local voice setup
-- CloudKit transport, persisted default-off guardian opt-in, disable gate, and family invitations; remote erasure remains open
+- Versioned private/shared CKSyncEngine transport, durable outbox/inbox/apply, full Profile/settings/pool/photo/event coverage, derived progress/rewards, default-off guardian opt-in, family invitations, and source-side remote erasure/non-resurrection; production schema and physical acceptance remain open
 - Light-mode V1 visual system, compact landscape layouts, 44-point targets, VoiceOver announcements, Reduce Motion, and left-handed writing controls

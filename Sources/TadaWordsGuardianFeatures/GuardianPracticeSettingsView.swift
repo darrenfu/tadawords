@@ -7,6 +7,7 @@ struct GuardianPracticeSettingsView: View {
     let onSave: (ProfilePracticeSettings) -> Void
 
     private let profileID: ProfileID
+    private let selectedHandwritingTool: HandwritingTool
     @State private var readDraft: GuardianRouteSettingsDraft
     @State private var writeDraft: GuardianRouteSettingsDraft
     @State private var voiceEnabled: Bool
@@ -24,6 +25,7 @@ struct GuardianPracticeSettingsView: View {
         onSave: @escaping (ProfilePracticeSettings) -> Void
     ) {
         profileID = settings.profileID
+        selectedHandwritingTool = settings.interface.selectedHandwritingTool
         self.section = section
         self.onBack = onBack
         self.onSave = onSave
@@ -134,7 +136,8 @@ struct GuardianPracticeSettingsView: View {
             ),
             notifications: notificationDraft.settings,
             interface: PracticeInterfacePreferences(
-                leftHandedLayoutEnabled: leftHandedWritingControlsEnabled
+                leftHandedLayoutEnabled: leftHandedWritingControlsEnabled,
+                selectedHandwritingTool: selectedHandwritingTool
             )
         )
     }

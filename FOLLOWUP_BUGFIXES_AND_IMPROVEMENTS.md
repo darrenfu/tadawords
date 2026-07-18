@@ -154,7 +154,7 @@ Overall state: merged to `main` by PR #2 at merge commit `cc42e17`; human physic
 | V03-IMP-014 | Improvement | Write layout | Make the writing region 10% wider and keep its frame fixed when feedback appears. Keep the root Quest transition identity stable across word changes so animation never shifts the handwriting coordinate space. | Automated pass | Record error feedback and word-to-word transitions on phone/tablet; compare canvas bounds and root transition keys. |
 | V03-IMP-015 | Improvement | Canonical pronunciation | Remove pronunciation-context editing from every Parent input and OCR path. Every new word uses isolated canonical teacher pronunciation; legacy contextual metadata remains decode-compatible only. | Automated pass | Add ordinary, homophone, and heteronym examples through typing and Add All; verify no editor appears and every new prompt has an isolated audio cue. |
 | V03-IMP-016 | Improvement | Read presentation | Replace per-word color variation with one fixed, coordinated, high-contrast design token per World. Every Read word in the active World uses that token; color changes only when the child changes Worlds. | Automated pass | Verify all eight World tokens are visually distinct, meet WCAG contrast on the Read card, remain fixed across words/retries, and change only after a World switch. |
-| V03-FEAT-001 | Feature | Cross-device sync | Sync Profiles, Read/Write pools, Profile settings, immutable attempts/corrections, event-derived progress, calendar completions, and rewards through parent-opted-in CloudKit while every Quest remains fully local-first. Voiceprints stay per-device; picture and canonical teacher-audio caches re-download. | Design complete; implementation and live acceptance incomplete | Pass restartable outbox and order-independent convergence tests, then validate one-Apple-ID private sync and two-Apple-ID `CKShare` sync on paid-Team Release builds. Delete a Profile while another device is offline and prove the tombstone prevents resurrection while non-tombstone CloudKit data is erased. See `Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md`. |
+| V03-FEAT-001 | Feature | Cross-device sync | Sync Profiles, Read/Write pools, Profile settings, immutable attempts/corrections, event-derived progress, calendar completions, and rewards through parent-opted-in CloudKit while every Quest remains fully local-first. Voiceprints stay per-device; picture and canonical teacher-audio caches re-download. | v0.7.0 source implementation and deterministic simulator E2E complete; production CloudKit and physical/human acceptance remain open | Keep the exact-HEAD simulator artifact green, then validate one-Apple-ID private sync and two-Apple-ID `CKShare` sync on paid-Team Release builds. Delete a test-only Profile while another device is offline and prove the tombstone prevents resurrection while non-tombstone CloudKit data is erased. See `Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md`. |
 
 ## v0.3 daily notes
 
@@ -172,7 +172,7 @@ Overall state: merged to `main` by PR #2 at merge commit `cc42e17`; human physic
 - Widened the Write canvas and stabilized both its local layout and the root Quest transition identity so feedback and word changes do not move its coordinates. Extended completion feedback from 430 ms to 830 ms.
 - Replaced per-word Read color variation with one unique, high-contrast design token per World so words remain visually consistent until the World changes.
 - Added pinned Twemoji 17.0.3 concrete-word hints, private on-device caching, abstract-word fail-closed behavior, and repository attribution in `THIRD_PARTY_NOTICES.md`.
-- Audited the existing local-first/CloudKit foundation and recorded the cross-device Profile + Progress Sync contract in `Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md`. The design keeps parent opt-in, makes voiceprints device-local and caches re-downloadable, and identifies durable outbox, event-derived progress, business-key convergence, unconditional tombstones, CloudKit erasure, and paid-Team two-device acceptance as remaining work.
+- At the v0.3 checkpoint, audited the existing local-first/CloudKit foundation and recorded the cross-device Profile + Progress Sync contract in `Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md`. The design kept parent opt-in, made voiceprints device-local and caches re-downloadable, and identified durable outbox, event-derived progress, business-key convergence, unconditional tombstones, CloudKit erasure, and paid-Team two-device acceptance as the next work. The source-side items were implemented in v0.7.0; production CloudKit and physical/human acceptance remain open.
 - Completed the v0.3 branch-wide Swift suite: 548/548 passed with zero failures.
 - Added five critical XCUITest flows; all 5/5 pass on the iPhone 17 Pro Max simulator, including OCR Review → Add All → Pool → Sort and consecutive Read/Write feedback dismissal.
 - Built fresh v0.3 LocalQA apps for iPhone 17 Pro Max and iPad Pro 13-inch
@@ -488,3 +488,67 @@ physical link opening and human accessibility acceptance remain open.
   resource flow passes on iPhone 17 Pro Max and iPad Pro 13-inch simulators.
   Physical Safari opening, offline behavior, VoiceOver, and large Dynamic Type
   remain human release acceptance work.
+
+## v0.7.0 — 2026-07-18
+
+Target release: `v0.7.0`
+
+Branch: `codex/batch-family-sync-v0.7.0`
+
+Build: `2026071805`
+
+Overall state: the cross-device Family Sync source contract, strict format
+gate, 809/809 Swift tests, 14/14 Issue Agent tests, and the source-batch
+simulator matrices pass. Production CloudKit schema, exact committed-HEAD
+simulator reruns, signed iPhone/iPad private/share flows, destructive test-only
+erasure, background delivery, and human accessibility/recovery review remain
+release gates.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V070-FEAT-001 | Feature | Cross-device sync | Keep every Quest local-first while synchronizing parent-approved Profile facts, Read/Write pools, independent settings groups, immutable learning events, derived progress, daily completion/reward facts, and a bounded Profile photo through private/shared CloudKit. | Source and deterministic simulator E2E pass; production acceptance pending | Rerun the six-flow suite on the exact committed HEAD, then complete same-Apple-ID private sync and different-Apple-ID share acceptance on signed iPhone and iPad builds. |
+| V070-PRIV-001 | Privacy | Terminal deletion | Persist a privacy-minimal deletion ledger before erasing owner Profile records/assets/share/zone; make participant leave and revocation terminal; block stale-device resurrection and purge Profile-scoped transport/photo bytes. | Source deletion/privacy harnesses pass | On test-only Profiles, delete while another device is offline, verify local purge after reconnect, and inspect the real container to prove that only the minimal ledger remains. |
+| V070-RECOVERY-001 | Reliability | Durable sync | Survive process death around outbox, inbox, apply, acknowledgement, server-record conflict, quarantine, account change, and retry state without losing local work or duplicating completion/reward facts. | Source harnesses and simulator restart/status flows pass | Force-quit both signed devices at each retry boundary, reconnect in both orders, and verify Parent status before and after restart. |
+| V070-ACCESS-001 | Feature | Family access | Use Apple's production sharing controller for existing-share management, route owners to private and participants to shared storage, fail closed for terminal/malformed bindings, and reconcile save/stop events through the normal notification path. | Source implementation and routing/presentation tests pass | As owner and participant, invite, accept, remove/leave, and revoke on signed devices; prove no revoked route creates a private fallback. |
+
+### 2026-07-18 v0.7.0 notes
+
+- Added one versioned private and one shared `CKSyncEngine` state with durable,
+  exact-operation outbox/inbox persistence, account-generation isolation,
+  checksummed bounded envelopes, exact acknowledgement, quarantine, and
+  corrected-record recovery.
+- Made conflict resolution deterministic: immutable attempts/corrections use
+  stable identities, mutable Pool/settings records use logical revisions,
+  same-revision different-byte conflicts fail closed, and progress/rewards are
+  rebuilt from canonical facts.
+- Added bounded 512 px / 256 KiB prepared Profile photos as validated `CKAsset`
+  uploads with durable staging, acknowledgement cleanup, identity checks, and
+  corrupt-asset quarantine. Voiceprints, raw/enrollment audio, notifications,
+  handwriting residue, picture/audio caches, OCR, and sound caches stay local.
+- Implemented ledger-before-purge terminal deletion, privacy-minimal retained
+  fields, owner zone/share/asset erasure, participant leave, revocation,
+  restart idempotence, stale-device upload barriers, and Profile-scoped purge
+  of inbox/quarantine/system fields/locks/photo staging.
+- Added the Parent-authorized production Apple access-management UI. Existing
+  owner and participant routes use their persisted private/shared binding;
+  revoked, deleted, and malformed routes fail closed. Save/stop-sharing
+  delegate events reuse the idempotent notification reconciliation path.
+- Added privacy-safe durable Parent status for pending count, retry state, last
+  success, iCloud/account recovery, compatibility/corruption/conflict attention,
+  and restart-consistent presentation. Diagnostics contain no child name,
+  word, photo, recording, voiceprint, or repository payload.
+- Account confirmation now reports a changed CloudKit account generation so
+  re-enabling Family Sync after switching accounts invalidates the old
+  acknowledgements and seeds the newly confirmed account. Reauthorizing the
+  same account remains idempotent.
+- Owner access management now always enters the transport's tested existing-
+  share recovery path before presenting Apple's controller. Confirmed-missing
+  shares can be rebuilt, transient failures are propagated, and participants
+  can never create a private owner share.
+- Added a machine-readable data manifest and five-layer evidence matrix. Only
+  19 fields directly observed by the six simulator flows receive simulator
+  evidence; unobserved simulator rows and every physical/human row remain
+  pending.
+- The source batch passes Family Sync 6/6 on iPhone 17 Pro Max and
+  6/6 on iPad Pro 13-inch (M5), plus Critical Flow 10/10 on each simulator,
+  all on iOS 26.5. Exact committed-HEAD reruns remain mandatory before merge.

@@ -3,6 +3,31 @@ import TadaWordsDomain
 import XCTest
 
 final class PracticeSettingsTests: XCTestCase {
+    func testLegacyInterfacePreferencesDefaultToPencil() throws {
+        let data = Data(#"{"leftHandedLayoutEnabled":true}"#.utf8)
+
+        let decoded = try JSONDecoder().decode(
+            PracticeInterfacePreferences.self,
+            from: data
+        )
+
+        XCTAssertTrue(decoded.leftHandedLayoutEnabled)
+        XCTAssertEqual(decoded.selectedHandwritingTool, .pencil)
+    }
+
+    func testRemovedCrayonPreferenceMigratesToPencil() throws {
+        let data = Data(
+            #"{"leftHandedLayoutEnabled":false,"selectedHandwritingTool":"crayon"}"#.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(
+            PracticeInterfacePreferences.self,
+            from: data
+        )
+
+        XCTAssertEqual(decoded.selectedHandwritingTool, .pencil)
+    }
+
     func testLegacyProfileSettingsDefaultNotificationsToDisabled() throws {
         let profileID = ProfileID()
         let encoded = try JSONEncoder().encode(

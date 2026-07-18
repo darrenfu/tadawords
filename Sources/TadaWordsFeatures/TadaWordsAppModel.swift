@@ -45,6 +45,7 @@ final class TadaWordsAppModel: ObservableObject {
     private var routeStatusTask: Task<Void, Never>?
     private var calendarTask: Task<Void, Never>?
     private var profileSelectionTask: Task<Void, Never>?
+    private var handwritingToolTask: Task<Void, Never>?
     private var worldProgressTask: Task<Void, Never>?
     private var focusedReplaySeed: FocusedReplaySeed?
     private var isApplicationActive = true
@@ -147,6 +148,7 @@ final class TadaWordsAppModel: ObservableObject {
             profiles.sort(by: Self.isProfileOrderedBefore)
             isCreatingChildProfile = false
             await selectProfileAndWait(profile)
+            Task { await onLearningDataChanged() }
             return true
         } catch let error as ChildProfileCreationError {
             isCreatingChildProfile = false
@@ -263,6 +265,44 @@ final class TadaWordsAppModel: ObservableObject {
 
     func clearWorldSelectionError() {
         worldSelectionError = nil
+    }
+
+    func selectHandwritingTool(_ tool: HandwritingTool) {
+        guard let profileID = selectedProfile?.id,
+            let practiceSettingsRepository
+        else { return }
+        handwritingToolTask?.cancel()
+        handwritingToolTask = Task { [weak self] in
+            guard let self, !Task.isCancelled else { return }
+            do {
+                let current =
+                    try await practiceSettingsRepository.settings(
+                        for: profileID
+                    ) ?? .defaults(for: profileID)
+                guard !Task.isCancelled,
+                    current.interface.selectedHandwritingTool != tool
+                else { return }
+                let updated = ProfilePracticeSettings(
+                    profileID: current.profileID,
+                    read: current.read,
+                    write: current.write,
+                    audio: current.audio,
+                    notifications: current.notifications,
+                    interface: PracticeInterfacePreferences(
+                        leftHandedLayoutEnabled:
+                            current.interface.leftHandedLayoutEnabled,
+                        selectedHandwritingTool: tool
+                    ),
+                    wordRecommendationMode: current.wordRecommendationMode
+                )
+                try await practiceSettingsRepository.save(updated)
+                guard !Task.isCancelled else { return }
+                await onLearningDataChanged()
+            } catch {
+                // Tool choice is non-blocking child UI. The in-quest selection
+                // remains usable and a later choice retries persistence.
+            }
+        }
     }
 
     func selectCartoonIcon(_ assetID: String) {
@@ -456,6 +496,62 @@ final class TadaWordsAppModel: ObservableObject {
         }
         Task {
             await audioExperienceService.setApplicationActive(isActive)
+        }
+    }
+
+    /// Reloads repository-backed state after a committed Family Sync apply.
+    /// An in-flight quest keeps its session, timer, and current response. The
+    /// only forced navigation is a remote deletion of the active Profile.
+    func refreshAfterExternalSyncAndWait() async {
+        guard let profileRepository else { return }
+        do {
+            let refreshedProfiles = try await profileRepository.profiles()
+                .sorted(by: Self.isProfileOrderedBefore)
+            profiles = refreshedProfiles
+
+            guard let selectedProfileID = selectedProfile?.id else {
+                if let lastPlayedProfileID,
+                    !refreshedProfiles.contains(where: {
+                        $0.id == lastPlayedProfileID
+                    })
+                {
+                    self.lastPlayedProfileID = nil
+                    try? await childSessionRepository?
+                        .clearLastSelectedProfileID()
+                }
+                return
+            }
+            guard
+                let refreshedProfile = refreshedProfiles.first(where: {
+                    $0.id == selectedProfileID
+                })
+            else {
+                abandonActiveQuest()
+                focusedReplaySeed = nil
+                routeStatusTask?.cancel()
+                calendarTask?.cancel()
+                worldProgressTask?.cancel()
+                selectedProfile = nil
+                lastPlayedProfileID = nil
+                todayRouteStatuses = [:]
+                calendarMonthSummary = nil
+                worldProgression = nil
+                rewardCollections = [:]
+                destination = .profileChooser
+                try? await childSessionRepository?
+                    .clearLastSelectedProfileID()
+                await audioExperienceService.stopAmbientAudio()
+                return
+            }
+
+            selectedProfile = refreshedProfile
+            await activateAudio(for: refreshedProfile)
+            await refreshTodayRouteStatuses(for: refreshedProfile)
+            await loadCalendar(for: refreshedProfile)
+            await loadWorldProgress(for: refreshedProfile)
+        } catch {
+            // Existing local state remains usable. The next foreground or
+            // committed receipt retries from the repository source of truth.
         }
     }
 
@@ -1346,6 +1442,7 @@ final class TadaWordsAppModel: ObservableObject {
         shouldRefreshAudio: Bool = false
     ) async throws {
         try await repository.save(updated)
+        Task { await onLearningDataChanged() }
         guard selectedProfile?.id == updated.id else { return }
         selectedProfile = updated
         if let index = profiles.firstIndex(where: { $0.id == updated.id }) {

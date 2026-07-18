@@ -19,6 +19,16 @@ public struct QuestStars: Codable, Hashable, Sendable {
     public func contains(_ star: QuestStar) -> Bool {
         earned.contains(star)
     }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        earned = Set(try container.decode([QuestStar].self))
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(QuestStar.allCases.filter(earned.contains))
+    }
 }
 
 public enum LearningInputMethod: String, Codable, CaseIterable, Hashable, Sendable {

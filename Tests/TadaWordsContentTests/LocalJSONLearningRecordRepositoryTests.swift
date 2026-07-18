@@ -134,9 +134,21 @@ final class LocalJSONLearningRecordRepositoryTests: XCTestCase {
             restoredCorrections,
             [earlierCorrection, laterCorrection]
         )
-        XCTAssertEqual(restoredReadProgress, readProgress)
-        XCTAssertEqual(restoredWriteProgress, writeProgress)
-        XCTAssertEqual(restoredOtherProgress, otherProgress)
+        XCTAssertEqual(
+            restoredReadProgress?.firstIndependentCorrectCount,
+            readProgress.firstIndependentCorrectCount
+        )
+        XCTAssertEqual(
+            restoredWriteProgress?.firstIndependentCorrectCount,
+            writeProgress.firstIndependentCorrectCount
+        )
+        XCTAssertEqual(
+            restoredOtherProgress?.firstIndependentCorrectCount,
+            otherProgress.firstIndependentCorrectCount
+        )
+        XCTAssertEqual(restoredReadProgress?.firstIndependentAttemptCount, 2)
+        XCTAssertEqual(restoredWriteProgress?.firstIndependentAttemptCount, 1)
+        XCTAssertEqual(restoredOtherProgress?.firstIndependentAttemptCount, 1)
     }
 
     func testIdenticalAppendsAndSavesAreIdempotentButConflictsFail()
@@ -239,6 +251,241 @@ final class LocalJSONLearningRecordRepositoryTests: XCTestCase {
         )
         XCTAssertEqual(restoredOriginal.outcome, .incorrect)
         XCTAssertEqual(restoredCorrections, [appendedCorrection])
+    }
+
+    func testAppendAtomicallyRebuildsProgressWithoutAnExplicitSave()
+        async throws
+    {
+        let snapshotURL = try makeSnapshotURL()
+        let repository = LocalJSONLearningRecordRepository(
+            snapshotURL: snapshotURL
+        )
+        let original = attempt(number: 1, outcome: .incorrect)
+
+        try await repository.append(original)
+        let initiallyDerivedValue = try await repository.progress(
+            for: original.profileID,
+            wordPromptID: original.wordPromptID
+        )
+        let initiallyDerived = try XCTUnwrap(initiallyDerivedValue)
+        XCTAssertEqual(initiallyDerived.firstIndependentAttemptCount, 1)
+        XCTAssertEqual(initiallyDerived.firstIndependentCorrectCount, 0)
+
+        try await repository.append(
+            correction(
+                number: 1,
+                attemptID: original.id,
+                outcome: .correct,
+                at: ContentTestFixture.day.addingTimeInterval(1)
+            )
+        )
+
+        let restarted = LocalJSONLearningRecordRepository(
+            snapshotURL: snapshotURL
+        )
+        let correctedValue = try await restarted.progress(
+            for: original.profileID,
+            wordPromptID: original.wordPromptID
+        )
+        let corrected = try XCTUnwrap(correctedValue)
+        XCTAssertEqual(corrected.firstIndependentAttemptCount, 1)
+        XCTAssertEqual(corrected.firstIndependentCorrectCount, 1)
+
+        let migratedData = try Data(contentsOf: snapshotURL)
+        let migrated = try snapshotDecoder.decode(
+            LearningRecordSnapshot.self,
+            from: migratedData
+        )
+        XCTAssertEqual(
+            migrated.schemaVersion,
+            LearningRecordSnapshot.currentSchemaVersion
+        )
+        XCTAssertEqual(
+            migrated.projectionAlgorithmVersion,
+            LearningRecordSnapshot.currentProjectionAlgorithmVersion
+        )
+        XCTAssertEqual(migrated.canonicalFactsChecksum.count, 64)
+    }
+
+    func testVersionOneSnapshotDropsStaleProgressAndMigratesAtomically()
+        async throws
+    {
+        let snapshotURL = try makeSnapshotURL()
+        let original = attempt(number: 1, outcome: .correct)
+        let staleProgress = progress(correctCount: 0)
+        let versionOne = LearningRecordSnapshot(
+            schemaVersion: 1,
+            attempts: [original],
+            corrections: [],
+            progress: [staleProgress]
+        )
+        try encodeSnapshot(versionOne).write(to: snapshotURL)
+
+        let repository = LocalJSONLearningRecordRepository(
+            snapshotURL: snapshotURL
+        )
+        let rebuiltValue = try await repository.progress(
+            for: original.profileID,
+            wordPromptID: original.wordPromptID
+        )
+        let rebuilt = try XCTUnwrap(rebuiltValue)
+        XCTAssertEqual(rebuilt.firstIndependentAttemptCount, 1)
+        XCTAssertEqual(rebuilt.firstIndependentCorrectCount, 1)
+        XCTAssertNotEqual(rebuilt, staleProgress)
+
+        let migratedData = try Data(contentsOf: snapshotURL)
+        let migrated = try snapshotDecoder.decode(
+            LearningRecordSnapshot.self,
+            from: migratedData
+        )
+        XCTAssertEqual(
+            migrated.schemaVersion,
+            LearningRecordSnapshot.currentSchemaVersion
+        )
+        let persistedProgress = try XCTUnwrap(migrated.progress.first)
+        XCTAssertEqual(migrated.progress.count, 1)
+        XCTAssertEqual(
+            persistedProgress.firstIndependentAttemptCount,
+            rebuilt.firstIndependentAttemptCount
+        )
+        XCTAssertEqual(
+            persistedProgress.firstIndependentCorrectCount,
+            rebuilt.firstIndependentCorrectCount
+        )
+        XCTAssertEqual(migrated.canonicalFactsChecksum.count, 64)
+
+        let restarted = LocalJSONLearningRecordRepository(
+            snapshotURL: snapshotURL
+        )
+        _ = try await restarted.attempts(
+            for: original.profileID,
+            wordPromptID: nil
+        )
+        XCTAssertEqual(try Data(contentsOf: snapshotURL), migratedData)
+    }
+
+    func testProjectionMetadataMismatchRebuildsStaleVersionTwoProgress()
+        async throws
+    {
+        let snapshotURL = try makeSnapshotURL()
+        let original = attempt(number: 1, outcome: .correct)
+        let stale = LearningRecordSnapshot(
+            projectionAlgorithmVersion: 0,
+            canonicalFactsChecksum: "stale",
+            attempts: [original],
+            corrections: [],
+            progress: [progress(correctCount: 0)]
+        )
+        try encodeSnapshot(stale).write(to: snapshotURL)
+
+        let repository = LocalJSONLearningRecordRepository(
+            snapshotURL: snapshotURL
+        )
+        let rebuiltValue = try await repository.progress(
+            for: original.profileID,
+            wordPromptID: original.wordPromptID
+        )
+        let rebuilt = try XCTUnwrap(rebuiltValue)
+        XCTAssertEqual(rebuilt.firstIndependentCorrectCount, 1)
+
+        let repaired = try snapshotDecoder.decode(
+            LearningRecordSnapshot.self,
+            from: Data(contentsOf: snapshotURL)
+        )
+        XCTAssertEqual(
+            repaired.projectionAlgorithmVersion,
+            LearningRecordSnapshot.currentProjectionAlgorithmVersion
+        )
+        XCTAssertNotEqual(repaired.canonicalFactsChecksum, "stale")
+    }
+
+    func testForgedStaleProjectionWithMatchingFactsMetadataIsRebuilt()
+        async throws
+    {
+        let snapshotURL = try makeSnapshotURL()
+        let original = attempt(number: 1, outcome: .correct)
+        let writer = LocalJSONLearningRecordRepository(snapshotURL: snapshotURL)
+        try await writer.append(original)
+
+        let canonical = try snapshotDecoder.decode(
+            LearningRecordSnapshot.self,
+            from: Data(contentsOf: snapshotURL)
+        )
+        let forgedProgress = progress(correctCount: 0)
+        let forged = LearningRecordSnapshot(
+            schemaVersion: canonical.schemaVersion,
+            projectionAlgorithmVersion: canonical.projectionAlgorithmVersion,
+            canonicalFactsChecksum: canonical.canonicalFactsChecksum,
+            attempts: canonical.attempts,
+            corrections: canonical.corrections,
+            progress: [forgedProgress]
+        )
+        try encodeSnapshot(forged).write(to: snapshotURL)
+
+        let reader = LocalJSONLearningRecordRepository(snapshotURL: snapshotURL)
+        let repairedValue = try await reader.progress(
+            for: original.profileID,
+            wordPromptID: original.wordPromptID
+        )
+        let repaired = try XCTUnwrap(repairedValue)
+        XCTAssertEqual(repaired.firstIndependentAttemptCount, 1)
+        XCTAssertEqual(repaired.firstIndependentCorrectCount, 1)
+        XCTAssertNotEqual(repaired, forgedProgress)
+
+        let persisted = try snapshotDecoder.decode(
+            LearningRecordSnapshot.self,
+            from: Data(contentsOf: snapshotURL)
+        )
+        XCTAssertEqual(persisted.progress.count, 1)
+        XCTAssertEqual(
+            persisted.progress.first?.firstIndependentCorrectCount,
+            1
+        )
+    }
+
+    func testCanonicalEventPermutationsProduceByteEquivalentSnapshots()
+        async throws
+    {
+        let firstURL = try makeSnapshotURL()
+        let secondURL = try makeSnapshotURL()
+        let first = LocalJSONLearningRecordRepository(snapshotURL: firstURL)
+        let second = LocalJSONLearningRecordRepository(snapshotURL: secondURL)
+        let incorrect = attempt(
+            number: 1,
+            outcome: .incorrect,
+            at: ContentTestFixture.day
+        )
+        let correct = attempt(
+            number: 2,
+            outcome: .correct,
+            at: ContentTestFixture.day.addingTimeInterval(2)
+        )
+        let override = correction(
+            number: 1,
+            attemptID: incorrect.id,
+            outcome: .correct,
+            at: ContentTestFixture.day.addingTimeInterval(1)
+        )
+
+        try await first.append(incorrect)
+        try await first.append(correct)
+        try await first.append(override)
+
+        try await second.append(override)
+        try await second.append(correct)
+        try await second.append(incorrect)
+
+        XCTAssertEqual(
+            try Data(contentsOf: firstURL),
+            try Data(contentsOf: secondURL)
+        )
+        let finalProgressValue = try await second.progress(
+            for: incorrect.profileID,
+            wordPromptID: incorrect.wordPromptID
+        )
+        let finalProgress = try XCTUnwrap(finalProgressValue)
+        XCTAssertEqual(finalProgress.firstIndependentAttemptCount, 2)
+        XCTAssertEqual(finalProgress.firstIndependentCorrectCount, 2)
     }
 
     func testProgressIsProfileWordAndModeSafe() async throws {
@@ -561,6 +808,12 @@ final class LocalJSONLearningRecordRepositoryTests: XCTestCase {
         encoder.dateEncodingStrategy = .secondsSince1970
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try encoder.encode(snapshot)
+    }
+
+    private var snapshotDecoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        return decoder
     }
 
     private func assertInvalidJSON(

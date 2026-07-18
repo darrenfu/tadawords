@@ -40,6 +40,9 @@ Infrastructure adapters depend on Domain contracts; Domain never depends on infr
   pools, attempts, progress, and daily quest history.
 - Coordinates child-created profiles so isolated default settings exist before a
   new profile becomes visible.
+- Owns the local-first Family Sync coordinator, versioned data manifest, durable
+  journal/outbox, crash-safe apply transaction, deterministic merge rules, and
+  event-derived projections. Child and Parent writes commit locally before sync.
 
 ### TadaWordsGuardianFeatures
 
@@ -62,7 +65,9 @@ Infrastructure adapters depend on Domain contracts; Domain never depends on infr
 
 - Apple framework adapters for Domain service contracts.
 - No product rules and no feature navigation state.
-- Replaceable implementations for audio, speech, handwriting, and device security.
+- Replaceable implementations for audio, speech, handwriting, device security,
+  private/shared `CKSyncEngine`, bounded Profile-photo `CKAsset`, and CloudKit
+  deletion-ledger transport.
 
 ## Clean Code constraints
 

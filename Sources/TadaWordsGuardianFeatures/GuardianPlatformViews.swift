@@ -1,6 +1,57 @@
 import SwiftUI
 import TadaWordsDomain
 
+/// Exportable support evidence deliberately limited to transport state. It
+/// never includes a Profile ID, child name, word, photo, voice sample, or
+/// repository payload.
+struct GuardianFamilySyncDiagnosticReport: Equatable {
+    let text: String
+
+    init(
+        status: FamilySyncStatus,
+        isEnabled: Bool,
+        generatedAt: Date = Date()
+    ) {
+        var fields = [
+            "Tada Words Family Sync Diagnostics",
+            "Schema: 1",
+            "Generated: \(generatedAt.ISO8601Format())",
+            "Enabled on this device: \(isEnabled ? "yes" : "no")",
+        ]
+        switch status {
+        case .idle:
+            fields.append("State: idle")
+        case .optedOut:
+            fields.append("State: opted_out")
+        case .deviceOnly:
+            fields.append("State: device_only")
+        case .syncing(let pendingCount):
+            fields.append("State: syncing")
+            fields.append("Pending changes: \(pendingCount)")
+        case .synced(let date):
+            fields.append("State: synced")
+            fields.append("Last success: \(date.ISO8601Format())")
+        case .pendingOffline(
+            let pendingCount,
+            let retryCount,
+            let nextRetryAt
+        ):
+            fields.append("State: waiting_for_connection")
+            fields.append("Pending changes: \(pendingCount)")
+            fields.append("Retry count: \(retryCount)")
+            if let nextRetryAt {
+                fields.append("Next retry: \(nextRetryAt.ISO8601Format())")
+            }
+        case .iCloudUnavailable:
+            fields.append("State: icloud_unavailable")
+        case .failed(_, let pendingCount):
+            fields.append("State: needs_attention")
+            fields.append("Pending changes: \(pendingCount)")
+        }
+        text = fields.joined(separator: "\n")
+    }
+}
+
 struct GuardianFamilySyncPresentation: Equatable {
     let navigationTitle: String
     let title: String
@@ -45,21 +96,37 @@ struct GuardianFamilySyncPresentation: Equatable {
             preconditionFailure("Opted-out state was handled above.")
         case .deviceOnly:
             preconditionFailure("Device-only state was handled above.")
-        case .syncing:
+        case .syncing(let pendingCount):
             title = "Syncing…"
-            message = "Local learning data stays available while this finishes."
+            message =
+                pendingCount == 1
+                ? "1 change is safe on this device while it syncs."
+                : "\(pendingCount) changes are safe on this device while they sync."
             symbol = "arrow.triangle.2.circlepath.icloud"
             showsSyncAction = false
             showsInvitationActions = false
-        case .synced:
+        case .synced(let date):
             title = "Up to date"
-            message = "Family learning data is current."
+            message = "Last synced \(Self.formatted(date))."
             symbol = "checkmark.icloud.fill"
             showsSyncAction = true
             showsInvitationActions = true
-        case .pendingOffline:
+        case .pendingOffline(
+            let pendingCount,
+            let retryCount,
+            let nextRetryAt
+        ):
             title = "Waiting for a connection"
-            message = "Tada Words will retry without interrupting practice."
+            let pendingMessage =
+                pendingCount == 1
+                ? "1 change is safe on this device. Tada Words will retry."
+                : "\(pendingCount) changes are safe on this device. Tada Words will retry."
+            if retryCount > 0, let nextRetryAt {
+                message =
+                    "\(pendingMessage) Retry \(retryCount) is scheduled for \(Self.formatted(nextRetryAt))."
+            } else {
+                message = pendingMessage
+            }
             symbol = "arrow.triangle.2.circlepath.icloud"
             showsSyncAction = true
             showsInvitationActions = false
@@ -69,13 +136,17 @@ struct GuardianFamilySyncPresentation: Equatable {
             symbol = "exclamationmark.icloud.fill"
             showsSyncAction = true
             showsInvitationActions = false
-        case .failed(let message):
+        case .failed(let message, _):
             title = "Sync needs attention"
             self.message = message
             symbol = "exclamationmark.icloud.fill"
             showsSyncAction = true
             showsInvitationActions = false
         }
+    }
+
+    private static func formatted(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 
@@ -91,11 +162,13 @@ struct GuardianFamilySyncView: View {
     let status: FamilySyncStatus
     let isEnabled: Bool
     let shareURL: URL?
+    let canManageAccess: Bool
     @Binding var shareURLText: String
     let onBack: () -> Void
     let onSetEnabled: @MainActor (Bool) -> Void
     let onSyncNow: () -> Void
     let onCreateShare: () -> Void
+    let onManageAccess: () -> Void
     let onAcceptShare: () -> Void
 
     private var presentation: GuardianFamilySyncPresentation {
@@ -110,12 +183,27 @@ struct GuardianFamilySyncView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Label(presentation.title, systemImage: presentation.symbol)
                             .font(.system(.title3, design: .rounded, weight: .bold))
+                            .accessibilityIdentifier("guardian.sync.status")
                         Text(presentation.message)
                             .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
                         if presentation.showsSyncAction {
                             Button("Sync now", action: onSyncNow)
                                 .buttonStyle(.borderedProminent)
+                                .accessibilityIdentifier("guardian.sync.now")
                         }
+                        ShareLink(
+                            item: GuardianFamilySyncDiagnosticReport(
+                                status: status,
+                                isEnabled: isEnabled
+                            ).text
+                        ) {
+                            Label(
+                                "Share diagnostics",
+                                systemImage: "doc.text.magnifyingglass"
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("guardian.sync.diagnostics")
                     }
                 }
 
@@ -132,6 +220,7 @@ struct GuardianFamilySyncView: View {
                                 )
                             )
                             .font(.system(.headline, design: .rounded, weight: .bold))
+                            .accessibilityIdentifier("guardian.sync.enabled")
                             Text(
                                 "Turning this on sends profiles, word lists, progress, settings, and rewards to your iCloud. Voiceprints and raw recordings never sync. Turning it off stops future sync but does not erase records already uploaded."
                             )
@@ -149,6 +238,18 @@ struct GuardianFamilySyncView: View {
                                 .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
                             Button("Create invitation", action: onCreateShare)
                                 .buttonStyle(.bordered)
+                            if canManageAccess {
+                                Button(action: onManageAccess) {
+                                    Label(
+                                        "Manage access",
+                                        systemImage: "person.2.badge.gearshape"
+                                    )
+                                }
+                                .buttonStyle(.bordered)
+                                .accessibilityIdentifier(
+                                    "guardian.sync.manage-access"
+                                )
+                            }
                             if let shareURL {
                                 ShareLink(item: shareURL) {
                                     Label("Share invitation", systemImage: "square.and.arrow.up")
@@ -174,6 +275,7 @@ struct GuardianFamilySyncView: View {
             .padding(GuardianPrimitiveTokens.Spacing.large)
             .frame(maxWidth: .infinity)
         }
+        .accessibilityIdentifier("guardian.sync.page")
     }
 }
 

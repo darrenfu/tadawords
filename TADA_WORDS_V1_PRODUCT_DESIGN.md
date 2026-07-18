@@ -575,7 +575,9 @@ modelVersion, schedulerVersion, deviceID
 - 重复 Word 在同步后由 `Profile + Mode + normalized word` 合并；Read 与 Write 的同名词仍是两个独立学习对象。
 - 同步状态、待处理数量、最近成功时间和可恢复错误在重启后仍可见；孩子做题页面不弹同步阻塞框。
 
-当前实现保持可检查的本地 JSON snapshot 作为运行真源，通过自定义 CloudKit record adapter 同步，不为 v0.3 再引入 Core Data 或自建服务器。完整 record scope、合并规则、outbox、删除与验收见 [ADR-0001](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md)。
+v0.7.0 保持可检查的本地 JSON snapshot 作为运行真源，通过私有库和共享库各自持久化的 `CKSyncEngine`、耐崩溃 outbox/inbox 与 Profile 级 apply transaction 同步，不引入 Core Data 或自建服务器。完整 record scope、合并规则、删除与分层验收见 [ADR-0001](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md)、[数据清单](Docs/FAMILY-SYNC-DATA-MANIFEST.md)和[验收矩阵](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md)。
+
+Family Sync 页面在 production Release 中使用 Apple `UICloudSharingController` 管理现有共享。入口先通过 Parent Gate 与系统敏感操作认证，再按持久化 binding 将 owner 路由到 private database、participant 路由到 shared database；revoked、deleted 或 malformed binding 一律 fail closed，不能静默新建 private fallback。系统页面保存或停止共享后，通过与 background notification 相同的幂等 reconciliation/receipt/UI refresh 路径更新 App。LocalQA 和普通 simulator 不注入该入口。
 
 ### 同一 Apple ID
 
@@ -596,7 +598,7 @@ modelVersion, schedulerVersion, deviceID
 - 声纹模板只保存在当前设备 Keychain；Profile 同步时导出 `notEnrolled`，导入时保留接收设备自己的 enrollment 状态。
 - 新 iPhone/iPad 需要为同一个 Kid Profile 单独完成一次声纹注册；声纹不可用不能阻塞学习历史同步。
 - 具体词图片和未来的远端 audio 补包只写入 App `Caches`，不进入 CloudKit。首发 500 词的 Katie 双语速音频随 App bundle 离线分发；bundle 外的家长自定义词使用本机 Apple 英语女声 fallback。两类音频都不进入家庭同步数据。
-- Avatar 原图属于家长明确选择的 Profile 数据，不是 cache；Family Sync 开启后可同步，但生产版应使用有大小上限的独立 `CKAsset`。
+- Avatar 原图属于家长明确选择的 Profile 数据，不是 cache；Family Sync 开启后以最大 512 px、256 KiB 的 prepared JPEG 独立 `CKAsset` 同步。通用 envelope 只携带引用与校验元数据，损坏或身份不匹配的 asset 被隔离且不会覆盖现有头像。
 
 ## 19. 通知
 

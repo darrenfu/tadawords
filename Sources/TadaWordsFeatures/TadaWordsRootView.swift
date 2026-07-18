@@ -21,6 +21,7 @@ public struct TadaWordsRootView: View {
     private let onOpenGuardian: () -> Void
     private let demoLaunchRoute: DemoLaunchRoute?
     private let usesSimulatedVoiceCheck: Bool
+    private var externalDataRevision: UUID?
 
     @State private var didApplyDemoLaunchRoute = false
     @State private var isCalendarPresented = false
@@ -95,6 +96,7 @@ public struct TadaWordsRootView: View {
         pictureHintProvider: any WordPictureHintProviding =
             NoWordPictureHintProvider(),
         speechPermissionActions: SpeechPermissionActions,
+        externalDataRevision: UUID? = nil,
         onLearningDataChanged: @escaping @Sendable () async -> Void = {},
         onOpenGuardian: @escaping () -> Void = {}
     ) {
@@ -103,6 +105,7 @@ public struct TadaWordsRootView: View {
         self.audioExperienceService = audioExperienceService
         self.pictureHintProvider = pictureHintProvider
         self.speechPermissionActions = speechPermissionActions
+        self.externalDataRevision = externalDataRevision
         self.onOpenGuardian = onOpenGuardian
         demoLaunchRoute = nil
         usesSimulatedVoiceCheck = false
@@ -148,6 +151,7 @@ public struct TadaWordsRootView: View {
         pictureHintProvider: any WordPictureHintProviding =
             NoWordPictureHintProvider(),
         speechPermissionActions: SpeechPermissionActions,
+        externalDataRevision: UUID? = nil,
         onLearningDataChanged: @escaping @Sendable () async -> Void = {},
         onOpenGuardian: @escaping () -> Void = {}
     ) {
@@ -156,6 +160,7 @@ public struct TadaWordsRootView: View {
         self.audioExperienceService = audioExperienceService
         self.pictureHintProvider = pictureHintProvider
         self.speechPermissionActions = speechPermissionActions
+        self.externalDataRevision = externalDataRevision
         self.onOpenGuardian = onOpenGuardian
         demoLaunchRoute = nil
         usesSimulatedVoiceCheck = false
@@ -338,6 +343,12 @@ public struct TadaWordsRootView: View {
         .onChange(of: scenePhase, initial: true) { _, phase in
             model.setApplicationActive(phase == .active)
         }
+        .onChange(of: externalDataRevision) { _, revision in
+            guard revision != nil else { return }
+            Task {
+                await model.refreshAfterExternalSyncAndWait()
+            }
+        }
         .sheet(isPresented: $isCalendarPresented) {
             ChildQuestCalendarView(
                 profile: model.selectedProfile,
@@ -482,6 +493,7 @@ public struct TadaWordsRootView: View {
                         recognitionService: handwritingRecognitionService,
                         audioExperienceService: audioExperienceService,
                         pictureHintProvider: pictureHintProvider,
+                        onHandwritingToolChanged: model.selectHandwritingTool,
                         onSpeak: { await model.speakAndWait(session.prompt) },
                         onBack: model.showLobby,
                         onComplete: { summary in

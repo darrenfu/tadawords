@@ -37,20 +37,25 @@ targets:
         product: TadaWordsApplePlatform
       - package: TadaWordsModules
         product: TadaWordsDomain
+      - package: TadaWordsModules
+        product: TadaWordsContent
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app
         PRODUCT_NAME: Tada Words
-        MARKETING_VERSION: 0.6.1
-        CURRENT_PROJECT_VERSION: 2026071701
+        MARKETING_VERSION: 0.7.0
+        CURRENT_PROJECT_VERSION: 2026071805
         TADA_GIT_COMMIT: unknown
         CODE_SIGN_STYLE: Automatic
+        APS_ENVIRONMENT: development
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: false
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_ENTITLEMENTS: Apps/TadaWordsApp/TadaWords.entitlements
       configs:
+        Release:
+          APS_ENVIRONMENT: production
         LocalQA:
           PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app.localqa
           PRODUCT_NAME: Tada Words QA
@@ -61,8 +66,8 @@ targets:
       path: Apps/TadaWordsApp/Info.plist
       properties:
         CFBundleDisplayName: Tada Words
-        CFBundleShortVersionString: "0.6.1"
-        CFBundleVersion: "2026071701"
+        CFBundleShortVersionString: "0.7.0"
+        CFBundleVersion: "2026071805"
         TadaWordsGitCommit: "$(TADA_GIT_COMMIT)"
         CKSharingSupported: true
         ITSAppUsesNonExemptEncryption: false
@@ -72,6 +77,8 @@ targets:
         NSPhotoLibraryUsageDescription: Tada Words lets a parent choose a profile photo or a word-sheet photo for on-device text recognition.
         NSSpeechRecognitionUsageDescription: Tada Words uses on-device speech recognition to compare the spoken practice word and give immediate feedback.
         UIRequiresFullScreen: true
+        UIBackgroundModes:
+          - remote-notification
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations:

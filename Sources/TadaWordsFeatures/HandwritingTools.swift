@@ -219,7 +219,9 @@ struct HandwritingSelectionState: Equatable {
 /// payload so existing preferences decode safely; all newly stored selections
 /// use black. Eraser mode is deliberately transient so a child always returns
 /// to a drawing tool in a later session.
-public struct HandwritingPreferenceStore: HandwritingPreferenceRemoving, @unchecked Sendable {
+public struct HandwritingPreferenceStore: LegacyHandwritingPreferenceMigrating,
+    @unchecked Sendable
+{
     private let userDefaults: UserDefaults
     private let keyPrefix: String
 
@@ -260,6 +262,22 @@ public struct HandwritingPreferenceStore: HandwritingPreferenceRemoving, @unchec
 
     public func remove(for profileID: ProfileID) {
         userDefaults.removeObject(forKey: key(for: profileID))
+    }
+
+    public func consumeLegacyTool(
+        for profileID: ProfileID
+    ) -> HandwritingTool? {
+        guard let data = userDefaults.data(forKey: key(for: profileID)) else {
+            return nil
+        }
+        defer { remove(for: profileID) }
+        guard
+            let stored = try? JSONDecoder().decode(StoredSelection.self, from: data),
+            let tool = HandwritingTool(rawValue: stored.tool)
+        else {
+            return .pencil
+        }
+        return HandwritingToolPolicy.selectableTool(orPencil: tool)
     }
 
     private func key(for profileID: ProfileID) -> String {

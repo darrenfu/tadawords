@@ -73,15 +73,18 @@ public actor LocalJSONKidProfileRepository: KidProfileRepository {
     public nonisolated let snapshotURL: URL
 
     private let fileManager: FileManager
+    private let mutationGate: ProfileScopedMutationGate?
     private var storage: KidProfileStorage?
     private var loadFailure: LocalKidProfileRepositoryError?
 
     public init(
         snapshotURL: URL,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        mutationGate: ProfileScopedMutationGate? = nil
     ) {
         self.snapshotURL = snapshotURL
         self.fileManager = fileManager
+        self.mutationGate = mutationGate
     }
 
     public func profiles() async throws -> [KidProfile] {
@@ -93,17 +96,41 @@ public actor LocalJSONKidProfileRepository: KidProfileRepository {
     }
 
     public func save(_ profile: KidProfile) async throws {
-        var candidate = try loadedStorage()
-        guard try candidate.save(profile) else { return }
-        try persist(candidate)
-        storage = candidate
+        try await withMutationLease(for: profile.id) {
+            var candidate = try loadedStorage()
+            guard try candidate.save(profile) else { return }
+            try persist(candidate)
+            storage = candidate
+        }
     }
 
     public func delete(id: ProfileID) async throws {
-        var candidate = try loadedStorage()
-        guard candidate.delete(id: id) else { return }
-        try persist(candidate)
-        storage = candidate
+        try await withMutationLease(for: id) {
+            var candidate = try loadedStorage()
+            guard candidate.delete(id: id) else { return }
+            try persist(candidate)
+            storage = candidate
+        }
+    }
+
+    private func withMutationLease(
+        for profileID: ProfileID,
+        _ operation: () throws -> Void
+    ) async throws {
+        guard let mutationGate,
+            ProfileScopedMutationLeaseContext.profileID != profileID
+        else {
+            try operation()
+            return
+        }
+        await mutationGate.acquire(profileID)
+        do {
+            try operation()
+            await mutationGate.release(profileID)
+        } catch {
+            await mutationGate.release(profileID)
+            throw error
+        }
     }
 
     /// Retries loading only after a caller explicitly repairs or restores the

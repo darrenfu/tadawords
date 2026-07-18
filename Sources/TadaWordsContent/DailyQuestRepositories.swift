@@ -12,27 +12,104 @@ public enum DailyQuestRepositoryError: Error, Equatable, Sendable {
     case conflictingRewardGrantID(RewardGrantID)
     case rewardAlreadyGranted(RewardGrantKey)
     case rewardDoesNotMatchCompletion(RewardGrantID)
+    case conflictingCanonicalPlan(DailyQuestKey)
+    case conflictingCanonicalTodayCompletion(DailyQuestKey)
+    case conflictingCanonicalReward(DailyQuestKey)
+    case incompleteCanonicalToday(DailyQuestKey)
+    case canonicalPlanNotFound(DailyQuestKey)
 }
 
 public struct DailyQuestSnapshot: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 3
+    public static let currentCanonicalBusinessKeyVersion = 1
 
     public let schemaVersion: Int
+    public let canonicalBusinessKeyVersion: Int
     public let plans: [DailyQuestPlan]
     public let completions: [DailyQuestCompletion]
     public let rewardGrants: [RewardGrant]
+    /// Sync deliveries are not dependency-atomic. These durable staging sets
+    /// hold otherwise-valid facts until their plan/completion/reward chain is
+    /// complete, including across process termination.
+    public let pendingCompletions: [DailyQuestCompletion]
+    public let pendingRewardGrants: [RewardGrant]
 
     public init(
         schemaVersion: Int = Self.currentSchemaVersion,
+        canonicalBusinessKeyVersion: Int? = nil,
         plans: [DailyQuestPlan],
         completions: [DailyQuestCompletion],
-        rewardGrants: [RewardGrant]
+        rewardGrants: [RewardGrant],
+        pendingCompletions: [DailyQuestCompletion] = [],
+        pendingRewardGrants: [RewardGrant] = []
     ) {
         self.schemaVersion = schemaVersion
+        self.canonicalBusinessKeyVersion =
+            canonicalBusinessKeyVersion
+            ?? (schemaVersion == Self.currentSchemaVersion
+                ? Self.currentCanonicalBusinessKeyVersion
+                : 0)
         self.plans = plans
         self.completions = completions
         self.rewardGrants = rewardGrants
+        self.pendingCompletions = pendingCompletions
+        self.pendingRewardGrants = pendingRewardGrants
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case canonicalBusinessKeyVersion
+        case plans
+        case completions
+        case rewardGrants
+        case pendingCompletions
+        case pendingRewardGrants
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let schemaVersion = try container.decode(
+            Int.self,
+            forKey: .schemaVersion
+        )
+        self.init(
+            schemaVersion: schemaVersion,
+            canonicalBusinessKeyVersion: try container.decodeIfPresent(
+                Int.self,
+                forKey: .canonicalBusinessKeyVersion
+            ) ?? 0,
+            plans: try container.decode(
+                [DailyQuestPlan].self,
+                forKey: .plans
+            ),
+            completions: try container.decode(
+                [DailyQuestCompletion].self,
+                forKey: .completions
+            ),
+            rewardGrants: try container.decode(
+                [RewardGrant].self,
+                forKey: .rewardGrants
+            ),
+            pendingCompletions: try container.decodeIfPresent(
+                [DailyQuestCompletion].self,
+                forKey: .pendingCompletions
+            ) ?? [],
+            pendingRewardGrants: try container.decodeIfPresent(
+                [RewardGrant].self,
+                forKey: .pendingRewardGrants
+            ) ?? []
+        )
+    }
+}
+
+/// Family-sync delivery can split a Daily plan, completion, and reward across
+/// separate CKSyncEngine batches. This protocol is deliberately separate from
+/// the app's dependency-closed `mergeCanonical` API so local quest completion
+/// still commits its reward atomically.
+public protocol CausallyStagedDailyQuestHistoryRepository: Sendable {
+    func stageCanonical(
+        _ batch: DailyQuestCanonicalMergeBatch
+    ) async throws -> DailyQuestCanonicalMergeResult
 }
 
 public enum DailyQuestSnapshotValidationIssue: Equatable, Sendable {
@@ -64,6 +141,11 @@ public enum LocalDailyQuestRepositoryError: Error, Equatable, Sendable {
         found: Int,
         supported: Int
     )
+    case unsupportedCanonicalBusinessKeyVersion(
+        snapshotURL: URL,
+        found: Int,
+        supported: Int
+    )
     case invalidSnapshot(
         snapshotURL: URL,
         issue: DailyQuestSnapshotValidationIssue
@@ -71,7 +153,9 @@ public enum LocalDailyQuestRepositoryError: Error, Equatable, Sendable {
     case writeFailed(snapshotURL: URL, details: String)
 }
 
-public actor InMemoryDailyQuestRepository: DailyQuestHistoryRepository {
+public actor InMemoryDailyQuestRepository: DailyQuestHistoryRepository,
+    CausallyStagedDailyQuestHistoryRepository
+{
     private var storage = DailyQuestStorage()
 
     public init() {}
@@ -127,6 +211,36 @@ public actor InMemoryDailyQuestRepository: DailyQuestHistoryRepository {
         storage.rewardGrants(for: profileID)
     }
 
+    public func mergeCanonical(
+        _ batch: DailyQuestCanonicalMergeBatch
+    ) async throws -> DailyQuestCanonicalMergeResult {
+        guard !batch.isEmpty else {
+            return DailyQuestCanonicalMergeResult(
+                didChange: false,
+                affectedKeys: []
+            )
+        }
+        var candidate = storage
+        let result = try candidate.mergeCanonical(batch)
+        storage = candidate
+        return result
+    }
+
+    public func stageCanonical(
+        _ batch: DailyQuestCanonicalMergeBatch
+    ) async throws -> DailyQuestCanonicalMergeResult {
+        guard !batch.isEmpty else {
+            return DailyQuestCanonicalMergeResult(
+                didChange: false,
+                affectedKeys: []
+            )
+        }
+        var candidate = storage
+        let result = try candidate.stageCanonical(batch)
+        storage = candidate
+        return result
+    }
+
     public func deleteHistory(for profileID: ProfileID) async throws {
         _ = try storage.deleteHistory(for: profileID)
     }
@@ -134,19 +248,24 @@ public actor InMemoryDailyQuestRepository: DailyQuestHistoryRepository {
 
 /// Durable, local-only Daily Quest source of truth. One actor instance should
 /// be shared per snapshot URL so all read-modify-write operations are serialized.
-public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository {
+public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository,
+    CausallyStagedDailyQuestHistoryRepository
+{
     public nonisolated let snapshotURL: URL
 
     private let fileManager: FileManager
+    private let mutationGate: ProfileScopedMutationGate?
     private var storage: DailyQuestStorage?
     private var loadFailure: LocalDailyQuestRepositoryError?
 
     public init(
         snapshotURL: URL,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        mutationGate: ProfileScopedMutationGate? = nil
     ) {
         self.snapshotURL = snapshotURL
         self.fileManager = fileManager
+        self.mutationGate = mutationGate
     }
 
     public func state(for key: DailyQuestKey) async throws -> DailyQuestState {
@@ -156,12 +275,14 @@ public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository {
     public func createPlanIfAbsent(
         _ plan: DailyQuestPlan
     ) async throws -> DailyQuestPlan {
-        var candidate = try loadedStorage()
-        let result = try candidate.createPlanIfAbsent(plan)
-        guard result.inserted else { return result.plan }
-        try persist(candidate)
-        storage = candidate
-        return result.plan
+        try await withMutationLeases(for: [plan.key.profileID]) {
+            var candidate = try loadedStorage()
+            let result = try candidate.createPlanIfAbsent(plan)
+            guard result.inserted else { return result.plan }
+            try persist(candidate)
+            storage = candidate
+            return result.plan
+        }
     }
 
     public func completions(
@@ -181,17 +302,19 @@ public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository {
         _ completion: DailyQuestCompletion,
         proposedRewardGrant: RewardGrant?
     ) async throws -> DailyQuestCompletionWriteResult {
-        var candidate = try loadedStorage()
-        let result = try candidate.recordCompletion(
-            completion,
-            proposedRewardGrant: proposedRewardGrant
-        )
-        guard result.insertedCompletion || result.grantedReward else {
+        try await withMutationLeases(for: [completion.profileID]) {
+            var candidate = try loadedStorage()
+            let result = try candidate.recordCompletion(
+                completion,
+                proposedRewardGrant: proposedRewardGrant
+            )
+            guard result.insertedCompletion || result.grantedReward else {
+                return result
+            }
+            try persist(candidate)
+            storage = candidate
             return result
         }
-        try persist(candidate)
-        storage = candidate
-        return result
     }
 
     public func allCompletions(
@@ -212,11 +335,77 @@ public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository {
         try loadedStorage().rewardGrants(for: profileID)
     }
 
+    public func mergeCanonical(
+        _ batch: DailyQuestCanonicalMergeBatch
+    ) async throws -> DailyQuestCanonicalMergeResult {
+        guard !batch.isEmpty else {
+            return DailyQuestCanonicalMergeResult(
+                didChange: false,
+                affectedKeys: []
+            )
+        }
+        let profileIDs = Set(batch.plans.map { $0.key.profileID })
+            .union(batch.completions.map(\.profileID))
+            .union(batch.rewardGrants.map { $0.key.profileID })
+        return try await withMutationLeases(for: profileIDs) {
+            var candidate = try loadedStorage()
+            let result = try candidate.mergeCanonical(batch)
+            guard result.didChange else { return result }
+            try persist(candidate)
+            storage = candidate
+            return result
+        }
+    }
+
+    public func stageCanonical(
+        _ batch: DailyQuestCanonicalMergeBatch
+    ) async throws -> DailyQuestCanonicalMergeResult {
+        guard !batch.isEmpty else {
+            return DailyQuestCanonicalMergeResult(
+                didChange: false,
+                affectedKeys: []
+            )
+        }
+        let profileIDs = Set(batch.plans.map { $0.key.profileID })
+            .union(batch.completions.map(\.profileID))
+            .union(batch.rewardGrants.map { $0.key.profileID })
+        return try await withMutationLeases(for: profileIDs) {
+            var candidate = try loadedStorage()
+            let result = try candidate.stageCanonical(batch)
+            guard result.didChange else { return result }
+            try persist(candidate)
+            storage = candidate
+            return result
+        }
+    }
+
     public func deleteHistory(for profileID: ProfileID) async throws {
-        var candidate = try loadedStorage()
-        guard try candidate.deleteHistory(for: profileID) else { return }
-        try persist(candidate)
-        storage = candidate
+        try await withMutationLeases(for: [profileID]) {
+            var candidate = try loadedStorage()
+            guard try candidate.deleteHistory(for: profileID) else { return }
+            try persist(candidate)
+            storage = candidate
+        }
+    }
+
+    private func withMutationLeases<Value>(
+        for profileIDs: Set<ProfileID>,
+        _ operation: () throws -> Value
+    ) async throws -> Value {
+        guard let mutationGate else { return try operation() }
+        let ids =
+            profileIDs
+            .filter { ProfileScopedMutationLeaseContext.profileID != $0 }
+            .sorted { $0.description < $1.description }
+        for id in ids { await mutationGate.acquire(id) }
+        do {
+            let value = try operation()
+            for id in ids.reversed() { await mutationGate.release(id) }
+            return value
+        } catch {
+            for id in ids.reversed() { await mutationGate.release(id) }
+            throw error
+        }
     }
 
     /// Retries only after the caller repairs or restores the snapshot. A
@@ -272,7 +461,11 @@ public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository {
                 details: String(describing: error)
             )
         }
-        guard snapshot.schemaVersion == DailyQuestSnapshot.currentSchemaVersion else {
+        guard
+            (1...DailyQuestSnapshot.currentSchemaVersion).contains(
+                snapshot.schemaVersion
+            )
+        else {
             throw LocalDailyQuestRepositoryError.unsupportedSchemaVersion(
                 snapshotURL: snapshotURL,
                 found: snapshot.schemaVersion,
@@ -281,7 +474,25 @@ public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository {
         }
 
         do {
-            return try DailyQuestStorage(snapshot: snapshot)
+            let loaded = try DailyQuestStorage(snapshot: snapshot)
+            if snapshot.schemaVersion < DailyQuestSnapshot.currentSchemaVersion {
+                try persist(loaded)
+                return loaded
+            }
+            guard
+                snapshot.canonicalBusinessKeyVersion
+                    == DailyQuestSnapshot.currentCanonicalBusinessKeyVersion
+            else {
+                throw
+                    LocalDailyQuestRepositoryError
+                    .unsupportedCanonicalBusinessKeyVersion(
+                        snapshotURL: snapshotURL,
+                        found: snapshot.canonicalBusinessKeyVersion,
+                        supported:
+                            DailyQuestSnapshot.currentCanonicalBusinessKeyVersion
+                    )
+            }
+            return loaded
         } catch let error as DailyQuestStorageValidationError {
             throw LocalDailyQuestRepositoryError.invalidSnapshot(
                 snapshotURL: snapshotURL,

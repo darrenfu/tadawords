@@ -52,6 +52,18 @@ PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当�
 | LocalQA 隔离声明 | v0.2 基线：`Tada Words QA` 使用独立 bundle ID、空 iCloud entitlement，且 `CKSharingSupported` 为 false |
 | 儿童语音 fixture | v0.2 基线：SHA-256 通过，Apple 转写为 `Bye.`，App policy 对目标 `bye` 判定为匹配 |
 
+### 当前 v0.7.0 Family Sync 证据
+
+上表保留 v0.3.1 的历史交付记录。当前 v0.7.0 (`2026071805`) 另有以下证据：
+
+| 检查 | 结果 |
+|---|---|
+| Swift formatter 严格检查 | 通过 |
+| Swift 单元与组合测试 | 809/809 通过，0 failure；Issue Agent 14/14 通过 |
+| Family Sync XCUITest | source batch：iPhone 17 Pro Max 6/6、iPad Pro 13-inch (M5) 6/6，iOS 26.5；merge 前必须对 exact committed HEAD 重跑 |
+| Critical XCUITest | source batch：iPhone 17 Pro Max 10/10、iPad Pro 13-inch (M5) 10/10，iOS 26.5；exact committed HEAD 重跑是交付门槛 |
+| Production CloudKit | Source contract 已完成；schema、签名真机 private/share、后台 push、owner/participant access management、远端删除和人工恢复文案仍待验收 |
+
 `CKSharingSupported` 是构建声明，不代表模拟器正在运行 CloudKit。模拟器刻意使用 local/device-only transport；真实 CloudKit transport 只能在配置 Team、container 与 iCloud 的签名真机上验收。
 
 iPad 的 DeviceTests 与 Critical XCUITest 证明 production 识别链路和七条关键交互能在真机运行。它们不替代儿童真实手写、标准发音听感、各方向布局、Apple Pencil、VoiceOver 或 Dynamic Type 的人工验收。
@@ -83,7 +95,7 @@ iPad 的 DeviceTests 与 Critical XCUITest 证明 production 识别链路和七�
 | 7 日与 30 日报告 | 代码已完成 | 检查趋势、单词详情、识别纠正和 CSV 导出 |
 | Crash-resumable Profile 删除 | 代码已完成 | 删除本地资料、单词、历史、奖励、提醒和本机声纹 |
 | 本地通知与安静时段 | 代码已完成 | 每日、Pool low、完成、同步失败、周报与时间设置 |
-| CloudKit 同步与家庭邀请 | 持久、默认关闭的家长 opt-in 已完成；远端删除未完成 | 用 Developer Team、iCloud container 与两个 Apple 账号验收 opt-in、关闭和邀请；远端擦除完成前不可发布 |
+| CloudKit 同步与家庭邀请 | v0.7.0 source：版本化 CKSyncEngine、完整 Profile 数据、事件重算、耐崩溃 apply 与远端删除语义已实现；生产验收未完成 | 用付费 Developer Team、production schema、两个设备与两个 Apple 账号验收 private/share、后台 push、离线合并和 test-only 远端擦除；通过前不可发布该能力 |
 | 1 分钟声纹注册与 Read 匹配 | v0.3 跟读流程完成，需要儿童样本校准 | 随机短句逐句播放、儿童跟读、拒绝样本可重录；声纹只存本机 Keychain，原始录音不保存或同步 |
 | Apple Pencil 与掌触过滤 | 代码已完成，需要真机验收 | iPhone 用手指，iPad 分别测试手指与 Pencil |
 | VoiceOver、Reduce Motion、动态字体 | 代码已完成，需要真机验收 | 完整走查反馈播报、焦点、横屏紧凑高度 |
@@ -236,20 +248,22 @@ iPad 的 DeviceTests 与 Critical XCUITest 证明 production 识别链路和七�
 
 这部分必须使用已配置 `iCloud.com.tadawords.app` 的 Apple Developer Team。准备两个登录不同 Apple ID 的设备。
 
-Release 的 Family Sync 默认关闭并持久保存。Onboarding 的隐私确认不会开启 CloudKit；只有家长在 Guardian 中明确开启后，启动、生命周期、手动同步和邀请才可以接触 CloudKit。关闭开关会停止未来同步，但不会删除已经上传的 records。Profile 删除会传播 tombstone，但仍不会擦除既有 CloudKit records；完成远端擦除前只能用测试数据执行本节，不能把 Family Sync 作为可发布功能。
+Release 的 Family Sync 默认关闭并持久保存。Onboarding 的隐私确认不会开启 CloudKit；只有家长在 Guardian 中明确开启后，启动、生命周期、手动同步和邀请才可以接触 CloudKit。关闭开关会停止未来同步，但按设计不会删除已经上传的 records；Profile 删除才会先写入最小 deletion ledger，再擦除 Profile zone、children、assets、root 与 share。该 source 语义不能替代 production CloudKit 证据；本节只使用 test-only Profile，且在全部真机门禁通过前不能把 Family Sync 作为已验收功能。
 
 1. 首次启动与完成 onboarding 后，确认 **Family sync** 显示关闭，且没有 CloudKit 请求
 2. 在设备 A 创建 Profile、单词、设置与学习记录
 3. 通过家长认证明确开启 Family Sync，再点 **Sync now**
 4. 创建家庭邀请，并通过系统 Share Sheet 发给设备 B
 5. 在设备 B 明确开启并接受邀请，然后同步
-6. 确认 Profile、Pool、设置、attempt、correction、进度、日计划、完成和奖励一致
-7. 关闭 Family Sync，确认后续启动、前后台切换、手动按钮与邀请不再调用 CloudKit，本地 Quest 继续可用
-8. 再开启后，两台设备离线修改不同记录，再联网同步
-9. 删除一个 Profile，确认 tombstone 防止另一台设备把它恢复，并在远端擦除实现后确认 CloudKit 既有 records 被删除
-10. 断网完成 Quest，确认本地学习不受同步失败影响
+6. 作为 owner 和 participant 分别打开系统 Family access 管理页；owner 移除 participant、participant Leave、再做 revocation，确认 App 回到 terminal 状态且绝不静默建立 private fallback
+7. 确认 Profile/头像、两个 Pool、六组设置、attempt/correction、Ebbinghaus 进度、日计划、完成、Calendar、World、Badge、Collection 和奖励一致；两台设备的声纹与 cache 保持各自本地
+8. 关闭 Family Sync，确认后续启动、前后台切换、手动按钮、邀请与 access management 不再调用 CloudKit，本地 Quest 继续可用
+9. 再开启后，两台设备离线修改不同记录，再联网同步
+10. 删除一个 test-only Profile，确认另一台离线设备先收到 ledger、清除本地资料且不能复活；在 CloudKit Dashboard/测试工具中确认除最小 ledger 外的 records、asset、share 与 zone 已擦除
+11. 在 push、fetch 或 apply 中途强制退出并重启，确认 exact pending batch 被恢复一次、UI 自动刷新且不会重复 completion/reward
+12. 断网完成 Quest，确认本地学习不受同步失败影响；Parent 页面在重启后仍准确显示 pending 数、连接/账号状态、重试与最近成功时间
 
-通过标准：Quest 提交不等待 CloudKit。同步失败显示状态并保留本地数据。声纹模板不进入 CloudKit；每台设备单独注册声纹。
+通过标准：Quest 提交不等待 CloudKit；同一 canonical facts 在不同到达顺序下收敛一致且不重复。同步失败显示真实可恢复状态并保留本地数据。删除不可复活。声纹模板不进入 CloudKit；每台设备单独注册声纹。记录 exact commit、version/build、Team/container、schema environment、设备/系统、账号角色与证据路径。
 
 ## 验收 Voice setup
 
