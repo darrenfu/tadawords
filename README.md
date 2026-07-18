@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.5.1%20QA-6D48D7" alt="v0.5.1 QA">
+  <img src="https://img.shields.io/badge/status-v0.5.2%20QA-6D48D7" alt="v0.5.2 QA">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
@@ -21,7 +21,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** The `v0.5.1` branch packages version `0.5.1` (build `2026071504`). It adds a World-themed Parent Home with Back navigation and reduced copy, a 1.8s launch page with the official Tada Words and Pawgoo marks, and bounded recovery paths for connected, mixed-case, or target-aligned numeric-zero `of` handwriting. The tree passes **638/638** Swift tests and strict format lint. The complete nine-flow simulator UI matrix passes on phone and tablet; physical child/Parent acceptance remains open. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** Version `0.5.2` (build `2026071505`) carries forward the v0.5.1 World-themed Parent Home, 1.8s branded launch, and bounded `of` handwriting recovery, then adds a human-controlled Issue → release-batch → versioned PR delivery loop. The tree passes **638/638** Swift tests and strict format lint; the complete nine-flow simulator UI matrix passes on phone and tablet. Physical child/Parent acceptance remains open. See the [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [cross-device sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -136,6 +136,20 @@ Run the device-readiness script before installing on an iPhone or iPad:
 ```sh
 ./Scripts/verify-device-readiness.sh
 ```
+
+Every physical Release Batch build also embeds its Git commit. Before installing
+the signed LocalQA app, verify that the bundle matches the reserved version,
+build, commit, and bundle ID:
+
+```sh
+./Scripts/verify-signed-app-identity.sh \
+  '/path/to/Tada Words QA.app' \
+  0.5.2 2026071505 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+```
+
+The local [Issue Agent](Automation/issue-agent/README.md) polls ready GitHub
+Issues every ten minutes, batches related module work, and stops for human
+product, device, and merge gates.
 
 Follow [DEVICE_DEPLOYMENT.md](DEVICE_DEPLOYMENT.md) for signing, Developer Mode, and direct installation.
 

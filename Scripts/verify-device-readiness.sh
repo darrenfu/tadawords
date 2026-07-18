@@ -91,6 +91,13 @@ for plist in "$INFO" "$LOCAL_INFO"; do
 done
 pass "microphone and speech usage descriptions are present"
 
+for plist in "$INFO" "$LOCAL_INFO"; do
+    test "$(plutil -extract TadaWordsGitCommit raw -o - "$plist" 2>/dev/null)" \
+        = '$(TADA_GIT_COMMIT)' \
+        || fail "TadaWordsGitCommit must bind to TADA_GIT_COMMIT in $(basename "$plist")"
+done
+pass "source property lists bind the installed app to its Git commit"
+
 test "$(plutil -extract CFBundleDisplayName raw -o - "$LOCAL_INFO")" = "Tada Words QA" \
     || fail "LocalQA display name must be Tada Words QA"
 test "$(plutil -extract CKSharingSupported raw -o - "$LOCAL_INFO")" = false \
@@ -122,10 +129,7 @@ else
     pass "1024 x 1024 opaque app icon is present"
 fi
 
-(
-    cd "$ROOT"
-    xcodegen generate --spec project.yml >/dev/null
-)
+"$ROOT/Scripts/generate-xcode-project.sh" >/dev/null
 pass "Xcode project regenerated from project.yml"
 
 if grep -q 'DEVELOPMENT_TEAM' "$PROJECT/project.pbxproj"; then
