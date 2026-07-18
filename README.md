@@ -21,7 +21,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.7.0` (build `2026071805`) implements the source contract for opt-in, local-first Family Sync: versioned private/shared CloudKit transport, durable outbox/inbox/apply recovery, deterministic conflict resolution, event-derived progress, Profile photos, privacy-minimal terminal deletion, account-generation acknowledgement isolation, and production-only Apple share-access management. Strict format lint, **809/809** Swift tests, and **14/14** Issue Agent tests pass. The six-flow Family Sync suite and ten-flow critical suite each pass on iPhone 17 Pro Max and iPad Pro 13-inch simulators in the source batch; the delivery protocol reruns both suites on the exact committed HEAD before evidence promotion. Production schema, signed iPhone/iPad CloudKit, two-Apple-ID sharing, destructive test-only erasure, background delivery, and human accessibility/recovery review remain release gates. See the [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** Version `0.7.0` (build `2026071806`) implements the source contract for opt-in, local-first Family Sync: versioned private/shared CloudKit transport, durable outbox/inbox/apply recovery, deterministic conflict resolution, event-derived progress, Profile photos, privacy-minimal terminal deletion, account-generation acknowledgement isolation, and production-only Apple share-access management. Strict format lint, **814/814** Swift tests, and **14/14** Issue Agent tests pass. The six-flow Family Sync suite and ten-flow critical suite each pass on iPhone 17 Pro Max and iPad Pro 13-inch simulators in the source batch; the delivery protocol reruns both suites on the exact committed HEAD before evidence promotion. Production schema, signed iPhone/iPad CloudKit, two-Apple-ID sharing, destructive test-only erasure, background delivery, and human accessibility/recovery review remain release gates. See the [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -129,7 +129,7 @@ make check
 open TadaWords.xcodeproj
 ```
 
-`make check` runs strict Swift formatting checks, the Swift package test suite, and the Issue Agent checks. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480**, v0.3 contained **548**, v0.3.1 and v0.4.1 contained **595**, v0.5 contained **619**, v0.5.1 contained **638**, v0.6.0 contained **641**, and v0.6.1 contained **643 Swift tests plus 14 Issue Agent tests**, all with zero failures. The v0.7.0 source batch passes **809 Swift tests plus 14 Issue Agent tests**. Its Xcode UI evidence adds six Family Sync flows—remote Profile/settings/pool/progress/reward apply, offline restart/acknowledgement, quarantine, account states, and deletion navigation—to the ten-flow critical matrix. Both suites pass on iPhone 17 Pro Max and iPad Pro 13-inch simulators; exact committed-HEAD reruns remain a mandatory delivery gate before merge. A separate physical-device target calls the public production handwriting service and does not use the demo recognizer.
+`make check` runs strict Swift formatting checks, the Swift package test suite, and the Issue Agent checks. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480**, v0.3 contained **548**, v0.3.1 and v0.4.1 contained **595**, v0.5 contained **619**, v0.5.1 contained **638**, v0.6.0 contained **641**, and v0.6.1 contained **643 Swift tests plus 14 Issue Agent tests**, all with zero failures. The v0.7.0 source batch passes **814 Swift tests plus 14 Issue Agent tests**. Its Xcode UI evidence adds six Family Sync flows—remote Profile/settings/pool/progress/reward apply, offline restart/acknowledgement, quarantine, account states, and deletion navigation—to the ten-flow critical matrix. Both suites pass on iPhone 17 Pro Max and iPad Pro 13-inch simulators; exact committed-HEAD reruns remain a mandatory delivery gate before merge. A separate physical-device target calls the public production handwriting service and does not use the demo recognizer.
 
 Run the device-readiness script before installing on an iPhone or iPad:
 
@@ -144,7 +144,7 @@ build, commit, and bundle ID:
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.7.0 2026071805 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.7.0 2026071806 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 The local [Issue Agent](Automation/issue-agent/README.md) polls ready GitHub
@@ -176,8 +176,8 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Version and build | v0.7.0 (`2026071805`) in source Plists and generated project settings |
-| Swift tests | v0.7.0: 809 passed, 0 failures; Issue Agent: 14 passed, 0 failures |
+| Version and build | v0.7.0 (`2026071806`) in source Plists and generated project settings |
+| Swift tests | v0.7.0: 814 passed, 0 failures; Issue Agent: 14 passed, 0 failures |
 | Family Sync simulator E2E | Source batch: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5; exact committed-HEAD rerun is mandatory delivery evidence |
 | Critical XCUITest flows | Source batch: 10/10 on iPhone 17 Pro Max and 10/10 on iPad Pro 13-inch (M5), iOS 26.5; exact committed-HEAD rerun is mandatory delivery evidence |
 | Parent Privacy/Support XCUITest | v0.6.1 focused flow: 1/1 passed on iPhone 17 Pro Max and 1/1 passed on iPad Pro 13-inch simulators |

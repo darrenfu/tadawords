@@ -495,10 +495,10 @@ Target release: `v0.7.0`
 
 Branch: `codex/batch-family-sync-v0.7.0`
 
-Build: `2026071805`
+Build: `2026071806`
 
 Overall state: the cross-device Family Sync source contract, strict format
-gate, 809/809 Swift tests, 14/14 Issue Agent tests, and the source-batch
+gate, 814/814 Swift tests, 14/14 Issue Agent tests, and the source-batch
 simulator matrices pass. Production CloudKit schema, exact committed-HEAD
 simulator reruns, signed iPhone/iPad private/share flows, destructive test-only
 erasure, background delivery, and human accessibility/recovery review remain
@@ -510,6 +510,7 @@ release gates.
 | V070-PRIV-001 | Privacy | Terminal deletion | Persist a privacy-minimal deletion ledger before erasing owner Profile records/assets/share/zone; make participant leave and revocation terminal; block stale-device resurrection and purge Profile-scoped transport/photo bytes. | Source deletion/privacy harnesses pass | On test-only Profiles, delete while another device is offline, verify local purge after reconnect, and inspect the real container to prove that only the minimal ledger remains. |
 | V070-RECOVERY-001 | Reliability | Durable sync | Survive process death around outbox, inbox, apply, acknowledgement, server-record conflict, quarantine, account change, and retry state without losing local work or duplicating completion/reward facts. | Source harnesses and simulator restart/status flows pass | Force-quit both signed devices at each retry boundary, reconnect in both orders, and verify Parent status before and after restart. |
 | V070-ACCESS-001 | Feature | Family access | Use Apple's production sharing controller for existing-share management, route owners to private and participants to shared storage, fail closed for terminal/malformed bindings, and reconcile save/stop events through the normal notification path. | Source implementation and routing/presentation tests pass | As owner and participant, invite, accept, remove/leave, and revoke on signed devices; prove no revoked route creates a private fallback. |
+| V070-BUG-001 | P0 bug | Upgrade migration | Preserve Daily Quest history written by v0.6.x, whose synthesized `QuestStars` Codable shape was `{ "earned": [...] }`, while v0.7.0 writes the canonical deterministic array form. Never delete or reset an unreadable snapshot. | Fixed with dual-format decoding and a schema-1 completion/reward migration regression; physical reinstall confirmation pending | Upgrade an unchanged v0.6.x LocalQA container in place, verify the app opens, and confirm plans, completions, rewards, calendar, and stars remain intact. |
 
 ### 2026-07-18 v0.7.0 notes
 
@@ -552,3 +553,8 @@ release gates.
 - The source batch passes Family Sync 6/6 on iPhone 17 Pro Max and
   6/6 on iPad Pro 13-inch (M5), plus Critical Flow 10/10 on each simulator,
   all on iOS 26.5. Exact committed-HEAD reruns remain mandatory before merge.
+- A physical in-place upgrade exposed a fail-closed legacy decoding gap before
+  any saved data was reset. `QuestStars` now accepts both the v0.6.x keyed
+  representation and the canonical v0.7.0 array, while all new writes remain
+  deterministic. The regression fixture includes a real plan/completion/reward
+  dependency chain, which the earlier empty-completion migration test missed.

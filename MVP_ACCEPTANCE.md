@@ -54,12 +54,12 @@ PR #2 已在 merge commit `cc42e17` 把 v0.3 合入 `main`。2026-07-14 的当�
 
 ### 当前 v0.7.0 Family Sync 证据
 
-上表保留 v0.3.1 的历史交付记录。当前 v0.7.0 (`2026071805`) 另有以下证据：
+上表保留 v0.3.1 的历史交付记录。当前 v0.7.0 (`2026071806`) 另有以下证据：
 
 | 检查 | 结果 |
 |---|---|
 | Swift formatter 严格检查 | 通过 |
-| Swift 单元与组合测试 | 809/809 通过，0 failure；Issue Agent 14/14 通过 |
+| Swift 单元与组合测试 | 814/814 通过，0 failure；Issue Agent 14/14 通过 |
 | Family Sync XCUITest | source batch：iPhone 17 Pro Max 6/6、iPad Pro 13-inch (M5) 6/6，iOS 26.5；merge 前必须对 exact committed HEAD 重跑 |
 | Critical XCUITest | source batch：iPhone 17 Pro Max 10/10、iPad Pro 13-inch (M5) 10/10，iOS 26.5；exact committed HEAD 重跑是交付门槛 |
 | Production CloudKit | Source contract 已完成；schema、签名真机 private/share、后台 push、owner/participant access management、远端删除和人工恢复文案仍待验收 |

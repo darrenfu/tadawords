@@ -572,6 +572,106 @@ final class DailyQuestRepositoryTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: snapshotURL), migratedData)
     }
 
+    func testVersionOneSnapshotMigratesLegacyKeyedQuestStarsWithoutDataLoss()
+        async throws
+    {
+        let snapshotURL = try makeSnapshotURL()
+        let dailyPlan = DailyQuestPlan(
+            localDay: LocalDay(date: Self.today, timeZone: Self.timeZone),
+            questPlan: plan(
+                id: questID(145),
+                mode: .read,
+                newWordNumbers: [145]
+            )
+        )
+        let completion = DailyQuestCompletion(
+            id: DailyQuestCompletionID(rawValue: uuid(146)),
+            dailyPlanID: dailyPlan.id,
+            runQuestID: dailyPlan.id,
+            profileID: dailyPlan.key.profileID,
+            learningMode: dailyPlan.key.learningMode,
+            localDay: dailyPlan.key.localDay,
+            runKind: .today,
+            points: 88,
+            stars: QuestStars(earned: [.completion, .accuracy]),
+            completedAt: Self.today.addingTimeInterval(300)
+        )
+        let rewardKey = RewardGrantKey(
+            profileID: dailyPlan.key.profileID,
+            world: .moonpetalKingdom,
+            localDay: dailyPlan.key.localDay,
+            learningMode: dailyPlan.key.learningMode
+        )
+        let reward = RewardGrant(
+            id: RewardGrantID(rawValue: uuid(147)),
+            key: rewardKey,
+            dailyPlanID: dailyPlan.id,
+            completionID: completion.id,
+            item: ThemedRewardCatalog().reward(for: rewardKey),
+            grantedAt: completion.completedAt
+        )
+        let versionOne = DailyQuestSnapshot(
+            schemaVersion: 1,
+            plans: [dailyPlan],
+            completions: [completion],
+            rewardGrants: [reward]
+        )
+        let canonicalData = try Self.encoder.encode(versionOne)
+        var legacyObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: canonicalData)
+                as? [String: Any]
+        )
+        legacyObject.removeValue(forKey: "canonicalBusinessKeyVersion")
+        legacyObject.removeValue(forKey: "pendingCompletions")
+        legacyObject.removeValue(forKey: "pendingRewardGrants")
+        var legacyCompletions = try XCTUnwrap(
+            legacyObject["completions"] as? [[String: Any]]
+        )
+        legacyCompletions[0]["stars"] = [
+            "earned": ["completion", "accuracy"]
+        ]
+        legacyObject["completions"] = legacyCompletions
+        let legacyData = try JSONSerialization.data(
+            withJSONObject: legacyObject,
+            options: [.sortedKeys]
+        )
+        try legacyData.write(to: snapshotURL)
+
+        let repository = LocalJSONDailyQuestRepository(
+            snapshotURL: snapshotURL
+        )
+        let migratedState = try await repository.state(for: dailyPlan.key)
+
+        XCTAssertEqual(migratedState.plan, dailyPlan)
+        XCTAssertEqual(migratedState.todayCompletion, completion)
+        XCTAssertEqual(migratedState.rewardGrant, reward)
+        let migratedData = try Data(contentsOf: snapshotURL)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let migrated = try decoder.decode(
+            DailyQuestSnapshot.self,
+            from: migratedData
+        )
+        XCTAssertEqual(
+            migrated.schemaVersion,
+            DailyQuestSnapshot.currentSchemaVersion
+        )
+        XCTAssertEqual(migrated.plans, [dailyPlan])
+        XCTAssertEqual(migrated.completions, [completion])
+        XCTAssertEqual(migrated.rewardGrants, [reward])
+        let migratedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: migratedData)
+                as? [String: Any]
+        )
+        let migratedCompletions = try XCTUnwrap(
+            migratedObject["completions"] as? [[String: Any]]
+        )
+        XCTAssertEqual(
+            migratedCompletions[0]["stars"] as? [String],
+            ["completion", "accuracy"]
+        )
+    }
+
     func testCorruptSnapshotIsPreservedLatchedAndReloadableAfterRepair()
         async throws
     {
