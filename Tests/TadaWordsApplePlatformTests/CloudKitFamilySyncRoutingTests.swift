@@ -360,7 +360,7 @@ private struct CloudRoutingFixture {
         let familyRecord = FamilySyncRecord(
             recordName: "profile-\(profileID)",
             profileID: profileID,
-            kind: .profile,
+            kind: .wordPoolEntry,
             payload: Data("routing-payload".utf8),
             updatedAt: Date(timeIntervalSince1970: 2_180_000_000),
             deviceID: "routing-device"
