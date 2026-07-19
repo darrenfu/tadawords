@@ -4,7 +4,7 @@ set -eu
 
 usage() {
     cat >&2 <<'EOF'
-Usage: verify-signed-app-identity.sh APP_PATH VERSION BUILD COMMIT BUNDLE_ID
+Usage: verify-signed-app-identity.sh APP_PATH VERSION BUILD COMMIT BUNDLE_ID [TEAM_ID]
 
 Verifies that a signed physical-device .app carries the exact release-batch
 identity expected for installation.
@@ -12,13 +12,14 @@ EOF
     exit 2
 }
 
-test "$#" -eq 5 || usage
+test "$#" -eq 5 || test "$#" -eq 6 || usage
 
 APP=$1
 EXPECTED_VERSION=$2
 EXPECTED_BUILD=$3
 EXPECTED_COMMIT=$4
 EXPECTED_BUNDLE_ID=$5
+EXPECTED_TEAM=${6:-}
 INFO="$APP/Info.plist"
 
 test -d "$APP" || {
@@ -76,5 +77,8 @@ test -n "$team" && test "$team" != "not set" || {
     printf 'FAIL: signed app does not carry a development TeamIdentifier\n' >&2
     exit 1
 }
+if test -n "$EXPECTED_TEAM"; then
+    assert_equal team-id "$EXPECTED_TEAM" "$team"
+fi
 printf 'PASS: TeamIdentifier=%s\n' "$team"
 printf 'READY: signed app identity matches the release batch\n'

@@ -115,7 +115,7 @@ The iOS target depends on `TadaWordsAppShell`, `TadaWordsApplePlatform`, and `Ta
 - A free Apple Account for direct LocalQA installation on personal devices
 - A paid Apple Developer Program team for TestFlight and CloudKit acceptance
 
-The current v0.6.2 release batch uses Xcode 26.6. Exact-HEAD automated, simulator, signed-device, and human acceptance evidence is recorded on its pull request.
+The current v0.6.7 automation release uses Xcode 26.6. The latest merged runtime evidence is the exact-HEAD v0.6.2 matrix recorded on PR #30; v0.6.7 physical-device acceptance remains open.
 
 ## Build and test
 
@@ -130,6 +130,10 @@ open TadaWords.xcodeproj
 ```
 
 `make check` runs strict Swift formatting checks, the Swift package test suite, and the Issue Agent checks. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480 tests with zero failures**, merged v0.3 contained **548**, and the complete v0.3.1 baseline contains **595 tests with zero failures**. The v0.4.1 merged tree also passes **595 tests with zero failures**, including the v0.3.1 World-layout coverage and the updated audio contract. The v0.5 baseline passes **619 tests**, v0.5.1 passes **638**, v0.6.0 passes **641**, and v0.6.1 passes **643 Swift tests plus 14 Issue Agent tests with zero failures**. The Xcode UI target covers Read/Write completion, repeated delete/Undo, Delete All/restore, explicit Preset approval, Photos-picker dismissal, OCR Review → Add All → Pool → Sort, Lobby → Write → Spell, and the Parent Privacy/Support/data-control surface. Each release PR records its new exact-HEAD test count and complete phone/tablet matrix. A separate physical-device target calls the public production handwriting service and does not use the demo recognizer.
+
+`make check` also runs the release-candidate preflight failure-mode tests. See
+[`Docs/RELEASE_CANDIDATE_PREFLIGHT.md`](Docs/RELEASE_CANDIDATE_PREFLIGHT.md) for
+the canonical signed archive/export verification command.
 
 Run the device-readiness script before installing on an iPhone or iPad:
 
@@ -176,10 +180,10 @@ Simulator builds also use the local-only transport. A normal signed physical-dev
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Version and build | v0.6.2 (`2026071702`) in source Plists and generated project settings |
-| Swift tests | Exact-HEAD result recorded on PR #30 after integration with v0.6.1 |
+| Version and build | v0.6.7 (`2026071804`) in source Plists and generated project settings |
+| Swift tests | Exact-HEAD v0.6.7 result is recorded on PR #37; merged v0.6.2 evidence is recorded on PR #30 |
 | Parent Privacy/Support XCUITest | v0.6.1 focused flow: 1/1 passed on iPhone 17 Pro Max and 1/1 passed on iPad Pro 13-inch simulators |
-| Critical XCUITest flows | Exact-HEAD v0.6.2 iPhone/iPad matrix recorded on PR #30 |
+| Critical XCUITest flows | Exact-HEAD v0.6.7 iPhone/iPad matrix is recorded on PR #37; merged v0.6.2 matrix is recorded on PR #30 |
 | Parent Home | Back navigation, World theme, shared tactile components, and reduced copy passed targeted simulator verification |
 | Launch page | 1.8s minimum, official Tada Words and Pawgoo marks, warm native launch color, audio-before-countdown sequencing, bundled spoken brand signature, and fade policy passed simulator tests; physical listening QA pending |
 | `of` handwriting recovery | Three-scale evidence aggregation, 10-candidate inspection, mixed-case vocabulary, six child-like positive styles, target-aligned `0` → `o` normalization with a real Vision `0f` fixture, 30 paired neighbor controls, cross-scale corroboration, and the `off` veto passed automated tests; child handwriting pending |

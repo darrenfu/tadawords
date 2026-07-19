@@ -2,6 +2,8 @@
 
 import datetime as dt
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -48,6 +50,16 @@ class IssueAgentTests(unittest.TestCase):
                 issue(3, "Audio", ["agent-ready", "agent-blocked"])
             )
         )
+        self.assertFalse(
+            issue_agent.is_ready(
+                issue(4, "Audio", ["agent-ready", "agent-reclaimed"])
+            )
+        )
+        self.assertFalse(
+            issue_agent.is_ready(
+                issue(5, "Audio", ["agent-ready", "implementation-in-pr"])
+            )
+        )
 
     def test_explicit_area_wins_over_keywords(self):
         candidate = issue(
@@ -57,24 +69,51 @@ class IssueAgentTests(unittest.TestCase):
         )
         self.assertEqual(issue_agent.infer_area(candidate), "parent")
 
-    def test_keywords_group_related_issues(self):
+    def test_area_similarity_does_not_implicitly_group_issues(self):
         candidates = [
             issue(1, "Fix pronunciation", ["agent-ready"]),
             issue(2, "Audio ducking", ["agent-ready"]),
             issue(3, "Parent Gate copy", ["agent-ready"]),
         ]
         batches = issue_agent.suggested_batches(candidates)
-        by_area = {batch["area"]: batch["issue_numbers"] for batch in batches}
-        self.assertEqual(by_area["audio"], [1, 2])
-        self.assertEqual(by_area["parent"], [3])
+        self.assertEqual(
+            [batch["issue_numbers"] for batch in batches], [[1], [2], [3]]
+        )
 
-    def test_batch_size_is_bounded(self):
+    def test_explicit_batch_size_is_bounded(self):
         candidates = [
-            issue(index, f"Audio issue {index}", ["agent-ready", "area:audio"])
+            issue(
+                index,
+                f"Audio issue {index}",
+                ["agent-ready", "area:audio", "batch:audio-v0.6.8"],
+            )
             for index in range(1, 8)
         ]
         batches = issue_agent.suggested_batches(candidates, max_batch_size=5)
         self.assertEqual([len(batch["issue_numbers"]) for batch in batches], [5, 2])
+
+    def test_priority_orders_pickup_before_issue_number(self):
+        candidates = [
+            issue(1, "Normal", ["agent-ready", "priority:P2"]),
+            issue(20, "Urgent", ["agent-ready", "priority:P0"]),
+            issue(3, "High", ["agent-ready", "priority:P1"]),
+        ]
+        batches = issue_agent.suggested_batches(candidates)
+        self.assertEqual(
+            [batch["issue_numbers"] for batch in batches], [[20], [3], [1]]
+        )
+        self.assertEqual(
+            [batch["priority"] for batch in batches], ["P0", "P1", "P2"]
+        )
+
+    def test_priority_can_be_read_from_structured_issue_body(self):
+        candidate = issue(
+            44,
+            "Family Sync",
+            ["agent-ready"],
+            body="## Priority\n\nP0. This is first.",
+        )
+        self.assertEqual(issue_agent.issue_priority(candidate), (0, "P0"))
 
     def test_oldest_issue_batch_is_considered_first(self):
         candidates = [
@@ -186,6 +225,91 @@ class IssueAgentTests(unittest.TestCase):
         )
         self.assertEqual(versions, {(0, 5, 1), (0, 5, 2)})
         self.assertEqual(builds, {"2026071502"})
+
+    def test_issue_policy_examples_do_not_reserve_versions(self):
+        issues = [
+            issue(
+                38,
+                "Cap versions at v1.0.0",
+                ["agent-ready"],
+                body="Reject v1.0.1, v1.1.0, and v2.0.0.",
+            )
+        ]
+        versions, _ = issue_agent.reserved_versions_and_builds(
+            issues, [], "origin/main\norigin/agent/batch-automation-v0.6.7"
+        )
+        self.assertEqual(versions, {(0, 6, 7)})
+
+    def test_pre_app_store_policy_accepts_versions_below_or_at_ceiling(self):
+        policy = {
+            "first_public_app_store_release": {
+                "status": "incomplete",
+                "version_ceiling": "1.0.0",
+            }
+        }
+        issue_agent.enforce_release_ceiling(
+            [(0, 9, 9), (0, 10, 0), (1, 0, 0)], policy, context="test"
+        )
+
+    def test_pre_app_store_policy_rejects_versions_above_ceiling(self):
+        policy = {
+            "first_public_app_store_release": {
+                "status": "incomplete",
+                "version_ceiling": "1.0.0",
+            }
+        }
+        for version in ((1, 0, 1), (1, 1, 0), (2, 0, 0)):
+            with self.subTest(version=version), self.assertRaisesRegex(
+                issue_agent.CommandError, "exceeds the pre-App Store ceiling"
+            ):
+                issue_agent.enforce_release_ceiling(
+                    [version], policy, context="test"
+                )
+
+    def test_released_policy_requires_owner_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "release-policy.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "first_public_app_store_release": {
+                            "status": "released",
+                            "version_ceiling": "1.0.0",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                issue_agent.CommandError, "released policy state is missing"
+            ):
+                issue_agent.load_release_policy(path)
+
+    def test_complete_owner_authorized_release_state_lifts_ceiling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "release-policy.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "first_public_app_store_release": {
+                            "status": "released",
+                            "version_ceiling": "1.0.0",
+                            "public_app_store_url": "https://apps.apple.com/app/id1",
+                            "released_version": "1.0.0",
+                            "released_build": "2026999901",
+                            "release_manifest": "sha256:example",
+                            "owner_authorization": "/release-policy abcdef1",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            policy = issue_agent.load_release_policy(path)
+            issue_agent.enforce_release_ceiling(
+                [(1, 0, 1), (2, 0, 0)], policy, context="test"
+            )
 
     def test_build_number_is_monotonic_and_date_based(self):
         today = dt.date(2026, 7, 15)
