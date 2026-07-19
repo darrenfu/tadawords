@@ -78,6 +78,7 @@ enum GuardianDestination {
     case reports
     case settings(GuardianSettingsSection)
     case familySync
+    case thirdPartyNotices
     case voiceprint(KidProfile)
     case importReport(GuardianWordImportReport)
 
@@ -89,7 +90,7 @@ enum GuardianDestination {
             .progressAndPerformance
         case .settings(let section):
             section.parentSection
-        case .familySync:
+        case .familySync, .thirdPartyNotices:
             .appAndFamily
         case .parentGate, .dashboard, .parentSection, .profiles, .profileEditor,
             .voiceprint:
@@ -193,6 +194,8 @@ final class GuardianDashboardViewModel: ObservableObject {
             "settings-\(section.rawValue)"
         case .familySync:
             "family-sync"
+        case .thirdPartyNotices:
+            "third-party-notices"
         case .voiceprint(let profile):
             "voiceprint-\(profile.id)"
         case .importReport(let report):
@@ -275,6 +278,10 @@ final class GuardianDashboardViewModel: ObservableObject {
     func showFamilySync() {
         destination = .familySync
         refreshSyncStatus()
+    }
+
+    func showThirdPartyNotices() {
+        destination = .thirdPartyNotices
     }
 
     func showVoiceprint(_ profile: KidProfile) {

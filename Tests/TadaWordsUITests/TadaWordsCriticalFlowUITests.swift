@@ -145,6 +145,39 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         XCTAssertTrue(permissions.waitForExistence(timeout: 5))
     }
 
+    /// Third-party credits stay behind the Parent Gate while their complete
+    /// attribution remains readable offline inside the app.
+    func testParentCanOpenOfflineThirdPartyNotices() throws {
+        launchDemo()
+        unlockParentArea()
+
+        let appAndFamily = app.buttons["guardian.home.app-and-family"]
+        XCTAssertTrue(appAndFamily.waitForExistence(timeout: 8))
+        appAndFamily.tap()
+
+        let notices = app.buttons["guardian.app.third-party-notices"]
+        for _ in 0..<4 where !notices.exists {
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        XCTAssertTrue(notices.waitForExistence(timeout: 5))
+        notices.tap()
+
+        XCTAssertTrue(
+            app.staticTexts[
+                "Twemoji graphics © X Corp. and other contributors."
+            ]
+            .waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(
+            app.links["guardian.third-party-notices.source"].exists
+                || app.buttons["guardian.third-party-notices.source"].exists
+        )
+        XCTAssertTrue(
+            app.links["guardian.third-party-notices.license"].exists
+                || app.buttons["guardian.third-party-notices.license"].exists
+        )
+    }
+
     /// Covers the parent-session delete contract: only the first deletion asks
     /// for confirmation, every deletion exposes Undo, and sorting remains
     /// interactive after the list mutates.

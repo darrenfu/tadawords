@@ -395,6 +395,7 @@ struct GuardianAppAndFamilyView: View {
     let onOpenSoundAndAccessibility: () -> Void
     let onOpenNotifications: () -> Void
     let onOpenFamilySync: () -> Void
+    let onOpenThirdPartyNotices: () -> Void
 
     var body: some View {
         GuardianParentHubLayout(
@@ -429,6 +430,14 @@ struct GuardianAppAndFamilyView: View {
                 tint: GuardianPrimitiveTokens.ColorValue.teal,
                 accessibilityIdentifier: "guardian.app.sync",
                 action: onOpenFamilySync
+            )
+            GuardianNavigationTile(
+                title: "Third-Party Notices",
+                summary: "Licenses and credits available offline",
+                symbol: "doc.text.magnifyingglass",
+                tint: GuardianPrimitiveTokens.ColorValue.blue,
+                accessibilityIdentifier: "guardian.app.third-party-notices",
+                action: onOpenThirdPartyNotices
             )
             GuardianPrivacyAndSupportSection()
         }

@@ -1,7 +1,7 @@
 # Critical UI smoke tests
 
 `TadaWordsCriticalFlowUITests` uses the app's existing Debug-only demo
-composition. It covers ten device-level regressions without microphone,
+composition. It covers eleven device-level regressions without microphone,
 handwriting-recognition, network, or persistent-data dependencies:
 
 - two consecutive Write words advance after the transient completion card;
@@ -11,6 +11,8 @@ handwriting-recognition, network, or persistent-data dependencies:
 - Parent Home back navigation returns to Kid selection and restores the gate;
 - parent-only Privacy Policy, Support, profile deletion, and iOS permission
   guidance remain discoverable on compact and regular-width layouts;
+- parent-only offline Third-Party Notices expose the exact Twemoji attribution,
+  pinned source, and CC BY 4.0 license behind the Parent Gate;
 - two consecutive parent deletions retain Undo, skip the second confirmation,
   and leave the pool sort menu interactive;
 - Delete All names the affected pool and count, then restores the complete pool

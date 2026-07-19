@@ -635,7 +635,37 @@ already at forward schemas 2, 4, and 3 while v0.6.7 accepted only schema 1.
   word entries, two profiles, and quest history preserved. A deterministic
   derived-progress refresh changed only the rebuildable `progress` projection;
   canonical facts and every other snapshot remained unchanged.
-- The combined pre-commit gate passes strict format, 820/820 Swift tests,
+- The exact committed-HEAD gate passes strict format, 821/821 Swift tests,
   40/40 Issue Agent tests, and 11/11 release-preflight tests. Exact committed-
   HEAD simulator and data-preserving physical-device gates are recorded on the
   P0 PR before merge.
+
+## v0.7.3 — 2026-07-19
+
+Target release: `v0.7.3`
+
+Branch: `agent/batch-third-party-notices-v0.7.3`
+
+Build: `2026071903`
+
+Overall state: Parent-gated, offline third-party attribution for the exact
+bundled picture-hint implementation. Production content-rights inventory and
+archive verification continue in the dependent App Store readiness batch.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V073-COMP-001 | Compliance | Parent resources | Keep the exact Twemoji attribution, pinned source, unmodified status, and CC BY 4.0 license accessible offline behind the Parent Gate. | Source and focused iPhone/iPad simulator UI tests pass | Keep the release inventory synchronized with the bundled archive and complete human VoiceOver and largest Dynamic Type review. |
+
+### 2026-07-19 v0.7.3 notes
+
+- Added a Third-Party Notices destination under Parent Home → App & Family.
+- States that all 74 bundled picture-hint graphics are unmodified, identifies
+  `jdecked/twemoji` 17.0.3, and exposes the exact copyright attribution plus
+  source and Creative Commons Attribution 4.0 International links.
+- Keeps every notice string available offline and every external link behind
+  the Parent Gate; no child-facing route was added.
+- Added exact-content, route/back-stack, and focused UI regression coverage.
+- The focused Parent flow passes 1/1 on iPhone 17 Pro Max and 1/1 on iPad Pro
+  13-inch (M5), iOS 26.5.
+- The complete pre-commit gate passes strict format, 822/822 Swift tests,
+  40/40 Issue Agent tests, and 11/11 release-preflight tests.
