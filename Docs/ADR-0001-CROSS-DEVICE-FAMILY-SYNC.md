@@ -1,8 +1,9 @@
 # ADR-0001: Local-first Profile and Progress Sync
 
-- **Status:** Proposed for v0.3; implementation and live CloudKit acceptance are incomplete
+- **Status:** Accepted; the v0.7.0 source contract is implemented. Production CloudKit schema and physical-device acceptance remain open human gates.
 - **Date:** 2026-07-13
 - **Scope:** Kid Profiles, Read/Write pools, Profile settings, learning events and progress, Quest calendar, rewards, deletion, and family sharing
+- **Tracking:** [Epic #40](https://github.com/darrenfu/tadawords/issues/40), [transport #44](https://github.com/darrenfu/tadawords/issues/44), [Profile data #45](https://github.com/darrenfu/tadawords/issues/45), [canonical progress #42](https://github.com/darrenfu/tadawords/issues/42), [deletion #19](https://github.com/darrenfu/tadawords/issues/19), [atomic apply #43](https://github.com/darrenfu/tadawords/issues/43), and [two-device acceptance #41](https://github.com/darrenfu/tadawords/issues/41)
 
 ## Context
 
@@ -10,13 +11,13 @@ Families may use Tada Words on more than one iPhone or iPad. A child must be abl
 
 Cloud sync is an enhancement, not the source of truth for a Quest. The child path must never wait for iCloud, show a blocking sync modal, or lose a locally completed attempt because a network request failed.
 
-The repository already contains a meaningful sync foundation. This ADR distinguishes that foundation from the work still required before cross-device sync can be called complete.
+The v0.7.0 source implementation follows this contract. Simulator and deterministic transport evidence prove local merge and recovery behavior; they do not prove the Apple account, production CloudKit schema, push delivery, sharing, or destructive remote erasure on physical devices.
 
 ## Decision
 
 Keep each device's inspectable local snapshots as the operational source of truth. After a local commit, a profile-scoped sync coordinator reconciles deterministic records through CloudKit. Family Sync remains off by default and is enabled separately by a parent on each device.
 
-Use one CloudKit record zone per Profile, in the owner's private database or the accepted `CKShare` shared database. Do not add a separate app server for v0.3.
+Use one CloudKit record zone per Profile, in the owner's private database or the accepted `CKShare` shared database. Do not add a separate app server for this implementation.
 
 ### What syncs
 
@@ -35,7 +36,7 @@ Use one CloudKit record zone per Profile, in the owner's private database or the
 
 The last-opened Profile remains a device convenience and does not sync. OS notification requests and scheduled notification identifiers remain device-local; their parent-selected preference values sync and are reconciled separately on each device.
 
-The selected handwriting tool should move into the Profile's interface settings when this feature is implemented. Hidden/default ink color does not need a cloud record.
+The selected handwriting/input tool is part of the Profile's interface settings and synchronizes. Hidden/default black ink color does not need a cloud record.
 
 ### What never syncs
 
@@ -47,7 +48,11 @@ The selected handwriting tool should move into the Profile's interface settings 
 
 Picture hints arrive inside the app bundle and need no sync or download. Teacher-audio caches are disposable; a receiving device downloads eligible teacher audio on demand and continues with its offline fallback if that asset is unavailable.
 
-Profile photos are not disposable caches. When a parent opts in, the prepared source avatar is Profile data and syncs; move it to a bounded `CKAsset` before production acceptance rather than embedding an unbounded image in a general payload.
+Profile photos are not disposable caches. When a parent opts in, the prepared
+source avatar is Profile data and syncs as a bounded `CKAsset`; the general
+record envelope carries only its stable reference and validation metadata, not
+JPEG/base64 bytes. Incoming bytes are checked against the Profile ID, content
+type, dimensions, byte size, and checksum before they enter the durable inbox.
 
 ## Local-first write and outbox
 
@@ -57,7 +62,13 @@ Profile photos are not disposable caches. When a parent opts in, the prepared so
 4. Reconcile in the background when the app becomes active, after a parent taps **Sync now**, and after connectivity returns.
 5. Clear a dirty Profile only after the resolved CloudKit write succeeds.
 
-The sync journal stores only Profile ID, dirty/deleted state, first/last queued time, retry count, next retry time, and last successful sync time. Local snapshots remain the recovery fallback: at bootstrap, a local manifest is compared with the last acknowledged manifest so a crash between the local commit and journal update cannot silently lose a change.
+The sync journal stores only Profile/record keys, dirty/deleted operation and
+revision, retry count/next retry, privacy-safe condition/error category, pending
+count, and last attempt/success times. It contains no child nickname, word,
+photo, or learning payload. Local snapshots remain the recovery fallback: at
+bootstrap, a local manifest is compared with the last acknowledged manifest so
+a crash between the local commit and journal update cannot silently lose a
+change.
 
 Retry uses bounded exponential backoff with jitter. A failed sync never rolls back a local write.
 
@@ -79,7 +90,7 @@ A Profile deletion is terminal for that Profile ID. A deletion tombstone wins ov
 
 The tombstone is written before local Profile data is purged. It is retained in a small CloudKit deletion ledger containing no nickname, photo, words, or learning payload. All other private/shared Profile records are physically erased. An offline stale device must fetch the deletion ledger before it may push that Profile and must purge its local Profile, pools, settings, attempts, progress, calendar, rewards, handwriting preference, session pointer, and device voiceprint.
 
-Do not garbage-collect a tombstone until the product has an explicit device-membership/acknowledgement protocol. Permanent minimal tombstones are the simpler v0.3 choice.
+Do not garbage-collect a tombstone until the product has an explicit device-membership/acknowledgement protocol. Permanent minimal tombstones are the required first-release choice.
 
 ## Parent consent and visible state
 
@@ -95,49 +106,39 @@ The Parent screen exposes honest, persistent states:
 - **Sync needs attention — local learning data is safe**, with **Try again**
 - **Merged changes from another device**, as nonblocking recovery information
 
-Status, pending count, last success, and privacy-safe error category survive an app restart. Detailed diagnostics stay on device and never include a child's words, nickname, photo, or voice data.
+Status, pending count, last success, and privacy-safe error category survive an app restart. A parent may explicitly export a locally generated transport-state diagnostic; it never includes a child's Profile ID, words, nickname, photo, or voice data.
 
 Malformed or identity-conflicting incoming data is quarantined instead of overwriting valid local data. The Parent screen reports that sync needs attention and offers retry/exported diagnostics; the child can continue practicing.
 
 ### Client and schema compatibility
 
-v0.5 adds `letterKeyboard` to the persisted attempt pace context so typed
-spelling and handwriting can share Write mastery without sharing pace. A v0.5
-client decodes all earlier attempt values, but a pre-v0.5 client does not know
-the new enum case. Until record schema negotiation and tolerant unknown-value
-handling ship, Family Sync must require every participating device to run v0.5
-or later before a letter-keyboard attempt is uploaded. LocalQA remains
-device-only and is unaffected. Do not silently encode a typed attempt as
-handwriting merely to satisfy an older client, because that would corrupt the
-child's pace baseline.
+Cloud records use a checksummed v2 envelope with an explicit schema version,
+minimum readable version, bounded payload size, record kind, and logical
+revision. Older compatible snapshots migrate before export. A client that sees
+an unknown future kind or schema quarantines it without overwriting valid local
+data. `letterKeyboard` remains a distinct attempt pace context; it is never
+silently rewritten as handwriting for an older client.
 
-## Existing implementation audit
+## v0.7.0 implementation audit
 
-| Area | Present in the repository | Gap before completion |
+| Area | Source implementation | Remaining live acceptance |
 |---|---|---|
-| Local-first boundary | Quest and parent data live in atomic local JSON snapshots; sync runs after local work | No durable dirty-profile journal or persisted sync status |
-| Parent consent | Persisted, versioned, default-off opt-in; corrupt preference fails closed | Needs signed Release device acceptance |
-| Record coverage | Profiles, inactive/active pool entries, settings, attempts, corrections, progress, daily plans/completions, rewards, and Profile deletion records export | Settings are one coarse snapshot; pen preference is outside it; photo needs bounded asset handling |
-| Conflict resolver | Timestamp, deletion-on-tie, device ID, and payload tie-break are deterministic | Newer stale Profile data can beat an older tombstone; clock skew is authoritative; no semantic business-key convergence tests |
-| Learning history | Attempts/corrections use stable immutable IDs | Synced progress is currently last-writer-wins instead of rebuilt from the merged event history |
-| Calendar/rewards | Plans, completions, and rewards are transported and incoming plan IDs are remapped | Simultaneous offline Today completions/rewards can violate one-per-day invariants and fail a sync apply |
-| Profile deletion | Durable local tombstone, crash recovery, local purge, and outbound deletion record exist | Cloud child records are not physically erased; deletion is not unconditional; remote apply does not immediately refresh every child/session surface |
-| Voiceprint | Export scrubs enrollment status; import preserves the local status; template is device Keychain data | Each real device still needs enrollment and deletion acceptance |
-| CloudKit | Private/shared databases, per-Profile zone/root, query pagination, push, create invitation, and accept invitation exist | Only routing logic is unit-tested; no paid-Team/container/schema/two-device acceptance evidence |
-| UI | Parent opt-in, manual sync, invitation, offline/unavailable/failure states exist | Status is actor-memory only; no pending count, durable retry state, conflict recovery receipt, or device list |
-| LocalQA | Simulator and LocalQA intentionally use device-only transport and no iCloud entitlement | LocalQA can never prove cross-device sync |
+| Local-first boundary | Atomic local repositories, durable manifest comparison, exact-operation outbox, retry/backoff, separate private/shared engine state, and crash replay | Force-quit and reconnect on signed physical devices |
+| Parent consent and status | Default-off per-device consent, parent authorization, durable pending/condition/retry/last-success state, Sync now, invitation actions, privacy-safe diagnostics export, recovery copy, and production-only Apple `UICloudSharingController` access management routed through the persisted owner/participant binding. Save/stop-sharing delegate events enter the same idempotent notification-reconciliation path used by background delivery. | Signed owner/participant access-management and revocation acceptance; human review of account prompts, sharing, VoiceOver, and background delivery |
+| Profile/settings/pools | Stable Profile identity; independently mergeable settings groups; Profile-scoped handwriting tool; stable word business keys, revisions, aliases, deduplication, and removal/reactivation | Same-account and shared-account physical convergence |
+| Profile photo | 512 px / 256 KiB prepared JPEG, general-envelope stripping, validated `CKAsset`, durable upload source, corrupt-asset quarantine, and acknowledgement cleanup | Physical photo transfer through the real container |
+| Learning history | Immutable attempt/correction union, conflict quarantine, prompt-alias migration, deterministic progress and Ebbinghaus rebuild | Two devices completing real Read/Write Quests offline in both reconnect orders |
+| Plans, completion, and rewards | Stable business keys, causal staging, deterministic calendar/world/badge/collection projections, and Practice Again UUID semantics | Physical calendar/reward comparison after background reconciliation |
+| Deletion | Local ledger-before-purge, unconditional tombstone dominance, owner erasure workflow, participant-leave/revocation behavior, restart idempotence, and stale-device upload barrier | Explicitly authorized test-only destructive CloudKit proof |
+| Remote apply and UI | Profile-scoped durable apply transaction, exact pending bytes, commit receipts, bootstrap replay, notification reconciliation, and immediate Kid/Parent refresh without abandoning an active Quest | Real push/background delivery and human navigation recovery checks |
+| Coverage | Machine-readable data manifest and five-layer acceptance matrix plus deterministic retry, corruption, ordering, restart, account, route, and two-device harnesses. Six Family Sync UI flows pass on both target simulators in the source batch, and only the 19 directly observed manifest rows receive simulator evidence. | Exact committed-HEAD simulator artifacts are mandatory delivery evidence; every matrix row still marked simulator, physical, or human remains pending |
+| LocalQA | Explicit device-only bundle, no iCloud/APNs entitlement, safe simulator and signed-device UI validation | It intentionally cannot prove CloudKit behavior |
 
-## Minimal implementation sequence
-
-1. Make Profile deletion unconditional in conflict resolution and add a deletion ledger plus CloudKit child-record erasure.
-2. Add record schema versions, minimum-client negotiation, tolerant unknown
-   attempt-context decoding, and a durable profile-level sync journal/status
-   snapshot.
-3. Add per-entry pool revisions and split settings into independently mergeable groups.
-4. Stop treating synced `WordProgress` as authoritative; rebuild all progress from the merged attempts and corrections.
-5. Introduce stable daily-plan, Today-completion, and reward business record names; add order-independent two-device convergence tests.
-6. Refresh Profile/session/notification/UI projections immediately after applying remote records.
-7. Complete real CloudKit acceptance before changing the feature status to implemented.
+The source sequence in #44, #45, #42, #19, and #43 is implemented together in
+v0.7.0 so the invariants are reviewed and tested as one coherent data contract.
+The automated release gate is tracked in #41 and in the
+[Family Sync acceptance matrix](FAMILY-SYNC-ACCEPTANCE-COVERAGE.md). Production acceptance remains the final
+step; no simulator or fake transport result is promoted to live evidence.
 
 ## Required acceptance
 
@@ -149,8 +150,9 @@ Live acceptance requires:
 2. CloudKit development schema deployed and entitlements verified in a normally signed Release/TestFlight build. `TadaWordsLocalQA` is not sufficient.
 3. Two physical devices on one iCloud account for private-database sync.
 4. Two physical devices on different iCloud accounts for invitation/share acceptance.
-5. Offline edits on both devices, reconnect in both orders, force-quit/restart during retry, opt-out/re-enable, and lost-network recovery.
-6. Delete a Profile while another device is offline; prove the stale device cannot resurrect it and that non-tombstone cloud records are erased.
-7. Confirm voiceprints remain independently enrolled per device and picture/teacher-audio caches re-download instead of syncing.
+5. Validate the production-only Apple `CKShare` access-management UI as both owner and participant; revoke/remove access and prove the persisted route becomes terminal without creating a private fallback.
+6. Offline edits on both devices, reconnect in both orders, force-quit/restart during retry, opt-out/re-enable, and lost-network recovery.
+7. Delete a Profile while another device is offline; prove the stale device cannot resurrect it and that non-tombstone cloud records are erased.
+8. Confirm voiceprints remain independently enrolled per device and picture/teacher-audio caches re-download instead of syncing.
 
-Until all seven live steps pass, product copy and release notes must describe Family Sync as under acceptance, not complete.
+Until all eight live steps pass, product copy and release notes must describe Family Sync as under acceptance, not complete.

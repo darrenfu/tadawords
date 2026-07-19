@@ -8,6 +8,7 @@ SCHEME="TadaWords"
 LOCAL_SCHEME="TadaWordsLocalQA"
 INFO="$ROOT/Apps/TadaWordsApp/Info.plist"
 LOCAL_INFO="$ROOT/Apps/TadaWordsApp/InfoLocalQA.plist"
+ENTITLEMENTS="$ROOT/Apps/TadaWordsApp/TadaWords.entitlements"
 LOCAL_ENTITLEMENTS="$ROOT/Apps/TadaWordsApp/TadaWordsLocalQA.entitlements"
 LOCAL_SCHEME_FILE="$PROJECT/xcshareddata/xcschemes/TadaWordsLocalQA.xcscheme"
 PRIVACY="$ROOT/Apps/TadaWordsApp/PrivacyInfo.xcprivacy"
@@ -35,6 +36,8 @@ command -v xcodebuild >/dev/null 2>&1 || fail "Xcode command-line tools are unav
 
 plutil -lint "$INFO" >/dev/null || fail "Info.plist is invalid"
 plutil -lint "$LOCAL_INFO" >/dev/null || fail "InfoLocalQA.plist is invalid"
+plutil -lint "$ENTITLEMENTS" >/dev/null \
+    || fail "TadaWords.entitlements is invalid"
 plutil -lint "$LOCAL_ENTITLEMENTS" >/dev/null \
     || fail "TadaWordsLocalQA.entitlements is invalid"
 plutil -lint "$PRIVACY" >/dev/null || fail "PrivacyInfo.xcprivacy is invalid"
@@ -90,6 +93,21 @@ for plist in "$INFO" "$LOCAL_INFO"; do
     done
 done
 pass "microphone and speech usage descriptions are present"
+
+BACKGROUND_MODES=$(plutil -extract UIBackgroundModes json -o - "$INFO" 2>/dev/null) \
+    || fail "UIBackgroundModes is missing from Info.plist"
+printf '%s' "$BACKGROUND_MODES" | grep -q '"remote-notification"' \
+    || fail "Info.plist must enable the remote-notification background mode"
+test "$(plutil -extract aps-environment raw -o - "$ENTITLEMENTS" 2>/dev/null)" \
+    = '$(APS_ENVIRONMENT)' \
+    || fail "production APNs entitlement must bind to APS_ENVIRONMENT"
+if plutil -extract UIBackgroundModes json -o - "$LOCAL_INFO" >/dev/null 2>&1; then
+    fail "LocalQA must not advertise remote notification background delivery"
+fi
+if plutil -extract aps-environment raw -o - "$LOCAL_ENTITLEMENTS" >/dev/null 2>&1; then
+    fail "LocalQA must not contain an APNs entitlement"
+fi
+pass "production background sync capability is declared and LocalQA remains isolated"
 
 for plist in "$INFO" "$LOCAL_INFO"; do
     test "$(plutil -extract TadaWordsGitCommit raw -o - "$plist" 2>/dev/null)" \
@@ -214,7 +232,8 @@ test "$(plutil -extract CKSharingSupported raw -o - "$LOCAL_BUILT_INFO")" = fals
     || fail "the LocalQA built app unexpectedly advertises CloudKit sharing"
 pass "unsigned LocalQA simulator build is isolated and device-only"
 
-if xcrun devicectl list devices 2>/dev/null | grep -q 'connected'; then
+if xcrun devicectl list devices 2>/dev/null \
+    | grep -Eq 'connected|available \(paired\)'; then
     pass "a physical Apple device is connected"
 else
     blocked "no connected physical iPhone or iPad"

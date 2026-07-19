@@ -1,0 +1,16 @@
+{
+  "formatVersion": 1,
+  "stores": {
+    "child-session.json": 1,
+    "daily-quests.json": 3,
+    "family-sync-apply-transactions.json": 1,
+    "family-sync-journal.json": 1,
+    "family-sync-preference.json": 1,
+    "first-run-onboarding.json": 1,
+    "learning-records.json": 4,
+    "practice-settings.json": 1,
+    "profile-deletions.json": 1,
+    "profiles.json": 1,
+    "word-pool.json": 2
+  }
+}

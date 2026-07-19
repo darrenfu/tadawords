@@ -113,7 +113,6 @@ private struct GuardianProfileManagementCard: View {
                 .controlSize(.large)
             }
         }
-        .accessibilityIdentifier("guardian.profile.\(profile.id)")
     }
 
     @ViewBuilder private var actionButtons: some View {
@@ -502,23 +501,6 @@ extension ProfileAvatar {
 }
 
 #if os(iOS)
-    private enum ProfilePhotoPreparation {
-        static func prepare(_ data: Data) -> Data? {
-            guard let image = UIImage(data: data) else { return nil }
-            let maximumDimension: CGFloat = 512
-            let scale = min(1, maximumDimension / max(image.size.width, image.size.height))
-            let size = CGSize(
-                width: max(1, image.size.width * scale),
-                height: max(1, image.size.height * scale)
-            )
-            let renderer = UIGraphicsImageRenderer(size: size)
-            let resized = renderer.image { _ in
-                image.draw(in: CGRect(origin: .zero, size: size))
-            }
-            return resized.jpegData(compressionQuality: 0.78)
-        }
-    }
-
     private struct GuardianCameraPicker: UIViewControllerRepresentable {
         let onImage: (Data) -> Void
         let onCancel: () -> Void

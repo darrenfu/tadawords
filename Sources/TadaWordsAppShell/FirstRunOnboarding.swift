@@ -8,6 +8,8 @@ enum FirstRunOnboardingPurpose: String, Codable, Equatable, Sendable {
 }
 
 struct FirstRunOnboardingState: Codable, Equatable, Sendable {
+    static let currentSchemaVersion = 1
+
     enum Status: String, Codable, Sendable {
         case pending
         case completed
@@ -27,7 +29,7 @@ struct FirstRunOnboardingState: Codable, Equatable, Sendable {
         purpose: FirstRunOnboardingPurpose
     ) -> FirstRunOnboardingState {
         FirstRunOnboardingState(
-            schemaVersion: 1,
+            schemaVersion: Self.currentSchemaVersion,
             status: .pending,
             startedAt: startedAt,
             completedAt: nil,

@@ -420,6 +420,52 @@ public struct DailyQuestCompletionWriteResult: Hashable, Sendable {
     }
 }
 
+/// A pre-resolved set of canonical daily facts received from synchronization.
+/// The sync layer owns logical-revision conflict resolution; the repository
+/// owns atomic dependency validation, reference remapping, and UUID set union.
+public struct DailyQuestCanonicalMergeBatch: Hashable, Sendable {
+    public let plans: [DailyQuestPlan]
+    public let completions: [DailyQuestCompletion]
+    public let rewardGrants: [RewardGrant]
+
+    public init(
+        plans: [DailyQuestPlan] = [],
+        completions: [DailyQuestCompletion] = [],
+        rewardGrants: [RewardGrant] = []
+    ) {
+        self.plans = plans
+        self.completions = completions
+        self.rewardGrants = rewardGrants
+    }
+
+    public var isEmpty: Bool {
+        plans.isEmpty && completions.isEmpty && rewardGrants.isEmpty
+    }
+}
+
+public struct DailyQuestCanonicalMergeResult: Equatable, Sendable {
+    public let didChange: Bool
+    public let affectedKeys: Set<DailyQuestKey>
+
+    public init(
+        didChange: Bool,
+        affectedKeys: Set<DailyQuestKey>
+    ) {
+        self.didChange = didChange
+        self.affectedKeys = affectedKeys
+    }
+}
+
+extension RewardGrantKey {
+    public var dailyQuestKey: DailyQuestKey {
+        DailyQuestKey(
+            profileID: profileID,
+            learningMode: learningMode,
+            localDay: localDay
+        )
+    }
+}
+
 public protocol DailyQuestRepository: Sendable {
     func state(for key: DailyQuestKey) async throws -> DailyQuestState
 
@@ -457,6 +503,13 @@ public protocol DailyQuestHistoryRepository: DailyQuestRepository {
     func rewardGrants(
         for profileID: ProfileID
     ) async throws -> [RewardGrant]
+
+    /// Atomically installs sync-layer winners for stable daily business keys.
+    /// Today and its reward must be supplied together on first delivery;
+    /// Practice Again completions remain immutable UUID-addressed facts.
+    func mergeCanonical(
+        _ batch: DailyQuestCanonicalMergeBatch
+    ) async throws -> DailyQuestCanonicalMergeResult
 
     func deleteHistory(for profileID: ProfileID) async throws
 }

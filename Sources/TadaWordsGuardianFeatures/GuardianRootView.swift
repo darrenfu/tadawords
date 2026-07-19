@@ -10,6 +10,7 @@ public struct GuardianRootView: View {
     private let onExit: () -> Void
     private let imageTextRecognitionService: any ImageTextRecognizing
     private let presetWordCatalog: PresetWordCatalog
+    private var externalDataRevision: UUID?
 
     /// Preview convenience. Production composition must use `init(store:onExit:)`.
     public init(onExit: @escaping () -> Void = {}) {
@@ -66,6 +67,8 @@ public struct GuardianRootView: View {
         audioExperienceService: any AudioExperienceService =
             SilentAudioExperienceService(),
         familySyncCoordinator: (any FamilySyncCoordinating)? = nil,
+        familySyncAccessManagement:
+            (@MainActor (ProfileID) async throws -> Void)? = nil,
         notificationScheduler: (any LearningNotificationScheduling)? = nil,
         voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)? = nil,
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
@@ -77,17 +80,20 @@ public struct GuardianRootView: View {
         presetWordCatalog: PresetWordCatalog = BundledPresetWordCatalog.catalog,
         sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing =
             AllowSensitiveGuardianActions(),
+        externalDataRevision: UUID? = nil,
         onExit: @escaping () -> Void = {}
     ) {
         self.onExit = onExit
         self.imageTextRecognitionService = imageTextRecognitionService
         self.presetWordCatalog = presetWordCatalog
+        self.externalDataRevision = externalDataRevision
         _model = StateObject(
             wrappedValue: GuardianDashboardViewModel(
                 store: store,
                 audioPromptService: audioPromptService,
                 audioExperienceService: audioExperienceService,
                 familySyncCoordinator: familySyncCoordinator,
+                familySyncAccessManagement: familySyncAccessManagement,
                 notificationScheduler: notificationScheduler,
                 voiceprintEnrollmentService: voiceprintEnrollmentService,
                 voiceprintRepository: voiceprintRepository,
@@ -120,6 +126,12 @@ public struct GuardianRootView: View {
         .environment(\.font, .system(.body, design: .rounded))
         .onChange(of: model.isLoading, initial: true) { _, isLoading in
             loadingOverlayIsFocused = isLoading
+        }
+        .onChange(of: externalDataRevision) { _, revision in
+            guard revision != nil else { return }
+            Task {
+                await model.refreshAfterExternalSyncAndWait()
+            }
         }
         .alert(
             "Something went wrong",
@@ -310,11 +322,13 @@ public struct GuardianRootView: View {
                 status: model.syncStatus,
                 isEnabled: model.isFamilySyncEnabled,
                 shareURL: model.shareURL,
+                canManageAccess: model.canManageFamilyAccess,
                 shareURLText: $model.shareURLText,
                 onBack: model.returnToParentSection,
                 onSetEnabled: model.setFamilySyncEnabled,
                 onSyncNow: model.syncNow,
                 onCreateShare: model.createFamilyShare,
+                onManageAccess: model.manageFamilyAccess,
                 onAcceptShare: model.acceptFamilyShare
             )
 

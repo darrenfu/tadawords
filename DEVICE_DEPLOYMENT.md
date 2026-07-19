@@ -18,6 +18,19 @@ Tada Words has three deliberately separate delivery milestones. A successful Sim
 6. On the device, enable Developer Mode if iOS requests it.
 7. Select the physical device as the run destination and press **Run**.
 
+For repeat command-line installs, build the exact committed LocalQA candidate and
+use the repository wrapper instead of calling `devicectl install` directly:
+
+```sh
+./Scripts/install-localqa-device.sh DEVICE_ID '/path/to/Tada Words QA.app'
+```
+
+The wrapper first copies only `Library/Application Support/TadaWords` into a
+private temporary directory, compares every saved `schemaVersion` with the
+reader policy bundled inside the target app, and removes the temporary copy.
+It refuses a downgrade before installation if any target reader is too old or
+if the device is locked/unavailable. It never edits or resets device data.
+
 The first direct install can use Xcode-managed personal-team signing for testing on
 the owner's devices. TestFlight requires an active paid Apple Developer Program team.
 The generated project intentionally does not store a personal Team ID in Git. Xcode
@@ -71,9 +84,17 @@ that declaration if custom cryptography is added later.
   for `iCloud.com.tadawords.app`.
 - Release Family Sync is persisted and off by default. Onboarding consent does not
   enable it; a parent must explicitly turn it on in Guardian settings. Turning it
-  off stops future sync but does not yet erase records already uploaded to CloudKit.
-- Profile deletion removes local data and creates a sync tombstone, but remote record
-  erasure remains a release blocker.
+  off stops future sync on that device and, by design, does not erase records already
+  uploaded to CloudKit.
+- Profile deletion writes a privacy-minimal ledger before local purge and the v0.7.0
+  source implements restartable owner erasure of Profile records, assets, share, and
+  zone plus stale-device non-resurrection. Production schema deployment and an
+  explicitly authorized destructive test-only physical-device proof remain release
+  blockers; LocalQA cannot supply that evidence.
+- The normal Release target exposes Apple's existing-share management UI only after
+  Parent Gate and sensitive-action authorization. Owner removal, participant Leave,
+  revocation, and post-dismissal reconciliation must be accepted on signed iPhone and
+  iPad builds; LocalQA intentionally omits this CloudKit-only entry point.
 
 Before external TestFlight or App Store review, the owner must also complete the
 App Store privacy answers, age rating, export-compliance answers, and a public

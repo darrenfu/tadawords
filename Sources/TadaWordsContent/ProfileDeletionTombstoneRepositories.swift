@@ -8,6 +8,15 @@ public protocol HandwritingPreferenceRemoving: Sendable {
     func remove(for profileID: ProfileID)
 }
 
+/// One-way bridge for settings written by builds that kept the selected pen
+/// in UserDefaults. Production bootstrap consumes the value into synchronized
+/// Profile interface settings, then removes the device-local residue.
+public protocol LegacyHandwritingPreferenceMigrating:
+    HandwritingPreferenceRemoving
+{
+    func consumeLegacyTool(for profileID: ProfileID) -> HandwritingTool?
+}
+
 public protocol ProfileDeletionTombstoneRepository: Sendable {
     func tombstones() async throws -> [ProfileDeletionTombstone]
     func pendingTombstones() async throws -> [ProfileDeletionTombstone]
@@ -64,13 +73,16 @@ public actor InMemoryProfileDeletionTombstoneRepository:
 public actor LocalJSONProfileDeletionTombstoneRepository:
     ProfileDeletionTombstoneRepository
 {
+    public nonisolated static let currentSchemaVersion = 1
+
     private struct Snapshot: Codable {
         struct Entry: Codable {
             let tombstone: ProfileDeletionTombstone
             let isCommitted: Bool
         }
 
-        static let currentSchemaVersion = 1
+        static let currentSchemaVersion =
+            LocalJSONProfileDeletionTombstoneRepository.currentSchemaVersion
         let schemaVersion: Int
         let entries: [Entry]
 
@@ -82,11 +94,17 @@ public actor LocalJSONProfileDeletionTombstoneRepository:
 
     public nonisolated let snapshotURL: URL
     private let fileManager: FileManager
+    private let mutationGate: ProfileScopedMutationGate?
     private var values: [ProfileID: Snapshot.Entry]?
 
-    public init(snapshotURL: URL, fileManager: FileManager = .default) {
+    public init(
+        snapshotURL: URL,
+        fileManager: FileManager = .default,
+        mutationGate: ProfileScopedMutationGate? = nil
+    ) {
         self.snapshotURL = snapshotURL
         self.fileManager = fileManager
+        self.mutationGate = mutationGate
     }
 
     public func tombstones() async throws -> [ProfileDeletionTombstone] {
@@ -109,35 +127,61 @@ public actor LocalJSONProfileDeletionTombstoneRepository:
     }
 
     public func save(_ tombstone: ProfileDeletionTombstone) async throws {
-        var candidate = try loadedValues()
-        guard
-            candidate[tombstone.profileID]?.tombstone.deletedAt ?? .distantPast
-                < tombstone.deletedAt
-        else { return }
-        candidate[tombstone.profileID] = Snapshot.Entry(
-            tombstone: tombstone,
-            isCommitted: false
-        )
-        try persist(candidate)
-        values = candidate
+        try await withMutationLease(for: tombstone.profileID) {
+            var candidate = try loadedValues()
+            guard
+                candidate[tombstone.profileID]?.tombstone.deletedAt ?? .distantPast
+                    < tombstone.deletedAt
+            else { return }
+            candidate[tombstone.profileID] = Snapshot.Entry(
+                tombstone: tombstone,
+                isCommitted: false
+            )
+            try persist(candidate)
+            values = candidate
+        }
     }
 
     public func markCommitted(for profileID: ProfileID) async throws {
-        var candidate = try loadedValues()
-        guard let entry = candidate[profileID], !entry.isCommitted else { return }
-        candidate[profileID] = Snapshot.Entry(
-            tombstone: entry.tombstone,
-            isCommitted: true
-        )
-        try persist(candidate)
-        values = candidate
+        try await withMutationLease(for: profileID) {
+            var candidate = try loadedValues()
+            guard let entry = candidate[profileID], !entry.isCommitted else { return }
+            candidate[profileID] = Snapshot.Entry(
+                tombstone: entry.tombstone,
+                isCommitted: true
+            )
+            try persist(candidate)
+            values = candidate
+        }
     }
 
     public func delete(for profileID: ProfileID) async throws {
-        var candidate = try loadedValues()
-        guard candidate.removeValue(forKey: profileID) != nil else { return }
-        try persist(candidate)
-        values = candidate
+        try await withMutationLease(for: profileID) {
+            var candidate = try loadedValues()
+            guard candidate.removeValue(forKey: profileID) != nil else { return }
+            try persist(candidate)
+            values = candidate
+        }
+    }
+
+    private func withMutationLease(
+        for profileID: ProfileID,
+        _ operation: () throws -> Void
+    ) async throws {
+        guard let mutationGate,
+            ProfileScopedMutationLeaseContext.profileID != profileID
+        else {
+            try operation()
+            return
+        }
+        await mutationGate.acquire(profileID)
+        do {
+            try operation()
+            await mutationGate.release(profileID)
+        } catch {
+            await mutationGate.release(profileID)
+            throw error
+        }
     }
 
     private func loadedValues() throws -> [ProfileID: Snapshot.Entry] {

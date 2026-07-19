@@ -21,7 +21,7 @@ final class ProductionNotificationReconcilerTests: XCTestCase {
         let words = InMemoryWordPoolRepository()
         let learning = InMemoryLearningRecordRepository()
         let prompt = try WordPrompt(learningMode: .read, text: "cat")
-        _ = try await words.upsert([
+        let importOutcomes = try await words.upsert([
             WordPoolEntryDraft(
                 profileID: profile.id,
                 prompt: prompt,
@@ -30,10 +30,13 @@ final class ProductionNotificationReconcilerTests: XCTestCase {
                 positionInBatch: 0
             )
         ])
+        let canonicalPrompt = try XCTUnwrap(
+            importOutcomes.first?.entry.prompt
+        )
         try await learning.append(
             AttemptEvent(
                 profileID: profile.id,
-                wordPromptID: prompt.id,
+                wordPromptID: canonicalPrompt.id,
                 learningMode: .read,
                 evidence: .firstIndependentAttempt,
                 outcome: .incorrect,
@@ -43,7 +46,7 @@ final class ProductionNotificationReconcilerTests: XCTestCase {
         try await learning.save(
             WordProgress(
                 profileID: profile.id,
-                wordPromptID: prompt.id,
+                wordPromptID: canonicalPrompt.id,
                 learningMode: .read,
                 firstIndependentAttemptCount: 2,
                 firstIndependentCorrectCount: 0,
@@ -71,7 +74,7 @@ final class ProductionNotificationReconcilerTests: XCTestCase {
                 completedRunCount: 2
             ),
             familySyncCoordinator: NotificationSyncCoordinator(
-                currentStatus: .failed(message: "safe")
+                currentStatus: .failed(message: "safe", pendingCount: 1)
             ),
             clock: NotificationClock(now: now),
             timeZone: TimeZone(secondsFromGMT: 0) ?? .current

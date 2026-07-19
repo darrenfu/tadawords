@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import TadaWordsContent
 import TadaWordsDesignSystem
 import TadaWordsDomain
 import TadaWordsFeatures
@@ -21,6 +22,20 @@ enum ApplicationOrientationPolicy {
         case .parents, .firstRunParents:
             .parentFlexible
         }
+    }
+}
+
+enum FamilySyncBackgroundResultPolicy {
+    static func result(
+        status: FamilySyncStatus,
+        receiptTokenBefore: String?,
+        receiptTokenAfter: String?
+    ) -> FamilySyncBackgroundFetchResult {
+        if case .failed = status { return .failed }
+        guard let receiptTokenBefore, let receiptTokenAfter,
+            receiptTokenBefore != receiptTokenAfter
+        else { return .noData }
+        return .newData
     }
 }
 
@@ -46,6 +61,7 @@ public struct TadaWordsApplicationView: View {
     @State private var area: Area = .child
     @State private var refreshedChildState: RefreshedChildState?
     @State private var childProfileRevision = UUID()
+    @State private var familySyncDataRevision: UUID?
     @State private var hasCompletedFirstRunOnboarding = false
     @StateObject private var launchPresentation = AppLaunchPresentationCoordinator()
     @StateObject private var bootstrapModel: ApplicationBootstrapModel
@@ -63,6 +79,7 @@ public struct TadaWordsApplicationView: View {
     private let voiceprintRepository: (any DeviceVoiceprintRepository)?
     private let sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing
     private let familySyncCapability: FamilySyncCapability
+    private let familySyncAccessManagement: (@MainActor (ProfileID) async throws -> Void)?
     private let interfaceOrientationController: any InterfaceOrientationControlling
 
     /// Preview-only convenience. Production callers must use the initializer
@@ -96,6 +113,7 @@ public struct TadaWordsApplicationView: View {
         voiceprintRepository = nil
         sensitiveActionAuthorizer = AllowSensitiveGuardianActions()
         familySyncCapability = .deviceOnly
+        familySyncAccessManagement = nil
         self.interfaceOrientationController = interfaceOrientationController
         _bootstrapModel = StateObject(
             wrappedValue: ApplicationBootstrapModel(
@@ -120,6 +138,8 @@ public struct TadaWordsApplicationView: View {
         audioExperienceService: any AudioExperienceService =
             SilentAudioExperienceService(),
         familySyncTransport: (any FamilySyncTransport)? = nil,
+        familySyncAccessManagement:
+            (@MainActor (ProfileID) async throws -> Void)? = nil,
         notificationScheduler: (any LearningNotificationScheduling)? = nil,
         voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)? = nil,
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
@@ -136,7 +156,8 @@ public struct TadaWordsApplicationView: View {
             clock: clock,
             timeZone: timeZone,
             familySyncTransport: resolvedFamilySyncTransport,
-            notificationScheduler: notificationScheduler
+            notificationScheduler: notificationScheduler,
+            voiceprintRepository: voiceprintRepository
         )
         launchMode = .production
         self.audioPromptService = audioPromptService
@@ -153,6 +174,7 @@ public struct TadaWordsApplicationView: View {
         self.voiceprintRepository = voiceprintRepository
         self.sensitiveActionAuthorizer = sensitiveActionAuthorizer
         familySyncCapability = resolvedFamilySyncTransport.capability
+        self.familySyncAccessManagement = familySyncAccessManagement
         self.interfaceOrientationController = interfaceOrientationController
         _bootstrapModel = StateObject(
             wrappedValue: ApplicationBootstrapModel(
@@ -320,7 +342,14 @@ public struct TadaWordsApplicationView: View {
                             handwritingRecognitionService: handwritingRecognitionService,
                             pictureHintProvider: pictureHintProvider,
                             speechPermissionActions: speechPermissionActions,
+                            externalDataRevision: familySyncDataRevision,
                             onLearningDataChanged: {
+                                Task {
+                                    _ = await environment.familySyncCoordinator
+                                        .synchronize(
+                                            trigger: .localMutation
+                                        )
+                                }
                                 await environment.notificationReconciler?.reconcileAll()
                             },
                             onOpenGuardian: showGuardianArea
@@ -335,6 +364,7 @@ public struct TadaWordsApplicationView: View {
                             audioPromptService: audioPromptService,
                             audioExperienceService: audioExperienceService,
                             familySyncCoordinator: environment.familySyncCoordinator,
+                            familySyncAccessManagement: familySyncAccessManagement,
                             notificationScheduler: notificationScheduler,
                             voiceprintEnrollmentService: voiceprintEnrollmentService,
                             voiceprintRepository: voiceprintRepository,
@@ -343,6 +373,7 @@ public struct TadaWordsApplicationView: View {
                             imageTextRecognitionService: imageTextRecognitionService,
                             pictureHintProvider: pictureHintProvider,
                             sensitiveActionAuthorizer: sensitiveActionAuthorizer,
+                            externalDataRevision: familySyncDataRevision,
                             onExit: {
                                 refreshProfilesAndShowChild(environment: environment)
                             }
@@ -355,6 +386,33 @@ public struct TadaWordsApplicationView: View {
             }
         }
         .task {
+            await FamilySyncRemoteNotificationBridge.shared.register {
+                let receiptTokenBefore =
+                    try? await environment
+                    .familySyncApplyTransactionRepository
+                    .committedReceiptToken()
+                let status = await environment.familySyncCoordinator.synchronize(
+                    trigger: .remoteNotification
+                )
+                let receiptTokenAfter =
+                    try? await environment
+                    .familySyncApplyTransactionRepository
+                    .committedReceiptToken()
+                return FamilySyncBackgroundResultPolicy.result(
+                    status: status,
+                    receiptTokenBefore: receiptTokenBefore,
+                    receiptTokenAfter: receiptTokenAfter
+                )
+            }
+            if await environment.familySyncCoordinator.isEnabled() {
+                await FamilySyncRemoteNotificationBridge.shared
+                    .requestRegistration()
+            }
+            await FamilySyncConnectivityRecoveryBridge.shared.register {
+                _ = await environment.familySyncCoordinator.synchronize(
+                    trigger: .connectivityRecovery
+                )
+            }
             startProductionLaunchPresentationIfNeeded(
                 environment: environment,
                 profiles: childProfiles,
@@ -368,11 +426,44 @@ public struct TadaWordsApplicationView: View {
                     await environment.notificationReconciler?.reconcileAll()
                 }
             }
-            if let voiceprintRepository {
-                for tombstone in (try? await environment.tombstoneRepository.tombstones()) ?? [] {
-                    try? await voiceprintRepository.delete(for: tombstone.profileID)
-                }
+        }
+        .task {
+            let receipts =
+                await environment
+                .familySyncApplyTransactionRepository.committedReceipts()
+            for await receipt in receipts {
+                guard !Task.isCancelled else { return }
+                await applyCommittedFamilySyncReceipt(
+                    receipt,
+                    environment: environment
+                )
             }
+        }
+    }
+
+    private func applyCommittedFamilySyncReceipt(
+        _ receipt: FamilySyncCommittedApplyReceipt,
+        environment: ProductionApplicationEnvironment
+    ) async {
+        do {
+            async let profiles = environment.profileRepository.profiles()
+            async let lastSelectedProfileID =
+                environment.childSessionRepository.lastSelectedProfileID()
+            let refreshedProfiles = try await profiles
+            let savedProfileID = try await lastSelectedProfileID
+            refreshedChildState = RefreshedChildState(
+                profiles: refreshedProfiles,
+                lastSelectedProfileID: savedProfileID.flatMap { candidate in
+                    refreshedProfiles.contains(where: { $0.id == candidate })
+                        ? candidate
+                        : nil
+                }
+            )
+            familySyncDataRevision = receipt.transactionID
+            await environment.notificationReconciler?.reconcileAll()
+        } catch {
+            // The repositories remain authoritative. The next receipt or
+            // foreground activation retries this presentation-only read.
         }
     }
 

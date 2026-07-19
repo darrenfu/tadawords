@@ -389,17 +389,15 @@ final class ApplicationCompositionTests: XCTestCase {
             outcome: .correct,
             occurredAt: Self.testDate
         )
-        let progress = WordProgress(
-            profileID: Self.defaultProfile.id,
-            wordPromptID: wordID,
-            learningMode: .read,
-            firstIndependentAttemptCount: 1,
-            firstIndependentCorrectCount: 1,
-            lastEncounterAt: Self.testDate
-        )
-
         try await environment.learningRecordRepository.append(attempt)
-        try await environment.learningRecordRepository.save(progress)
+        let derivedProgress = try await environment.learningRecordRepository.progress(
+            for: Self.defaultProfile.id,
+            wordPromptID: wordID
+        )
+        let eventDerivedProgress = try XCTUnwrap(derivedProgress)
+        XCTAssertEqual(eventDerivedProgress.firstIndependentAttemptCount, 1)
+        XCTAssertEqual(eventDerivedProgress.firstIndependentCorrectCount, 1)
+        XCTAssertEqual(eventDerivedProgress.lastEncounterAt, Self.testDate)
 
         let restartedRepository = LocalJSONLearningRecordRepository(
             snapshotURL: environment.dataPaths.learningRecordsSnapshot
@@ -413,7 +411,7 @@ final class ApplicationCompositionTests: XCTestCase {
             wordPromptID: wordID
         )
         XCTAssertEqual(persistedAttempts, [attempt])
-        XCTAssertEqual(persistedProgress, progress)
+        XCTAssertEqual(persistedProgress, eventDerivedProgress)
     }
 
     func testCorruptProfileSnapshotFailsClosedWithoutOverwritingBytes() async throws {
@@ -434,11 +432,11 @@ final class ApplicationCompositionTests: XCTestCase {
                 applicationSupportDirectory: applicationSupportDirectory
             ).bootstrap()
             XCTFail("Expected corrupt profile JSON to stop bootstrap.")
-        } catch let error as LocalKidProfileRepositoryError {
-            guard case .invalidJSON(let snapshotURL, _) = error else {
-                return XCTFail("Unexpected profile repository error: \(error)")
-            }
-            XCTAssertEqual(snapshotURL, paths.profilesSnapshot)
+        } catch let error as ApplicationBootstrapError {
+            XCTAssertEqual(
+                error,
+                .invalidSnapshotEnvelope(store: .profiles)
+            )
         }
 
         XCTAssertEqual(
@@ -473,11 +471,11 @@ final class ApplicationCompositionTests: XCTestCase {
                 applicationSupportDirectory: applicationSupportDirectory
             ).bootstrap()
             XCTFail("Expected corrupt word-pool JSON to stop bootstrap.")
-        } catch let error as LocalWordPoolRepositoryError {
-            guard case .invalidJSON(let snapshotURL, _) = error else {
-                return XCTFail("Unexpected word-pool repository error: \(error)")
-            }
-            XCTAssertEqual(snapshotURL, paths.wordPoolSnapshot)
+        } catch let error as ApplicationBootstrapError {
+            XCTAssertEqual(
+                error,
+                .invalidSnapshotEnvelope(store: .wordPool)
+            )
         }
 
         XCTAssertEqual(
@@ -507,11 +505,11 @@ final class ApplicationCompositionTests: XCTestCase {
                 applicationSupportDirectory: applicationSupportDirectory
             ).bootstrap()
             XCTFail("Expected corrupt learning JSON to stop bootstrap.")
-        } catch let error as LocalLearningRecordRepositoryError {
-            guard case .invalidJSON(let snapshotURL, _) = error else {
-                return XCTFail("Unexpected learning repository error: \(error)")
-            }
-            XCTAssertEqual(snapshotURL, paths.learningRecordsSnapshot)
+        } catch let error as ApplicationBootstrapError {
+            XCTAssertEqual(
+                error,
+                .invalidSnapshotEnvelope(store: .learningRecords)
+            )
         }
 
         XCTAssertEqual(
@@ -541,11 +539,11 @@ final class ApplicationCompositionTests: XCTestCase {
                 applicationSupportDirectory: applicationSupportDirectory
             ).bootstrap()
             XCTFail("Expected corrupt practice settings to stop bootstrap.")
-        } catch let error as LocalPracticeSettingsRepositoryError {
-            guard case .invalidJSON(let snapshotURL, _) = error else {
-                return XCTFail("Unexpected settings repository error: \(error)")
-            }
-            XCTAssertEqual(snapshotURL, paths.practiceSettingsSnapshot)
+        } catch let error as ApplicationBootstrapError {
+            XCTAssertEqual(
+                error,
+                .invalidSnapshotEnvelope(store: .practiceSettings)
+            )
         }
 
         XCTAssertEqual(
@@ -577,11 +575,11 @@ final class ApplicationCompositionTests: XCTestCase {
                 applicationSupportDirectory: applicationSupportDirectory
             ).bootstrap()
             XCTFail("Expected corrupt Daily Quest JSON to stop bootstrap.")
-        } catch let error as LocalDailyQuestRepositoryError {
-            guard case .invalidJSON(let snapshotURL, _) = error else {
-                return XCTFail("Unexpected Daily Quest repository error: \(error)")
-            }
-            XCTAssertEqual(snapshotURL, paths.dailyQuestsSnapshot)
+        } catch let error as ApplicationBootstrapError {
+            XCTAssertEqual(
+                error,
+                .invalidSnapshotEnvelope(store: .dailyQuests)
+            )
         }
 
         XCTAssertEqual(
@@ -647,6 +645,209 @@ final class ApplicationCompositionTests: XCTestCase {
         )
     }
 
+    func testCurrentFamilySyncSnapshotVersionsBootstrapSuccessfully() async throws {
+        let applicationSupportDirectory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(applicationSupportDirectory) }
+        let paths = ApplicationDataPaths(
+            applicationSupportDirectory: applicationSupportDirectory
+        )
+        try FileManager.default.createDirectory(
+            at: paths.dataDirectory,
+            withIntermediateDirectories: true
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        encoder.outputFormatting = [.sortedKeys]
+        try encoder.encode(
+            KidProfileSnapshot(profiles: [Self.defaultProfile])
+        ).write(to: paths.profilesSnapshot)
+        try encoder.encode(
+            WordPoolSnapshot(entries: [])
+        ).write(to: paths.wordPoolSnapshot)
+        try encoder.encode(
+            LearningRecordSnapshot(
+                attempts: [],
+                corrections: [],
+                progress: []
+            )
+        ).write(to: paths.learningRecordsSnapshot)
+        try encoder.encode(
+            PracticeSettingsSnapshot(
+                settings: [.defaults(for: Self.defaultProfile.id)]
+            )
+        ).write(to: paths.practiceSettingsSnapshot)
+        try encoder.encode(
+            DailyQuestSnapshot(
+                plans: [],
+                completions: [],
+                rewardGrants: []
+            )
+        ).write(to: paths.dailyQuestsSnapshot)
+
+        let environment = try await makeBootstrapper(
+            applicationSupportDirectory: applicationSupportDirectory
+        ).bootstrap()
+
+        XCTAssertEqual(environment.profiles, [Self.defaultProfile])
+        XCTAssertEqual(
+            try schemaVersion(in: paths.wordPoolSnapshot),
+            WordPoolSnapshot.currentSchemaVersion
+        )
+        XCTAssertEqual(
+            try schemaVersion(in: paths.learningRecordsSnapshot),
+            LearningRecordSnapshot.currentSchemaVersion
+        )
+        XCTAssertEqual(
+            try schemaVersion(in: paths.dailyQuestsSnapshot),
+            DailyQuestSnapshot.currentSchemaVersion
+        )
+    }
+
+    func testNewerCoreSchemasFailBeforeAnyBootstrapWriteAcrossRetries()
+        async throws
+    {
+        let candidates:
+            [(
+                store: ApplicationSnapshotStore,
+                supported: Int,
+                snapshotURL: (ApplicationDataPaths) -> URL
+            )] = [
+                (
+                    .wordPool,
+                    WordPoolSnapshot.currentSchemaVersion,
+                    { $0.wordPoolSnapshot }
+                ),
+                (
+                    .learningRecords,
+                    LearningRecordSnapshot.currentSchemaVersion,
+                    { $0.learningRecordsSnapshot }
+                ),
+                (
+                    .dailyQuests,
+                    DailyQuestSnapshot.currentSchemaVersion,
+                    { $0.dailyQuestsSnapshot }
+                ),
+            ]
+
+        for candidate in candidates {
+            let applicationSupportDirectory = try makeTemporaryDirectory()
+            defer { removeTemporaryDirectory(applicationSupportDirectory) }
+            let paths = ApplicationDataPaths(
+                applicationSupportDirectory: applicationSupportDirectory
+            )
+            try FileManager.default.createDirectory(
+                at: paths.dataDirectory,
+                withIntermediateDirectories: true
+            )
+            let futureVersion = candidate.supported + 1
+            let original = Data(
+                "{\"schemaVersion\":\(futureVersion)}".utf8
+            )
+            let futureSnapshotURL = candidate.snapshotURL(paths)
+            try original.write(to: futureSnapshotURL)
+
+            for _ in 0..<2 {
+                do {
+                    _ = try await makeBootstrapper(
+                        applicationSupportDirectory: applicationSupportDirectory
+                    ).bootstrap()
+                    XCTFail("Expected a newer snapshot to require an app update.")
+                } catch let error as ApplicationBootstrapError {
+                    XCTAssertEqual(
+                        error,
+                        .requiresNewerApp(
+                            store: candidate.store,
+                            found: futureVersion,
+                            supported: candidate.supported
+                        )
+                    )
+                }
+            }
+
+            XCTAssertEqual(try Data(contentsOf: futureSnapshotURL), original)
+            XCTAssertFalse(
+                FileManager.default.fileExists(
+                    atPath: paths.deviceIdentitySnapshot.path
+                )
+            )
+            XCTAssertFalse(
+                FileManager.default.fileExists(
+                    atPath: paths.firstRunOnboardingSnapshot.path
+                )
+            )
+            XCTAssertEqual(
+                try FileManager.default.contentsOfDirectory(
+                    at: paths.dataDirectory,
+                    includingPropertiesForKeys: nil
+                ).map(\.lastPathComponent),
+                [futureSnapshotURL.lastPathComponent]
+            )
+        }
+    }
+
+    func testNewerSchemaFailureProvidesPrivacySafeUpdateGuidance() {
+        let failure = ApplicationBootstrapFailure(
+            error: ApplicationBootstrapError.requiresNewerApp(
+                store: .wordPool,
+                found: 3,
+                supported: 2
+            )
+        )
+
+        XCTAssertEqual(failure.title, "Update Tada Words")
+        XCTAssertTrue(failure.message.contains("saved data is safe"))
+        XCTAssertTrue(failure.message.contains("latest Tada Words build"))
+        XCTAssertEqual(failure.debugDetails, "requires-newer-app:wordPool:3:2")
+    }
+
+    func testBundledPersistenceSchemaPolicyMatchesEveryReader() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let policyURL = repositoryRoot.appendingPathComponent(
+            "Apps/TadaWordsApp/PersistenceSchemaCompatibility.json"
+        )
+        guard
+            let object = try JSONSerialization.jsonObject(
+                with: Data(contentsOf: policyURL)
+            ) as? [String: Any],
+            let formatVersion = object["formatVersion"] as? Int,
+            let rawStores = object["stores"] as? [String: Any]
+        else {
+            return XCTFail("Persistence compatibility policy is malformed.")
+        }
+        let stores = rawStores.compactMapValues { value in
+            (value as? NSNumber)?.intValue
+        }
+
+        XCTAssertEqual(formatVersion, 1)
+        XCTAssertEqual(
+            stores,
+            [
+                "child-session.json": ChildSessionSnapshot.currentSchemaVersion,
+                "daily-quests.json": DailyQuestSnapshot.currentSchemaVersion,
+                "family-sync-apply-transactions.json":
+                    FamilySyncApplyTransactionSnapshot.currentSchemaVersion,
+                "family-sync-journal.json":
+                    FamilySyncJournalSnapshot.currentSchemaVersion,
+                "family-sync-preference.json":
+                    FamilySyncPreferenceSnapshot.currentSchemaVersion,
+                "first-run-onboarding.json":
+                    FirstRunOnboardingState.currentSchemaVersion,
+                "learning-records.json":
+                    LearningRecordSnapshot.currentSchemaVersion,
+                "practice-settings.json":
+                    PracticeSettingsSnapshot.currentSchemaVersion,
+                "profile-deletions.json":
+                    LocalJSONProfileDeletionTombstoneRepository
+                    .currentSchemaVersion,
+                "profiles.json": KidProfileSnapshot.currentSchemaVersion,
+                "word-pool.json": WordPoolSnapshot.currentSchemaVersion,
+            ]
+        )
+    }
+
     func testConstructingProductionCompositionDoesNotRequestSpeechPermission() async throws {
         let applicationSupportDirectory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(applicationSupportDirectory) }
@@ -666,6 +867,136 @@ final class ApplicationCompositionTests: XCTestCase {
 
         let requestCount = await recorder.requestCount
         XCTAssertEqual(requestCount, 0)
+    }
+
+    func testBootstrapReplaysPendingFamilySyncApplyBeforeEnvironmentExposure()
+        async throws
+    {
+        let applicationSupportDirectory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(applicationSupportDirectory) }
+        let paths = ApplicationDataPaths(
+            applicationSupportDirectory: applicationSupportDirectory
+        )
+        try FileManager.default.createDirectory(
+            at: paths.dataDirectory,
+            withIntermediateDirectories: true
+        )
+        let remoteProfile = KidProfile(
+            id: ProfileID(),
+            displayName: "Recovered Kid",
+            avatar: .cartoonAnimal(assetID: "fox"),
+            selectedWorld: .pawsAndPines,
+            createdAt: Self.testDate.addingTimeInterval(-100),
+            updatedAt: Self.testDate.addingTimeInterval(20)
+        )
+        let remoteSettings = ProfilePracticeSettings(
+            profileID: remoteProfile.id,
+            read: LearningRouteSettings(
+                newWordLimit: 7,
+                reviewWordLimit: 3,
+                contentOrder: .reviewThenNew,
+                emergencyAfterSeconds: 180
+            )
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        let revision = FamilySyncLogicalRevision(
+            counter: 6,
+            deviceID: "remote-device"
+        )
+        let records = [
+            FamilySyncRecord(
+                recordName: "profile-\(remoteProfile.id)",
+                profileID: remoteProfile.id,
+                kind: .profile,
+                payload: try encoder.encode(remoteProfile),
+                updatedAt: remoteProfile.updatedAt,
+                deviceID: revision.deviceID,
+                logicalRevision: revision
+            ),
+            FamilySyncRecord(
+                recordName: "practice-settings-\(remoteProfile.id)",
+                profileID: remoteProfile.id,
+                kind: .practiceSettings,
+                payload: try encoder.encode(remoteSettings),
+                updatedAt: remoteProfile.updatedAt,
+                deviceID: revision.deviceID,
+                logicalRevision: revision
+            ),
+        ]
+
+        // Simulate a crash after the first repository write: Profile bytes are
+        // already visible on disk, while the exact accepted multi-repository
+        // batch remains pending and settings were never applied.
+        let profileRepository = LocalJSONKidProfileRepository(
+            snapshotURL: paths.profilesSnapshot
+        )
+        try await profileRepository.save(remoteProfile)
+        let transactions = LocalJSONFamilySyncApplyTransactionRepository(
+            snapshotURL: paths.familySyncApplyTransactionsSnapshot
+        )
+        let start = try await transactions.begin(
+            profileID: remoteProfile.id,
+            records: records,
+            at: Self.testDate
+        )
+        guard case .pending(let pendingTransaction) = start else {
+            return XCTFail("The crash fixture must begin as pending")
+        }
+
+        let environment = try await makeBootstrapper(
+            applicationSupportDirectory: applicationSupportDirectory
+        ).bootstrap()
+        let recoveredSettings = try await environment.practiceSettingsRepository
+            .settings(for: remoteProfile.id)
+        let pendingAfterRecovery =
+            try await environment
+            .familySyncApplyTransactionRepository.pendingTransactions()
+        let committed =
+            try await environment
+            .familySyncApplyTransactionRepository.lastCommittedReceipt(
+                for: remoteProfile.id
+            )
+
+        XCTAssertEqual(environment.profiles, [remoteProfile])
+        XCTAssertEqual(recoveredSettings, remoteSettings)
+        XCTAssertTrue(pendingAfterRecovery.isEmpty)
+        XCTAssertEqual(committed?.transactionID, pendingTransaction.id)
+        XCTAssertEqual(committed?.recordCount, 2)
+        XCTAssertEqual(
+            committed?.affectedKinds,
+            [.practiceSettings, .profile]
+        )
+
+        // Once committed, the crash file retains only privacy-minimal receipt
+        // metadata. Child names and exact payload bytes are gone.
+        let committedSnapshotBytes = try Data(
+            contentsOf: paths.familySyncApplyTransactionsSnapshot
+        )
+        let committedSnapshotText = String(
+            decoding: committedSnapshotBytes,
+            as: UTF8.self
+        )
+        XCTAssertFalse(committedSnapshotText.contains(remoteProfile.displayName))
+        XCTAssertFalse(committedSnapshotText.contains("newWordLimit"))
+
+        let secondRestart = try await makeBootstrapper(
+            applicationSupportDirectory: applicationSupportDirectory
+        ).bootstrap()
+        let secondSettings = try await secondRestart.practiceSettingsRepository
+            .settings(for: remoteProfile.id)
+        let secondPending =
+            try await secondRestart
+            .familySyncApplyTransactionRepository.pendingTransactions()
+        let secondReceipt =
+            try await secondRestart
+            .familySyncApplyTransactionRepository.lastCommittedReceipt(
+                for: remoteProfile.id
+            )
+        XCTAssertEqual(secondRestart.profiles, [remoteProfile])
+        XCTAssertEqual(secondSettings, remoteSettings)
+        XCTAssertTrue(secondPending.isEmpty)
+        XCTAssertEqual(secondReceipt, committed)
     }
 
     func testBootstrapRecoversPendingProfileDeletionJournalWithoutResurrection()
@@ -722,6 +1053,38 @@ final class ApplicationCompositionTests: XCTestCase {
         XCTAssertEqual(
             handwritingStore.selection(for: retainedProfileID),
             HandwritingSelectionState(tool: .brush)
+        )
+    }
+
+    func testBootstrapConsumesLegacyHandwritingToolIntoProfileSettings()
+        async throws
+    {
+        let applicationSupportDirectory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(applicationSupportDirectory) }
+        let suiteName = "BootstrapHandwritingMigrationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let handwritingStore = HandwritingPreferenceStore(
+            userDefaults: defaults,
+            keyPrefix: "selection"
+        )
+        handwritingStore.save(
+            HandwritingSelectionState(tool: .brush),
+            for: Self.defaultProfile.id
+        )
+
+        let environment = try await makeBootstrapper(
+            applicationSupportDirectory: applicationSupportDirectory,
+            handwritingPreferenceRemover: handwritingStore
+        ).bootstrap()
+        let settings = try await environment.practiceSettingsRepository.settings(
+            for: Self.defaultProfile.id
+        )
+
+        XCTAssertEqual(settings?.interface.selectedHandwritingTool, .brush)
+        XCTAssertEqual(
+            handwritingStore.selection(for: Self.defaultProfile.id),
+            HandwritingSelectionState()
         )
     }
 
@@ -788,6 +1151,18 @@ final class ApplicationCompositionTests: XCTestCase {
             withIntermediateDirectories: true
         )
         return directory
+    }
+
+    private func schemaVersion(in url: URL) throws -> Int {
+        guard
+            let object = try JSONSerialization.jsonObject(
+                with: Data(contentsOf: url)
+            ) as? [String: Any],
+            let version = object["schemaVersion"] as? Int
+        else {
+            throw CocoaError(.coderReadCorrupt)
+        }
+        return version
     }
 
     private func removeTemporaryDirectory(_ directory: URL) {

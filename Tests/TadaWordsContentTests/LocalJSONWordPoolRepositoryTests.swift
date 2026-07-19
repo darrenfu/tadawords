@@ -328,7 +328,7 @@ final class LocalJSONWordPoolRepositoryTests: XCTestCase {
             )
             XCTFail("Expected an unsupported-schema error")
         } catch let error as LocalWordPoolRepositoryError {
-            guard case .unsupportedSchemaVersion(_, 999, 1) = error else {
+            guard case .unsupportedSchemaVersion(_, 999, 2) = error else {
                 return XCTFail("Unexpected error: \(error)")
             }
         }
@@ -441,6 +441,179 @@ final class LocalJSONWordPoolRepositoryTests: XCTestCase {
         )
 
         XCTAssertEqual(try Data(contentsOf: snapshotURL), originalData)
+    }
+
+    func testIndependentDevicesDeriveSameEntryAndPromptIDs() async throws {
+        let firstURL = try makeSnapshotURL()
+        let secondURL = try makeSnapshotURL()
+        let first = try await ManualWordPoolImporter(
+            repository: LocalJSONWordPoolRepository(snapshotURL: firstURL)
+        ).importBatch(
+            "Dog",
+            profileID: ContentTestFixture.profileID,
+            learningMode: .read,
+            addedAt: ContentTestFixture.day
+        )
+        let second = try await ManualWordPoolImporter(
+            repository: LocalJSONWordPoolRepository(snapshotURL: secondURL)
+        ).importBatch(
+            "ＤＯＧ",
+            profileID: ContentTestFixture.profileID,
+            learningMode: .read,
+            addedAt: ContentTestFixture.day.addingTimeInterval(30)
+        )
+
+        let firstEntry = try XCTUnwrap(first.inserted.first)
+        let secondEntry = try XCTUnwrap(second.inserted.first)
+        XCTAssertEqual(firstEntry.id, secondEntry.id)
+        XCTAssertEqual(firstEntry.prompt.id, secondEntry.prompt.id)
+        XCTAssertTrue(firstEntry.legacyEntryIDs.isEmpty)
+        XCTAssertTrue(firstEntry.legacyPromptIDs.isEmpty)
+
+        let write = try await ManualWordPoolImporter(
+            repository: LocalJSONWordPoolRepository(
+                snapshotURL: try makeSnapshotURL()
+            )
+        ).importBatch(
+            "dog",
+            profileID: ContentTestFixture.profileID,
+            learningMode: .write,
+            addedAt: ContentTestFixture.day
+        )
+        XCTAssertNotEqual(write.inserted.first?.id, firstEntry.id)
+        XCTAssertNotEqual(write.inserted.first?.prompt.id, firstEntry.prompt.id)
+    }
+
+    func testV1SnapshotMigratesAtomicallyAndLegacyIDsStillResolve()
+        async throws
+    {
+        let snapshotURL = try makeSnapshotURL()
+        let legacy = try ContentTestFixture.entry(
+            "Cat",
+            number: 41,
+            addedAt: ContentTestFixture.day
+        )
+        try encodeSnapshot(
+            WordPoolSnapshot(schemaVersion: 1, entries: [legacy])
+        ).write(to: snapshotURL)
+
+        let repository = LocalJSONWordPoolRepository(snapshotURL: snapshotURL)
+        let migratedEntries = try await repository.entries(
+            for: ContentTestFixture.profileID,
+            learningMode: .read,
+            includingInactive: true
+        )
+        let migrated = try XCTUnwrap(migratedEntries.first)
+
+        XCTAssertNotEqual(migrated.id, legacy.id)
+        XCTAssertNotEqual(migrated.prompt.id, legacy.prompt.id)
+        XCTAssertTrue(migrated.resolves(entryID: legacy.id))
+        XCTAssertTrue(migrated.resolves(promptID: legacy.prompt.id))
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let persisted = try decoder.decode(
+            WordPoolSnapshot.self,
+            from: Data(contentsOf: snapshotURL)
+        )
+        XCTAssertEqual(persisted.schemaVersion, 2)
+        XCTAssertEqual(persisted.entries, [migrated])
+
+        let updatedThroughLegacyID = try await repository.setActive(
+            false,
+            entryID: legacy.id
+        )
+        XCTAssertEqual(updatedThroughLegacyID.id, migrated.id)
+        XCTAssertFalse(updatedThroughLegacyID.isActive)
+
+        let restarted = LocalJSONWordPoolRepository(snapshotURL: snapshotURL)
+        let afterRestart = try await restarted.entries(
+            for: ContentTestFixture.profileID,
+            learningMode: .read,
+            includingInactive: true
+        )
+        XCTAssertEqual(afterRestart, [updatedThroughLegacyID])
+    }
+
+    func testV1DuplicateBusinessIdentityCollapsesWithoutLosingAliases()
+        async throws
+    {
+        let snapshotURL = try makeSnapshotURL()
+        let first = try ContentTestFixture.entry(
+            "cat",
+            number: 51,
+            addedAt: ContentTestFixture.day,
+            lastQueuedAt: ContentTestFixture.day,
+            isActive: true,
+            position: 0
+        )
+        let second = try ContentTestFixture.entry(
+            "CAT",
+            number: 52,
+            addedAt: ContentTestFixture.day.addingTimeInterval(10),
+            lastQueuedAt: ContentTestFixture.day.addingTimeInterval(20),
+            isActive: false,
+            position: 3
+        )
+        try encodeSnapshot(
+            WordPoolSnapshot(schemaVersion: 1, entries: [first, second])
+        ).write(to: snapshotURL)
+
+        let repository = LocalJSONWordPoolRepository(snapshotURL: snapshotURL)
+        let entries = try await repository.entries(
+            for: ContentTestFixture.profileID,
+            learningMode: .read,
+            includingInactive: true
+        )
+
+        let migrated = try XCTUnwrap(entries.first)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(Set(migrated.legacyEntryIDs), [first.id, second.id])
+        XCTAssertEqual(
+            Set(migrated.legacyPromptIDs),
+            [first.prompt.id, second.prompt.id]
+        )
+        XCTAssertEqual(migrated.addedAt, first.addedAt)
+        XCTAssertEqual(migrated.lastQueuedAt, second.lastQueuedAt)
+        XCTAssertEqual(migrated.positionInLastBatch, second.positionInLastBatch)
+        XCTAssertFalse(migrated.isActive)
+    }
+
+    func testSyncedLegacyAliasesMergeIntoOneCanonicalMembership()
+        async throws
+    {
+        let repository = LocalJSONWordPoolRepository(
+            snapshotURL: try makeSnapshotURL()
+        )
+        let first = try ContentTestFixture.entry(
+            "train",
+            number: 61,
+            addedAt: ContentTestFixture.day
+        )
+        let second = try ContentTestFixture.entry(
+            "TRAIN",
+            number: 62,
+            addedAt: ContentTestFixture.day.addingTimeInterval(30),
+            position: 2
+        )
+
+        try await repository.mergeSynced(first)
+        try await repository.mergeSynced(second)
+        let entries = try await repository.entries(
+            for: ContentTestFixture.profileID,
+            learningMode: .read,
+            includingInactive: true
+        )
+
+        let merged = try XCTUnwrap(entries.first)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(Set(merged.legacyEntryIDs), [first.id, second.id])
+        XCTAssertEqual(
+            Set(merged.legacyPromptIDs),
+            [first.prompt.id, second.prompt.id]
+        )
+        XCTAssertEqual(merged.lastQueuedAt, second.lastQueuedAt)
+        XCTAssertEqual(merged.positionInLastBatch, 2)
     }
 
     private func makeSnapshotURL() throws -> URL {
