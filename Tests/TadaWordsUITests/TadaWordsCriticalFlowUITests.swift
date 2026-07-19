@@ -176,6 +176,11 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
             app.links["guardian.third-party-notices.license"].exists
                 || app.buttons["guardian.third-party-notices.license"].exists
         )
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Third-Party Notices"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     /// Covers the parent-session delete contract: only the first deletion asks
