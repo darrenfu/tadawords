@@ -148,7 +148,12 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
     /// Third-party credits stay behind the Parent Gate while their complete
     /// attribution remains readable offline inside the app.
     func testParentCanOpenOfflineThirdPartyNotices() throws {
-        launchDemo()
+        launchDemo(
+            additionalLaunchArguments: [
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
+            ]
+        )
         unlockParentArea()
 
         let appAndFamily = app.buttons["guardian.home.app-and-family"]
@@ -162,25 +167,44 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         XCTAssertTrue(notices.waitForExistence(timeout: 5))
         notices.tap()
 
-        XCTAssertTrue(
-            app.staticTexts[
-                "Twemoji graphics © X Corp. and other contributors."
-            ]
-            .waitForExistence(timeout: 5)
-        )
-        XCTAssertTrue(
-            app.links["guardian.third-party-notices.source"].exists
-                || app.buttons["guardian.third-party-notices.source"].exists
-        )
-        XCTAssertTrue(
-            app.links["guardian.third-party-notices.license"].exists
-                || app.buttons["guardian.third-party-notices.license"].exists
-        )
+        for expectedText in [
+            "Twemoji graphics © X Corp. and other contributors.",
+            "Tada Words includes 74 unmodified graphics from jdecked/twemoji 17.0.3.",
+            "The graphics are licensed under the Creative Commons Attribution 4.0 International license.",
+            "This notice and the picture-hint graphics are built into Tada Words and remain available offline.",
+        ] {
+            let text = app.staticTexts[expectedText]
+            for _ in 0..<5 where !text.exists {
+                app.scrollViews.firstMatch.swipeUp()
+            }
+            XCTAssertTrue(text.waitForExistence(timeout: 5))
+        }
+
+        let sourceLink = app.links["guardian.third-party-notices.source"]
+        let sourceButton = app.buttons["guardian.third-party-notices.source"]
+        let licenseLink = app.links["guardian.third-party-notices.license"]
+        let licenseButton = app.buttons["guardian.third-party-notices.license"]
+        for _ in 0..<5 where !(sourceLink.exists || sourceButton.exists) {
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        XCTAssertTrue(sourceLink.exists || sourceButton.exists)
+        XCTAssertTrue(licenseLink.exists || licenseButton.exists)
 
         let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Third-Party Notices"
+        screenshot.name = "Third-Party Notices - Largest Dynamic Type"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+
+        for _ in 0..<5 where !app.buttons["Back"].exists {
+            app.scrollViews.firstMatch.swipeDown()
+        }
+        let back = app.buttons["Back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        back.tap()
+        XCTAssertTrue(
+            app.buttons["guardian.app.third-party-notices"]
+                .waitForExistence(timeout: 5)
+        )
     }
 
     /// Covers the parent-session delete contract: only the first deletion asks

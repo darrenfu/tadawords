@@ -94,23 +94,24 @@ final class GuardianParentNavigationTests: XCTestCase {
 
     func testThirdPartyNoticeMatchesBundledTwemojiAttribution() {
         XCTAssertEqual(
+            GuardianThirdPartyNoticesContent.title,
+            "Third-Party Notices"
+        )
+        XCTAssertEqual(
             GuardianThirdPartyNoticesContent.attribution,
             "Twemoji graphics © X Corp. and other contributors."
         )
-        XCTAssertTrue(
-            GuardianThirdPartyNoticesContent.sourceDescription.contains(
-                "jdecked/twemoji 17.0.3"
-            )
+        XCTAssertEqual(
+            GuardianThirdPartyNoticesContent.sourceDescription,
+            "Tada Words includes 74 unmodified graphics from jdecked/twemoji 17.0.3."
         )
-        XCTAssertTrue(
-            GuardianThirdPartyNoticesContent.sourceDescription.contains(
-                "74 unmodified graphics"
-            )
+        XCTAssertEqual(
+            GuardianThirdPartyNoticesContent.licenseDescription,
+            "The graphics are licensed under the Creative Commons Attribution 4.0 International license."
         )
-        XCTAssertTrue(
-            GuardianThirdPartyNoticesContent.offlineDescription.contains(
-                "available offline"
-            )
+        XCTAssertEqual(
+            GuardianThirdPartyNoticesContent.offlineDescription,
+            "This notice and the picture-hint graphics are built into Tada Words and remain available offline."
         )
         XCTAssertEqual(
             GuardianThirdPartyNoticesContent.sourceURL.absoluteString,

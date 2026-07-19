@@ -648,13 +648,14 @@ Branch: `agent/batch-third-party-notices-v0.7.3`
 
 Build: `2026071903`
 
-Overall state: Parent-gated, offline third-party attribution for the exact
-bundled picture-hint implementation. Production content-rights inventory and
-archive verification continue in the dependent App Store readiness batch.
+Overall state: Parent-gated, offline third-party attribution plus a versioned
+content-rights inventory and exact source/archive verifier for the bundled
+picture-hint implementation. Cartesia entitlement evidence and Pawgoo ownership
+attestation remain separate human blockers under #32 and #33.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
-| V073-COMP-001 | Compliance | Parent resources | Keep the exact Twemoji attribution, pinned source, unmodified status, and CC BY 4.0 license accessible offline behind the Parent Gate. | Source and focused iPhone/iPad simulator UI tests pass | Keep the release inventory synchronized with the bundled archive and complete human VoiceOver and largest Dynamic Type review. |
+| V073-COMP-001 | Compliance | Parent resources | Keep the exact Twemoji attribution, pinned source, unmodified status, and CC BY 4.0 license accessible offline behind the Parent Gate. | Source, archive, and focused iPhone/iPad simulator UI tests pass | Keep the release inventory synchronized with the signed release archive and complete human VoiceOver review. |
 
 ### 2026-07-19 v0.7.3 notes
 
@@ -665,7 +666,13 @@ archive verification continue in the dependent App Store readiness batch.
 - Keeps every notice string available offline and every external link behind
   the Parent Gate; no child-facing route was added.
 - Added exact-content, route/back-stack, and focused UI regression coverage.
+- The focused flow launches at the largest accessibility text size, verifies
+  every required notice paragraph and both resource controls, retains settled
+  visual evidence, and returns to App & Family through the shared Back control.
 - The focused Parent flow passes 1/1 on iPhone 17 Pro Max and 1/1 on iPad Pro
   13-inch (M5), iOS 26.5.
 - The complete pre-commit gate passes strict format, 822/822 Swift tests,
   40/40 Issue Agent tests, and 11/11 release-preflight tests.
+- Added `Docs/APP_STORE_CONTENT_RIGHTS.md` and a repeatable source/archive
+  verifier. The unsigned v0.7.3 Release archive matches 1,008 M4A files, 74
+  Twemoji PNGs, five expected JSON files, and all test/resource exclusions.

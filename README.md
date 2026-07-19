@@ -21,7 +21,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.7.3` (build `2026071903`) adds offline Third-Party Notices behind the Parent Gate for the 74 bundled, unmodified Twemoji picture hints. The merged v0.7.2 recovery build opened the existing physical-iPhone data in place with two Profiles, 201 Word Pool entries, and 488 canonical attempts preserved; no reset or snapshot edit was used. Production CloudKit schema, signed iPhone/iPad private and shared sync, destructive test-only erasure, background delivery, and human accessibility review remain release gates. See the [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** Version `0.7.3` (build `2026071903`) adds offline Third-Party Notices behind the Parent Gate for the 74 bundled, unmodified Twemoji picture hints, plus a versioned [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md) and source/archive verifier. The merged v0.7.2 recovery build opened the existing physical-iPhone data in place with two Profiles, 201 Word Pool entries, and 488 canonical attempts preserved; no reset or snapshot edit was used. Production CloudKit schema, signed iPhone/iPad private and shared sync, destructive test-only erasure, background delivery, and human accessibility review remain release gates. See the [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -220,6 +220,7 @@ The repository includes one unmodified child-speech fixture from [OpenSLR SLR101
 - [Preset word catalog](Docs/TADA_WORDS_PRESET_CATALOG.md)
 - [Visual and accessibility audit](QAArtifacts/DESIGN_AUDIT_2026-07-12.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
+- [App Store content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md)
 
 ## License
 
