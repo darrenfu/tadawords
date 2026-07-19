@@ -205,7 +205,8 @@ public struct GuardianRootView: View {
                         onOpenNotifications: {
                             model.showSettings(.notifications)
                         },
-                        onOpenFamilySync: model.showFamilySync
+                        onOpenFamilySync: model.showFamilySync,
+                        onOpenThirdPartyNotices: model.showThirdPartyNotices
                     )
                 }
             } else {
@@ -330,6 +331,11 @@ public struct GuardianRootView: View {
                 onCreateShare: model.createFamilyShare,
                 onManageAccess: model.manageFamilyAccess,
                 onAcceptShare: model.acceptFamilyShare
+            )
+
+        case .thirdPartyNotices:
+            GuardianThirdPartyNoticesView(
+                onBack: model.returnToParentSection
             )
 
         case .voiceprint(let profile):

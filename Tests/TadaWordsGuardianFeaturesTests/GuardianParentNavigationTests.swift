@@ -63,6 +63,10 @@ final class GuardianParentNavigationTests: XCTestCase {
             GuardianDestination.familySync.parentSectionForBack,
             .appAndFamily
         )
+        XCTAssertEqual(
+            GuardianDestination.thirdPartyNotices.parentSectionForBack,
+            .appAndFamily
+        )
     }
 
     func testParentResourcesUseOnlyExpectedPawgooHTTPSDestinations() {
@@ -86,6 +90,37 @@ final class GuardianParentNavigationTests: XCTestCase {
             XCTAssertNil(resource.destination.fragment)
             XCTAssertFalse(resource.accessibilityIdentifier.isEmpty)
         }
+    }
+
+    func testThirdPartyNoticeMatchesBundledTwemojiAttribution() {
+        XCTAssertEqual(
+            GuardianThirdPartyNoticesContent.title,
+            "Third-Party Notices"
+        )
+        XCTAssertEqual(
+            GuardianThirdPartyNoticesContent.attribution,
+            "Twemoji graphics © X Corp. and other contributors."
+        )
+        XCTAssertEqual(
+            GuardianThirdPartyNoticesContent.sourceDescription,
+            "Tada Words includes 74 unmodified graphics from jdecked/twemoji 17.0.3."
+        )
+        XCTAssertEqual(
+            GuardianThirdPartyNoticesContent.licenseDescription,
+            "The graphics are licensed under the Creative Commons Attribution 4.0 International license."
+        )
+        XCTAssertEqual(
+            GuardianThirdPartyNoticesContent.offlineDescription,
+            "This notice and the picture-hint graphics are built into Tada Words and remain available offline."
+        )
+        XCTAssertEqual(
+            GuardianThirdPartyNoticesContent.sourceURL.absoluteString,
+            "https://github.com/jdecked/twemoji"
+        )
+        XCTAssertEqual(
+            GuardianThirdPartyNoticesContent.licenseURL.absoluteString,
+            "https://creativecommons.org/licenses/by/4.0/"
+        )
     }
 
     func testDataControlCopyNamesExistingParentPathsAndIOSPermissions() {
@@ -181,6 +216,11 @@ final class GuardianParentNavigationTests: XCTestCase {
         XCTAssertEqual(model.transitionKey, "parent-section-wordsAndPractice")
 
         model.showSettings(.notifications)
+        model.returnToParentSection()
+        XCTAssertEqual(model.transitionKey, "parent-section-appAndFamily")
+
+        model.showThirdPartyNotices()
+        XCTAssertEqual(model.transitionKey, "third-party-notices")
         model.returnToParentSection()
         XCTAssertEqual(model.transitionKey, "parent-section-appAndFamily")
     }

@@ -21,7 +21,10 @@ struct GuardianNavigationHeader: View {
 
             Text(title)
                 .font(.system(.title2, design: .rounded, weight: .bold))
-                .lineLimit(1)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
 
             Spacer()
         }

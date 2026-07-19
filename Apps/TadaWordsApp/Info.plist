@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.7.2</string>
+	<string>0.7.3</string>
 	<key>CFBundleVersion</key>
-	<string>2026071902</string>
+	<string>2026071903</string>
 	<key>CKSharingSupported</key>
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
@@ -36,6 +36,10 @@
 	<string>Tada Words uses on-device speech recognition to compare the spoken practice word and give immediate feedback.</string>
 	<key>TadaWordsGitCommit</key>
 	<string>$(TADA_GIT_COMMIT)</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
@@ -43,10 +47,6 @@
 	</dict>
 	<key>UIRequiresFullScreen</key>
 	<true/>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
