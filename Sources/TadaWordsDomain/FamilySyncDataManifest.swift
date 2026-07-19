@@ -53,7 +53,8 @@ public enum FamilySyncDataManifest {
             "Bounded CKAsset metadata and prepared JPEG bytes."),
         local(
             "profiles.voiceprintStatus",
-            "Enrollment is independently derived from this device Keychain."),
+            "Enrollment is independently derived from this device Keychain. The dedicated synchronized Profile wire payload omits this field entirely, including sentinel values."
+        ),
         sync("profiles.createdAt", .profile, "Stable Profile history."),
         sync("profiles.updatedAt", .profile, "Audit metadata; logical revision decides conflicts."),
 
@@ -121,7 +122,31 @@ public enum FamilySyncDataManifest {
             "cloudDeletionLedger.*", .profileDeletion,
             "Privacy-minimal owner barrier retained outside the erasable Profile zone."),
 
+        syncEnvelope("familySyncEnvelope.recordName", "Stable CloudKit record routing name."),
+        syncEnvelope("familySyncEnvelope.profileID", "Profile scope for every record."),
+        syncEnvelope("familySyncEnvelope.kindIdentifier", "Versioned payload type."),
+        syncEnvelope("familySyncEnvelope.payload", "Canonical record-kind payload bytes."),
+        syncEnvelope("familySyncEnvelope.updatedAt", "Audit and display timestamp."),
+        syncEnvelope("familySyncEnvelope.isDeleted", "Record-level deletion marker."),
+        syncEnvelope("familySyncEnvelope.schemaVersion", "Writer schema boundary."),
+        syncEnvelope(
+            "familySyncEnvelope.minimumReadableVersion",
+            "Fail-closed reader compatibility boundary."),
+        syncEnvelope(
+            "familySyncEnvelope.logicalRevision.counter",
+            "Monotonic conflict-order component."),
+        syncEnvelope(
+            "familySyncEnvelope.logicalRevision.deviceID",
+            "Random per-install UUID used only to break equal logical revisions; it is not an Apple hardware, advertising, or account identifier."
+        ),
+        syncEnvelope("familySyncEnvelope.payloadChecksum", "Integrity boundary."),
+        syncEnvelope("familySyncEnvelope.payloadSize", "Payload-size validation boundary."),
+
         local("childSession.lastSelectedProfileID", "Launch convenience differs by device."),
+        local(
+            "familySyncDeviceIdentity.installationUUIDFile",
+            "The source file stays on this installation; its opaque UUID value is copied into synchronized logical-revision envelopes for deterministic conflict resolution."
+        ),
         local("familySyncPreference.*", "Consent and opt-out are explicit on each device."),
         local("familySyncJournal.*", "Transport recovery metadata; no child payload."),
         local(
@@ -154,7 +179,7 @@ public enum FamilySyncDataManifest {
             "voiceprint.keychainTemplate",
             "Biometric-like child voice data never leaves the device."),
         local("voiceprint.enrollmentSamples", "Raw audio is discarded and never synchronized."),
-        local("cache.pictureHints", "Disposable download cache."),
+        local("cache.pictureHints", "Disposable decoded bundled-asset cache."),
         local("cache.teacherWordAudio", "Disposable download cache."),
         local("cache.musicAndSoundEffects", "Rendered asset cache."),
         local("cache.ocrAndRecognition", "Disposable inference cache."),
@@ -183,6 +208,18 @@ public enum FamilySyncDataManifest {
             fieldPath: fieldPath,
             classification: .synchronized,
             recordKind: recordKind,
+            rationale: rationale,
+            evidenceIDs: evidenceIDs(for: fieldPath)
+        )
+    }
+
+    private static func syncEnvelope(
+        _ fieldPath: String,
+        _ rationale: String
+    ) -> FamilySyncDataManifestEntry {
+        FamilySyncDataManifestEntry(
+            fieldPath: fieldPath,
+            classification: .synchronized,
             rationale: rationale,
             evidenceIDs: evidenceIDs(for: fieldPath)
         )

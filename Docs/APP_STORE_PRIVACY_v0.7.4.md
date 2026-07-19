@@ -77,6 +77,12 @@ and
 
 ## Runtime data-flow inventory
 
+**Current deletion limitation:** the Parent flow refuses to delete the only
+remaining Profile and the app has no separate Delete All App Data/reset path.
+Therefore every Profile-deletion statement below applies only when another
+Profile remains. This is not a complete in-app erasure choice for a one-Profile
+family and remains a release blocker in #19.
+
 | Flow | Data and purpose | Device boundary and destination | Access, retention, linkage, tracking | Choice and deletion | Source evidence |
 | --- | --- | --- | --- | --- | --- |
 | Read-practice microphone and speech | One short utterance, transient PCM, on-device transcript, confidence, answer decision, response time, and optional local speaker-confidence signal | Raw PCM and recognition stay on device. `requiresOnDeviceRecognition` is mandatory; unsupported devices fail closed | PCM is held in memory for the recognition session, capped at 15 seconds, then released. Raw audio and transcript are not persisted or synced. Attempt facts may persist/sync. No tracking | Child taps Record after iOS microphone/speech permission. Profile deletion removes persisted Profile-owned attempt data locally and enters the sync deletion flow | [`AppleSpeechRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechRecognitionService.swift), [`Info.plist`](../Apps/TadaWordsApp/Info.plist) |
@@ -85,15 +91,15 @@ and
 | Profile photo | Parent-selected camera/library image, resized JPEG, dimensions, size, content type, checksum, and Profile association | Stored locally. When Family Sync is enabled, only the prepared JPEG travels to Apple CloudKit as a `CKAsset` | The original camera/library image is not synchronized. The prepared image is at most 512×512 and 256 KiB. Apple and authorized share participants receive it through CloudKit. No source path gives Pawgoo access. No tracking | Parent selects the photo. Profile deletion purges the local photo and stages CloudKit erasure; production proof remains open in #19 | [`ProfilePhotoPreparation.swift`](../Sources/TadaWordsGuardianFeatures/ProfilePhotoPreparation.swift), [`CloudKitProfilePhotoAsset.swift`](../Sources/TadaWordsApplePlatform/CloudKitProfilePhotoAsset.swift) |
 | Handwriting recognition | Vector strokes and temporary raster passes used by on-device Vision; recognition decision and timing | Strokes, rasters, and recognition candidates stay on device | Unfinished strokes and transient recognition data are not persisted or synced. Attempt outcome, timing, help, and input context may persist/sync. No tracking | Child writes and submits. Clear/session transition discards the canvas. Profile deletion removes Profile-owned attempt facts | [`AppleHandwritingRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleHandwritingRecognitionService.swift), [`HandwritingCanvasView.swift`](../Sources/TadaWordsFeatures/HandwritingCanvasView.swift) |
 | Typed spelling | In-app A–Z key taps, submitted spelling decision, timing, help, and input context | On device; canonical attempt fact may sync | Draft keystrokes are transient. The submitted attempt fact is linked to Profile/prompt IDs. No tracking | Child initiates and submits; Profile deletion follows the common attempt-data path | [`SpellQuestView.swift`](../Sources/TadaWordsFeatures/SpellQuestView.swift), [`RepositoryFamilySyncRecordStore.swift`](../Sources/TadaWordsContent/RepositoryFamilySyncRecordStore.swift) |
-| Local app files | Profiles, Pools, canonical learning facts, settings, quests, session/onboarding state, deletion ledger, device identity, and sync recovery state | App-private Application Support files; the classified subset below can be copied to CloudKit only after opt-in | JSON snapshots use explicit forward-only schemas. A future schema fails before bootstrap writes and reports only store/version boundaries. Records link by stable Profile and event IDs. No tracking | Parent creates/imports data. Parent Profile deletion removes Profile-owned local records after the terminal barrier. App-container removal is OS-managed; Keychain is separate | [`ApplicationBootstrap.swift`](../Sources/TadaWordsAppShell/ApplicationBootstrap.swift), [`FAMILY-SYNC-DATA-MANIFEST.md`](FAMILY-SYNC-DATA-MANIFEST.md) |
+| Local app files | Profiles, Pools, canonical learning facts, settings, quests, session/onboarding state, deletion ledger, a random per-install UUID, and sync recovery state | App-private Application Support files; the classified subset below can be copied to CloudKit only after opt-in | JSON snapshots use explicit forward-only schemas. A future schema fails before bootstrap writes and reports only store/version boundaries. Records link by stable Profile/event IDs. The random UUID is not an Apple hardware, advertising, or account identifier; its value enters synchronized logical-revision envelopes only to deterministically resolve equal revisions. No tracking | Parent creates/imports data. Profile deletion removes Profile-owned local records after the terminal barrier only when another Profile remains. There is no complete in-app final-Profile/delete-all path yet. App-container removal is OS-managed; Keychain is separate | [`ApplicationBootstrap.swift`](../Sources/TadaWordsAppShell/ApplicationBootstrap.swift), [`FAMILY-SYNC-DATA-MANIFEST.md`](FAMILY-SYNC-DATA-MANIFEST.md) |
 | Local notifications | Parent-selected reminder preferences; generic notification title/body; OS request IDs | Notification content and schedules stay with `UNUserNotificationCenter`. Preferences may sync; OS authorization and scheduled IDs do not | Notification copy avoids child names and words. Request IDs include a local Profile UUID and are held by iOS. No tracking | iOS notification permission plus Parent toggles. Turning settings off or deleting a Profile removes its scheduled requests | [`AppleLearningNotificationScheduler.swift`](../Sources/TadaWordsApplePlatform/AppleLearningNotificationScheduler.swift) |
-| Family Sync | Canonical Profile, Pool, settings, attempt/correction, daily-plan/completion/reward, and deletion facts; bounded photo asset | Yes, after explicit parent opt-in, to Apple's private/shared CloudKit databases. APNs remote notification wakes reconciliation; the app ignores notification payload content | Apple and invited share participants have access according to CloudKit controls. The source has no Pawgoo server-reader path. Record linkage uses stable Profile/event/business-key IDs. No advertising or tracking purpose | Off by default per device. Turning it off stops future lifecycle/manual/background sync but does not erase uploaded records. Profile deletion is the erasure action; production proof remains open in #19 | [`CloudKitFamilySyncTransport.swift`](../Sources/TadaWordsApplePlatform/CloudKitFamilySyncTransport.swift), [`TadaWordsAppDelegate.swift`](../Apps/TadaWordsApp/TadaWordsAppDelegate.swift), [`FamilySyncDataManifest.swift`](../Sources/TadaWordsDomain/FamilySyncDataManifest.swift) |
-| Profile deletion ledger | Profile ID, revision counter, revision device ID, and envelope schema only | Retained in the owner's CloudKit control zone to prevent stale-device resurrection | Contains no nickname, photo, word, learning event, or voice data. The Profile zone/share/assets are designed to be erased after the barrier. No tracking | Parent authorization required. Owner erasure, participant leave, and revocation paths exist in source; signed production destructive acceptance remains open | [`CloudKitFamilyDeletionLedger.swift`](../Sources/TadaWordsApplePlatform/CloudKitFamilyDeletionLedger.swift), [`RepositoryFamilySyncDeletionPrivacyHarnessTests.swift`](../Tests/TadaWordsContentTests/RepositoryFamilySyncDeletionPrivacyHarnessTests.swift) |
+| Family Sync | Canonical Profile, Pool, settings, attempt/correction, daily-plan/completion/reward, and deletion facts; bounded photo asset; common envelope metadata including a random per-install logical-revision UUID | Yes, after explicit parent opt-in, to Apple's private/shared CloudKit databases. APNs remote notification wakes reconciliation; the app ignores notification payload content | Apple and invited share participants have access according to CloudKit controls. The source has no Pawgoo server-reader path. Record linkage uses stable Profile/event/business-key IDs. The opaque installation UUID is used only as an equal-revision tie-breaker, not advertising, cross-app tracking, hardware identification, or account identity. No advertising or tracking purpose | Off by default per device. Turning it off stops future lifecycle/manual/background sync but does not erase uploaded records. Profile deletion is the erasure action only while another Profile remains; production proof and a complete final-Profile/delete-all path remain open in #19 | [`CloudKitFamilySyncTransport.swift`](../Sources/TadaWordsApplePlatform/CloudKitFamilySyncTransport.swift), [`TadaWordsAppDelegate.swift`](../Apps/TadaWordsApp/TadaWordsAppDelegate.swift), [`FamilySyncDataManifest.swift`](../Sources/TadaWordsDomain/FamilySyncDataManifest.swift) |
+| Profile deletion ledger | Profile ID, revision counter, revision device ID, and envelope schema, plus CloudKit system record metadata | Retained in the owner's CloudKit control zone to prevent stale-device resurrection | App-authored fields contain no nickname, photo, word, learning event, or voice data. CloudKit also maintains system metadata for the record. The Profile zone/share/assets are designed to be erased after the barrier. No tracking | Parent authorization required. Owner erasure, participant leave, and revocation paths exist in source; deletion of the sole Profile is currently blocked, and signed production destructive acceptance remains open | [`CloudKitFamilyDeletionLedger.swift`](../Sources/TadaWordsApplePlatform/CloudKitFamilyDeletionLedger.swift), [`RepositoryFamilySyncDeletionPrivacyHarnessTests.swift`](../Tests/TadaWordsContentTests/RepositoryFamilySyncDeletionPrivacyHarnessTests.swift) |
 | Picture hints | Concrete-word lookup and a child-safe Twemoji PNG | Bundle only. No runtime URL request | 74 unique PNGs are bundled. Abstract/function words have no mapping. No request logging, cache download, or tracking | Shown only after the practice assistance rule permits it. Removing the app removes bundled/cache copies | [`AppleWordPictureHintService.swift`](../Sources/TadaWordsApplePlatform/AppleWordPictureHintService.swift), [`Package.swift`](../Package.swift) |
 | Third-Party Notices | Offline Twemoji attribution, pinned source/version, unmodified status, and CC BY 4.0 terms | Notice text stays in the bundle. Only a parent's explicit tap opens the GitHub source or Creative Commons license in the external browser | No Profile, word, learning, photo, voice, or device identifier is appended to either URL. Normal open-web policy applies. No tracking SDK | Available behind the Parent Gate; external navigation is parent initiated | [`GuardianThirdPartyNoticesView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianThirdPartyNoticesView.swift), [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md) |
 | Teacher word audio | Bundled Katie/Aurora clip or offline Apple speech. Dormant client payload contains word, optional pronunciation key, usage, speed, and contract version | Current configuration: bundle/Apple speech only. If an HTTPS `TadaWordsTeacherAudioEndpoint` is added later, that JSON would go to the configured server and an MP3 would return | Current app contains no endpoint or provider credential. Any future endpoint needs a new server-retention/provider audit. Received audio would be cached under a one-way SHA-256 filename. No current tracking | No current remote choice because the path is inactive. Enabling an endpoint invalidates this inventory | [`TadaWordsApp.swift`](../Apps/TadaWordsApp/TadaWordsApp.swift), [`RemoteTeacherWordAudioProvider.swift`](../Sources/TadaWordsApplePlatform/RemoteTeacherWordAudioProvider.swift) |
 | Parent learning-report export | Word, mode, first-attempt count, correct count, accuracy, and mean seconds in CSV | Leaves the app only when an authorized parent invokes the iOS share sheet and chooses a destination | Tada Words does not upload the CSV. The selected destination's policy applies. No automatic retention or tracking by this app | Sensitive Parent action authorization, followed by an explicit share-sheet choice each time | [`GuardianReportsView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianReportsView.swift), [`GuardianModels.swift`](../Sources/TadaWordsGuardianFeatures/GuardianModels.swift) |
-| Family Sync diagnostic export | Enabled flag, coarse transport state, pending/retry count, next retry, and last-success timestamp | Leaves the app only when a parent explicitly chooses a share-sheet destination | Deliberately excludes Profile ID, child name, words, photo, voice sample, voiceprint, and repository payload. Destination policy applies. No tracking | Parent explicitly shares each report | [`GuardianPlatformViews.swift`](../Sources/TadaWordsGuardianFeatures/GuardianPlatformViews.swift) |
+| Family Sync diagnostic export | Generated timestamp, enabled flag, coarse transport state, pending/retry count, next retry, and last-success timestamp | Leaves the app only when a parent explicitly chooses a share-sheet destination | Deliberately excludes Profile ID, child name, words, photo, voice sample, voiceprint, and repository payload. Destination policy applies. No tracking | Parent explicitly shares each report | [`GuardianPlatformViews.swift`](../Sources/TadaWordsGuardianFeatures/GuardianPlatformViews.swift) |
 | OS diagnostics | Bootstrap failure category/store/schema boundary and speech-framework error domain/code | Written to Apple's local unified logging system; no app network exporter exists | No nickname, word, photo, voice sample, transcript, voiceprint, stroke, or repository payload is logged by these paths. OS retention/access policy applies. No analytics or tracking | Automatic on technical failure; removed under OS log lifecycle | [`ApplicationBootstrap.swift`](../Sources/TadaWordsAppShell/ApplicationBootstrap.swift), [`AppleSpeechRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechRecognitionService.swift) |
 | Privacy and support resources | Opens Pawgoo Privacy or Support in the external browser; a parent may later email `support@pawgoo.app` and voluntarily include contact/message content | HTTPS request to `pawgoo.app`; optional support message travels through the parent's chosen mail service to Pawgoo support | Normal web/network metadata reaches Pawgoo/hosting providers. Support staff can read voluntarily sent email/message content under Pawgoo's mailbox retention practice. The app does not append child data. Apple separately exempts app-enabled navigation of the open web from web-traffic declaration. No advertising/tracking SDK in the app | Links are behind the Parent Gate. Sending support content is parent-initiated outside the app. Parent can instead use in-app local deletion/permission guidance | [`GuardianTodayView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianTodayView.swift), live [Privacy](https://pawgoo.app/en/tadawords/privacy) and [Support](https://pawgoo.app/en/support) pages |
 | Face ID/device authentication | OS result used to authorize sensitive Parent actions | Biometric data does not enter Tada Words | The app receives only authentication success/failure from LocalAuthentication. No biometric template, retention, linkage, or tracking by the app | Triggered for sensitive Parent actions when available; device passcode fallback follows OS policy | [`AppleSensitiveGuardianActionAuthorizer.swift`](../Sources/TadaWordsApplePlatform/AppleSensitiveGuardianActionAuthorizer.swift), [`Info.plist`](../Apps/TadaWordsApp/Info.plist) |
@@ -109,7 +115,10 @@ voiceprint cannot silently become a synchronized field.
 
 - Profile stable ID, nickname, age, grade, source avatar choice, World/icon/
   Treasure choices, created/updated metadata, and the bounded prepared Profile
-  photo plus validated attachment metadata.
+  photo plus validated attachment metadata. The dedicated Profile wire payload
+  does not encode `voiceprintStatus` at all—not even a `notEnrolled` sentinel.
+  A receiving device preserves the enrollment state derived from its own
+  Keychain.
 - Independent Read, Write, audio, notification-intent, interface, handwriting-
   tool, and word-policy settings.
 - Parent-approved Pool prompts, normalized words, provenance, active state,
@@ -121,6 +130,11 @@ voiceprint cannot silently become a synchronized field.
 - Daily plans, Today/Practice Again completion facts, reward grants, and causal
   staging records.
 - The privacy-minimal terminal Profile-deletion ledger.
+- Every record's common envelope: record/Profile identity, kind and schema
+  boundaries, update/deletion state, payload/checksum/size, and logical
+  revision. The revision's device ID is a random UUID created by this app for
+  the installation and is used only to converge equal revisions; it is not an
+  Apple hardware ID, IDFA, account ID, or cross-app identifier.
 
 ### Derived locally, never authoritative transport
 
@@ -139,6 +153,8 @@ CloudKit must not win a conflict with a transported progress/report snapshot.
 - Per-device Family Sync opt-in, account confirmation, outbox/journal/retry,
   CloudKit bindings/system fields, inbox/quarantine, `CKSyncEngine` tokens, APNs
   token, and local notification request IDs.
+- The `device-identity.txt` file itself. Its opaque UUID value is intentionally
+  copied into the synchronized logical-revision envelope as described above.
 - Exact pending remote-apply payloads and photo upload-source files used for
   crash recovery. They are purged after acknowledgement; only privacy-minimal
   receipts remain.
@@ -166,7 +182,7 @@ process exists. The release owner must attest that boundary.
 
 | Surface | Current declaration/behavior | Audit result |
 | --- | --- | --- |
-| `PrivacyInfo.xcprivacy` | Tracking false; no tracking domains; empty collected-data array; File Timestamp reason `C617.1`; System Boot Time reason `35F9.1` | Internally consistent with the conditional no-Pawgoo-collection design. Keep it provisional until the owner attestations and exact signed-build scan pass |
+| `PrivacyInfo.xcprivacy` | Tracking false; no tracking domains; empty collected-data array; File Timestamp reason `C617.1`; System Boot Time reason `35F9.1`; app-container User Defaults reason `CA92.1` | The three required-reason declarations cover the audited source, including the Profile-scoped handwriting-tool preference in `UserDefaults`. Keep the manifest and conditional no-Pawgoo-collection design provisional until the owner attestations and exact signed-build scan pass |
 | Microphone | Spoken practice or voice setup; raw audio not saved/uploaded | Matches source |
 | Speech Recognition | On-device comparison | Matches source; unsupported on-device recognition fails closed |
 | Camera | Parent-selected Profile photo or word-sheet OCR | Matches source; prepared Profile photo may later sync through CloudKit after opt-in |
@@ -193,14 +209,15 @@ No website was modified during this audit.
 | --- | --- | --- |
 | Picture-hint downloads require a connection and download an optional hint | All picture hints are now bundled and resolved with `Data(contentsOf:)`; there is no hint URLSession path | Remove the CDN/download/internet-requirement language and describe bundled offline hints |
 | Deletion “stops the deleted profile from returning” | Source has a terminal ledger, stale-device barrier, and owner/participant removal paths, but production destructive CloudKit proof is still open | Qualify the public guarantee until #19 passes, then align the final verified behavior |
+| Parent deletion/data-control copy implies every Profile can be removed | The app refuses to delete the only remaining Profile and has no complete Delete All App Data/reset path | Treat this as a release blocker in #19; add an authorized final-Profile/full-erasure flow and only then claim complete in-app deletion |
 | Local data remains until a parent deletes, resets app data, or removes the app | App-container data follows that model, but the `ThisDeviceOnly` voiceprint is in Keychain and iOS does not guarantee app-uninstall cleanup | Resolve #28 and update policy/support copy to the chosen truthful lifecycle |
 | Family Sync is optional/off by default and covers “selected profile and learning records” | Per-device opt-in/off-by-default is correct. Family Sync is nevertheless required for the 1.0 product, and the payload includes all classified durable Profile-owned canonical facts, not only an unspecified selection | Keep opt-in wording; expand scope to Profile metadata/photo, Pools, settings, canonical learning/daily/reward facts, and deletion ledger; keep device-local exclusions explicit |
 | Support says deletion stops return | Same unproven production-erasure issue as the privacy page | Make Support and Privacy use the same qualified, verified deletion language |
 
 These mismatches are release blockers for a truthful submission. Issues #19
-and #28 cover deletion proof and Keychain lifecycle. The offline-picture and
-Family Sync scope copy need a dedicated website follow-up Issue before release;
-this source-only batch is not authorized to mutate GitHub or the public site.
+and #28 cover deletion proof and Keychain lifecycle. Issue #54 owns exact-RC
+alignment and deployment evidence for the Pawgoo Privacy and Support pages;
+this source-only batch did not mutate the public site.
 
 ## Draft App Store Privacy answers
 
@@ -232,6 +249,20 @@ answer by assumption:
 | --- | --- | --- | --- |
 | Contact Info → Email Address | App Functionality → Customer Support | Yes | No |
 | User Content → Customer Support | App Functionality → Customer Support | Yes | No |
+
+### Conditional installation Device ID disclosure
+
+Every synchronized record includes a random per-install UUID as the logical-
+revision tie-breaker. It is not an Apple hardware identifier, IDFA, account ID,
+or cross-app identifier, but it is stable for the app installation and reaches
+Apple CloudKit/share participants with Profile-scoped records. The release
+owner must classify it against the exact App Store Privacy questionnaire and
+the final Pawgoo CloudKit-access operating boundary.
+
+If those facts do not support the conditional **No data collected** answer,
+declare `Identifiers → Device ID` for App Functionality with the truthful
+linked-to-user result rather than omitting the UUID. Source code alone cannot
+decide Pawgoo access/retention or the final questionnaire treatment.
 
 For data provided in an app interface, the optional-disclosure exception
 requires optional and infrequent submission, clear disclosure of the submitted
@@ -266,8 +297,10 @@ shipping behavior and obtain the operator's retention/access facts.
 | Family Sync physical acceptance | Same-account private sync, different-Apple-ID sharing, background delivery, recovery, and accessibility on exact signed iPhone/iPad RC | [#22](https://github.com/darrenfu/tadawords/issues/22) plus Family Sync acceptance Issues |
 | App Store container/configuration | Final App ID/container/App Store Connect configuration and production schema | [#23](https://github.com/darrenfu/tadawords/issues/23) |
 | Distribution decisions | Kids category, pricing, release mode, TestFlight/App Review/manual release | [#24](https://github.com/darrenfu/tadawords/issues/24), [#26](https://github.com/darrenfu/tadawords/issues/26) |
-| Pawgoo live copy | Remove old hint-download statements; qualify deletion; clarify Keychain lifecycle and full sync scope | New website follow-up required; no public-site mutation in this batch |
+| Pawgoo live copy | Remove old hint-download statements; qualify deletion; clarify Keychain lifecycle and full sync scope | [#54](https://github.com/darrenfu/tadawords/issues/54); no public-site mutation in this batch |
+| Complete child-data erasure | Allow the authorized parent to delete the final Profile and all associated local/CloudKit data, or provide an equally complete Delete All Data flow that returns to first-run without resurrection | [#19](https://github.com/darrenfu/tadawords/issues/19) |
 | Pawgoo CloudKit access | Owner attests that no separate server credential, dashboard, export, or support process reads/retains CloudKit records | Release-owner attestation |
+| Installation Device ID classification | Confirm the random per-install logical-revision UUID is handled consistently in the final Privacy Report and App Store Privacy questionnaire; if the conditional no-collection assumptions do not hold, disclose Device ID for App Functionality rather than guessing | Release-owner/privacy review |
 | Support retention/use | Owner confirms mailbox retention, uses, access, deletion response, and optional-disclosure eligibility | Release-owner/privacy review |
 | Remote teacher audio | Exact signed plist/project scan proves endpoint absent | Exact signed-RC gate |
 | Dependency/domain scan | No new SDK, package, framework destination, or unexpected iPhone/iPad traffic | Exact signed-RC gate |
@@ -295,6 +328,8 @@ shipping behavior and obtain the operator's retention/access facts.
    `CFBundleVersion`, bundle ID, signing team, entitlements, embedded commit,
    `PrivacyInfo.xcprivacy`, resolved frameworks, and resource list from the
    signed `.app`/`.ipa`.
+   Confirm the archive declares File Timestamp `C617.1`, System Boot Time
+   `35F9.1`, and app-container User Defaults `CA92.1` exactly once.
 2. Search source, generated project, final Info.plist, linked frameworks, and
    resolved dependencies for URLSession, CloudKit, analytics, telemetry,
    crash-reporting, advertising, attribution, and account code. Prove
@@ -309,13 +344,22 @@ shipping behavior and obtain the operator's retention/access facts.
    unexplained non-Apple runtime destination is acceptable.
 5. Enable Family Sync on signed production-capable test builds. Verify the
    manifest's record classes and bounded CKAsset only; verify voiceprint/raw
-   audio/OCR/strokes/caches never appear.
+   audio/OCR/strokes/caches never appear. Decode every actual repository record
+   kind against the reviewed recursive JSON-shape contract, including enum
+   associated values, array elements, and raw-value wrappers.
 6. Complete same-account, different-Apple-ID share, background APNs wake,
    offline recovery, account-change, participant leave/revocation, and test-
    only terminal deletion acceptance. Inspect the real container after erasure.
 7. Reconcile the exact build, this inventory, the live Privacy/Support pages,
    in-app disclosure, permission strings, privacy manifest, App Store Connect
    answers, and operator attestations. Any mismatch blocks submission.
+
+This pre-1.0 migration guarantees that the current client can read legacy
+Profile payloads and preserves their exact CKAsset checksum during hydration.
+It does not claim that an old installed binary can read a newly emitted
+Profile-photo payload. All Family Sync acceptance devices must be upgraded to
+the same release candidate before the signed multi-device test; mixed-version
+compatibility remains out of scope until a versioned wire cutover is designed.
 
 ## Change control
 

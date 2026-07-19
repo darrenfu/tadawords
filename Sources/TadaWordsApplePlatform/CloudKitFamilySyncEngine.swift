@@ -39,11 +39,15 @@ enum CloudKitFamilyRecordCodec {
             )
     ) throws -> CKRecord {
         try record.validateCompatibility()
+        let outboundRecord =
+            try CloudKitProfilePhotoAssetCodec
+            .canonicalizedForCurrentWriter(record)
+        try outboundRecord.validateCompatibility()
         let stagedPhoto = try CloudKitProfilePhotoAssetCodec.stageIfNeeded(
-            record,
+            outboundRecord,
             sourceDirectory: photoAssetSourceDirectory
         )
-        let envelopeRecord = stagedPhoto?.wireRecord ?? record
+        let envelopeRecord = stagedPhoto?.wireRecord ?? outboundRecord
         let cloudRecord =
             metadataStore.restoredRecord(id: recordID, scope: scope)
             ?? CKRecord(recordType: Schema.itemRecordType, recordID: recordID)
@@ -59,15 +63,18 @@ enum CloudKitFamilyRecordCodec {
             throw error
         }
         cloudRecord.parent = CKRecord.Reference(recordID: rootRecordID, action: .none)
-        cloudRecord[Schema.profileID] = record.profileID.rawValue.uuidString as NSString
-        cloudRecord[Schema.kind] = record.kind.rawValue as NSString
-        cloudRecord[Schema.schemaVersion] = NSNumber(value: record.schemaVersion)
+        cloudRecord[Schema.profileID] =
+            outboundRecord.profileID.rawValue.uuidString as NSString
+        cloudRecord[Schema.kind] = outboundRecord.kind.rawValue as NSString
+        cloudRecord[Schema.schemaVersion] = NSNumber(
+            value: outboundRecord.schemaVersion
+        )
         cloudRecord[Schema.envelope] = envelopeData as NSData
         if let stagedPhoto {
             do {
                 try CloudKitProfilePhotoAssetCodec.attach(
                     stagedPhoto,
-                    originalRecord: record,
+                    originalRecord: outboundRecord,
                     to: cloudRecord
                 )
             } catch {

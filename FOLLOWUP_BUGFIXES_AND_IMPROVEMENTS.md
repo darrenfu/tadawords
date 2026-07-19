@@ -703,10 +703,26 @@ exact signed-build gates.
 - Recorded that all 74 Twemoji picture hints are bundled and that the shipping
   configuration has no teacher-audio endpoint, advertising, analytics,
   crash-reporting, tracking SDK, or external Swift dependency.
+- Added the missing `UserDefaults` required-reason declaration (`CA92.1`) and
+  a source-manifest contract test after independent App Store review found the
+  production handwriting-tool preference was not covered by the prior
+  two-category manifest.
 - Classified the current Family Sync payload as synchronized canonical facts,
   locally rebuilt views, and device-only sensitive/recovery state. Added a
   regression test that prevents voiceprint fields from silently entering the
   synchronized class.
+- Replaced the Profile sync payload with a dedicated wire DTO that omits
+  `voiceprintStatus` entirely. Repository export/apply/identity validation and
+  CKAsset photo staging now share that DTO; legacy payloads remain readable and
+  retain their exact photo checksum, while remote sentinels cannot overwrite a
+  device's Keychain-derived enrollment. A recursive contract now inspects the
+  actual repository output for every record kind, nested object, array element,
+  raw wrapper, and associated enum case. Pre-1.0 signed multi-device acceptance
+  requires all devices on the same build; old-binary/new-photo mixed-version
+  compatibility is not claimed.
+- Classified every common sync-envelope field, including the random per-install
+  logical-revision UUID, and replaced the record-kind inference with explicit
+  allowlists plus an encoded-envelope contract test.
 - Inventoried Parent CSV and privacy-safe sync-diagnostic share sheets, local
   OS diagnostics, APNs-triggered CloudKit reconciliation, bounded Profile photo
   `CKAsset`, terminal deletion ledger, and current Parent Privacy/Support/data
@@ -714,8 +730,13 @@ exact signed-build gates.
 - Re-fetched the live Pawgoo Privacy and Support pages and documented outdated
   hint-download, deletion, Keychain removal, and underspecified Family Sync
   language. No public-site or App Store Connect state changed.
+- Recorded that the current app cannot delete its only remaining Profile and
+  has no complete Delete All App Data path; #19 must close that privacy gap
+  before the app or public policy claims complete in-app erasure.
+- Opened #54 to own exact-RC alignment and deployment evidence for the live
+  Pawgoo Privacy and Support pages; this batch did not mutate the public site.
 - Kept **No data collected** conditional on production CloudKit acceptance,
   exact signed-build traffic/dependency evidence, absent remote audio endpoint,
   Pawgoo CloudKit non-access, support-mail practices, and corrected public copy.
-- The complete pre-commit gate passes strict format, 823/823 Swift tests,
+- The complete pre-commit gate passes strict format, 834/834 Swift tests,
   40/40 Issue Agent tests, and 11/11 release-preflight tests.

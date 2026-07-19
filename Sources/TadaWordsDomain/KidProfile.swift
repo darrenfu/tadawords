@@ -184,7 +184,7 @@ public enum ProfileAvatar: Codable, Hashable, Sendable {
     case photo(assetID: String, source: PhotoSource)
     case treasure(rewardItemID: RewardItemID, iconAssetID: String)
 
-    public enum PhotoSource: String, Codable, Hashable, Sendable {
+    public enum PhotoSource: String, Codable, CaseIterable, Hashable, Sendable {
         case camera
         case photoLibrary
     }

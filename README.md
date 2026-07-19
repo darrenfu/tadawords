@@ -187,7 +187,7 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 |---|---|
 | Strict Swift format lint | Passed |
 | Version and build | v0.7.4 (`2026071904`) in source Plists and generated project settings |
-| Swift tests | Merged v0.7.2 exact HEAD: 821/821; merged v0.7.3: 822/822; v0.7.4 pre-commit gate: 823/823 |
+| Swift tests | Merged v0.7.2 exact HEAD: 821/821; merged v0.7.3: 822/822; v0.7.4 pre-commit gate: 834/834 |
 | Family Sync simulator E2E | Merged v0.7.2: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5 |
 | Critical XCUITest flows | Merged v0.7.2: full critical matrix passed on iPad; the single iPhone Photos-dismiss timing case passed 2/2 in isolated fresh reruns after the combined run, and every other flow passed |
 | Third-Party Notices | Parent-gated offline text, exact attribution, source/license links, and route tests passed; focused UI flow passed 1/1 on iPhone 17 Pro Max and 1/1 on iPad Pro 13-inch (M5), iOS 26.5 |

@@ -10,7 +10,7 @@ acceptance has passed.
 
 | Owner | Fields | Cloud representation | Merge authority |
 |---|---|---|---|
-| Profile | Stable ID, display name, age, grade, source avatar reference, selected/starter World, guardian World overrides, selected cartoon icon, selected Treasure avatar, created/updated audit dates | Profile record plus bounded photo `CKAsset` | Persisted logical revision; preserve device voiceprint state |
+| Profile | Stable ID, display name, age, grade, source avatar reference, selected/starter World, guardian World overrides, selected cartoon icon, selected Treasure avatar, created/updated audit dates. The wire DTO omits voiceprint enrollment entirely, including sentinels | Profile record plus bounded photo `CKAsset` | Persisted logical revision; preserve device voiceprint state derived from the receiving device Keychain |
 | Read settings | New/review limits, order, timer | Independent settings record | Group logical revision |
 | Write settings | New/review limits, order, timer | Independent settings record | Group logical revision |
 | Audio settings | Parent-selected durable audio preferences | Independent settings record | Group logical revision |
@@ -94,3 +94,10 @@ the persisted private-owner or shared-participant binding; owner removal,
 participant leave, and revocation still require signed physical-device and
 human acceptance. Create/accept invitation tests alone are not evidence of
 those destructive access transitions.
+
+The pre-1.0 reader accepts legacy Profile payloads that included a device-local
+voiceprint sentinel, ignores that key, and preserves the receiving device's
+Keychain-derived state. Current writers never emit the key. Signed multi-device
+acceptance requires every test device to run the same release candidate; an old
+binary reading a newly emitted photo payload is not a supported mixed-version
+claim for this release.

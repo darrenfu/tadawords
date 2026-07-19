@@ -128,8 +128,10 @@ pass "LocalQA is visibly named and statically device-only"
 for declaration in \
     NSPrivacyAccessedAPICategoryFileTimestamp \
     NSPrivacyAccessedAPICategorySystemBootTime \
+    NSPrivacyAccessedAPICategoryUserDefaults \
     C617.1 \
-    35F9.1; do
+    35F9.1 \
+    CA92.1; do
     grep -q "$declaration" "$PRIVACY" || fail "privacy declaration $declaration is missing"
 done
 pass "required-reason API declarations are present"
