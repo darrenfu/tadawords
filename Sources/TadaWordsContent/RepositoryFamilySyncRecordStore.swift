@@ -136,7 +136,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
                 name: "profile-\(profileID)",
                 profileID: profileID,
                 kind: .profile,
-                value: syncableProfile(profile),
+                value: FamilySyncProfilePayload(profile: profile),
                 updatedAt: profile.updatedAt
             )
         )
@@ -327,13 +327,15 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         }
 
         for record in records where record.kind == .profile {
-            let incoming = try decode(KidProfile.self, from: record)
+            let incoming = try decode(FamilySyncProfilePayload.self, from: record)
             let localVoiceprintStatus =
                 try await profileRepository.profile(
                     id: profileID
                 )?.voiceprintStatus ?? .notEnrolled
             try await profileRepository.save(
-                profile(incoming, preserving: localVoiceprintStatus)
+                incoming.materialized(
+                    preservingVoiceprintStatus: localVoiceprintStatus
+                )
             )
         }
         for record in records where record.kind == .wordPoolEntry {
@@ -530,7 +532,10 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
                 }
                 switch record.kind {
                 case .profile:
-                    let value = try decode(KidProfile.self, from: record)
+                    let value = try decode(
+                        FamilySyncProfilePayload.self,
+                        from: record
+                    )
                     try require(
                         value.id == profileID
                             && record.recordName == "profile-\(profileID)",
@@ -704,31 +709,6 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         }
         try await voiceprintRepository?.delete(for: profileID)
         handwritingPreferenceRemover?.remove(for: profileID)
-    }
-
-    private func syncableProfile(_ profile: KidProfile) -> KidProfile {
-        self.profile(profile, preserving: .notEnrolled)
-    }
-
-    private func profile(
-        _ profile: KidProfile,
-        preserving voiceprintStatus: VoiceprintEnrollmentStatus
-    ) -> KidProfile {
-        KidProfile(
-            id: profile.id,
-            displayName: profile.displayName,
-            avatar: profile.avatar,
-            selectedWorld: profile.selectedWorld,
-            starterWorld: profile.starterWorld,
-            guardianUnlockedWorlds: profile.guardianUnlockedWorlds,
-            selectedCartoonIconAssetID: profile.selectedCartoonIconAssetID,
-            selectedTreasureAvatar: profile.selectedTreasureAvatar,
-            schoolGrade: profile.schoolGrade,
-            ageYears: profile.ageYears,
-            voiceprintStatus: voiceprintStatus,
-            createdAt: profile.createdAt,
-            updatedAt: profile.updatedAt
-        )
     }
 
     private func record<Value: Encodable>(

@@ -274,7 +274,7 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         let wrong = FamilySyncRecord(
             recordName: "wrong-profile",
             profileID: wrongProfile,
-            kind: .profile,
+            kind: .wordPoolEntry,
             payload: Data("wrong".utf8),
             updatedAt: fixture.now,
             deviceID: "remote",
@@ -517,7 +517,7 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         let sharedRecord = FamilySyncRecord(
             recordName: "shared-profile",
             profileID: sharedProfileID,
-            kind: .profile,
+            kind: .wordPoolEntry,
             payload: Data("shared".utf8),
             updatedAt: fixture.now,
             deviceID: "remote"
@@ -958,7 +958,7 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         let expected = FamilySyncRecord(
             recordName: "profile",
             profileID: fixture.profileID,
-            kind: .profile,
+            kind: .wordPoolEntry,
             payload: Data("same-payload".utf8),
             updatedAt: fixture.now,
             deviceID: revision.deviceID,
@@ -1129,7 +1129,7 @@ private struct CloudInboxHarnessFixture {
         FamilySyncRecord(
             recordName: name,
             profileID: profileID,
-            kind: .profile,
+            kind: .wordPoolEntry,
             payload: Data(payload.utf8),
             updatedAt: now,
             deviceID: revision.deviceID,

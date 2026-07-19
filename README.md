@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.7.3%20Notices%20QA-6D48D7" alt="v0.7.3 notices QA">
+  <img src="https://img.shields.io/badge/status-v0.7.4%20Privacy%20Audit-6D48D7" alt="v0.7.4 privacy audit">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
@@ -21,7 +21,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.7.3` (build `2026071903`) adds offline Third-Party Notices behind the Parent Gate for the 74 bundled, unmodified Twemoji picture hints, plus a versioned [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md) and source/archive verifier. The merged v0.7.2 recovery build opened the existing physical-iPhone data in place with two Profiles, 201 Word Pool entries, and 488 canonical attempts preserved; no reset or snapshot edit was used. Production CloudKit schema, signed iPhone/iPad private and shared sync, destructive test-only erasure, background delivery, and human accessibility review remain release gates. See the [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** Version `0.7.4` (build `2026071904`) refreshes the App Store privacy inventory against the merged recovery, Family Sync, offline-hint, and Third-Party Notices source. It records the canonical CloudKit payload, locally derived views, device-only voiceprint/audio/OCR/handwriting state, Parent privacy/support/data controls, user-directed exports, and current Pawgoo policy mismatches. The App Store answer set remains conditional until production CloudKit, Keychain removal, public-copy, operator-attestation, and exact signed-build gates pass. See the [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -115,7 +115,12 @@ The iOS target depends on `TadaWordsAppShell`, `TadaWordsApplePlatform`, and `Ta
 - A free Apple Account for direct LocalQA installation on personal devices
 - A paid Apple Developer Program team for TestFlight and CloudKit acceptance
 
-The current v0.7.3 notices candidate uses Xcode 26.6. The merged v0.7.2 exact HEAD passed the combined simulator matrix and a data-preserving physical-iPhone upgrade. Production Family Sync and human accessibility acceptance remain open.
+The current v0.7.4 privacy candidate uses Xcode 26.6. Merged v0.7.2 passed
+the exact-HEAD iPhone/iPad simulator matrix, LocalQA install guard, and a data-
+preserving physical iPhone update; merged v0.7.3 added offline Parent notices
+and exact content verification. Family Sync production schema, signed cross-
+device sharing/deletion, human accessibility, and exact-release privacy/network
+acceptance remain open.
 
 ## Build and test
 
@@ -129,7 +134,7 @@ make check
 open TadaWords.xcodeproj
 ```
 
-`make check` runs strict Swift formatting checks, the Swift package test suite, Issue Agent checks, and release-candidate preflight failure-mode tests. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480**, v0.3 contained **548**, v0.3.1 and v0.4.1 contained **595**, v0.5 contained **619**, v0.5.1 contained **638**, v0.6.0 contained **641**, and v0.6.1 contained **643 Swift tests plus 14 Issue Agent tests**, all with zero failures. The v0.7.0 source batch passed **814 Swift tests plus 14 Issue Agent tests**. Merged v0.7.2 passed **821 Swift tests, 40 Issue Agent tests, and 11 release-preflight tests**. Its Xcode UI evidence covers six Family Sync flows plus the critical matrix on phone and tablet simulators. A separate physical-device target calls the public production handwriting service and does not use the demo recognizer. See [`Docs/RELEASE_CANDIDATE_PREFLIGHT.md`](Docs/RELEASE_CANDIDATE_PREFLIGHT.md) for the canonical signed archive/export verification command.
+`make check` runs strict Swift formatting checks, the Swift package test suite, Issue Agent checks, and release-candidate preflight failure-mode tests. The accepted V1 baseline contained **367 tests with zero failures**. Merged v0.2 contained **480**, v0.3 contained **548**, v0.3.1 and v0.4.1 contained **595**, v0.5 contained **619**, v0.5.1 contained **638**, v0.6.0 contained **641**, and v0.6.1 contained **643 Swift tests plus 14 Issue Agent tests**, all with zero failures. The v0.7.0 source batch passed **814 Swift tests plus 14 Issue Agent tests**. Merged v0.7.2 passed **821 Swift tests, 40 Issue Agent tests, and 11 release-preflight tests**; merged v0.7.3 passed **822 Swift tests** with the same automation/preflight counts. Its Xcode UI evidence covers six Family Sync flows plus the critical matrix on phone and tablet simulators. A separate physical-device target calls the public production handwriting service and does not use the demo recognizer. See [`Docs/RELEASE_CANDIDATE_PREFLIGHT.md`](Docs/RELEASE_CANDIDATE_PREFLIGHT.md) for the canonical signed archive/export verification command.
 
 Run the device-readiness script before installing on an iPhone or iPad:
 
@@ -144,7 +149,7 @@ build, commit, and bundle ID:
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.7.3 2026071903 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.7.4 2026071904 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 The local [Issue Agent](Automation/issue-agent/README.md) can pick up ready
@@ -166,6 +171,9 @@ Follow [DEVICE_DEPLOYMENT.md](DEVICE_DEPLOYMENT.md) for signing, Developer Mode,
 - Release builds keep iCloud Family Sync off by default. Completing onboarding does not enable it; a parent must explicitly turn it on in Guardian settings.
 - Turning Family Sync off prevents later lifecycle, manual, invitation, and access-management sync calls. By design, opting out does not erase records that were already uploaded; Profile deletion is the separate erasure action.
 - Profile deletion first persists a privacy-minimal deletion ledger, then clears local learning data, reminders, the local voiceprint, and staged photo sources. The owner path removes the Profile CloudKit zone, records, assets, root, and share; participant leave and revocation become terminal local routes. Source and deterministic tests pass, but production destructive proof on signed test-only Profiles is still required.
+- The versioned [App Store privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md)
+  maps every audited runtime flow to its device/network boundary and records
+  the owner attestations and Pawgoo copy changes required before submission.
 
 The voiceprint provides a confidence signal. It does not prove that only the selected child spoke. Production use needs representative same-child and different-speaker testing.
 
@@ -178,8 +186,8 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Version and build | v0.7.3 (`2026071903`) in source Plists and generated project settings |
-| Swift tests | Merged v0.7.2 exact HEAD: 821/821; v0.7.3 pre-commit gate: 822/822 |
+| Version and build | v0.7.4 (`2026071904`) in source Plists and generated project settings |
+| Swift tests | Merged v0.7.2 exact HEAD: 821/821; merged v0.7.3: 822/822; v0.7.4 pre-commit gate: 834/834 |
 | Family Sync simulator E2E | Merged v0.7.2: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5 |
 | Critical XCUITest flows | Merged v0.7.2: full critical matrix passed on iPad; the single iPhone Photos-dismiss timing case passed 2/2 in isolated fresh reruns after the combined run, and every other flow passed |
 | Third-Party Notices | Parent-gated offline text, exact attribution, source/license links, and route tests passed; focused UI flow passed 1/1 on iPhone 17 Pro Max and 1/1 on iPad Pro 13-inch (M5), iOS 26.5 |
@@ -203,7 +211,7 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | CloudKit remote erasure | Source and deterministic tests passed; production destructive test-only proof open |
 | Physical child speech, handwriting, audio, accessibility, and CloudKit | Acceptance open |
 
-The [feature audit](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md) records the merged v0.2 implementation evidence. The [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md) records changes through v0.7.3, and the [V1 backlog](V1_BACKLOG.md) lists the remaining device and human acceptance work.
+The [feature audit](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md) records the merged v0.2 implementation evidence. The [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md) records changes through v0.7.4, and the [V1 backlog](V1_BACKLOG.md) lists the remaining device and human acceptance work.
 
 ## Test fixture attribution
 
@@ -218,6 +226,7 @@ The repository includes one unmodified child-speech fixture from [OpenSLR SLR101
 - [Physical-device deployment](DEVICE_DEPLOYMENT.md)
 - [Voiceprint Device Alpha plan](VOICEPRINT_DEVICE_ALPHA.md)
 - [Preset word catalog](Docs/TADA_WORDS_PRESET_CATALOG.md)
+- [App Store privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md)
 - [Visual and accessibility audit](QAArtifacts/DESIGN_AUDIT_2026-07-12.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 - [App Store content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md)

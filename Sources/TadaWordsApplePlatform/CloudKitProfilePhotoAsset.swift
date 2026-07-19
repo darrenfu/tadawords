@@ -32,15 +32,55 @@ enum CloudKitProfilePhotoAssetCodec {
         static let originalPayloadSize = "profilePhotoPayloadSize"
     }
 
+    /// Upgrades every Profile accepted by the current writer to the reviewed
+    /// wire DTO before the envelope or CKAsset metadata is created. This also
+    /// migrates legacy durable-outbox bytes and recalculates checksum/size, so
+    /// a current outbound CloudKit record can never retain voiceprint state.
+    static func canonicalizedForCurrentWriter(
+        _ record: FamilySyncRecord
+    ) throws -> FamilySyncRecord {
+        guard record.kind == .profile else { return record }
+        let payload: FamilySyncProfilePayload
+        do {
+            payload = try decoder().decode(
+                FamilySyncProfilePayload.self,
+                from: record.payload
+            )
+        } catch {
+            throw CloudKitProfilePhotoAssetError.invalidProfilePayload
+        }
+        let encoded: Data
+        do {
+            encoded = try encoder().encode(payload)
+        } catch {
+            throw CloudKitProfilePhotoAssetError.invalidProfilePayload
+        }
+        return FamilySyncRecord(
+            recordName: record.recordName,
+            profileID: record.profileID,
+            kind: record.kind,
+            payload: encoded,
+            updatedAt: record.updatedAt,
+            deviceID: record.deviceID,
+            isDeleted: record.isDeleted,
+            schemaVersion: record.schemaVersion,
+            minimumReadableVersion: record.minimumReadableVersion,
+            logicalRevision: record.logicalRevision
+        )
+    }
+
     static func stageIfNeeded(
         _ record: FamilySyncRecord,
         sourceDirectory: URL,
         fileManager: FileManager = .default
     ) throws -> CloudKitStagedProfilePhotoAsset? {
         guard record.kind == .profile,
-            let profile = try? decoder().decode(KidProfile.self, from: record.payload),
-            case .photo(_, let source) = profile.avatar,
-            let jpegData = profile.avatar.embeddedPhotoData
+            let payload = try? decoder().decode(
+                FamilySyncProfilePayload.self,
+                from: record.payload
+            ),
+            case .photo(_, let source) = payload.avatar,
+            let jpegData = payload.avatar.embeddedPhotoData
         else { return nil }
 
         let dimensions = try decodedJPEGDimensions(jpegData)
@@ -56,16 +96,15 @@ enum CloudKitProfilePhotoAssetCodec {
             directory: sourceDirectory,
             fileManager: fileManager
         )
-        let wireProfile = replacingAvatar(
-            of: profile,
-            with: .photo(
+        let wirePayload: Data
+        do {
+            let wireAvatar = ProfileAvatar.photo(
                 assetID: attachment.metadata.stableAssetID,
                 source: source
             )
-        )
-        let wirePayload: Data
-        do {
-            wirePayload = try encoder().encode(wireProfile)
+            wirePayload = try encoder().encode(
+                payload.replacingAvatar(wireAvatar)
+            )
         } catch {
             throw CloudKitProfilePhotoAssetError.invalidProfilePayload
         }
@@ -134,14 +173,14 @@ enum CloudKitProfilePhotoAssetCodec {
         else { throw CloudKitProfilePhotoAssetError.missingAsset }
 
         let metadata: ProfilePhotoAttachmentMetadata
-        let wireProfile: KidProfile
+        let wireProfile: FamilySyncProfilePayload
         do {
             metadata = try decoder().decode(
                 ProfilePhotoAttachmentMetadata.self,
                 from: metadataData
             )
             wireProfile = try decoder().decode(
-                KidProfile.self,
+                FamilySyncProfilePayload.self,
                 from: wireRecord.payload
             )
         } catch {
@@ -169,13 +208,22 @@ enum CloudKitProfilePhotoAssetCodec {
             validating: metadata,
             jpegData: jpegData
         )
-        let localProfile = replacingAvatar(
-            of: wireProfile,
-            with: .preparedPhoto(attachment)
-        )
         let localPayload: Data
         do {
-            localPayload = try encoder().encode(localProfile)
+            let localAvatar = ProfileAvatar.preparedPhoto(attachment)
+            if containsLegacyVoiceprintField(wireRecord.payload) {
+                let legacy = try decoder().decode(
+                    KidProfile.self,
+                    from: wireRecord.payload
+                )
+                localPayload = try encoder().encode(
+                    replacingAvatar(of: legacy, with: localAvatar)
+                )
+            } else {
+                localPayload = try encoder().encode(
+                    wireProfile.replacingAvatar(localAvatar)
+                )
+            }
         } catch {
             throw CloudKitProfilePhotoAssetError.invalidProfilePayload
         }
@@ -321,6 +369,14 @@ enum CloudKitProfilePhotoAssetCodec {
             createdAt: profile.createdAt,
             updatedAt: profile.updatedAt
         )
+    }
+
+    private static func containsLegacyVoiceprintField(_ payload: Data) -> Bool {
+        guard
+            let object = try? JSONSerialization.jsonObject(with: payload)
+                as? [String: Any]
+        else { return false }
+        return object.keys.contains("voiceprintStatus")
     }
 
     private static func encoder() -> JSONEncoder {

@@ -150,6 +150,11 @@ final class RepositoryFamilySyncRecordStoreTests: XCTestCase {
 
         let records = try await store.records(for: enrolled.id)
         let profileRecord = try XCTUnwrap(records.first { $0.kind == .profile })
+        let encodedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: profileRecord.payload)
+                as? [String: Any]
+        )
+        XCTAssertNil(encodedObject["voiceprintStatus"])
         let exported = try JSONDecoder.tada.decode(
             KidProfile.self,
             from: profileRecord.payload
@@ -162,6 +167,116 @@ final class RepositoryFamilySyncRecordStoreTests: XCTestCase {
         let saved = try XCTUnwrap(loadedProfile)
         XCTAssertEqual(saved.voiceprintStatus, enrolled.voiceprintStatus)
         XCTAssertEqual(saved.selectedCartoonIconAssetID, "fox")
+    }
+
+    func testLegacyProfilePayloadIgnoresRemoteVoiceprintSentinel() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let local = KidProfile(
+            id: fixture.profile.id,
+            displayName: fixture.profile.displayName,
+            avatar: fixture.profile.avatar,
+            selectedWorld: fixture.profile.selectedWorld,
+            voiceprintStatus: .enrolled(
+                modelVersion: "device-only-model",
+                enrolledAt: fixture.now
+            ),
+            createdAt: fixture.profile.createdAt
+        )
+        try await fixture.profiles.save(local)
+        let legacyRemote = KidProfile(
+            id: local.id,
+            displayName: "Remote name",
+            avatar: local.avatar,
+            selectedWorld: local.selectedWorld,
+            voiceprintStatus: .needsRefresh,
+            createdAt: local.createdAt,
+            updatedAt: fixture.now.addingTimeInterval(10)
+        )
+        let record = FamilySyncRecord(
+            recordName: "profile-\(local.id)",
+            profileID: local.id,
+            kind: .profile,
+            payload: try JSONEncoder.tada.encode(legacyRemote),
+            updatedAt: legacyRemote.updatedAt,
+            deviceID: "legacy-device"
+        )
+
+        try await fixture.makeStore(tombstones: fixture.tombstones).apply(
+            [record],
+            for: local.id
+        )
+
+        let loaded = try await fixture.profiles.profile(id: local.id)
+        let saved = try XCTUnwrap(loaded)
+        XCTAssertEqual(saved.displayName, "Remote name")
+        XCTAssertEqual(saved.voiceprintStatus, local.voiceprintStatus)
+    }
+
+    func testIncomingProfileWirePayloadCanonicalizesBeforePersistenceAndReexport()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let createdAt = fixture.now
+        let treasure = TreasureAvatarSelection(
+            rewardItemID: RewardItemID(rawValue: "earned-crown"),
+            iconAssetID: "crown.fill"
+        )
+        let baseline = FamilySyncProfilePayload(
+            profile: KidProfile(
+                id: fixture.profile.id,
+                displayName: "Baseline",
+                avatar: fixture.profile.avatar,
+                selectedWorld: fixture.profile.selectedWorld,
+                selectedTreasureAvatar: treasure,
+                createdAt: createdAt
+            )
+        )
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: JSONEncoder.tada.encode(baseline)
+            ) as? [String: Any]
+        )
+        object["displayName"] = "   Remote Reader   "
+        object["ageYears"] = 999
+        object["updatedAt"] = createdAt.addingTimeInterval(-100).timeIntervalSince1970
+        object["selectedCartoonIconAssetID"] = "must-be-cleared-by-treasure"
+        let payload = try JSONSerialization.data(
+            withJSONObject: object,
+            options: [.sortedKeys]
+        )
+        let record = FamilySyncRecord(
+            recordName: "profile-\(fixture.profile.id)",
+            profileID: fixture.profile.id,
+            kind: .profile,
+            payload: payload,
+            updatedAt: createdAt,
+            deviceID: "remote-device"
+        )
+        let store = fixture.makeStore(tombstones: fixture.tombstones)
+
+        try await store.apply([record], for: fixture.profile.id)
+
+        let persistedValue = try await fixture.profiles.profile(
+            id: fixture.profile.id
+        )
+        let persisted = try XCTUnwrap(persistedValue)
+        XCTAssertEqual(persisted.displayName, "Remote Reader")
+        XCTAssertEqual(persisted.ageYears, ProfileAgePolicy.durableAges.upperBound)
+        XCTAssertEqual(persisted.updatedAt, createdAt)
+        XCTAssertNil(persisted.selectedCartoonIconAssetID)
+        XCTAssertEqual(persisted.selectedTreasureAvatar, treasure)
+
+        let exportedRecords = try await store.records(for: fixture.profile.id)
+        let exported = try XCTUnwrap(
+            exportedRecords.first { $0.kind == .profile }
+        )
+        let canonical = try JSONDecoder.tada.decode(
+            FamilySyncProfilePayload.self,
+            from: exported.payload
+        )
+        XCTAssertEqual(canonical, FamilySyncProfilePayload(profile: persisted))
     }
 
     func testCommittedDeletionSurvivesRestartAndExportsProfileTombstone()
