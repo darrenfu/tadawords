@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+production_plist="$repo_root/Apps/TadaWordsApp/Info.plist"
+localqa_plist="$repo_root/Apps/TadaWordsApp/InfoLocalQA.plist"
+audio_relative="Sources/TadaWordsApplePlatform/Resources/Audio"
+picture_relative="Sources/TadaWordsApplePlatform/Resources/PictureHints/Twemoji-17.0.3"
+preset_relative="Sources/TadaWordsContent/Resources/PresetWords.json"
+compatibility_relative="Apps/TadaWordsApp/PersistenceSchemaCompatibility.json"
+guardian_notice_relative="Sources/TadaWordsGuardianFeatures/GuardianThirdPartyNoticesView.swift"
+
+expected_audio_digest="d8556c3035e6bce1947ce094531b64164a88433d0f58ee54ca03fd81a02fab86"
+expected_picture_digest="fbe89ce4496e0f50a59f93b3dc55f2e3e24eb1bcd463597c218a40e5f19d7a1a"
+
+fail() {
+    echo "content-inventory verification failed: $*" >&2
+    exit 1
+}
+
+assert_equal() {
+    local actual="$1"
+    local expected="$2"
+    local label="$3"
+    [[ "$actual" == "$expected" ]] || fail "$label: expected $expected, found $actual"
+}
+
+assert_file() {
+    [[ -f "$1" ]] || fail "missing $2: $1"
+}
+
+assert_sha256() {
+    local path="$1"
+    local expected="$2"
+    local label="$3"
+    local actual
+    actual="$(shasum -a 256 "$path" | awk '{print $1}')"
+    assert_equal "$actual" "$expected" "$label SHA-256"
+}
+
+count_files() {
+    find "$1" -type f -name "$2" | awk 'END { print NR + 0 }'
+}
+
+stable_tree_digest() {
+    local root="$1"
+    local pattern="$2"
+    (
+        cd "$root"
+        find . -type f -name "$pattern" -print \
+            | LC_ALL=C sort \
+            | while IFS= read -r path; do
+                shasum -a 256 "$path"
+            done
+    ) | shasum -a 256 | awk '{print $1}'
+}
+
+verify_picture_pack() {
+    local picture_root="$1"
+    local manifest="$picture_root/manifest.json"
+    local png_codes="$scratch/png-codes.txt"
+    local manifest_codes="$scratch/manifest-codes.txt"
+
+    assert_file "$manifest" "Twemoji manifest"
+    assert_file "$picture_root/README.md" "Twemoji provenance README"
+    assert_file "$picture_root/LICENSE-GRAPHICS.txt" "Twemoji graphics license"
+    assert_equal "$(count_files "$picture_root" '*.png')" "74" "Twemoji PNG count"
+    assert_equal "$(find "$picture_root" -maxdepth 1 -type f | awk 'END { print NR + 0 }')" "77" "Twemoji pack file count"
+    assert_equal "$(jq -r '.name' "$manifest")" "Twemoji" "Twemoji manifest name"
+    assert_equal "$(jq -r '.version' "$manifest")" "17.0.3" "Twemoji version"
+    assert_equal "$(jq -r '.source_repository' "$manifest")" "https://github.com/jdecked/twemoji" "Twemoji source repository"
+    assert_equal "$(jq -r '.source_commit' "$manifest")" "b6b55fef1e8636b540a6d016a4729ca8cdf2e60b" "Twemoji source commit"
+    assert_equal "$(jq -r '.license' "$manifest")" "CC-BY-4.0" "Twemoji license"
+    assert_equal "$(jq '.asset_codes | length' "$manifest")" "74" "Twemoji manifest asset count"
+    assert_equal "$(jq '[.asset_codes[]] | unique | length' "$manifest")" "74" "Twemoji unique asset count"
+
+    jq -r '.asset_codes[]' "$manifest" | LC_ALL=C sort >"$manifest_codes"
+    find "$picture_root" -maxdepth 1 -type f -name '*.png' -print \
+        | while IFS= read -r path; do
+            basename "${path%.png}"
+        done \
+        | LC_ALL=C sort >"$png_codes"
+    cmp -s "$manifest_codes" "$png_codes" \
+        || fail "Twemoji manifest codes do not exactly match bundled PNG filenames"
+
+    assert_sha256 "$manifest" "e2232045781f9984879eedcee3ae4cd410aa506daa77710e53f06759a29f7a27" "Twemoji manifest"
+    assert_sha256 "$picture_root/LICENSE-GRAPHICS.txt" "8ae9438818c26e4873b91d8c6ad620526c011e27e125677f13031eda903f007c" "Twemoji license"
+    assert_equal "$(stable_tree_digest "$picture_root" '*')" "$expected_picture_digest" "Twemoji complete-pack digest"
+}
+
+verify_audio_pack() {
+    local audio_root="$1"
+    local teacher_root="$audio_root/TeacherWords/Katie-500-v1"
+    local aurora_root="$audio_root/VoiceAccents/Aurora-v1"
+    local teacher_manifest="$teacher_root/manifest.json"
+    local aurora_manifest="$aurora_root/manifest.json"
+
+    assert_file "$teacher_manifest" "Katie manifest"
+    assert_file "$aurora_manifest" "Aurora manifest"
+    assert_equal "$(jq -r '.vendor' "$teacher_manifest")" "Cartesia" "Katie vendor"
+    assert_equal "$(jq -r '.model' "$teacher_manifest")" "sonic-3.5" "Katie model"
+    assert_equal "$(jq -r '.voice.name' "$teacher_manifest")" "Katie" "Katie voice"
+    assert_equal "$(jq -r '.pack_version' "$teacher_manifest")" "1.1.0" "Katie pack version"
+    assert_equal "$(jq -r '.created_on' "$teacher_manifest")" "2026-07-14" "Katie creation date"
+    assert_equal "$(jq '.words | length' "$teacher_manifest")" "500" "Katie manifest words"
+    assert_equal "$(jq '[.words[]] | unique | length' "$teacher_manifest")" "500" "Katie unique words"
+    assert_equal "$(count_files "$teacher_root/read-hint" '*.m4a')" "500" "Katie Read clips"
+    assert_equal "$(count_files "$teacher_root/write-prompt" '*.m4a')" "500" "Katie Write clips"
+
+    while IFS= read -r word; do
+        assert_file "$teacher_root/read-hint/$word.m4a" "Read clip for $word"
+        assert_file "$teacher_root/write-prompt/$word.m4a" "Write clip for $word"
+    done < <(jq -r '.words[]' "$teacher_manifest")
+
+    assert_equal "$(jq -r '.vendor' "$aurora_manifest")" "Cartesia" "Aurora vendor"
+    assert_equal "$(jq -r '.model' "$aurora_manifest")" "sonic-3.5" "Aurora model"
+    assert_equal "$(jq -r '.voice.name' "$aurora_manifest")" "Aurora" "Aurora voice"
+    assert_equal "$(jq -r '.pack_version' "$aurora_manifest")" "1.1.0" "Aurora pack version"
+    assert_equal "$(jq -r '.created_on' "$aurora_manifest")" "2026-07-14" "Aurora creation date"
+    assert_equal "$(jq '.correct | length' "$aurora_manifest")" "5" "Aurora positive transitions"
+    while IFS= read -r relative_path; do
+        assert_file "$aurora_root/$relative_path" "Aurora file $relative_path"
+    done < <(
+        jq -r '[.launch.file, .launch.rendering.ta_da_source, .correct[].file, .quest_complete.file] | unique[]' "$aurora_manifest"
+    )
+    assert_equal "$(count_files "$aurora_root" '*.m4a')" "8" "Aurora clip count"
+    assert_equal "$(count_files "$audio_root" '*.m4a')" "1008" "total bundled M4A clips"
+    assert_equal "$(stable_tree_digest "$audio_root" '*.m4a')" "$expected_audio_digest" "complete audio digest"
+}
+
+verify_preset_catalog() {
+    local preset_catalog="$1"
+    assert_file "$preset_catalog" "preset catalog"
+    assert_equal "$(jq '.roots | length' "$preset_catalog")" "5" "preset root categories"
+    assert_equal "$(jq '[.. | objects | select(has("words") and has("title"))] | length' "$preset_catalog")" "34" "preset leaf catalogs"
+    assert_equal "$(jq '[.. | objects | select(has("words") and has("title")) | .words | length] | add' "$preset_catalog")" "1365" "preset word references"
+    assert_equal "$(jq '[.. | objects | select(has("words") and has("title")) | .words[] | ascii_downcase] | unique | length' "$preset_catalog")" "1166" "preset unique normalized words"
+    assert_equal "$(jq '.sources | length' "$preset_catalog")" "7" "preset method sources"
+    assert_sha256 "$preset_catalog" "f5b0a273a816d97de265f82f8a16d56bc45cbc2be19d585dfda05449827e3fd0" "preset catalog"
+}
+
+for command in jq plutil shasum cmp; do
+    command -v "$command" >/dev/null || fail "$command is required"
+done
+
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/tada-content-inventory.XXXXXX")"
+trap 'rm -rf "$scratch"' EXIT
+
+source_version="$(plutil -extract CFBundleShortVersionString raw "$production_plist")"
+source_build="$(plutil -extract CFBundleVersion raw "$production_plist")"
+expected_version="${TADA_EXPECTED_VERSION:-$source_version}"
+expected_build="${TADA_EXPECTED_BUILD:-$source_build}"
+expected_bundle_id="${TADA_EXPECTED_BUNDLE_ID:-com.tadawords.app}"
+expected_commit="${TADA_EXPECTED_COMMIT:-$(git -C "$repo_root" rev-parse HEAD)}"
+
+assert_equal "$source_version" "$expected_version" "production plist version"
+assert_equal "$source_build" "$expected_build" "production plist build"
+assert_equal "$(plutil -extract CFBundleShortVersionString raw "$localqa_plist")" "$expected_version" "LocalQA plist version"
+assert_equal "$(plutil -extract CFBundleVersion raw "$localqa_plist")" "$expected_build" "LocalQA plist build"
+assert_equal "$(awk '/MARKETING_VERSION:/ { print $2; exit }' "$repo_root/project.yml")" "$expected_version" "project.yml version"
+assert_equal "$(awk '/CURRENT_PROJECT_VERSION:/ { print $2; exit }' "$repo_root/project.yml")" "$expected_build" "project.yml build"
+
+verify_audio_pack "$repo_root/$audio_relative"
+verify_picture_pack "$repo_root/$picture_relative"
+verify_preset_catalog "$repo_root/$preset_relative"
+assert_sha256 "$repo_root/$compatibility_relative" "ac0bec0343e049e8ee12448386b21992a6de7f67be427f6bf3f61404fbe547f3" "persistence compatibility table"
+
+guardian_notice="$repo_root/$guardian_notice_relative"
+guardian_today="$repo_root/Sources/TadaWordsGuardianFeatures/GuardianTodayView.swift"
+guardian_root="$repo_root/Sources/TadaWordsGuardianFeatures/GuardianRootView.swift"
+guardian_model="$repo_root/Sources/TadaWordsGuardianFeatures/GuardianDashboardViewModel.swift"
+assert_file "$guardian_notice" "Parent Third-Party Notices view"
+grep -Fq 'static let title = "Third-Party Notices"' "$guardian_notice" \
+    || fail "Third-Party Notices title is missing"
+grep -Fq 'Twemoji graphics © X Corp. and other contributors.' "$guardian_notice" \
+    || fail "Twemoji in-app copyright attribution is missing"
+grep -Fq '74 unmodified graphics from jdecked/twemoji 17.0.3.' "$guardian_notice" \
+    || fail "Twemoji in-app source, version, or unmodified quantity is missing"
+grep -Fq 'Creative Commons Attribution 4.0 International license.' "$guardian_notice" \
+    || fail "Twemoji in-app license description is missing"
+grep -Fq 'remain available offline.' "$guardian_notice" \
+    || fail "offline Third-Party Notices description is missing"
+grep -Fq 'https://github.com/jdecked/twemoji' "$guardian_notice" \
+    || fail "Twemoji in-app source URL is missing"
+grep -Fq 'https://creativecommons.org/licenses/by/4.0/' "$guardian_notice" \
+    || fail "Twemoji in-app license URL is missing"
+grep -Fq 'accessibilityIdentifier("guardian.third-party-notices")' "$guardian_notice" \
+    || fail "Third-Party Notices screen accessibility identifier is missing"
+grep -Fq 'accessibilityIdentifier: "guardian.app.third-party-notices"' "$guardian_today" \
+    || fail "App & Family notice entrance is missing"
+grep -Fq 'case .thirdPartyNotices:' "$guardian_root" \
+    || fail "Third-Party Notices destination is missing from GuardianRootView"
+grep -Fq 'GuardianThirdPartyNoticesView(' "$guardian_root" \
+    || fail "Third-Party Notices destination does not render its view"
+grep -Fq 'case .familySync, .thirdPartyNotices:' "$guardian_model" \
+    || fail "Third-Party Notices is not routed back to App & Family"
+
+assert_sha256 "$repo_root/Apps/TadaWordsApp/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" "ce1782b295901de1a7cc82f6f61cfc5ffbebf9bc0745256a573058bd1281e637" "app icon"
+assert_sha256 "$repo_root/Apps/TadaWordsApp/Assets.xcassets/TadaWordsMark.imageset/TadaWordsAppIcon.svg" "e47bfb19efa22e38db1b2a796bb47bb87993fc35b5ae4e6ba6624a9ec5e7b816" "Tada Words mark"
+assert_sha256 "$repo_root/Apps/TadaWordsApp/Assets.xcassets/PawgooMark.imageset/pawgoo-mark.svg" "2653ed92cac054f5df24d1726a90cd8e147b7e784cd98653c26f99d08c05f6c9" "Pawgoo mark"
+assert_sha256 "$repo_root/Tests/Fixtures/ChildSpeech/speechocean762-000010168-bye.wav" "807df45f3aec0718c30929595a9db1e99eab87134e6cdefe15551aa8c0a79db8" "child-speech fixture"
+
+assert_equal "$(find "$repo_root/QAArtifacts" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) | awk 'END { print NR + 0 }')" "19" "tracked QA image count"
+assert_equal "$(find "$repo_root/Sources" -path '*/Resources/*' -type f -name '*.json' | awk 'END { print NR + 0 }')" "4" "source resource JSON count"
+
+if find "$repo_root/Apps" "$repo_root/Sources" -type f \( -iname '*.ttf' -o -iname '*.otf' \) | grep -q .; then
+    fail "custom font file found under Apps or Sources"
+fi
+
+grep -Fq '.copy("Resources/Audio")' "$repo_root/Package.swift" || fail "Audio resource copy declaration missing"
+grep -Fq '.copy("Resources/PictureHints")' "$repo_root/Package.swift" || fail "PictureHints resource copy declaration missing"
+grep -Fq '74 small Twemoji PNG assets bundled' "$repo_root/THIRD_PARTY_NOTICES.md" || fail "bundled Twemoji notice missing"
+grep -Fq 'does not fetch' "$repo_root/THIRD_PARTY_NOTICES.md" || fail "offline Twemoji notice missing"
+grep -Fq 'jdecked/twemoji' "$repo_root/THIRD_PARTY_NOTICES.md" || fail "Twemoji source notice missing"
+grep -Fq 'Creative Commons Attribution 4.0' "$repo_root/THIRD_PARTY_NOTICES.md" || fail "Twemoji license notice missing"
+
+picture_service="$repo_root/Sources/TadaWordsApplePlatform/AppleWordPictureHintService.swift"
+grep -Fq 'Bundle.module' "$picture_service" || fail "picture service is not bound to bundled resources"
+if grep -Eiq 'https?://|URLSession|jsdelivr|cdn\.' "$picture_service"; then
+    fail "picture service contains a runtime network/CDN path"
+fi
+
+if plutil -extract TadaWordsTeacherAudioEndpoint raw "$production_plist" >/dev/null 2>&1; then
+    fail "production plist configures a runtime teacher-audio endpoint"
+fi
+
+echo "source inventory verified: $expected_version ($expected_build), 1,008 M4A, 74 offline Twemoji PNGs, four package JSON files plus one app schema JSON, no custom fonts"
+echo "in-app Twemoji attribution verified; rights readiness remains blocked by #32 and #33 because this verifier does not replace human evidence"
+
+if [[ "$#" -eq 0 ]]; then
+    echo "archive inspection skipped: pass a .xcarchive or .app path to verify the built product"
+    exit 0
+fi
+[[ "$#" -eq 1 ]] || fail "usage: $0 [TadaWords.xcarchive|TadaWords.app]"
+
+input_path="$1"
+if [[ "$input_path" == *.xcarchive ]]; then
+    app_path="$(find "$input_path/Products/Applications" -maxdepth 1 -type d -name '*.app' -print -quit)"
+else
+    app_path="$input_path"
+fi
+[[ -n "${app_path:-}" && -d "$app_path" ]] || fail "no .app found under $input_path"
+
+app_info="$app_path/Info.plist"
+assert_file "$app_info" "archive Info.plist"
+assert_equal "$(plutil -extract CFBundleShortVersionString raw "$app_info")" "$expected_version" "archive version"
+assert_equal "$(plutil -extract CFBundleVersion raw "$app_info")" "$expected_build" "archive build"
+assert_equal "$(plutil -extract CFBundleIdentifier raw "$app_info")" "$expected_bundle_id" "archive bundle ID"
+assert_equal "$(plutil -extract TadaWordsGitCommit raw "$app_info")" "$expected_commit" "archive embedded commit"
+if plutil -extract TadaWordsTeacherAudioEndpoint raw "$app_info" >/dev/null 2>&1; then
+    fail "archive configures a runtime teacher-audio endpoint"
+fi
+
+archive_audio_root="$(find "$app_path" -type d -path '*/Audio' -print -quit)"
+archive_picture_root="$(find "$app_path" -type d -path '*/PictureHints/Twemoji-17.0.3' -print -quit)"
+archive_preset="$(find "$app_path" -type f -name 'PresetWords.json' -print -quit)"
+[[ -n "$archive_audio_root" ]] || fail "Audio resource root missing from archive"
+[[ -n "$archive_picture_root" ]] || fail "Twemoji resource root missing from archive"
+[[ -n "$archive_preset" ]] || fail "PresetWords.json missing from archive"
+
+verify_audio_pack "$archive_audio_root"
+verify_picture_pack "$archive_picture_root"
+verify_preset_catalog "$archive_preset"
+find "$app_path" -type f -name 'Assets.car' -print -quit | grep -q . || fail "compiled asset catalog missing from archive"
+archive_compatibility="$app_path/PersistenceSchemaCompatibility.json"
+assert_file "$archive_compatibility" "archive persistence compatibility table"
+assert_sha256 "$archive_compatibility" "ac0bec0343e049e8ee12448386b21992a6de7f67be427f6bf3f61404fbe547f3" "archive persistence compatibility table"
+assert_equal "$(count_files "$app_path" '*.json')" "5" "archive JSON count"
+
+excluded_pattern='(^|/)(QAArtifacts|DesignAssets|Tests|Fixtures)(/|$)|speechocean|LICENSE_SOURCE|SHA256SUMS|\.(wav|ttf|otf)$'
+if find "$app_path" -type f | grep -E "$excluded_pattern"; then
+    fail "test/design-only content found in archive"
+fi
+
+echo "archive inventory verified: $app_path"
+echo "in-app Twemoji attribution verified at exact source HEAD; rights readiness remains blocked by #32 and #33 until separate human evidence lands"
