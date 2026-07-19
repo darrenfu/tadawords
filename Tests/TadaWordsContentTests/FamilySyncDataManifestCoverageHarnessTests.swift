@@ -52,6 +52,63 @@ final class FamilySyncDataManifestCoverageHarnessTests: XCTestCase {
         }
     }
 
+    func testPrivacyBoundaryKeepsSensitiveDeviceDataOutOfSynchronizedRecords() {
+        let classifications = Dictionary(
+            uniqueKeysWithValues: FamilySyncDataManifest.entries.map {
+                ($0.fieldPath, $0.classification)
+            }
+        )
+
+        let synchronized = [
+            "profiles.displayName",
+            "profiles.photoAttachment.*",
+            "wordPool.entries.prompt",
+            "learning.attempts.*",
+        ]
+        let deviceLocal = [
+            "childSession.lastSelectedProfileID",
+            "familySyncPreference.*",
+            "notifications.scheduledRequestIdentifiers",
+            "voiceprint.keychainTemplate",
+            "voiceprint.enrollmentSamples",
+            "cache.ocrAndRecognition",
+        ]
+        let derived = [
+            "learning.progress.*",
+            "views.scoresAndReports",
+        ]
+
+        for fieldPath in synchronized {
+            XCTAssertEqual(
+                classifications[fieldPath],
+                .synchronized,
+                "\(fieldPath) is part of the reviewed CloudKit payload boundary"
+            )
+        }
+        for fieldPath in deviceLocal {
+            XCTAssertEqual(
+                classifications[fieldPath],
+                .deviceLocal,
+                "\(fieldPath) must never cross the device boundary"
+            )
+        }
+        for fieldPath in derived {
+            XCTAssertEqual(
+                classifications[fieldPath],
+                .derived,
+                "\(fieldPath) must be rebuilt locally from canonical facts"
+            )
+        }
+
+        XCTAssertFalse(
+            FamilySyncDataManifest.entries.contains {
+                $0.classification == .synchronized
+                    && $0.fieldPath.localizedCaseInsensitiveContains("voiceprint")
+            },
+            "No voiceprint field may become synchronized"
+        )
+    }
+
     func testPersistedSnapshotFieldsMatchReviewedInventoryAndManifestEvidence()
         throws
     {

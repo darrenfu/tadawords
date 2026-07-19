@@ -676,3 +676,46 @@ attestation remain separate human blockers under #32 and #33.
 - Added `Docs/APP_STORE_CONTENT_RIGHTS.md` and a repeatable source/archive
   verifier. The unsigned v0.7.3 Release archive matches 1,008 M4A files, 74
   Twemoji PNGs, five expected JSON files, and all test/resource exclusions.
+
+## v0.7.4 — 2026-07-19
+
+Target release: `v0.7.4`
+
+Branch: `codex/pr29-privacy-v074-refresh`
+
+Build: `2026071904`
+
+Overall state: the App Store privacy inventory is refreshed against the merged
+v0.7.3 source. The App Store answer set remains a conditional draft pending
+production CloudKit, Keychain removal, public-policy, operator-attestation, and
+exact signed-build gates.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| APPSTORE-017 | Documentation | Privacy inventory | Keep one versioned, source-backed inventory for on-device processing, Apple services, Pawgoo-accessible support data, user-directed exports, and every configured/dormant non-Apple network path. Never publish an answer that depends on an unverified operating practice. | Refreshed source audit and focused regression pass | Re-run the inventory, dependency/domain scan, and iPhone/iPad traffic observation against the exact signed release candidate; obtain every listed owner attestation |
+| APPSTORE-017-WEB | Blocker | Pawgoo privacy/support | Align the live pages with bundled offline hints, the qualified deletion guarantee, Keychain app-removal reality, and the complete classified Family Sync scope. | Mismatch documented; public site unchanged | Publish reviewed wording, record the deployed asset/commit, and compare both live pages with the exact shipping behavior |
+
+### 2026-07-19 v0.7.4 notes
+
+- Replaced the stale v0.6.3 audit, which still described jsDelivr hints,
+  missing Parent links, an undecided Family Sync release, and authoritative
+  transported progress.
+- Recorded that all 74 Twemoji picture hints are bundled and that the shipping
+  configuration has no teacher-audio endpoint, advertising, analytics,
+  crash-reporting, tracking SDK, or external Swift dependency.
+- Classified the current Family Sync payload as synchronized canonical facts,
+  locally rebuilt views, and device-only sensitive/recovery state. Added a
+  regression test that prevents voiceprint fields from silently entering the
+  synchronized class.
+- Inventoried Parent CSV and privacy-safe sync-diagnostic share sheets, local
+  OS diagnostics, APNs-triggered CloudKit reconciliation, bounded Profile photo
+  `CKAsset`, terminal deletion ledger, and current Parent Privacy/Support/data
+  controls.
+- Re-fetched the live Pawgoo Privacy and Support pages and documented outdated
+  hint-download, deletion, Keychain removal, and underspecified Family Sync
+  language. No public-site or App Store Connect state changed.
+- Kept **No data collected** conditional on production CloudKit acceptance,
+  exact signed-build traffic/dependency evidence, absent remote audio endpoint,
+  Pawgoo CloudKit non-access, support-mail practices, and corrected public copy.
+- The complete pre-commit gate passes strict format, 823/823 Swift tests,
+  40/40 Issue Agent tests, and 11/11 release-preflight tests.
