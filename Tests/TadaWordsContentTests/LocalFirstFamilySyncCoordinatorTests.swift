@@ -17,6 +17,8 @@ final class LocalFirstFamilySyncCoordinatorTests: XCTestCase {
             payload: "remote",
             updatedAt: Date(timeIntervalSince1970: 20),
             deviceID: "b"
+        ).assigning(
+            revision: FamilySyncLogicalRevision(counter: 2, deviceID: "b")
         )
         let store = SyncStore(profileID: profileID, records: [local])
         let transport = SyncTransport(records: [remote])
@@ -35,7 +37,7 @@ final class LocalFirstFamilySyncCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(status, .synced(at: Date(timeIntervalSince1970: 30)))
         XCTAssertEqual(applied, [remote])
-        XCTAssertEqual(pushed, [remote])
+        XCTAssertTrue(pushed.isEmpty, "Fetched remote winners must not be redundantly re-sent")
     }
 
     func testTemporaryCloudFailureLeavesLocalDataPendingNotFailed() async {
@@ -54,7 +56,7 @@ final class LocalFirstFamilySyncCoordinatorTests: XCTestCase {
 
         let status = await coordinator.synchronize()
         let pushed = await transport.pushedRecords()
-        XCTAssertEqual(status, .pendingOffline)
+        XCTAssertEqual(status, .pendingOffline(pendingCount: 0))
         XCTAssertTrue(pushed.isEmpty)
     }
 
@@ -82,6 +84,8 @@ final class LocalFirstFamilySyncCoordinatorTests: XCTestCase {
             payload: "accepted-family",
             updatedAt: Date(timeIntervalSince1970: 50),
             deviceID: "owner"
+        ).assigning(
+            revision: FamilySyncLogicalRevision(counter: 1, deviceID: "owner")
         )
         let transport = SyncTransport(records: [remote], acceptedProfileID: profileID)
         let store = SyncStore(
@@ -241,7 +245,7 @@ final class LocalFirstFamilySyncCoordinatorTests: XCTestCase {
 
 private actor SyncStore: FamilySyncRecordStore {
     let profileID: ProfileID
-    let localRecords: [FamilySyncRecord]
+    var localRecords: [FamilySyncRecord]
     let idsForSync: [ProfileID]
     var applied: [FamilySyncRecord] = []
 
@@ -266,6 +270,13 @@ private actor SyncStore: FamilySyncRecordStore {
         for profileID: ProfileID
     ) async throws {
         applied.append(contentsOf: records)
+        var byName = Dictionary(
+            uniqueKeysWithValues: localRecords.map { ($0.recordName, $0) }
+        )
+        for record in records {
+            byName[record.recordName] = record
+        }
+        localRecords = byName.values.sorted { $0.recordName < $1.recordName }
     }
 
     func appliedRecords() -> [FamilySyncRecord] { applied }

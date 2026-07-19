@@ -254,7 +254,7 @@ final class GuardianCompletionFeaturesTests: XCTestCase {
         repository: InMemoryWordPoolRepository
     ) async throws -> WordPrompt {
         let prompt = try WordPrompt(learningMode: mode, text: text)
-        _ = try await repository.upsert([
+        let outcomes = try await repository.upsert([
             WordPoolEntryDraft(
                 profileID: profile.id,
                 prompt: prompt,
@@ -263,7 +263,7 @@ final class GuardianCompletionFeaturesTests: XCTestCase {
                 positionInBatch: 0
             )
         ])
-        return prompt
+        return try XCTUnwrap(outcomes.first?.entry.prompt)
     }
 
     private func recordTodayQuest(

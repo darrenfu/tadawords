@@ -2,7 +2,7 @@ import Foundation
 import TadaWordsDomain
 
 public struct WordPoolSnapshot: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public let schemaVersion: Int
     public let entries: [WordPoolEntry]
@@ -36,7 +36,7 @@ public enum LocalWordPoolRepositoryError: Error, Equatable, Sendable {
     case writeFailed(snapshotURL: URL, details: String)
 }
 
-/// Local, inspectable persistence for the small V1 guardian word pool.
+/// Local, inspectable persistence for the guardian word pool.
 ///
 /// Mutations are applied to a value-semantic candidate, atomically written to
 /// disk, and only then committed to actor state. A corrupt or unsupported file
@@ -45,27 +45,36 @@ public actor LocalJSONWordPoolRepository: WordPoolRepository {
     public nonisolated let snapshotURL: URL
 
     private let fileManager: FileManager
+    private let mutationGate: ProfileScopedMutationGate?
+    private let deviceID: String
     private var storage: WordPoolStorage?
     private var loadFailure: LocalWordPoolRepositoryError?
 
     public init(
         snapshotURL: URL,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        mutationGate: ProfileScopedMutationGate? = nil,
+        deviceID: String = "local-word-pool"
     ) {
         self.snapshotURL = snapshotURL
         self.fileManager = fileManager
+        self.mutationGate = mutationGate
+        self.deviceID = deviceID
     }
 
     public func upsert(_ drafts: [WordPoolEntryDraft]) async throws
         -> [WordPoolUpsertOutcome]
     {
         guard !drafts.isEmpty else { return [] }
-
-        var candidate = try loadedStorage()
-        let outcomes = candidate.upsert(drafts)
-        try persist(candidate)
-        storage = candidate
-        return outcomes
+        return try await withMutationLeases(
+            for: Set(drafts.map(\.profileID))
+        ) {
+            var candidate = try loadedStorage()
+            let outcomes = try candidate.upsert(drafts, deviceID: deviceID)
+            try persist(candidate)
+            storage = candidate
+            return outcomes
+        }
     }
 
     public func entries(
@@ -84,14 +93,19 @@ public actor LocalJSONWordPoolRepository: WordPoolRepository {
         _ isActive: Bool,
         entryID: WordPoolEntryID
     ) async throws -> WordPoolEntry {
-        var candidate = try loadedStorage()
-        let updatedEntry = try candidate.setActive(
-            isActive,
-            entryID: entryID
-        )
-        try persist(candidate)
-        storage = candidate
-        return updatedEntry
+        let loaded = try loadedStorage()
+        let profileIDs = Set([loaded.profileID(forEntryID: entryID)].compactMap { $0 })
+        return try await withMutationLeases(for: profileIDs) {
+            var candidate = try loadedStorage()
+            let updatedEntry = try candidate.setActive(
+                isActive,
+                entryID: entryID,
+                deviceID: deviceID
+            )
+            try persist(candidate)
+            storage = candidate
+            return updatedEntry
+        }
     }
 
     public func setActive(
@@ -99,28 +113,74 @@ public actor LocalJSONWordPoolRepository: WordPoolRepository {
         entryIDs: [WordPoolEntryID]
     ) async throws -> [WordPoolEntry] {
         guard !entryIDs.isEmpty else { return [] }
-        var candidate = try loadedStorage()
-        let updatedEntries = try candidate.setActive(
-            isActive,
-            entryIDs: entryIDs
+        let loaded = try loadedStorage()
+        let profileIDs = Set(
+            entryIDs.compactMap { loaded.profileID(forEntryID: $0) }
         )
-        try persist(candidate)
-        storage = candidate
-        return updatedEntries
+        return try await withMutationLeases(for: profileIDs) {
+            var candidate = try loadedStorage()
+            let updatedEntries = try candidate.setActive(
+                isActive,
+                entryIDs: entryIDs,
+                deviceID: deviceID
+            )
+            try persist(candidate)
+            storage = candidate
+            return updatedEntries
+        }
     }
 
-    public func mergeSynced(_ entry: WordPoolEntry) throws {
-        var candidate = try loadedStorage()
-        guard try candidate.mergeSynced(entry) else { return }
-        try persist(candidate)
-        storage = candidate
+    public func mergeSynced(_ entry: WordPoolEntry) async throws {
+        try await mergeSynced(
+            entry,
+            logicalRevision: entry.logicalRevision
+        )
+    }
+
+    public func mergeSynced(
+        _ entry: WordPoolEntry,
+        logicalRevision: FamilySyncLogicalRevision
+    ) async throws {
+        try await withMutationLeases(for: [entry.profileID]) {
+            var candidate = try loadedStorage()
+            guard
+                try candidate.mergeSynced(
+                    entry,
+                    logicalRevision: logicalRevision
+                )
+            else { return }
+            try persist(candidate)
+            storage = candidate
+        }
     }
 
     public func deleteAll(for profileID: ProfileID) async throws {
-        var candidate = try loadedStorage()
-        guard candidate.deleteAll(for: profileID) else { return }
-        try persist(candidate)
-        storage = candidate
+        try await withMutationLeases(for: [profileID]) {
+            var candidate = try loadedStorage()
+            guard candidate.deleteAll(for: profileID) else { return }
+            try persist(candidate)
+            storage = candidate
+        }
+    }
+
+    private func withMutationLeases<Value>(
+        for profileIDs: Set<ProfileID>,
+        _ operation: () throws -> Value
+    ) async throws -> Value {
+        guard let mutationGate else { return try operation() }
+        let ids =
+            profileIDs
+            .filter { ProfileScopedMutationLeaseContext.profileID != $0 }
+            .sorted { $0.description < $1.description }
+        for id in ids { await mutationGate.acquire(id) }
+        do {
+            let value = try operation()
+            for id in ids.reversed() { await mutationGate.release(id) }
+            return value
+        } catch {
+            for id in ids.reversed() { await mutationGate.release(id) }
+            throw error
+        }
     }
 
     /// Retries loading after a caller has explicitly repaired or restored the
@@ -181,7 +241,10 @@ public actor LocalJSONWordPoolRepository: WordPoolRepository {
             )
         }
 
-        guard snapshot.schemaVersion == WordPoolSnapshot.currentSchemaVersion else {
+        guard
+            snapshot.schemaVersion == 1
+                || snapshot.schemaVersion == WordPoolSnapshot.currentSchemaVersion
+        else {
             throw LocalWordPoolRepositoryError.unsupportedSchemaVersion(
                 snapshotURL: snapshotURL,
                 found: snapshot.schemaVersion,
@@ -190,7 +253,21 @@ public actor LocalJSONWordPoolRepository: WordPoolRepository {
         }
 
         do {
-            return try WordPoolStorage(entries: snapshot.entries)
+            let loadedStorage: WordPoolStorage
+            if snapshot.schemaVersion == 1 {
+                loadedStorage = try WordPoolStorage(
+                    migratingLegacyEntries: snapshot.entries
+                )
+            } else {
+                loadedStorage = try WordPoolStorage(entries: snapshot.entries)
+            }
+
+            if snapshot.schemaVersion != WordPoolSnapshot.currentSchemaVersion
+                || snapshot.entries != loadedStorage.allEntriesInStableOrder
+            {
+                try persist(loadedStorage)
+            }
+            return loadedStorage
         } catch let error as WordPoolStorageValidationError {
             throw LocalWordPoolRepositoryError.invalidSnapshot(
                 snapshotURL: snapshotURL,

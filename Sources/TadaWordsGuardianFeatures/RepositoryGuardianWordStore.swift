@@ -82,13 +82,22 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             learningMode: learningMode,
             includingInactive: true
         )
-        let entriesByPromptID = Dictionary(
-            uniqueKeysWithValues: entries.map { ($0.prompt.id, $0) }
+        let selectedByRequestedID = Dictionary(
+            uniqueKeysWithValues: uniqueIDs.compactMap { requestedID in
+                entries.first(where: { $0.resolves(promptID: requestedID) })
+                    .map { (requestedID, $0) }
+            }
         )
-        if let missingID = uniqueIDs.first(where: { entriesByPromptID[$0] == nil }) {
+        if let missingID = uniqueIDs.first(where: {
+            selectedByRequestedID[$0] == nil
+        }) {
             throw GuardianWordStoreError.wordNotFound(missingID)
         }
-        let selectedEntries = uniqueIDs.compactMap { entriesByPromptID[$0] }
+        let selectedEntries = Dictionary(
+            uniqueKeysWithValues: selectedByRequestedID.values.map {
+                ($0.id, $0)
+            }
+        ).values.sorted { $0.id.description < $1.id.description }
         return try await applyMembershipState(
             selectedEntries,
             isActive: isActive,
@@ -176,8 +185,12 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             attempts,
             completions
         )
+        let projectedAttempts = attemptsProjectedForDisplay(
+            loadedAttempts,
+            entries: read + write
+        )
         let corrections = try await allCorrections(
-            for: loadedAttempts,
+            for: projectedAttempts,
             repository: learningRecordRepository
         )
         return GuardianReportBuilder().makeReport(
@@ -185,7 +198,7 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             period: period,
             now: clock.now,
             prompts: (read + write).map(\.prompt),
-            attempts: loadedAttempts,
+            attempts: projectedAttempts,
             corrections: corrections,
             completions: loadedCompletions
         )
@@ -347,7 +360,10 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             return collected
         }
 
-        let loadedAttempts = try await attempts
+        let loadedAttempts = attemptsProjectedForDisplay(
+            try await attempts,
+            entries: activeEntries
+        )
         let attention = attentionEvaluator.evaluate(
             activePrompts: activeEntries.map(\.prompt),
             progress: progress,
@@ -365,6 +381,41 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             by: \.wordPromptID
         ).mapValues(\.count)
         return (attention, progress, practiceFrequencyByWordID)
+    }
+
+    /// Word-pool identity is canonicalized by normalized text and mode while
+    /// immutable attempts keep the prompt ID written by their source device.
+    /// Guardian read models must resolve those one-way aliases without ever
+    /// rewriting the persisted attempt bytes used by Family Sync.
+    private func attemptsProjectedForDisplay(
+        _ attempts: [AttemptEvent],
+        entries: [WordPoolEntry]
+    ) -> [AttemptEvent] {
+        attempts.map { attempt in
+            let matchingEntries = entries.filter {
+                $0.prompt.learningMode == attempt.learningMode
+                    && $0.resolves(promptID: attempt.wordPromptID)
+            }
+            guard
+                matchingEntries.count == 1,
+                let entry = matchingEntries.first,
+                entry.prompt.id != attempt.wordPromptID
+            else { return attempt }
+            return AttemptEvent(
+                id: attempt.id,
+                questID: attempt.questID,
+                profileID: attempt.profileID,
+                wordPromptID: entry.prompt.id,
+                learningMode: attempt.learningMode,
+                evidence: attempt.evidence,
+                outcome: attempt.outcome,
+                timing: attempt.timing,
+                occurredAt: attempt.occurredAt,
+                replayCount: attempt.replayCount,
+                recognitionConfidence: attempt.recognitionConfidence,
+                paceContext: attempt.paceContext
+            )
+        }
     }
 
     private func makeTodaySummary(

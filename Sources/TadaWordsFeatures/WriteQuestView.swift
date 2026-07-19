@@ -115,7 +115,7 @@ struct WriteQuestView: View {
     let recognitionService: any HandwritingRecognitionService
     let audioExperienceService: any AudioExperienceService
     let pictureHintProvider: any WordPictureHintProviding
-    let handwritingPreferenceStore: HandwritingPreferenceStore
+    let onHandwritingToolChanged: (HandwritingTool) -> Void
     let onSpeak: () async -> Void
     let onBack: () -> Void
     let onComplete: (QuestAttemptSummary) -> Void
@@ -158,8 +158,7 @@ struct WriteQuestView: View {
             SilentAudioExperienceService(),
         pictureHintProvider: any WordPictureHintProviding =
             NoWordPictureHintProvider(),
-        handwritingPreferenceStore: HandwritingPreferenceStore =
-            HandwritingPreferenceStore(),
+        onHandwritingToolChanged: @escaping (HandwritingTool) -> Void = { _ in },
         onSpeak: @escaping () async -> Void,
         onBack: @escaping () -> Void,
         onComplete: @escaping (QuestAttemptSummary) -> Void
@@ -169,7 +168,7 @@ struct WriteQuestView: View {
         self.recognitionService = recognitionService
         self.audioExperienceService = audioExperienceService
         self.pictureHintProvider = pictureHintProvider
-        self.handwritingPreferenceStore = handwritingPreferenceStore
+        self.onHandwritingToolChanged = onHandwritingToolChanged
         self.onSpeak = onSpeak
         self.onBack = onBack
         self.onComplete = onComplete
@@ -185,8 +184,8 @@ struct WriteQuestView: View {
             )
         )
         _handwritingSelection = State(
-            initialValue: handwritingPreferenceStore.selection(
-                for: session.profileID
+            initialValue: HandwritingSelectionState(
+                tool: session.interfacePreferences.selectedHandwritingTool
             )
         )
         _responseClock = State(
@@ -273,10 +272,7 @@ struct WriteQuestView: View {
             handwritingSelection.reconcileCanvas(hasInk: !isEmpty)
         }
         .onChange(of: handwritingSelection) { _, selection in
-            handwritingPreferenceStore.save(
-                selection,
-                for: session.profileID
-            )
+            onHandwritingToolChanged(selection.tool)
         }
         .sensoryFeedback(.success, trigger: successFeedbackTrigger)
         .sensoryFeedback(.impact(weight: .medium), trigger: clearFeedbackTrigger)

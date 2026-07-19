@@ -122,12 +122,43 @@ public struct PracticeModeConfiguration: Hashable, Sendable {
 
 public struct PracticeInterfacePreferences: Codable, Hashable, Sendable {
     public let leftHandedLayoutEnabled: Bool
+    public let selectedHandwritingTool: HandwritingTool
 
-    public init(leftHandedLayoutEnabled: Bool = false) {
+    public init(
+        leftHandedLayoutEnabled: Bool = false,
+        selectedHandwritingTool: HandwritingTool = .pencil
+    ) {
         self.leftHandedLayoutEnabled = leftHandedLayoutEnabled
+        // Crayon remains decodable for historical strokes and audio assets,
+        // but is no longer a child-selectable input tool.
+        switch selectedHandwritingTool {
+        case .pencil, .chalk, .brush:
+            self.selectedHandwritingTool = selectedHandwritingTool
+        case .crayon:
+            self.selectedHandwritingTool = .pencil
+        }
     }
 
     public static let `default` = PracticeInterfacePreferences()
+
+    private enum CodingKeys: String, CodingKey {
+        case leftHandedLayoutEnabled
+        case selectedHandwritingTool
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            leftHandedLayoutEnabled: try container.decodeIfPresent(
+                Bool.self,
+                forKey: .leftHandedLayoutEnabled
+            ) ?? false,
+            selectedHandwritingTool: try container.decodeIfPresent(
+                HandwritingTool.self,
+                forKey: .selectedHandwritingTool
+            ) ?? .pencil
+        )
+    }
 }
 
 public enum WordRecommendationMode: String, Codable, CaseIterable, Hashable,

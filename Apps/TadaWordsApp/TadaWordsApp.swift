@@ -16,6 +16,9 @@ struct TadaWordsApp: App {
     private let voiceprintEnrollmentService: AppleVoiceprintEnrollmentService
     private let pictureHintProvider: AppleWordPictureHintService
     private let familySyncTransport: (any FamilySyncTransport)?
+    private let familySyncAccessManagement: (@MainActor (ProfileID) async throws -> Void)?
+    private let appClock: any AppClock
+    private let appTimeZone: TimeZone
     private let notificationScheduler = AppleLearningNotificationScheduler()
     private let sensitiveActionAuthorizer = AppleSensitiveGuardianActionAuthorizer()
     private let handwritingRecognitionService = AppleHandwritingRecognitionService()
@@ -33,9 +36,32 @@ struct TadaWordsApp: App {
             // CKContainer traps when an intentionally unsigned simulator build
             // has no iCloud entitlement. Simulator and Local Device QA builds
             // use the AppShell's explicit device-only composition instead.
-            familySyncTransport = nil
+            #if DEBUG && targetEnvironment(simulator) && !LOCAL_DEVICE_QA
+                familySyncTransport = FamilySyncSimulatorTestSupport.transport(
+                    profileID: Self.defaultProfileID
+                )
+                familySyncAccessManagement = nil
+                appClock =
+                    FamilySyncSimulatorTestSupport.clock()
+                    ?? SystemAppClock()
+                appTimeZone =
+                    FamilySyncSimulatorTestSupport.timeZone()
+                    ?? .current
+            #else
+                familySyncTransport = nil
+                familySyncAccessManagement = nil
+                appClock = SystemAppClock()
+                appTimeZone = .current
+            #endif
         #else
-            familySyncTransport = CloudKitFamilySyncTransport()
+            let transport = CloudKitFamilySyncTransport()
+            let accessManager = CloudKitFamilyAccessManager(transport: transport)
+            familySyncTransport = transport
+            familySyncAccessManagement = { profileID in
+                try await accessManager.presentAccessManagement(for: profileID)
+            }
+            appClock = SystemAppClock()
+            appTimeZone = .current
         #endif
         audioExperienceService = experience
         voiceprintRepository = voiceprints
@@ -71,6 +97,8 @@ struct TadaWordsApp: App {
                 TadaWordsApplicationView(
                     applicationSupportDirectory: Self.applicationSupportDirectory,
                     defaultProfile: Self.defaultProfile,
+                    clock: appClock,
+                    timeZone: appTimeZone,
                     audioPromptService: audioPromptService,
                     speechRecognitionService: speechRecognitionService,
                     handwritingRecognitionService: handwritingRecognitionService,
@@ -79,6 +107,7 @@ struct TadaWordsApp: App {
                     requestSpeechAuthorization: requestSpeechAuthorization,
                     audioExperienceService: audioExperienceService,
                     familySyncTransport: familySyncTransport,
+                    familySyncAccessManagement: familySyncAccessManagement,
                     notificationScheduler: notificationScheduler,
                     voiceprintEnrollmentService: voiceprintEnrollmentService,
                     voiceprintRepository: voiceprintRepository,
@@ -106,7 +135,7 @@ struct TadaWordsApp: App {
         createdAt: Date(timeIntervalSince1970: 1_735_689_600)
     )
 
-    private static let defaultProfileID: ProfileID = {
+    nonisolated private static let defaultProfileID: ProfileID = {
         guard
             let rawValue = UUID(
                 uuidString: "3B20FEF0-7E43-4B70-8F89-D37AD55454A1"
@@ -118,12 +147,24 @@ struct TadaWordsApp: App {
     }()
 
     nonisolated private static func applicationSupportDirectory() throws -> URL {
-        try FileManager.default.url(
+        let systemDirectory = try FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
         )
+        #if DEBUG && targetEnvironment(simulator) && !LOCAL_DEVICE_QA
+            if let testDirectory =
+                try FamilySyncSimulatorTestSupport
+                .prepareApplicationSupportDirectory(
+                    systemDirectory: systemDirectory,
+                    profileID: defaultProfileID
+                )
+            {
+                return testDirectory
+            }
+        #endif
+        return systemDirectory
     }
 
     nonisolated private static func cachesDirectory() throws -> URL {

@@ -15,6 +15,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     private let tombstoneRepository: (any ProfileDeletionTombstoneRepository)?
     private let childSessionRepository: (any ChildSessionRepository)?
     private let handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)?
+    private let onLocalMutation: @Sendable (ProfileID) -> Void
     private let clock: any AppClock
     private let timeZone: TimeZone
     private var selectedProfileID: ProfileID
@@ -31,6 +32,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         tombstoneRepository: (any ProfileDeletionTombstoneRepository)? = nil,
         childSessionRepository: (any ChildSessionRepository)? = nil,
         handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)? = nil,
+        onLocalMutation: @escaping @Sendable (ProfileID) -> Void = { _ in },
         clock: any AppClock,
         timeZone: TimeZone = .current
     ) {
@@ -43,6 +45,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         self.tombstoneRepository = tombstoneRepository
         self.childSessionRepository = childSessionRepository
         self.handwritingPreferenceRemover = handwritingPreferenceRemover
+        self.onLocalMutation = onLocalMutation
         self.clock = clock
         self.timeZone = timeZone
         self.selectedProfileID =
@@ -90,6 +93,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         ).dashboardSnapshot()
         try await profileRepository.save(profile)
         selectedProfileID = profile.id
+        onLocalMutation(profile.id)
         return preparedDashboard
     }
 
@@ -125,6 +129,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         ).dashboardSnapshot()
         try await profileRepository.save(updated)
         selectedProfileID = updated.id
+        onLocalMutation(updated.id)
         return preparedDashboard
     }
 
@@ -171,7 +176,9 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         _ request: GuardianWordImportRequest
     ) async throws -> GuardianWordImportReport {
         let profile = try await selectedProfile()
-        return try await makeWordStore(for: profile).importWords(request)
+        let report = try await makeWordStore(for: profile).importWords(request)
+        onLocalMutation(profile.id)
+        return report
     }
 
     public func importWords(
@@ -179,14 +186,19 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         for profileID: ProfileID
     ) async throws -> GuardianWordImportReport {
         let profile = try await requiredProfile(id: profileID)
-        return try await makeWordStore(for: profile).importWords(request)
+        let report = try await makeWordStore(for: profile).importWords(request)
+        onLocalMutation(profile.id)
+        return report
     }
 
     public func updatePracticeSettings(
         _ settings: ProfilePracticeSettings
     ) async throws -> GuardianDashboardSnapshot {
         let profile = try await selectedProfile()
-        return try await makeWordStore(for: profile).updatePracticeSettings(settings)
+        let snapshot = try await makeWordStore(for: profile)
+            .updatePracticeSettings(settings)
+        onLocalMutation(profile.id)
+        return snapshot
     }
 
     public func deactivateWord(
@@ -194,10 +206,12 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         learningMode: LearningMode
     ) async throws -> GuardianDashboardSnapshot {
         let profile = try await selectedProfile()
-        return try await makeWordStore(for: profile).deactivateWord(
+        let snapshot = try await makeWordStore(for: profile).deactivateWord(
             id: id,
             learningMode: learningMode
         )
+        onLocalMutation(profile.id)
+        return snapshot
     }
 
     public func setWordsActive(
@@ -206,11 +220,13 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         isActive: Bool
     ) async throws -> GuardianDashboardSnapshot {
         let profile = try await selectedProfile()
-        return try await makeWordStore(for: profile).setWordsActive(
+        let snapshot = try await makeWordStore(for: profile).setWordsActive(
             ids: ids,
             learningMode: learningMode,
             isActive: isActive
         )
+        onLocalMutation(profile.id)
+        return snapshot
     }
 
     public func setWordsActive(
@@ -220,11 +236,13 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         for profileID: ProfileID
     ) async throws -> GuardianDashboardSnapshot {
         let profile = try await requiredProfile(id: profileID)
-        return try await makeWordStore(for: profile).setWordsActive(
+        let snapshot = try await makeWordStore(for: profile).setWordsActive(
             ids: ids,
             learningMode: learningMode,
             isActive: isActive
         )
+        onLocalMutation(profile.id)
+        return snapshot
     }
 
     public func setMembershipsActive(
@@ -239,6 +257,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
             learningMode: learningMode,
             isActive: isActive
         )
+        onLocalMutation(profile.id)
     }
 
     public func report(
@@ -253,10 +272,12 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         to outcome: AttemptOutcome
     ) async throws -> GuardianLearningReport {
         let profile = try await selectedProfile()
-        return try await makeWordStore(for: profile).correctAttempt(
+        let report = try await makeWordStore(for: profile).correctAttempt(
             id: id,
             to: outcome
         )
+        onLocalMutation(profile.id)
+        return report
     }
 
     /// Deletes every profile-scoped local record before removing the profile
@@ -310,6 +331,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         if selectedProfileID == id {
             selectedProfileID = fallback.id
         }
+        onLocalMutation(id)
         return GuardianProfileDeletionResult(
             dashboard: try await makeWordStore(for: fallback).dashboardSnapshot(),
             tombstone: tombstone

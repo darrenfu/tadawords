@@ -14,7 +14,7 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
             try WordPrompt(learningMode: .read, text: "cat"),
             try WordPrompt(learningMode: .read, text: "dog"),
         ]
-        _ = try await wordRepository.upsert(
+        let outcomes = try await wordRepository.upsert(
             prompts.enumerated().map { index, prompt in
                 WordPoolEntryDraft(
                     profileID: profile.id,
@@ -25,6 +25,7 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
                 )
             }
         )
+        let canonicalPrompts = outcomes.map(\.entry.prompt)
         let store = RepositoryGuardianWordStore(
             profile: profile,
             wordPoolRepository: wordRepository,
@@ -34,7 +35,7 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
 
         do {
             _ = try await store.setWordsActive(
-                ids: prompts.map(\.id),
+                ids: canonicalPrompts.map(\.id),
                 learningMode: .read,
                 isActive: false
             )
@@ -48,7 +49,10 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
             learningMode: .read,
             includingInactive: true
         )
-        XCTAssertEqual(Set(entries.map(\.prompt.id)), Set(prompts.map(\.id)))
+        XCTAssertEqual(
+            Set(entries.map(\.prompt.id)),
+            Set(canonicalPrompts.map(\.id))
+        )
         XCTAssertTrue(entries.allSatisfy(\.isActive))
         let settingsReadCount = await settingsRepository.readCount()
         XCTAssertEqual(settingsReadCount, 2)
@@ -58,7 +62,7 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
         let wordRepository = InMemoryWordPoolRepository()
         let profile = makeProfile(number: 90, name: "Ava")
         let prompt = try WordPrompt(learningMode: .read, text: "cat")
-        _ = try await wordRepository.upsert([
+        let outcomes = try await wordRepository.upsert([
             WordPoolEntryDraft(
                 profileID: profile.id,
                 prompt: prompt,
@@ -67,6 +71,7 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
                 positionInBatch: 0
             )
         ])
+        let canonicalPrompt = try XCTUnwrap(outcomes.first?.entry.prompt)
         let store = RepositoryGuardianWordStore(
             profile: profile,
             wordPoolRepository: wordRepository,
@@ -76,7 +81,7 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
 
         do {
             _ = try await store.deactivateWord(
-                id: prompt.id,
+                id: canonicalPrompt.id,
                 learningMode: .read
             )
             XCTFail("Expected the dependent settings read to fail")
@@ -89,7 +94,7 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
             learningMode: .read,
             includingInactive: false
         )
-        XCTAssertEqual(activeEntries.map(\.prompt), [prompt])
+        XCTAssertEqual(activeEntries.map(\.prompt), [canonicalPrompt])
     }
 
     func testEmptyProductionStoreNeverSeedsWordsOrAttention() async throws {
@@ -626,7 +631,7 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
         let profile = makeProfile(number: 1, name: "Ava")
         let manualPrompt = try WordPrompt(learningMode: .read, text: "cat")
         let legacyPrompt = try WordPrompt(learningMode: .read, text: "legacy")
-        _ = try await repository.upsert([
+        let outcomes = try await repository.upsert([
             WordPoolEntryDraft(
                 profileID: profile.id,
                 prompt: manualPrompt,
@@ -642,12 +647,17 @@ final class RepositoryGuardianWordStoreTests: XCTestCase {
                 positionInBatch: 1
             ),
         ])
+        let canonicalManualPrompt = try XCTUnwrap(
+            outcomes.first(where: {
+                $0.entry.source == .guardianManual
+            })?.entry.prompt
+        )
         let store = makeStore(profile: profile, repository: repository)
         let initialWords = try await store.dashboardSnapshot().readPool
         XCTAssertEqual(initialWords.map(\.normalizedText), ["cat"])
 
         let removed = try await store.setWordsActive(
-            ids: [manualPrompt.id],
+            ids: [canonicalManualPrompt.id],
             learningMode: .read,
             isActive: false
         )

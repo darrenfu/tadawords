@@ -127,6 +127,7 @@ final class GuardianDashboardViewModel: ObservableObject {
     private let audioPromptService: any AudioPromptService
     private let audioExperienceService: any AudioExperienceService
     private let familySyncCoordinator: (any FamilySyncCoordinating)?
+    private let familySyncAccessManagement: (@MainActor (ProfileID) async throws -> Void)?
     private let notificationScheduler: (any LearningNotificationScheduling)?
     private let voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)?
     private let voiceprintRepository: (any DeviceVoiceprintRepository)?
@@ -144,6 +145,8 @@ final class GuardianDashboardViewModel: ObservableObject {
         audioExperienceService: any AudioExperienceService =
             SilentAudioExperienceService(),
         familySyncCoordinator: (any FamilySyncCoordinating)? = nil,
+        familySyncAccessManagement:
+            (@MainActor (ProfileID) async throws -> Void)? = nil,
         notificationScheduler: (any LearningNotificationScheduling)? = nil,
         voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)? = nil,
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
@@ -157,6 +160,7 @@ final class GuardianDashboardViewModel: ObservableObject {
         self.audioPromptService = audioPromptService
         self.audioExperienceService = audioExperienceService
         self.familySyncCoordinator = familySyncCoordinator
+        self.familySyncAccessManagement = familySyncAccessManagement
         self.notificationScheduler = notificationScheduler
         self.voiceprintEnrollmentService = voiceprintEnrollmentService
         self.voiceprintRepository = voiceprintRepository
@@ -317,6 +321,54 @@ final class GuardianDashboardViewModel: ObservableObject {
             } catch {
                 errorMessage = "Family data could not be loaded. Please try again."
             }
+        }
+    }
+
+    /// Applies a committed Family Sync refresh without resetting the parent's
+    /// navigation. If the Profile currently being viewed was deleted on
+    /// another device, move to the Profile chooser immediately.
+    func refreshAfterExternalSyncAndWait() async {
+        let previouslyVisibleProfileID = snapshot?.profile.id
+        do {
+            var family = try await store.familySnapshot()
+            let visibleProfileStillExists =
+                previouslyVisibleProfileID.map {
+                    profileID in
+                    family.profiles.contains(where: { $0.id == profileID })
+                } ?? false
+            let targetProfileID =
+                visibleProfileStillExists
+                ? previouslyVisibleProfileID!
+                : family.selectedProfileID
+            let dashboard: GuardianDashboardSnapshot
+            if visibleProfileStillExists {
+                dashboard = try await store.dashboardSnapshot(
+                    for: targetProfileID
+                )
+            } else {
+                dashboard = try await store.selectProfile(id: targetProfileID)
+                family = try await store.familySnapshot()
+            }
+            familySnapshot = family
+            snapshot = dashboard
+            showWordRemovalState(for: dashboard.profile.id)
+            if previouslyVisibleProfileID != nil, !visibleProfileStillExists {
+                destination = .profiles
+            }
+            if case .reports = destination {
+                report = try await store.report(for: reportPeriod)
+            }
+            await applyAudioSnapshot()
+        } catch GuardianFamilyStoreError.profileNotFound {
+            // A remote owner can remove the final shared Profile. Keep the
+            // parent in a recoverable creation flow instead of a stale editor.
+            familySnapshot = nil
+            snapshot = nil
+            report = nil
+            destination = .profileEditor(nil)
+        } catch {
+            errorMessage =
+                "Family Sync finished, but this page could not refresh. Please try again."
         }
     }
 
@@ -670,6 +722,10 @@ final class GuardianDashboardViewModel: ObservableObject {
         }
     }
 
+    var canManageFamilyAccess: Bool {
+        familySyncAccessManagement != nil
+    }
+
     func syncNow() {
         guard let familySyncCoordinator, isFamilySyncEnabled else { return }
         Task {
@@ -740,6 +796,24 @@ final class GuardianDashboardViewModel: ObservableObject {
                 refresh()
             } catch {
                 errorMessage = "That family invitation could not be accepted."
+            }
+        }
+    }
+
+    func manageFamilyAccess() {
+        guard isFamilySyncEnabled,
+            let familySyncAccessManagement,
+            let profileID = snapshot?.profile.id
+        else { return }
+        Task {
+            guard await sensitiveActionAuthorizer.authorize(.manageGuardians) else {
+                return
+            }
+            do {
+                try await familySyncAccessManagement(profileID)
+            } catch {
+                errorMessage =
+                    "Family access could not be opened. Local data is safe."
             }
         }
     }
