@@ -89,6 +89,8 @@ public struct TadaWordsApplicationView: View {
     private let imageTextRecognitionService: any ImageTextRecognizing
     private let pictureHintProvider: any WordPictureHintProviding
     private let speechPermissionActions: SpeechPermissionActions
+    private let currentSpeechPermissionState: @Sendable () async -> SpeechPermissionState
+    private let requestSpeechPermissions: @Sendable () async -> SpeechPermissionState
     private let notificationScheduler: (any LearningNotificationScheduling)?
     private let voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)?
     private let voiceprintRepository: (any DeviceVoiceprintRepository)?
@@ -123,6 +125,8 @@ public struct TadaWordsApplicationView: View {
         imageTextRecognitionService = Self.makeDemoImageTextRecognitionService()
         pictureHintProvider = NoWordPictureHintProvider()
         speechPermissionActions = .unavailable
+        currentSpeechPermissionState = { .unavailable }
+        requestSpeechPermissions = { .unavailable }
         notificationScheduler = nil
         voiceprintEnrollmentService = nil
         voiceprintRepository = nil
@@ -149,7 +153,10 @@ public struct TadaWordsApplicationView: View {
             NoImageTextRecognitionService(),
         pictureHintProvider: any WordPictureHintProviding =
             NoWordPictureHintProvider(),
-        requestSpeechAuthorization: @escaping @Sendable () async -> Bool,
+        currentSpeechPermissionState:
+            @escaping @Sendable () async -> SpeechPermissionState,
+        requestSpeechPermissions:
+            @escaping @Sendable () async -> SpeechPermissionState,
         audioExperienceService: any AudioExperienceService =
             SilentAudioExperienceService(),
         familySyncTransport: (any FamilySyncTransport)? = nil,
@@ -183,9 +190,11 @@ public struct TadaWordsApplicationView: View {
         self.handwritingRecognitionService = handwritingRecognitionService
         self.imageTextRecognitionService = imageTextRecognitionService
         self.pictureHintProvider = pictureHintProvider
-        speechPermissionActions = SpeechPermissionActions(
-            requestAuthorization: requestSpeechAuthorization
-        )
+        self.currentSpeechPermissionState = currentSpeechPermissionState
+        self.requestSpeechPermissions = requestSpeechPermissions
+        speechPermissionActions = SpeechPermissionActions {
+            await currentSpeechPermissionState().isAuthorized
+        }
         self.notificationScheduler = notificationScheduler
         self.voiceprintEnrollmentService = voiceprintEnrollmentService
         self.voiceprintRepository = voiceprintRepository
@@ -406,8 +415,8 @@ public struct TadaWordsApplicationView: View {
                             notificationScheduler: notificationScheduler,
                             voiceprintEnrollmentService: voiceprintEnrollmentService,
                             voiceprintRepository: voiceprintRepository,
-                            requestSpeechAuthorization:
-                                speechPermissionActions.requestAuthorization,
+                            currentSpeechPermissionState: currentSpeechPermissionState,
+                            requestSpeechPermissions: requestSpeechPermissions,
                             imageTextRecognitionService: imageTextRecognitionService,
                             pictureHintProvider: pictureHintProvider,
                             sensitiveActionAuthorizer: sensitiveActionAuthorizer,

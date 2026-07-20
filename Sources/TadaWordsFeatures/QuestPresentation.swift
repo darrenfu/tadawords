@@ -34,14 +34,20 @@ enum KidSubmissionControl: CaseIterable {
 
 enum KidReadMicrophonePresentation {
     static func visibleStatus(
-        isRequestingPermission: Bool,
+        isCheckingPermission: Bool,
         isListening: Bool
     ) -> String? {
-        if isRequestingPermission {
+        if isCheckingPermission {
             return "Checking microphone…"
         }
         return isListening ? "Listening…" : nil
     }
+}
+
+enum ChildSpeechPermissionCopy {
+    static let blockedMessage = "Ask a Parent to set up the microphone."
+    static let parentSetupHint =
+        "Parents can set up Speech & Microphone in App & Family."
 }
 
 enum QuestBlockReason: Equatable {
@@ -175,12 +181,12 @@ struct QuestSession: Identifiable {
     }
 }
 
-enum ReadPermissionTimingPolicy {
+enum ReadPermissionCheckTimingPolicy {
     static func shouldResetResponseClock(
-        hasRequestedPermission: Bool,
+        hasCheckedPermission: Bool,
         wasPreviouslyDenied: Bool
     ) -> Bool {
-        !hasRequestedPermission || wasPreviouslyDenied
+        !hasCheckedPermission || wasPreviouslyDenied
     }
 }
 

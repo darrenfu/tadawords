@@ -984,7 +984,9 @@ final class ApplicationCompositionTests: XCTestCase {
         )
     }
 
-    func testConstructingProductionCompositionDoesNotRequestSpeechPermission() async throws {
+    func testConstructingProductionCompositionDoesNotCheckOrRequestSpeechPermission()
+        async throws
+    {
         let applicationSupportDirectory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(applicationSupportDirectory) }
         let recorder = AuthorizationRecorder()
@@ -995,13 +997,19 @@ final class ApplicationCompositionTests: XCTestCase {
             audioPromptService: AudioStub(),
             speechRecognitionService: SpeechStub(),
             handwritingRecognitionService: HandwritingStub(),
-            requestSpeechAuthorization: {
+            currentSpeechPermissionState: {
+                await recorder.recordCheck()
+                return .unavailable
+            },
+            requestSpeechPermissions: {
                 await recorder.recordRequest()
-                return false
+                return .unavailable
             }
         )
 
+        let checkCount = await recorder.checkCount
         let requestCount = await recorder.requestCount
+        XCTAssertEqual(checkCount, 0)
         XCTAssertEqual(requestCount, 0)
     }
 
@@ -1333,7 +1341,12 @@ final class ApplicationCompositionTests: XCTestCase {
 }
 
 private actor AuthorizationRecorder {
+    private(set) var checkCount = 0
     private(set) var requestCount = 0
+
+    func recordCheck() {
+        checkCount += 1
+    }
 
     func recordRequest() {
         requestCount += 1

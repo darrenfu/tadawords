@@ -7,20 +7,20 @@ final class KidVisualFirstPresentationTests: XCTestCase {
     func testIdleReadMicrophoneNeedsNoVisibleInstruction() {
         XCTAssertNil(
             KidReadMicrophonePresentation.visibleStatus(
-                isRequestingPermission: false,
+                isCheckingPermission: false,
                 isListening: false
             )
         )
         XCTAssertEqual(
             KidReadMicrophonePresentation.visibleStatus(
-                isRequestingPermission: false,
+                isCheckingPermission: false,
                 isListening: true
             ),
             "Listening…"
         )
         XCTAssertEqual(
             KidReadMicrophonePresentation.visibleStatus(
-                isRequestingPermission: true,
+                isCheckingPermission: true,
                 isListening: false
             ),
             "Checking microphone…"

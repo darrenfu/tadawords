@@ -11,11 +11,13 @@ struct GuardianFamilySyncDiagnosticReport: Equatable {
         status: FamilySyncStatus,
         isEnabled: Bool,
         profileErasure: GuardianProfileErasurePresentation? = nil,
+        remoteNotificationRegistration:
+            FamilySyncRemoteNotificationRegistrationState = .notRequested,
         generatedAt: Date = Date()
     ) {
         var fields = [
             "Tada Words Family Sync Diagnostics",
-            "Schema: 1",
+            "Schema: 2",
             "Generated: \(generatedAt.ISO8601Format())",
             "Enabled on this device: \(isEnabled ? "yes" : "no")",
         ]
@@ -49,6 +51,27 @@ struct GuardianFamilySyncDiagnosticReport: Equatable {
             fields.append("State: needs_attention")
             fields.append("Pending changes: \(pendingCount)")
         }
+        if case .deviceOnly = status {
+            fields.append("Push registration: unavailable_in_device_only_mode")
+        } else {
+            switch remoteNotificationRegistration {
+            case .notRequested:
+                fields.append("Push registration: not_requested")
+            case .pending(let since):
+                fields.append("Push registration: pending")
+                fields.append("Push registration updated: \(since.ISO8601Format())")
+            case .unverified(let at):
+                fields.append("Push registration: unverified")
+                fields.append("Push registration updated: \(at.ISO8601Format())")
+            case .registered(let at):
+                fields.append("Push registration: registered")
+                fields.append("Push registration updated: \(at.ISO8601Format())")
+            case .failed(let category, let at):
+                fields.append("Push registration: failed")
+                fields.append("Push registration failure: \(category.rawValue)")
+                fields.append("Push registration updated: \(at.ISO8601Format())")
+            }
+        }
         if let profileErasure {
             fields.append(
                 "Profile erasure state: \(profileErasure.diagnosticState)"
@@ -75,6 +98,7 @@ struct GuardianFamilySyncPresentation: Equatable {
     let showsPreferenceToggle: Bool
     let showsSyncAction: Bool
     let showsInvitationActions: Bool
+    let showsRemoteNotificationRegistration: Bool
 
     init(status: FamilySyncStatus, isEnabled: Bool) {
         if case .deviceOnly(let message) = status {
@@ -85,11 +109,13 @@ struct GuardianFamilySyncPresentation: Equatable {
             showsPreferenceToggle = false
             showsSyncAction = false
             showsInvitationActions = false
+            showsRemoteNotificationRegistration = false
             return
         }
 
         navigationTitle = "Family sync"
         showsPreferenceToggle = true
+        showsRemoteNotificationRegistration = true
         if !isEnabled || status.isOptedOut {
             title = "Family sync is off"
             message =
@@ -162,6 +188,49 @@ struct GuardianFamilySyncPresentation: Equatable {
 
     private static func formatted(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .shortened)
+    }
+}
+
+struct GuardianRemoteNotificationRegistrationPresentation {
+    let title: String
+    let message: String
+    let symbol: String
+    let showsRetryAction: Bool
+
+    init(state: FamilySyncRemoteNotificationRegistrationState) {
+        switch state {
+        case .notRequested:
+            title = "Push registration not requested"
+            message = "It starts when a parent turns on Family Sync."
+            symbol = "bell.slash.fill"
+            showsRetryAction = false
+        case .pending:
+            title = "Registering for background updates"
+            message = "Waiting for Apple to finish this device’s registration."
+            symbol = "hourglass"
+            showsRetryAction = false
+        case .unverified:
+            title = "Registration result unavailable"
+            message =
+                "A previous request may have finished after Family Sync changed. "
+                + "Restart Tada Words to check again."
+            symbol = "questionmark.circle.fill"
+            showsRetryAction = false
+        case .registered:
+            title = "Background notifications registered"
+            message =
+                "Apple registered background notifications for this app. "
+                + "CloudKit delivery is checked separately."
+            symbol = "checkmark.circle.fill"
+            showsRetryAction = false
+        case .failed(let category, _):
+            title = "Background registration needs attention"
+            message =
+                "Apple could not register background notifications "
+                + "(\(category.rawValue))."
+            symbol = "exclamationmark.triangle.fill"
+            showsRetryAction = true
+        }
     }
 }
 
@@ -412,6 +481,8 @@ struct GuardianFamilySyncView: View {
     let onManageAccess: () -> Void
     let onAcceptShare: () -> Void
     let onRetryProfileErasure: () -> Void
+    @State private var remoteNotificationRegistration:
+        FamilySyncRemoteNotificationRegistrationState = .notRequested
 
     init(
         status: FamilySyncStatus,
@@ -447,6 +518,12 @@ struct GuardianFamilySyncView: View {
         GuardianFamilySyncPresentation(status: status, isEnabled: isEnabled)
     }
 
+    private var remoteNotificationPresentation: GuardianRemoteNotificationRegistrationPresentation {
+        GuardianRemoteNotificationRegistrationPresentation(
+            state: remoteNotificationRegistration
+        )
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.large) {
@@ -458,6 +535,39 @@ struct GuardianFamilySyncView: View {
                             .accessibilityIdentifier("guardian.sync.status")
                         Text(presentation.message)
                             .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                        if presentation.showsRemoteNotificationRegistration {
+                            Divider()
+                            Label(
+                                remoteNotificationPresentation.title,
+                                systemImage: remoteNotificationPresentation.symbol
+                            )
+                            .font(
+                                .system(
+                                    .headline,
+                                    design: .rounded,
+                                    weight: .bold
+                                )
+                            )
+                            .accessibilityIdentifier(
+                                "guardian.sync.push-registration"
+                            )
+                            Text(remoteNotificationPresentation.message)
+                                .foregroundStyle(
+                                    GuardianSemanticTokens.secondaryForeground
+                                )
+                            if remoteNotificationPresentation.showsRetryAction {
+                                Button("Retry registration") {
+                                    Task {
+                                        await FamilySyncRemoteNotificationBridge
+                                            .shared.retryRegistrationIfRequested()
+                                    }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .accessibilityIdentifier(
+                                    "guardian.sync.push-registration.retry"
+                                )
+                            }
+                        }
                         if presentation.showsSyncAction {
                             Button("Sync now", action: onSyncNow)
                                 .buttonStyle(.borderedProminent)
@@ -467,7 +577,9 @@ struct GuardianFamilySyncView: View {
                             item: GuardianFamilySyncDiagnosticReport(
                                 status: status,
                                 isEnabled: isEnabled,
-                                profileErasure: profileErasure
+                                profileErasure: profileErasure,
+                                remoteNotificationRegistration:
+                                    remoteNotificationRegistration
                             ).text
                         ) {
                             Label(
@@ -574,6 +686,14 @@ struct GuardianFamilySyncView: View {
             .frame(maxWidth: 760, alignment: .leading)
             .padding(GuardianPrimitiveTokens.Spacing.large)
             .frame(maxWidth: .infinity)
+        }
+        .task {
+            let states = await FamilySyncRemoteNotificationBridge.shared
+                .registrationStates()
+            for await state in states {
+                guard !Task.isCancelled else { break }
+                remoteNotificationRegistration = state
+            }
         }
         .accessibilityIdentifier("guardian.sync.page")
     }

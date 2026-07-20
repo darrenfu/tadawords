@@ -172,6 +172,7 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
         XCTAssertFalse(presentation.showsPreferenceToggle)
         XCTAssertFalse(presentation.showsSyncAction)
         XCTAssertFalse(presentation.showsInvitationActions)
+        XCTAssertFalse(presentation.showsRemoteNotificationRegistration)
     }
 
     func testOptedOutICloudModeShowsOnlyExplicitPreferenceControl() {
@@ -229,6 +230,10 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
                 nextRetryAt: Date(timeIntervalSince1970: 1_735_689_900)
             ),
             isEnabled: true,
+            remoteNotificationRegistration: .failed(
+                category: .connectivity,
+                at: Date(timeIntervalSince1970: 1_735_689_700)
+            ),
             generatedAt: Date(timeIntervalSince1970: 1_735_689_600)
         ).text
 
@@ -236,15 +241,117 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
         XCTAssertTrue(report.contains("Pending changes: 3"))
         XCTAssertTrue(report.contains("Retry count: 2"))
         XCTAssertTrue(report.contains("Next retry:"))
+        XCTAssertTrue(report.contains("Push registration: failed"))
+        XCTAssertTrue(report.contains("Push registration failure: connectivity"))
+        XCTAssertTrue(report.contains("Push registration updated:"))
         for childPayload in [
             "Mia",
             "dog",
             "profile-photo-",
             "voiceprint",
             "payloadChecksum",
+            "device token",
+            "private details",
         ] {
             XCTAssertFalse(report.contains(childPayload))
         }
+    }
+
+    func testDiagnosticExportDescribesEveryRegistrationStateWithoutInventingTime() {
+        let generatedAt = Date(timeIntervalSince1970: 1_735_689_600)
+
+        let notRequested = GuardianFamilySyncDiagnosticReport(
+            status: .idle,
+            isEnabled: false,
+            remoteNotificationRegistration: .notRequested,
+            generatedAt: generatedAt
+        ).text
+        XCTAssertTrue(notRequested.contains("Push registration: not_requested"))
+        XCTAssertFalse(notRequested.contains("Push registration updated:"))
+
+        let pending = GuardianFamilySyncDiagnosticReport(
+            status: .syncing(pendingCount: 0),
+            isEnabled: true,
+            remoteNotificationRegistration: .pending(since: generatedAt),
+            generatedAt: generatedAt
+        ).text
+        XCTAssertTrue(pending.contains("Push registration: pending"))
+
+        let unverified = GuardianFamilySyncDiagnosticReport(
+            status: .syncing(pendingCount: 0),
+            isEnabled: true,
+            remoteNotificationRegistration: .unverified(at: generatedAt),
+            generatedAt: generatedAt
+        ).text
+        XCTAssertTrue(unverified.contains("Push registration: unverified"))
+
+        let registered = GuardianFamilySyncDiagnosticReport(
+            status: .synced(at: generatedAt),
+            isEnabled: true,
+            remoteNotificationRegistration: .registered(at: generatedAt),
+            generatedAt: generatedAt
+        ).text
+        XCTAssertTrue(registered.contains("Push registration: registered"))
+        XCTAssertFalse(registered.contains("Push registration failure:"))
+    }
+
+    func testDeviceOnlyDiagnosticDoesNotDescribeAPNsRegistration() {
+        let generatedAt = Date(timeIntervalSince1970: 1_735_689_600)
+        let report = GuardianFamilySyncDiagnosticReport(
+            status: .deviceOnly(message: "This device keeps data locally."),
+            isEnabled: false,
+            remoteNotificationRegistration: .registered(at: generatedAt),
+            generatedAt: generatedAt
+        ).text
+
+        XCTAssertTrue(
+            report.contains(
+                "Push registration: unavailable_in_device_only_mode"
+            )
+        )
+        XCTAssertFalse(report.contains("Push registration: registered"))
+    }
+
+    func testRegisteredPushPresentationDoesNotClaimCloudKitDelivery() {
+        let presentation = GuardianRemoteNotificationRegistrationPresentation(
+            state: .registered(at: Date(timeIntervalSince1970: 1_735_689_600))
+        )
+
+        XCTAssertEqual(
+            presentation.title,
+            "Background notifications registered"
+        )
+        XCTAssertEqual(
+            presentation.message,
+            "Apple registered background notifications for this app. "
+                + "CloudKit delivery is checked separately."
+        )
+        XCTAssertFalse(presentation.showsRetryAction)
+        XCTAssertFalse(
+            presentation.message.localizedCaseInsensitiveContains("can receive")
+        )
+        XCTAssertFalse(
+            presentation.message.localizedCaseInsensitiveContains(
+                "iCloud change notices"
+            )
+        )
+    }
+
+    func testFailedPushPresentationOffersRegistrationRetryOnly() {
+        let presentation = GuardianRemoteNotificationRegistrationPresentation(
+            state: .failed(
+                category: .connectivity,
+                at: Date(timeIntervalSince1970: 1_735_689_600)
+            )
+        )
+
+        XCTAssertTrue(presentation.showsRetryAction)
+        XCTAssertTrue(presentation.message.contains("connectivity"))
+        XCTAssertFalse(
+            presentation.message.localizedCaseInsensitiveContains(
+                "Try Family Sync"
+            )
+        )
     }
 
     func testProfileErasureAggregateUsesMostSevereStateAndCountsOnlyThatState() throws {

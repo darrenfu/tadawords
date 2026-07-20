@@ -89,7 +89,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "#55",
             "Provisional",
             "BLOCKED BY ISSUE #55",
-            "Parents-gated permission setup",
+            "SYSTEM_PERMISSION_INVENTORY_v0.7.8.md",
+            "Child Read has no request capability",
             "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/",
         ]
         for claim in requiredClaims {

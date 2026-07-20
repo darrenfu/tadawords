@@ -11,17 +11,25 @@ final class TadaWordsAppDelegate: NSObject, UIApplicationDelegate {
         label: "com.tadawords.family-sync.connectivity"
     )
     private var hasObservedUnsatisfiedPath = false
+    private let remoteNotificationRegistrationObserver =
+        AppleRemoteNotificationRegistrationObserver()
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         _ = launchOptions
+        let remoteNotificationRegistrationObserver =
+            remoteNotificationRegistrationObserver
         Task {
             await FamilySyncRemoteNotificationBridge.shared.configureRegistration(
-                register: {
+                register: { attempt in
                     await MainActor.run {
-                        UIApplication.shared.registerForRemoteNotifications()
+                        remoteNotificationRegistrationObserver
+                            .beginPlatformRegistration(attempt) {
+                                UIApplication.shared
+                                    .registerForRemoteNotifications()
+                            }
                     }
                 },
                 unregister: {
@@ -74,6 +82,25 @@ final class TadaWordsAppDelegate: NSObject, UIApplicationDelegate {
                 completionHandler(.failed)
             }
         }
+    }
+
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken _: Data
+    ) {
+        _ = application
+        remoteNotificationRegistrationObserver.enqueueDidRegister()
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        _ = application
+        let category =
+            AppleRemoteNotificationRegistrationObserver
+            .failureCategory(for: error)
+        remoteNotificationRegistrationObserver.enqueueDidFail(category: category)
     }
 
     private func handlePathUpdate(isSatisfied: Bool) {

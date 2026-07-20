@@ -761,7 +761,7 @@ gates pass.
 | APPSTORE-018 | Documentation | Submission metadata | Keep one versioned metadata, review-notes, screenshot, claim, and exact-RC preflight pack within Apple field limits and synchronized with the merged privacy/content-rights evidence. | v0.7.5 source candidate and automated contract coverage added | Recount final localized fields, validate exact signed iPhone/iPad screenshots and reviewer paths, then enter only the accepted values through the human-gated submission workflow |
 | APPSTORE-018-RIGHTS | Blocker | Copyright/content rights | Treat `2026 Pawgoo LLC` as provisional and do not make the App Store content-rights representation until the voice entitlement and Pawgoo rights chain are documented. | Merged inventory identifies every shipped content class; #32 and #33 remain open | Preserve the account/tier evidence and obtain an authorized Pawgoo authorship/rights-chain attestation for every selected storefront |
 | APPSTORE-018-DATA | Blocker | Privacy/public claims | Keep core practice/no-Pawgoo-account separate from parent-opted-in Family Sync, which needs an available iCloud account. Do not claim complete deletion while the final Profile cannot be deleted or a full reset performed. | Source boundaries and caveats are in the metadata pack; #19, #28, and #54 remain open | Pass production destructive sync and final-Profile/delete-all acceptance, choose/test the Keychain lifecycle, and deploy/verify matching Pawgoo Privacy and Support copy |
-| APPSTORE-018-KIDS | Blocker | Permission requests | Do not direct an App Reviewer to grant Speech or Microphone authorization from the child-facing Read screen. Apple Kids guidance expects permission requests behind a parental gate. | Current source can trigger both system prompts from Read; metadata and review steps are blocked by #55 | Move setup behind Parents, cover deny/retry/already-authorized states, and verify the exact signed flow on iPhone and iPad before replacing the reviewer placeholder |
+| APPSTORE-018-KIDS | Blocker | Permission requests | Do not direct an App Reviewer to grant Speech or Microphone authorization from the child-facing Read screen. Tada Words adopts a conservative parent-owned privacy policy for this setup; Apple does not explicitly require a parental gate before every OS permission prompt. | Current source can trigger both system prompts from Read; metadata and review steps are blocked by #55 | Move setup behind Parents, cover deny/retry/already-authorized states, and verify the exact signed flow on iPhone and iPad before replacing the reviewer placeholder |
 
 ### 2026-07-19 v0.7.5 notes
 
@@ -854,6 +854,123 @@ signed cross-device acceptance remain separate gates under #19, #22, and #23.
 - The pre-commit repository gate passes 998 Swift tests, 40 Issue Agent tests,
   and 11 release-preflight tests. Simulator and physical acceptance evidence
   will be recorded only after the exact committed HEAD passes.
+
+## v0.7.7 — 2026-07-19
+
+Target release: `v0.7.7`
+
+Branch: `codex/apns-release-preflight-v0.7.7`
+
+Build: `2026071907`
+
+Overall state: issue #56 is implemented at the source/tooling layer. The
+canonical release policy now accepts a Development- or Production-signed
+archive only as intermediate evidence and requires the exact exported app or
+IPA to carry Production APNs and CloudKit entitlements. No Apple resource,
+certificate, provisioning profile, archive, export, CloudKit schema, or App
+Store Connect record is created or changed by this batch.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V077-REL-001 | P0 release | APNs preflight | Bind push entitlement evidence to the exact signed archive and export without accepting LocalQA, source settings, screenshots, or an archive alone as Production proof. | Source/tooling complete; signed export open | Focused preflight: 16/16. Still required: full exact-HEAD repository and simulator gates, signed LocalQA identity/install/launch on iPhone and iPad, and an eventual PawGoo Production archive/export manifest. |
+
+### 2026-07-19 v0.7.7 notes
+
+- Reserved version `0.7.7` and build `2026071907` for reclaimed issue #56.
+- Added the literal source contract
+  `aps-environment = $(APS_ENVIRONMENT)` to the canonical policy.
+- Added `aps-environment=production` as a required exported-app entitlement.
+  Missing, Development, or any other exported value fails closed.
+- Kept an archive-specific override for lowercase `development` or
+  `production`; this never relaxes the exported app or IPA requirement.
+- Added canonical-policy tests for the exact source expression, valid
+  Production export, missing value, Development export, Development archive,
+  LocalQA rejection, and unexpected extra entitlements.
+- Documented that the manifest preserves archive and export paths, hashes, and
+  entitlement dictionaries separately. Only the exact export is Production
+  push evidence.
+- The focused release-preflight suite passes 16/16. A real signed archive and
+  exported app do not yet exist, so this batch makes no Production-readiness
+  claim beyond the source/tooling gate.
+
+## v0.7.8 — 2026-07-20
+
+Target release: `v0.7.8`
+
+Branch: `codex/issue55-parent-speech-permission-v0.7.8`
+
+Build: `2026071908`
+
+Overall state: source implementation separates the child check-only Speech and
+Microphone boundary from the Parents-only permission request capability. Exact
+signed first-install, denied, authorized, restricted, and revoked acceptance on
+one iPhone and one iPad remains required before #55 or the App Store gate can
+close.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| APPSTORE-019-KIDS | P1 privacy | Permission requests | Child launch, Profile switch, Read entry, replay, relaunch, and debug demo/deep-link routes must never trigger Speech Recognition or Microphone system prompts. Parents needs a clear setup route with separate status for both permissions. | Source implemented; exact-device gate open | Deterministic negative route, status, authorized-compatibility, and fail-closed tests; then exact signed first-install, denied, authorized, and revoked verification on one iPhone and one iPad |
+
+### 2026-07-20 v0.7.8 notes
+
+- Reserved existing version `0.7.8` and build `2026071908`; no competing branch
+  or version was created.
+- Removed all requesting capability from `TadaWordsFeatures`. Child Read can
+  only check existing authorization and shows an age-appropriate Ask a Parent
+  state without counting the permission failure as a learning attempt.
+- Added Parents → App & Family → Speech & Microphone with independent Speech
+  Recognition and Microphone status, explicit setup, already-authorized
+  compatibility, and iOS Settings guidance for denied, restricted, or revoked
+  access.
+- Kept Voice setup as a second adult-owned permission entry point. The Apple
+  controller requests only each still-undetermined permission and never
+  re-requests a denied or restricted status.
+- Added `Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md`, enumerating Speech,
+  Microphone, Camera, Photos, Notifications, device-owner authentication, and
+  non-prompting APNs/CloudKit service ownership.
+- Source/unit/documentation gates do not claim simulator, signed-device, or
+  human acceptance. Those remain serialized release evidence under #55/#22.
+- The pre-commit repository gate passes 1,016 Swift tests, 40 Issue Agent tests,
+  and 16 release-preflight tests after integrating the v0.7.7 Production APNs
+  gate. Exact committed-HEAD verification is recorded separately after the
+  implementation commit.
+## v0.7.9 — 2026-07-19
+
+Target release: `v0.7.9`
+
+Branch: `codex/apns-registration-observability-v0.7.9`
+
+Build: `2026071909`
+
+Overall state: source implementation and the repository gate are complete for
+the privacy-safe APNs registration observability tracked by #64. Exact signed
+iPhone/iPad registration evidence and real background convergence remain
+separate gates under #60 and #62.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V079-SYNC-001 | P0 observability | Family Sync push registration | Distinguish not-requested, pending, registered, and failed APNs registration without retaining or exporting the opaque device token. | Source complete; live acceptance open | 1042/1042 Swift, 40/40 Issue Agent, and 16/16 release-preflight tests pass on the combined source candidate. Still required: exact signed iPhone and iPad callbacks under #60; real background convergence under #62. |
+
+### 2026-07-19 v0.7.9 notes
+
+- Reserved version `0.7.9` and build `2026071909` for the reclaimed #64 batch.
+- Added the UIKit success and failure delegate callbacks. The success callback
+  has no local token identifier, and no device-token bytes enter the Domain,
+  Parent UI, diagnostics, logs, persistence, hashing, or export paths.
+- Kept only one process-local state value and one unread stream value per live
+  observer. Relaunch begins at not-requested and retries return to pending.
+- Mapped Apple failures into configuration, connectivity, or system categories
+  without exporting the original domain, code, description, device identity,
+  Apple Account detail, Profile content, or child data.
+- Added Parent-visible registration state and schema-2 Family Sync diagnostics
+  with the coarse state, optional category, and update timestamp.
+- Late callbacks after opt-out cannot replace not-requested state. Registration
+  failure never blocks local practice or claims a CloudKit convergence failure.
+- Notification-presentation authorization is not used as evidence for silent
+  CloudKit push registration.
+- The combined Speech/Microphone and APNs integration focus passes 110/110.
+  The complete combined source gate passes 1,042 Swift tests, 40 Issue Agent
+  tests, and 16 release-preflight tests.
 
 ## v0.7.10 — 2026-07-19
 

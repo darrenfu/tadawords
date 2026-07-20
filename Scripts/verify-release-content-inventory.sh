@@ -140,7 +140,62 @@ verify_preset_catalog() {
     assert_sha256 "$preset_catalog" "f5b0a273a816d97de265f82f8a16d56bc45cbc2be19d585dfda05449827e3fd0" "preset catalog"
 }
 
-for command in jq plutil shasum cmp; do
+verify_parent_notice_route() {
+    local guardian_model="$1"
+    local route_result
+    route_result="$(
+        awk '
+            function finish_case() {
+                if (case_has_notice && case_has_app_and_family) {
+                    route_found = 1
+                }
+                case_has_notice = 0
+                case_has_app_and_family = 0
+            }
+
+            /var parentSectionForBack: GuardianParentSection\?/ {
+                in_parent_mapping = 1
+                next
+            }
+
+            in_parent_mapping && /^        case / {
+                finish_case()
+            }
+
+            in_parent_mapping && index($0, ".thirdPartyNotices") {
+                case_has_notice = 1
+            }
+
+            in_parent_mapping && index($0, ".appAndFamily") {
+                case_has_app_and_family = 1
+            }
+
+            in_parent_mapping && /^    }$/ {
+                finish_case()
+                in_parent_mapping = 0
+            }
+
+            END {
+                if (route_found) {
+                    print "routed"
+                }
+            }
+        ' "$guardian_model"
+    )"
+    [[ "$route_result" == "routed" ]] \
+        || fail "Third-Party Notices is not routed back to App & Family"
+}
+
+if [[ "${1:-}" == "--verify-parent-notice-route" ]]; then
+    [[ "$#" -eq 2 ]] \
+        || fail "usage: $0 --verify-parent-notice-route GuardianDashboardViewModel.swift"
+    command -v awk >/dev/null || fail "awk is required"
+    verify_parent_notice_route "$2"
+    echo "Third-Party Notices route verified"
+    exit 0
+fi
+
+for command in jq plutil shasum cmp awk; do
     command -v "$command" >/dev/null || fail "$command is required"
 done
 
@@ -193,8 +248,7 @@ grep -Fq 'case .thirdPartyNotices:' "$guardian_root" \
     || fail "Third-Party Notices destination is missing from GuardianRootView"
 grep -Fq 'GuardianThirdPartyNoticesView(' "$guardian_root" \
     || fail "Third-Party Notices destination does not render its view"
-grep -Fq 'case .familySync, .thirdPartyNotices:' "$guardian_model" \
-    || fail "Third-Party Notices is not routed back to App & Family"
+verify_parent_notice_route "$guardian_model"
 
 assert_sha256 "$repo_root/Apps/TadaWordsApp/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" "ce1782b295901de1a7cc82f6f61cfc5ffbebf9bc0745256a573058bd1281e637" "app icon"
 assert_sha256 "$repo_root/Apps/TadaWordsApp/Assets.xcassets/TadaWordsMark.imageset/TadaWordsAppIcon.svg" "e47bfb19efa22e38db1b2a796bb47bb87993fc35b5ae4e6ba6624a9ec5e7b816" "Tada Words mark"
