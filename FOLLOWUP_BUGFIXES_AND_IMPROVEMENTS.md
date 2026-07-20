@@ -854,3 +854,70 @@ signed cross-device acceptance remain separate gates under #19, #22, and #23.
 - The pre-commit repository gate passes 998 Swift tests, 40 Issue Agent tests,
   and 11 release-preflight tests. Simulator and physical acceptance evidence
   will be recorded only after the exact committed HEAD passes.
+
+## v0.7.10 — 2026-07-19
+
+Target release: `v0.7.10`
+
+Branch: `codex/second-device-profile-adoption-v0.7.10`
+
+Build: `2026071910`
+
+Overall state: issue #66 source implementation and deterministic independent-
+UUID coverage are complete. Exact signed iPhone plus clean iPad production-
+CloudKit acceptance remains part of the later #62 convergence gate; this batch
+does not install devices, mutate Apple portals, or merge itself.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0710-SYNC-001 | P0 bug | Second-device onboarding | Let a parent discover and adopt an existing synchronized kid Profile before any random local Profile is committed. Preserve the exact UUID and synchronized fields; never merge by nickname, age, avatar, photo, or similarity. | Source complete; signed production acceptance open | Independent-UUID unit/integration and simulator UI coverage, full repository gate, then exact-HEAD one-iPhone plus clean-iPad CloudKit acceptance under #62 |
+
+### 2026-07-19 v0.7.10 notes
+
+- Reserved version `0.7.10` and build `2026071910` for the reclaimed #66 batch,
+  leaving the independently reserved lower release slots untouched.
+- Added an explicit transport bootstrap policy. Production CloudKit now leaves
+  a genuinely fresh Profile repository empty until a parent chooses to find an
+  existing kid or explicitly creates a separate new kid; device-only installs
+  retain their local seed behavior.
+- Added a Parent-owned first-run choice, privacy confirmation, retryable iCloud
+  discovery, exact Profile selection for one or many children, and an explicit
+  offline new-child route.
+- Adoption persists only the exact selected Profile UUID as this device's last
+  selection and completes onboarding without rewriting the Profile. Voiceprint
+  enrollment remains device-local.
+- Discovery intent is durable across a pre-adoption quit or restart, so an
+  already downloaded remote Profile never becomes an editable local new-kid
+  seed. Completing either exact adoption or explicit creation clears that
+  intent; schema-v1 onboarding state remains readable under the v2 policy.
+- Explicit creation durably reserves one exact pending Profile UUID before
+  settings, Profile, child-session, or completion-marker writes. A retry after
+  interruption reuses that UUID, so it cannot overwrite a discovered remote
+  Profile or create a second local Profile. Focused tests interrupt and resume
+  at every write boundary.
+- A discovery retry or relaunch continues the already enabled Family Sync
+  session with `synchronize()` instead of re-enabling it, preserving the
+  production CKSyncEngine cursor and inbox state. The simulator fixture tracks
+  acknowledgement with an independent durable cursor marker rather than
+  inferring it from local Profile presence.
+- Temporary iCloud unavailability during account confirmation is presented as
+  an offline retry state; a missing or restricted iCloud account remains a
+  distinct unavailable state. Neither path creates a Profile implicitly.
+- Same-nickname Profiles remain separate. No nickname, age, avatar, photo, or
+  fuzzy identity rule exists in the adoption path.
+- New Profile creation persists isolated default practice settings before the
+  Profile becomes visible and rolls those settings back if Profile persistence
+  fails.
+- Added deterministic tests for clean bootstrap/relaunch, one and multiple
+  remote Profiles, same nicknames, delayed connectivity, no iCloud account,
+  explicit offline creation, exact selection, and an independent simulator
+  UUID that differs from the bundled simulator seed.
+- The complete pre-commit gate passes strict format, 1012/1012 Swift tests,
+  40/40 Issue Agent tests, and 11/11 release-preflight tests.
+- The two focused independent-UUID second-device XCUITests pass 2/2 on both the
+  iPhone 17 Pro and iPad Pro 11-inch (M5) simulators: exact adoption without
+  a local seed, plus a quit/relaunch between discovery and adoption without a
+  locally seeded duplicate.
+- A generic iOS Simulator app build also succeeds. This is source and simulator
+  evidence only; it is not a substitute for the exact signed Production build
+  and one-iPhone plus clean-iPad CloudKit acceptance retained under #62.

@@ -284,13 +284,30 @@ public struct TadaWordsApplicationView: View {
             refreshedChildState == nil
             ? environment.lastSelectedProfileID
             : refreshedChildState?.lastSelectedProfileID
+        // A discovery-first empty install must keep its onboarding identity
+        // stable while the receipt stream imports candidate Profiles. Those
+        // candidates are presented by the onboarding view and do not become an
+        // implicitly editable local seed before the parent adopts one.
+        let requestedOnboardingPurpose =
+            environment.firstRunOnboardingPurpose ?? .fullSetup
+        let onboardingProfiles =
+            FirstRunOnboardingProfileSelection
+            .profilesForPresentation(
+                liveProfiles: childProfiles,
+                bootstrappedProfilesWereEmpty: environment.profiles.isEmpty,
+                purpose: requestedOnboardingPurpose,
+                familySyncCapability: familySyncCapability,
+                profileIntent: environment.firstRunProfileIntent,
+                pendingCreatedProfileID:
+                    environment.firstRunPendingCreatedProfileID
+            )
         let onboardingPurpose =
             FirstRunOnboardingProfileSelection.resolvedPurpose(
-                environment.firstRunOnboardingPurpose ?? .fullSetup,
-                in: childProfiles
+                requestedOnboardingPurpose,
+                in: onboardingProfiles
             )
         let onboardingProfile = FirstRunOnboardingProfileSelection.profile(
-            in: childProfiles,
+            in: onboardingProfiles,
             purpose: onboardingPurpose,
             lastSelectedProfileID: initialProfileID
         )
@@ -302,6 +319,11 @@ public struct TadaWordsApplicationView: View {
                     initialProfile: onboardingProfile,
                     purpose: onboardingPurpose,
                     familySyncCapability: familySyncCapability,
+                    onDiscoverProfiles: {
+                        try await discoverFirstRunProfiles(
+                            environment: environment
+                        )
+                    },
                     onFinish: { submission in
                         try await completeFirstRunOnboarding(
                             submission: submission,
@@ -514,6 +536,17 @@ public struct TadaWordsApplicationView: View {
                 preferences: settings?.audio ?? .default
             )
         }
+    }
+
+    private func discoverFirstRunProfiles(
+        environment: ProductionApplicationEnvironment
+    ) async throws -> [KidProfile] {
+        try await FirstRunProfileDiscoveryCoordinator(
+            familySyncCoordinator: environment.familySyncCoordinator,
+            familySyncTransport: environment.familySyncTransport,
+            profileRepository: environment.profileRepository,
+            onboardingRepository: environment.firstRunOnboardingRepository
+        ).discoverProfiles()
     }
 
     private func synchronizeIfReady() {

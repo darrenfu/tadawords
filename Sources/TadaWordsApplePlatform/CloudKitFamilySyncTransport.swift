@@ -465,6 +465,8 @@ struct CloudKitAmbiguousRemoteRemovalRecoveryExecutor {
 /// never start nested fetch/send operations.
 public actor CloudKitFamilySyncTransport: FamilySyncTransport {
     public nonisolated let capability = FamilySyncCapability.iCloud
+    public nonisolated let initialProfilePolicy =
+        FamilySyncInitialProfilePolicy.discoverBeforeCreating
 
     private let container: CKContainer
     private let privateDatabase: CKDatabase

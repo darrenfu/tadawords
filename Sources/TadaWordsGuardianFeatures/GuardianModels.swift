@@ -824,6 +824,13 @@ public protocol GuardianFamilyStore: GuardianWordStore {
         from draft: GuardianProfileDraft
     ) async throws -> GuardianDashboardSnapshot
 
+    /// Creates a Profile with a caller-reserved identity. First-run onboarding
+    /// uses this overload so interrupted retries cannot publish a second UUID.
+    func createProfile(
+        id: ProfileID,
+        from draft: GuardianProfileDraft
+    ) async throws -> GuardianDashboardSnapshot
+
     func updateProfile(
         id: ProfileID,
         from draft: GuardianProfileDraft

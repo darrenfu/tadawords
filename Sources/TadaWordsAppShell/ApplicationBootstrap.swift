@@ -90,11 +90,14 @@ struct ProductionApplicationEnvironment: Sendable {
     let lastSelectedProfileID: ProfileID?
     let guardianStore: RepositoryGuardianFamilyStore
     let familySyncCoordinator: LocalFirstFamilySyncCoordinator
+    let familySyncTransport: any FamilySyncTransport
     let familySyncApplyTransactionRepository: LocalJSONFamilySyncApplyTransactionRepository
     let tombstoneRepository: LocalJSONProfileDeletionTombstoneRepository
     let notificationReconciler: ProductionLearningNotificationReconciler?
     let firstRunOnboardingRepository: LocalFirstRunOnboardingRepository
     let firstRunOnboardingPurpose: FirstRunOnboardingPurpose?
+    let firstRunProfileIntent: FirstRunProfileIntent?
+    let firstRunPendingCreatedProfileID: ProfileID?
     let requiresFirstRunOnboarding: Bool
     let clock: any AppClock
     let timeZone: TimeZone
@@ -271,6 +274,10 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             repository: firstRunOnboardingRepository,
             existingProfiles: existingProfiles
         )
+        let firstRunState = try await firstRunOnboardingRepository.state()
+        let firstRunProfileIntent = firstRunState?.profileIntent
+        let firstRunPendingCreatedProfileID =
+            firstRunState?.pendingCreatedProfileID
         let requiresFirstRunOnboarding = firstRunOnboardingPurpose != nil
         // Seed only a genuinely new installation. Once a family has durable
         // deletion history, an empty Profile repository is intentional and
@@ -279,7 +286,8 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         let currentDeletionTombstones = try await tombstoneRepository.tombstones()
         if existingProfiles.isEmpty,
             !profileSnapshotExistedAtStart,
-            currentDeletionTombstones.isEmpty
+            currentDeletionTombstones.isEmpty,
+            familySyncTransport.initialProfilePolicy == .seedLocalProfile
         {
             seedProfile = try await seedingProfile(
                 tombstoneRepository: tombstoneRepository
@@ -386,12 +394,15 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             lastSelectedProfileID: lastSelectedProfileID,
             guardianStore: guardianStore,
             familySyncCoordinator: familySyncCoordinator,
+            familySyncTransport: familySyncTransport,
             familySyncApplyTransactionRepository:
                 familySyncApplyTransactionRepository,
             tombstoneRepository: tombstoneRepository,
             notificationReconciler: notificationReconciler,
             firstRunOnboardingRepository: firstRunOnboardingRepository,
             firstRunOnboardingPurpose: firstRunOnboardingPurpose,
+            firstRunProfileIntent: firstRunProfileIntent,
+            firstRunPendingCreatedProfileID: firstRunPendingCreatedProfileID,
             requiresFirstRunOnboarding: requiresFirstRunOnboarding,
             clock: clock,
             timeZone: timeZone,

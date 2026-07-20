@@ -8,6 +8,8 @@ import XCTest
 final class TadaWordsFamilySyncUITests: XCTestCase {
     private static let defaultProfileID =
         "3B20FEF0-7E43-4B70-8F89-D37AD55454A1"
+    private static let adoptedProfileID =
+        "A4E3A3AF-11BE-44F2-9E35-9F563808452A"
 
     private var app: XCUIApplication!
     private var suite: String!
@@ -22,6 +24,52 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         app?.terminate()
         app = nil
         suite = nil
+    }
+
+    func testCleanSecondDeviceAdoptsIndependentRemoteProfileWithoutLocalSeed()
+        throws
+    {
+        launch(scenario: "second-device-adoption", reset: true)
+
+        let consent = app.switches["first-run.privacy-consent"]
+        XCTAssertTrue(consent.waitForExistence(timeout: 10))
+        consent.tap()
+
+        let findExisting = app.buttons["first-run.find-existing"]
+        XCTAssertTrue(findExisting.waitForExistence(timeout: 5))
+        findExisting.tap()
+
+        let remote = app.buttons[
+            "first-run.discovery.profile.\(Self.adoptedProfileID)"
+        ]
+        XCTAssertTrue(
+            remote.waitForExistence(timeout: 18),
+            "A clean device should discover the independent remote UUID."
+        )
+        XCTAssertFalse(app.buttons["My Kid"].exists)
+
+        let finish = app.buttons["first-run.finish"]
+        XCTAssertTrue(finish.waitForExistence(timeout: 5))
+        finish.tap()
+        assertOnlyAdoptedKidIsVisible()
+
+        launch(scenario: "second-device-adoption", reset: false)
+        assertOnlyAdoptedKidIsVisible()
+    }
+
+    func testDiscoveredProfileRemainsAnAdoptionCandidateAcrossRelaunch() throws {
+        launch(scenario: "second-device-adoption", reset: true)
+        acceptPrivacyAndFindExistingProfile()
+        XCTAssertTrue(adoptionCandidate.waitForExistence(timeout: 18))
+        XCTAssertFalse(app.buttons["My Kid"].exists)
+
+        // Discovery imports the candidate durably before adoption. Relaunch in
+        // that window and prove it remains an exact-ID candidate rather than
+        // becoming an editable local new-kid seed.
+        launch(scenario: "second-device-adoption", reset: false)
+        acceptPrivacyAndFindExistingProfile()
+        XCTAssertTrue(adoptionCandidate.waitForExistence(timeout: 18))
+        XCTAssertFalse(app.buttons["My Kid"].exists)
     }
 
     func testRemoteBundleRefreshesKidAndParentSurfaces() throws {
@@ -191,6 +239,43 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         XCTAssertTrue(remoteProfile.waitForExistence(timeout: 18))
         remoteProfile.tap()
         XCTAssertTrue(app.buttons["child-lobby.kids"].waitForExistence(timeout: 8))
+    }
+
+    private func assertOnlyAdoptedKidIsVisible() {
+        let remoteProfile = app.buttons["Remote Mia"]
+        if remoteProfile.waitForExistence(timeout: 8) {
+            XCTAssertFalse(
+                app.buttons["My Kid"].exists,
+                "The random simulator seed must never become a second child."
+            )
+            remoteProfile.tap()
+            XCTAssertTrue(
+                app.buttons["child-lobby.kids"].waitForExistence(timeout: 8)
+            )
+            return
+        }
+
+        let kids = app.buttons["child-lobby.kids"]
+        XCTAssertTrue(kids.waitForExistence(timeout: 12))
+        kids.tap()
+        XCTAssertTrue(remoteProfile.waitForExistence(timeout: 8))
+        XCTAssertFalse(
+            app.buttons["My Kid"].exists,
+            "The random simulator seed must never become a second child."
+        )
+    }
+
+    private var adoptionCandidate: XCUIElement {
+        app.buttons["first-run.discovery.profile.\(Self.adoptedProfileID)"]
+    }
+
+    private func acceptPrivacyAndFindExistingProfile() {
+        let consent = app.switches["first-run.privacy-consent"]
+        XCTAssertTrue(consent.waitForExistence(timeout: 10))
+        consent.tap()
+        let findExisting = app.buttons["first-run.find-existing"]
+        XCTAssertTrue(findExisting.waitForExistence(timeout: 5))
+        findExisting.tap()
     }
 
     private func openRememberedRemoteProfile() {

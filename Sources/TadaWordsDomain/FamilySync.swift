@@ -335,6 +335,17 @@ public enum FamilySyncCapability: Equatable, Sendable {
     case iCloud
 }
 
+/// Controls whether first launch may publish a locally generated Profile
+/// before a parent has had a chance to look for an existing family in iCloud.
+///
+/// Device-only transports keep the historical local seed. A transport that can
+/// discover an existing family must opt into discovery-first bootstrapping so
+/// an unrelated random UUID can never become an invisible second child.
+public enum FamilySyncInitialProfilePolicy: Equatable, Sendable {
+    case seedLocalProfile
+    case discoverBeforeCreating
+}
+
 public enum FamilySyncAvailability: Equatable, Sendable {
     case available
     case deviceOnly
@@ -698,6 +709,8 @@ public struct FamilySyncRecordSetFingerprint: Hashable, Sendable {
 public protocol FamilySyncTransport: Sendable {
     var capability: FamilySyncCapability { get }
 
+    var initialProfilePolicy: FamilySyncInitialProfilePolicy { get }
+
     func availability() async -> FamilySyncAvailability
 
     func prepareProfileZone(_ profileID: ProfileID) async throws
@@ -745,6 +758,10 @@ public protocol FamilySyncTransport: Sendable {
 }
 
 extension FamilySyncTransport {
+    public var initialProfilePolicy: FamilySyncInitialProfilePolicy {
+        .seedLocalProfile
+    }
+
     public func confirmCurrentAccount() async throws -> FamilySyncAccountChange? {
         nil
     }

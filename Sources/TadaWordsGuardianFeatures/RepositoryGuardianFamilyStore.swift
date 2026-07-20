@@ -93,8 +93,16 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     public func createProfile(
         from draft: GuardianProfileDraft
     ) async throws -> GuardianDashboardSnapshot {
+        try await createProfile(id: ProfileID(), from: draft)
+    }
+
+    public func createProfile(
+        id: ProfileID,
+        from draft: GuardianProfileDraft
+    ) async throws -> GuardianDashboardSnapshot {
         let values = try validatedValues(from: draft, requiresAge: true)
         let profile = KidProfile(
+            id: id,
             displayName: values.displayName,
             avatar: values.avatar,
             selectedWorld: draft.selectedWorld,
@@ -107,7 +115,16 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         let preparedDashboard = try await makeWordStore(
             for: profile
         ).dashboardSnapshot()
-        try await profileRepository.save(profile)
+        try await practiceSettingsRepository.save(.defaults(for: profile.id))
+        do {
+            try await profileRepository.save(profile)
+        } catch {
+            // Settings are written first so a visible Profile is never
+            // published without its isolated defaults. Roll them back if the
+            // Profile commit fails.
+            try? await practiceSettingsRepository.delete(for: profile.id)
+            throw error
+        }
         selectedProfileID = profile.id
         onLocalMutation(profile.id)
         return preparedDashboard

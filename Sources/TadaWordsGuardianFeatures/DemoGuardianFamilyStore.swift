@@ -34,6 +34,13 @@ public actor DemoGuardianFamilyStore: GuardianFamilyStore {
         try await preparedStore().createProfile(from: draft)
     }
 
+    public func createProfile(
+        id: ProfileID,
+        from draft: GuardianProfileDraft
+    ) async throws -> GuardianDashboardSnapshot {
+        try await preparedStore().createProfile(id: id, from: draft)
+    }
+
     public func updateProfile(
         id: ProfileID,
         from draft: GuardianProfileDraft

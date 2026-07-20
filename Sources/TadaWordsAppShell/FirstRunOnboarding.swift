@@ -7,8 +7,13 @@ enum FirstRunOnboardingPurpose: String, Codable, Equatable, Sendable {
     case consentRefresh
 }
 
+enum FirstRunProfileIntent: String, Codable, Equatable, Sendable {
+    case createNew
+    case discoverExisting
+}
+
 struct FirstRunOnboardingState: Codable, Equatable, Sendable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     enum Status: String, Codable, Sendable {
         case pending
@@ -23,6 +28,32 @@ struct FirstRunOnboardingState: Codable, Equatable, Sendable {
     let consentVersion: Int?
     let consentedAt: Date?
     let purpose: FirstRunOnboardingPurpose?
+    let profileIntent: FirstRunProfileIntent?
+    let pendingCreatedProfileID: ProfileID?
+
+    init(
+        schemaVersion: Int,
+        status: Status,
+        startedAt: Date,
+        completedAt: Date?,
+        profileID: ProfileID?,
+        consentVersion: Int?,
+        consentedAt: Date?,
+        purpose: FirstRunOnboardingPurpose?,
+        profileIntent: FirstRunProfileIntent? = nil,
+        pendingCreatedProfileID: ProfileID? = nil
+    ) {
+        self.schemaVersion = schemaVersion
+        self.status = status
+        self.startedAt = startedAt
+        self.completedAt = completedAt
+        self.profileID = profileID
+        self.consentVersion = consentVersion
+        self.consentedAt = consentedAt
+        self.purpose = purpose
+        self.profileIntent = profileIntent
+        self.pendingCreatedProfileID = pendingCreatedProfileID
+    }
 
     static func pending(
         startedAt: Date,
@@ -36,7 +67,9 @@ struct FirstRunOnboardingState: Codable, Equatable, Sendable {
             profileID: nil,
             consentVersion: nil,
             consentedAt: nil,
-            purpose: purpose
+            purpose: purpose,
+            profileIntent: nil,
+            pendingCreatedProfileID: nil
         )
     }
 
@@ -53,12 +86,82 @@ struct FirstRunOnboardingState: Codable, Equatable, Sendable {
             profileID: profileID,
             consentVersion: consentVersion,
             consentedAt: consentVersion == nil ? nil : completedAt,
-            purpose: purpose
+            purpose: purpose,
+            profileIntent: nil,
+            pendingCreatedProfileID: nil
+        )
+    }
+
+    func recordingDiscoveryIntent() -> FirstRunOnboardingState {
+        FirstRunOnboardingState(
+            schemaVersion: Self.currentSchemaVersion,
+            status: status,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            profileID: profileID,
+            consentVersion: consentVersion,
+            consentedAt: consentedAt,
+            purpose: purpose,
+            profileIntent: .discoverExisting,
+            pendingCreatedProfileID: nil
+        )
+    }
+
+    func recordingProfileCreation(
+        profileID: ProfileID
+    ) -> FirstRunOnboardingState {
+        FirstRunOnboardingState(
+            schemaVersion: Self.currentSchemaVersion,
+            status: status,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            profileID: profileID,
+            consentVersion: consentVersion,
+            consentedAt: consentedAt,
+            purpose: purpose,
+            profileIntent: .createNew,
+            pendingCreatedProfileID: profileID
+        )
+    }
+
+    func updatingPurpose(
+        _ purpose: FirstRunOnboardingPurpose
+    ) -> FirstRunOnboardingState {
+        FirstRunOnboardingState(
+            schemaVersion: Self.currentSchemaVersion,
+            status: status,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            profileID: profileID,
+            consentVersion: consentVersion,
+            consentedAt: consentedAt,
+            purpose: purpose,
+            profileIntent: profileIntent,
+            pendingCreatedProfileID: pendingCreatedProfileID
         )
     }
 }
 
-actor LocalFirstRunOnboardingRepository {
+enum FirstRunOnboardingRepositoryError: Error, Equatable, Sendable {
+    case onboardingAlreadyCompleted
+}
+
+protocol FirstRunOnboardingPersisting: Sendable {
+    func markDiscoveryIntent() async throws
+
+    func beginProfileCreation(
+        proposedProfileID: ProfileID?,
+        startedAt: Date
+    ) async throws -> ProfileID
+
+    func markCompleted(
+        profileID: ProfileID,
+        completedAt: Date,
+        consentVersion: Int?
+    ) async throws
+}
+
+actor LocalFirstRunOnboardingRepository: FirstRunOnboardingPersisting {
     let snapshotURL: URL
 
     init(snapshotURL: URL) {
@@ -103,12 +206,44 @@ actor LocalFirstRunOnboardingRepository {
             return
         }
         guard current.purpose != purpose else { return }
-        try persist(
-            .pending(
-                startedAt: current.startedAt,
-                purpose: purpose
-            )
-        )
+        try persist(current.updatingPurpose(purpose))
+    }
+
+    func markDiscoveryIntent() throws {
+        guard let current = try state(), current.status == .pending else {
+            return
+        }
+        guard current.profileIntent != .discoverExisting else { return }
+        try persist(current.recordingDiscoveryIntent())
+    }
+
+    /// Reserves one exact identity before settings, Profile, session, or
+    /// completion writes begin. Every retry receives the same ID, including a
+    /// retry in the same process after a later write fails.
+    func beginProfileCreation(
+        proposedProfileID: ProfileID?,
+        startedAt: Date
+    ) throws -> ProfileID {
+        let current =
+            try state()
+            ?? .pending(startedAt: startedAt, purpose: .fullSetup)
+        guard current.status == .pending else {
+            throw FirstRunOnboardingRepositoryError.onboardingAlreadyCompleted
+        }
+        if current.profileIntent == .createNew,
+            let pendingCreatedProfileID = current.pendingCreatedProfileID
+        {
+            return pendingCreatedProfileID
+        }
+        // Moving from discovery to explicit creation must never reuse a remote
+        // candidate passed by stale UI state. Device-only bootstrap may still
+        // reserve its historical local seed when there was no discovery.
+        let profileID =
+            current.profileIntent == .discoverExisting
+            ? ProfileID()
+            : proposedProfileID ?? ProfileID()
+        try persist(current.recordingProfileCreation(profileID: profileID))
+        return profileID
     }
 
     func markCompleted(
@@ -148,6 +283,92 @@ enum FirstRunOnboardingError: Error, Equatable {
     case unsupportedAvatar
 }
 
+enum FirstRunProfileDiscoveryError: Error, Equatable, Sendable {
+    case offline
+    case iCloudUnavailable
+    case failed
+}
+
+/// Performs the parent-authorized first sync before any new Profile is
+/// committed. Discovery imports records through the same durable transaction
+/// path as ordinary Family Sync; the returned identities are the exact remote
+/// UUIDs and are never coalesced by display attributes.
+actor FirstRunProfileDiscoveryCoordinator {
+    private let familySyncCoordinator: any FamilySyncCoordinating
+    private let familySyncTransport: any FamilySyncTransport
+    private let profileRepository: any KidProfileRepository
+    private let onboardingRepository: any FirstRunOnboardingPersisting
+
+    init(
+        familySyncCoordinator: any FamilySyncCoordinating,
+        familySyncTransport: any FamilySyncTransport,
+        profileRepository: any KidProfileRepository,
+        onboardingRepository: any FirstRunOnboardingPersisting
+    ) {
+        self.familySyncCoordinator = familySyncCoordinator
+        self.familySyncTransport = familySyncTransport
+        self.profileRepository = profileRepository
+        self.onboardingRepository = onboardingRepository
+    }
+
+    func discoverProfiles() async throws -> [KidProfile] {
+        do {
+            try await onboardingRepository.markDiscoveryIntent()
+        } catch {
+            throw FirstRunProfileDiscoveryError.failed
+        }
+        switch await familySyncTransport.availability() {
+        case .temporarilyUnavailable:
+            throw FirstRunProfileDiscoveryError.offline
+        case .noAccount, .restricted, .deviceOnly:
+            throw FirstRunProfileDiscoveryError.iCloudUnavailable
+        case .available:
+            break
+        }
+        let status: FamilySyncStatus
+        if await familySyncCoordinator.isEnabled() {
+            // Re-enabling reconfirms the account and intentionally resets the
+            // CKSyncEngine state. A retry/relaunch must instead continue from
+            // the durable cursor and inbox already owned by this consent.
+            status = await familySyncCoordinator.synchronize()
+        } else {
+            do {
+                status = try await familySyncCoordinator.setEnabled(true)
+            } catch {
+                switch await familySyncTransport.availability() {
+                case .temporarilyUnavailable:
+                    throw FirstRunProfileDiscoveryError.offline
+                case .noAccount, .restricted, .deviceOnly:
+                    throw FirstRunProfileDiscoveryError.iCloudUnavailable
+                case .available:
+                    throw FirstRunProfileDiscoveryError.failed
+                }
+            }
+        }
+
+        switch status {
+        case .synced:
+            return try await profileRepository.profiles().sorted(by: Self.order)
+        case .pendingOffline:
+            throw FirstRunProfileDiscoveryError.offline
+        case .iCloudUnavailable, .deviceOnly, .optedOut:
+            throw FirstRunProfileDiscoveryError.iCloudUnavailable
+        case .idle, .syncing, .failed:
+            throw FirstRunProfileDiscoveryError.failed
+        }
+    }
+
+    private static func order(_ lhs: KidProfile, _ rhs: KidProfile) -> Bool {
+        let comparison = lhs.displayName.localizedCaseInsensitiveCompare(
+            rhs.displayName
+        )
+        if comparison != .orderedSame {
+            return comparison == .orderedAscending
+        }
+        return lhs.id.description < rhs.id.description
+    }
+}
+
 struct FirstRunOnboardingCompletion: Sendable {
     let profiles: [KidProfile]
     /// A valid remembered child opens directly. `nil` intentionally routes
@@ -156,6 +377,28 @@ struct FirstRunOnboardingCompletion: Sendable {
 }
 
 enum FirstRunOnboardingProfileSelection {
+    static func profilesForPresentation(
+        liveProfiles: [KidProfile],
+        bootstrappedProfilesWereEmpty: Bool,
+        purpose: FirstRunOnboardingPurpose,
+        familySyncCapability: FamilySyncCapability,
+        profileIntent: FirstRunProfileIntent?,
+        pendingCreatedProfileID: ProfileID?
+    ) -> [KidProfile] {
+        guard familySyncCapability == .iCloud, purpose == .fullSetup else {
+            return liveProfiles
+        }
+        switch profileIntent {
+        case .discoverExisting:
+            return []
+        case .createNew:
+            guard let pendingCreatedProfileID else { return [] }
+            return liveProfiles.filter { $0.id == pendingCreatedProfileID }
+        case nil:
+            return bootstrappedProfilesWereEmpty ? [] : liveProfiles
+        }
+    }
+
     static func resolvedPurpose(
         _ requestedPurpose: FirstRunOnboardingPurpose,
         in profiles: [KidProfile]
@@ -190,6 +433,7 @@ enum FirstRunOnboardingProfileSelection {
 struct FirstRunOnboardingSubmission: Sendable {
     enum Action: Sendable {
         case createProfile(GuardianProfileDraft)
+        case adoptExistingProfile(ProfileID)
         case confirmExistingProfiles
     }
 
@@ -212,14 +456,14 @@ actor FirstRunOnboardingCoordinator {
 
     private let profileRepository: any KidProfileRepository
     private let childSessionRepository: any ChildSessionRepository
-    private let onboardingRepository: LocalFirstRunOnboardingRepository
+    private let onboardingRepository: any FirstRunOnboardingPersisting
     private let guardianStore: any GuardianFamilyStore
     private let clock: any AppClock
 
     init(
         profileRepository: any KidProfileRepository,
         childSessionRepository: any ChildSessionRepository,
-        onboardingRepository: LocalFirstRunOnboardingRepository,
+        onboardingRepository: any FirstRunOnboardingPersisting,
         guardianStore: any GuardianFamilyStore,
         clock: any AppClock
     ) {
@@ -241,6 +485,27 @@ actor FirstRunOnboardingCoordinator {
             throw FirstRunOnboardingError.consentRequired
         }
         switch submission.action {
+        case .adoptExistingProfile(let adoptedProfileID):
+            guard
+                try await profileRepository.profile(id: adoptedProfileID) != nil
+            else {
+                throw FirstRunOnboardingError.profileNotFound
+            }
+            // Selection is an exact-ID read. It deliberately performs no save,
+            // merge, nickname comparison, or Profile mutation.
+            _ = try await guardianStore.selectProfile(id: adoptedProfileID)
+            try await childSessionRepository.saveLastSelectedProfileID(
+                adoptedProfileID
+            )
+            try await onboardingRepository.markCompleted(
+                profileID: adoptedProfileID,
+                completedAt: clock.now,
+                consentVersion: submission.consentVersion
+            )
+            return FirstRunOnboardingCompletion(
+                profiles: try await profileRepository.profiles(),
+                selectedProfileID: adoptedProfileID
+            )
         case .confirmExistingProfiles:
             guard let profileID,
                 let existing = try await profileRepository.profile(id: profileID)
@@ -310,8 +575,16 @@ actor FirstRunOnboardingCoordinator {
             throw FirstRunOnboardingError.unsupportedAvatar
         }
 
+        let pendingProfileID = try await onboardingRepository.beginProfileCreation(
+            proposedProfileID: existing?.id,
+            startedAt: clock.now
+        )
+        let pendingExisting = try await profileRepository.profile(
+            id: pendingProfileID
+        )
+
         let profile: KidProfile
-        if let existing {
+        if let existing = pendingExisting {
             profile = KidProfile(
                 id: existing.id,
                 displayName: displayName,
@@ -329,6 +602,7 @@ actor FirstRunOnboardingCoordinator {
             _ = try await guardianStore.selectProfile(id: profile.id)
         } else {
             let created = try await guardianStore.createProfile(
+                id: pendingProfileID,
                 from: GuardianProfileDraft(
                     displayName: displayName,
                     avatar: draft.avatar,
