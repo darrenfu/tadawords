@@ -14,7 +14,7 @@ final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
             clock: AppleRemoteNotificationFixedClock(now: now)
         )
         let observer = AppleRemoteNotificationRegistrationObserver(bridge: bridge)
-        await bridge.configureRegistration(register: {}, unregister: {})
+        await configureRegistration(bridge: bridge, observer: observer)
         await bridge.requestRegistration()
 
         observer.enqueueDidRegister()
@@ -33,7 +33,7 @@ final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
             clock: AppleRemoteNotificationFixedClock(now: now)
         )
         let observer = AppleRemoteNotificationRegistrationObserver(bridge: bridge)
-        await bridge.configureRegistration(register: {}, unregister: {})
+        await configureRegistration(bridge: bridge, observer: observer)
         await bridge.requestRegistration()
 
         observer.enqueueDidFail(
@@ -106,11 +106,34 @@ final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
             clock: AppleRemoteNotificationFixedClock(now: now)
         )
         let observer = AppleRemoteNotificationRegistrationObserver(bridge: bridge)
-        await bridge.configureRegistration(register: {}, unregister: {})
+        await configureRegistration(bridge: bridge, observer: observer)
         await bridge.requestRegistration()
 
         observer.enqueueDidFail(category: .connectivity)
         observer.enqueueDidRegister()
+        await observer.finishPendingCallbacks()
+
+        let callbackState = await bridge.registrationState()
+        XCTAssertEqual(
+            callbackState,
+            .failed(category: .connectivity, at: now)
+        )
+    }
+
+    @MainActor
+    func testLateCancelledCallbackCannotConsumeReplacementCallback() async {
+        let bridge = FamilySyncRemoteNotificationBridge(
+            clock: AppleRemoteNotificationFixedClock(now: now)
+        )
+        let observer = AppleRemoteNotificationRegistrationObserver(bridge: bridge)
+        await configureRegistration(bridge: bridge, observer: observer)
+
+        await bridge.requestRegistration()
+        await bridge.requestUnregistration()
+        await bridge.requestRegistration()
+
+        observer.enqueueDidRegister()
+        observer.enqueueDidFail(category: .connectivity)
         await observer.finishPendingCallbacks()
 
         let callbackState = await bridge.registrationState()
@@ -156,6 +179,23 @@ final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
         XCTAssertFalse(delegateSource.contains("token.map"))
         XCTAssertFalse(delegateSource.contains("token.base64EncodedString"))
     }
+}
+
+@MainActor
+private func configureRegistration(
+    bridge: FamilySyncRemoteNotificationBridge,
+    observer: AppleRemoteNotificationRegistrationObserver
+) async {
+    await bridge.configureRegistration(
+        register: { attempt in
+            await MainActor.run {
+                guard attempt.isCurrent else { return false }
+                observer.registrationDidStart(attempt)
+                return true
+            }
+        },
+        unregister: {}
+    )
 }
 
 private struct AppleRemoteNotificationFixedClock: AppClock {

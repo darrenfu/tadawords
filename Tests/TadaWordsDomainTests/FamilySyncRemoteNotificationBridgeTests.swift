@@ -42,7 +42,11 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
         )
         let recorder = RemoteNotificationRegistrationRecorder()
         await bridge.configureRegistration(
-            register: { await recorder.recordRegistration() },
+            register: { attempt in
+                guard attempt.isCurrent else { return false }
+                await recorder.recordRegistration()
+                return true
+            },
             unregister: { await recorder.recordUnregistration() }
         )
 
@@ -64,7 +68,7 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
             clock: RemoteNotificationFixedClock(now: now)
         )
         await successfulBridge.configureRegistration(
-            register: {},
+            register: { _ in true },
             unregister: {}
         )
 
@@ -80,7 +84,7 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
             clock: RemoteNotificationFixedClock(now: now)
         )
         await failedBridge.configureRegistration(
-            register: {},
+            register: { _ in true },
             unregister: {}
         )
         await failedBridge.requestRegistration()
@@ -98,7 +102,11 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
         )
         let recorder = RemoteNotificationRegistrationRecorder()
         await bridge.configureRegistration(
-            register: { await recorder.recordRegistration() },
+            register: { attempt in
+                guard attempt.isCurrent else { return false }
+                await recorder.recordRegistration()
+                return true
+            },
             unregister: {}
         )
         await bridge.requestRegistration()
@@ -121,7 +129,11 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
         )
         let recorder = RemoteNotificationRegistrationRecorder()
         await bridge.configureRegistration(
-            register: { await recorder.recordRegistration() },
+            register: { attempt in
+                guard attempt.isCurrent else { return false }
+                await recorder.recordRegistration()
+                return true
+            },
             unregister: { await recorder.recordUnregistration() }
         )
         await bridge.requestRegistration()
@@ -161,7 +173,11 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
 
         let configuration = Task {
             await bridge.configureRegistration(
-                register: { await harness.register() },
+                register: { attempt in
+                    guard attempt.isCurrent else { return false }
+                    await harness.register()
+                    return true
+                },
                 unregister: { await harness.unregister() }
             )
         }
@@ -194,11 +210,48 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
         )
     }
 
+    func testOptOutInvalidatesRegistrationBeforeSuspendedHandlerResumes() async {
+        let bridge = FamilySyncRemoteNotificationBridge(
+            clock: RemoteNotificationFixedClock(now: now)
+        )
+        let harness = RemoteNotificationStaleRegistrationHarness()
+        await bridge.requestRegistration()
+
+        let configuration = Task {
+            await bridge.configureRegistration(
+                register: { attempt in
+                    await harness.register(attempt: attempt)
+                },
+                unregister: { await harness.unregister() }
+            )
+        }
+        await harness.waitUntilRegistrationHandlerStarts()
+
+        let optOut = Task {
+            await bridge.requestUnregistration()
+        }
+        await waitForRegistrationState(.notRequested, on: bridge)
+
+        await harness.resumeRegistrationHandler()
+        await configuration.value
+        await optOut.value
+
+        let events = await harness.events
+        XCTAssertEqual(
+            events,
+            ["registration-handler-started", "unregister"],
+            "A handler suspended before its platform call must observe that its attempt was invalidated."
+        )
+    }
+
     func testCancelledPendingAttemptCannotOverwriteReplacementRequest() async {
         let bridge = FamilySyncRemoteNotificationBridge(
             clock: RemoteNotificationFixedClock(now: now)
         )
-        await bridge.configureRegistration(register: {}, unregister: {})
+        await bridge.configureRegistration(
+            register: { _ in true },
+            unregister: {}
+        )
 
         await bridge.requestRegistration()
         await bridge.requestUnregistration()
@@ -220,11 +273,46 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
         )
     }
 
+    func testReplacementAttemptAcceptsItsCallbackAfterLateCancelledCallback() async {
+        let bridge = FamilySyncRemoteNotificationBridge(
+            clock: RemoteNotificationFixedClock(now: now)
+        )
+        await bridge.configureRegistration(
+            register: { _ in true },
+            unregister: {}
+        )
+
+        await bridge.requestRegistration()
+        await bridge.requestUnregistration()
+        await bridge.requestRegistration()
+
+        // The first callback belongs to the cancelled attempt and must be
+        // consumed without changing the replacement attempt.
+        await bridge.recordRegistrationSucceeded()
+        let stateAfterCancelledCallback = await bridge.registrationState()
+        XCTAssertEqual(
+            stateAfterCancelledCallback,
+            .unverified(at: now)
+        )
+
+        // Once the stale generation is drained, the callback for the current
+        // generation must be allowed to complete registration.
+        await bridge.recordRegistrationSucceeded()
+        let stateAfterReplacementCallback = await bridge.registrationState()
+        XCTAssertEqual(
+            stateAfterReplacementCallback,
+            .registered(at: now)
+        )
+    }
+
     func testFreshBridgeDoesNotRestoreEarlierRegistrationState() async {
         let firstLaunch = FamilySyncRemoteNotificationBridge(
             clock: RemoteNotificationFixedClock(now: now)
         )
-        await firstLaunch.configureRegistration(register: {}, unregister: {})
+        await firstLaunch.configureRegistration(
+            register: { _ in true },
+            unregister: {}
+        )
         await firstLaunch.requestRegistration()
         await firstLaunch.recordRegistrationSucceeded()
 
@@ -248,7 +336,10 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
         let bridge = FamilySyncRemoteNotificationBridge(
             clock: RemoteNotificationFixedClock(now: now)
         )
-        await bridge.configureRegistration(register: {}, unregister: {})
+        await bridge.configureRegistration(
+            register: { _ in true },
+            unregister: {}
+        )
         await bridge.requestRegistration()
         let states = await bridge.registrationStates()
         var iterator = states.makeAsyncIterator()
@@ -265,6 +356,21 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
             newestState,
             .failed(category: .connectivity, at: now)
         )
+    }
+}
+
+extension FamilySyncRemoteNotificationBridgeTests {
+    fileprivate func waitForRegistrationState(
+        _ expected: FamilySyncRemoteNotificationRegistrationState,
+        on bridge: FamilySyncRemoteNotificationBridge
+    ) async {
+        for _ in 0..<100 {
+            if await bridge.registrationState() == expected {
+                return
+            }
+            await Task.yield()
+        }
+        XCTFail("Timed out waiting for registration state \(expected).")
     }
 }
 
@@ -319,6 +425,45 @@ private actor RemoteNotificationRegistrationInterleavingHarness {
     }
 
     func finishRegistration() {
+        registrationRelease?.resume()
+        registrationRelease = nil
+    }
+}
+
+private actor RemoteNotificationStaleRegistrationHarness {
+    private(set) var events: [String] = []
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var registrationRelease: CheckedContinuation<Void, Never>?
+
+    func register(
+        attempt: FamilySyncRemoteNotificationRegistrationAttempt
+    ) async -> Bool {
+        events.append("registration-handler-started")
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+        await withCheckedContinuation { continuation in
+            registrationRelease = continuation
+        }
+        guard attempt.isCurrent else { return false }
+        events.append("register")
+        return true
+    }
+
+    func unregister() {
+        events.append("unregister")
+    }
+
+    func waitUntilRegistrationHandlerStarts() async {
+        guard !events.contains("registration-handler-started") else { return }
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func resumeRegistrationHandler() {
         registrationRelease?.resume()
         registrationRelease = nil
     }

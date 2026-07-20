@@ -19,11 +19,17 @@ final class TadaWordsAppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         _ = launchOptions
+        let remoteNotificationRegistrationObserver =
+            remoteNotificationRegistrationObserver
         Task {
             await FamilySyncRemoteNotificationBridge.shared.configureRegistration(
-                register: {
+                register: { attempt in
                     await MainActor.run {
+                        guard attempt.isCurrent else { return false }
+                        remoteNotificationRegistrationObserver
+                            .registrationDidStart(attempt)
                         UIApplication.shared.registerForRemoteNotifications()
+                        return true
                     }
                 },
                 unregister: {
