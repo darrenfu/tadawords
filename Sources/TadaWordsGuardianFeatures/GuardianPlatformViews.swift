@@ -559,7 +559,7 @@ struct GuardianFamilySyncView: View {
                                 Button("Retry registration") {
                                     Task {
                                         await FamilySyncRemoteNotificationBridge
-                                            .shared.requestRegistration()
+                                            .shared.retryRegistrationIfRequested()
                                     }
                                 }
                                 .buttonStyle(.borderedProminent)

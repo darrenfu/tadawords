@@ -142,6 +142,13 @@ public actor FamilySyncRemoteNotificationBridge {
         await enqueueRegistrationPipelineOperation(operation)
     }
 
+    /// Retries only while Family Sync still owns registration consent. This is
+    /// safe to call from a stale Parent failure card after an opt-out finishes.
+    public func retryRegistrationIfRequested() async {
+        guard registrationRequested else { return }
+        await requestRegistration()
+    }
+
     public func requestUnregistration() async {
         guard registrationRequested || currentRegistrationAttempt != nil else {
             return

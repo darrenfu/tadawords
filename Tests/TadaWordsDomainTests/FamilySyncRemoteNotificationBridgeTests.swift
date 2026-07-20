@@ -115,6 +115,29 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
         XCTAssertEqual(registrationCount, 2)
     }
 
+    func testStaleRetryAfterOptOutCannotRestoreRegistration() async {
+        let bridge = FamilySyncRemoteNotificationBridge(
+            clock: RemoteNotificationFixedClock(now: now)
+        )
+        let recorder = RemoteNotificationRegistrationRecorder()
+        await bridge.configureRegistration(
+            register: { await recorder.recordRegistration() },
+            unregister: { await recorder.recordUnregistration() }
+        )
+        await bridge.requestRegistration()
+        await bridge.recordRegistrationFailed(category: .connectivity)
+
+        await bridge.requestUnregistration()
+        await bridge.retryRegistrationIfRequested()
+
+        let state = await bridge.registrationState()
+        let registrationCount = await recorder.registrationCount
+        let unregistrationCount = await recorder.unregistrationCount
+        XCTAssertEqual(state, .notRequested)
+        XCTAssertEqual(registrationCount, 1)
+        XCTAssertEqual(unregistrationCount, 1)
+    }
+
     func testUnregistrationMakesLateCallbacksInert() async {
         let bridge = FamilySyncRemoteNotificationBridge(
             clock: RemoteNotificationFixedClock(now: now)
