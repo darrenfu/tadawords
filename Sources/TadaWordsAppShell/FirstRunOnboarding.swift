@@ -793,6 +793,8 @@ actor FirstRunProfileDiscoveryCoordinator {
     private let profileDataEraser: any ProfileDataErasing
     private let familySyncJournalRepository: any FamilySyncJournalRepository
     private let familySyncApplyTransactionRepository: any FamilySyncApplyTransactionRepository
+    private let discoveryAdmissionGate: FirstRunDiscoveryAdmissionGate
+    private let discoveryAdmissionGeneration: FirstRunDiscoveryAdmissionGate.Generation
 
     init(
         familySyncCoordinator: any FamilySyncCoordinating,
@@ -804,7 +806,10 @@ actor FirstRunProfileDiscoveryCoordinator {
         profileDataEraser: any ProfileDataErasing,
         familySyncJournalRepository: any FamilySyncJournalRepository,
         familySyncApplyTransactionRepository:
-            any FamilySyncApplyTransactionRepository
+            any FamilySyncApplyTransactionRepository,
+        discoveryAdmissionGate: FirstRunDiscoveryAdmissionGate,
+        discoveryAdmissionGeneration:
+            FirstRunDiscoveryAdmissionGate.Generation
     ) {
         self.familySyncCoordinator = familySyncCoordinator
         self.familySyncTransport = familySyncTransport
@@ -816,6 +821,8 @@ actor FirstRunProfileDiscoveryCoordinator {
         self.familySyncJournalRepository = familySyncJournalRepository
         self.familySyncApplyTransactionRepository =
             familySyncApplyTransactionRepository
+        self.discoveryAdmissionGate = discoveryAdmissionGate
+        self.discoveryAdmissionGeneration = discoveryAdmissionGeneration
     }
 
     func discoverProfiles() async throws -> [KidProfile] {
@@ -891,9 +898,11 @@ actor FirstRunProfileDiscoveryCoordinator {
                 let profiles = try await profileRepository.profiles().sorted(
                     by: Self.order
                 )
+                try await requireCurrentDiscoveryGeneration()
                 if requiresAccountBoundaryCompletion {
                     try await onboardingRepository.finishProfileDiscovery()
                 }
+                try await requireCurrentDiscoveryGeneration()
                 return profiles
             } catch {
                 _ =
@@ -910,6 +919,35 @@ actor FirstRunProfileDiscoveryCoordinator {
         case .idle, .syncing, .failed:
             _ = try? await familySyncCoordinator.disableAndAwaitQuiescence()
             throw FirstRunProfileDiscoveryError.failed
+        }
+    }
+
+    /// A foreground transition may observe a different iCloud account after
+    /// the full fetch returns but before its candidates reach SwiftUI. The
+    /// process generation is therefore checked at both sides of the final
+    /// onboarding-state write and once more by the application view after this
+    /// actor returns. A stale Find is converted back into the durable reset
+    /// phase and sync is opted out before any candidate can be selected.
+    func requireCurrentDiscoveryGeneration() async throws {
+        guard
+            discoveryAdmissionGate.currentGeneration()
+                == discoveryAdmissionGeneration
+        else {
+            _ = discoveryAdmissionGate.closeForAccountRevalidation()
+            do {
+                _ = try await onboardingRepository.prepareForProfileDiscovery()
+            } catch {
+                // The process gate remains closed even when durable storage is
+                // temporarily unavailable. Retry must pass through Find again.
+            }
+            do {
+                _ = try await familySyncCoordinator.disableAndAwaitQuiescence()
+            } catch {
+                // `setEnabled(false)` closes its actor-local consent gate before
+                // awaiting persistence. A later Find/bootstrap retries the
+                // durable opt-out if this write failed.
+            }
+            throw FirstRunProfileDiscoveryError.resetRequired
         }
     }
 

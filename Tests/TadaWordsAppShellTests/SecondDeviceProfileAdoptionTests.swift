@@ -187,6 +187,86 @@ final class SecondDeviceProfileAdoptionTests: XCTestCase {
         try await exercise(createNew: true)
     }
 
+    func testForegroundAccountSwitchWhileFindReturnsCannotExposeOldCandidates()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let accountAProfile = profile(id: UUID(), name: "Mia")
+        let accountBProfile = profile(id: UUID(), name: "Noah")
+        let transport = DiscoveryTransport(
+            availability: [.available],
+            remoteProfiles: [accountAProfile],
+            switchedRemoteProfiles: [accountBProfile],
+            confirmationChanges: [nil, .switchedAccounts]
+        )
+        let environment = try await bootstrap(
+            in: directory,
+            defaultProfile: profile(id: UUID(), name: "Unused Seed"),
+            transport: transport
+        )
+        let blockingProfiles = BlockingNonemptyProfilesReadRepository(
+            base: environment.profileRepository
+        )
+        let admissionGate = FirstRunDiscoveryAdmissionGate()
+        let accountAGeneration = admissionGate.currentGeneration()
+        let staleFind = discovery(
+            in: environment,
+            profileRepository: blockingProfiles,
+            discoveryAdmissionGate: admissionGate,
+            discoveryAdmissionGeneration: accountAGeneration
+        )
+        let staleFindTask = Task {
+            try await staleFind.discoverProfiles()
+        }
+
+        // Account A has reached the canonical repositories and setEnabled(true)
+        // has returned `.synced`, but the candidates have not crossed the final
+        // presentation boundary yet.
+        await blockingProfiles.waitUntilNonemptyProfilesReadIsBlocked()
+        let foregroundGeneration = admissionGate.closeForAccountRevalidation()
+        let revalidated = await FirstRunDiscoveryAdmissionRevalidator.revalidate(
+            generation: foregroundGeneration,
+            gate: admissionGate,
+            onboardingRepository: environment.firstRunOnboardingRepository,
+            familySyncCoordinator: environment.familySyncCoordinator
+        )
+        XCTAssertTrue(revalidated)
+        XCTAssertFalse(admissionGate.admissionIsClosed())
+        await blockingProfiles.releaseNonemptyProfilesRead()
+
+        do {
+            _ = try await staleFindTask.value
+            XCTFail("A Find from account A must not expose candidates after switching to B.")
+        } catch {
+            XCTAssertEqual(
+                error as? FirstRunProfileDiscoveryError,
+                .resetRequired
+            )
+        }
+        let resetState = try await environment.firstRunOnboardingRepository.state()
+        let syncIsEnabled = await environment.familySyncCoordinator.isEnabled()
+        XCTAssertEqual(resetState?.discoveryResetPhase, .required)
+        XCTAssertTrue(admissionGate.admissionIsClosed())
+        XCTAssertFalse(syncIsEnabled)
+
+        await transport.resetOutboundObservations()
+        let accountBGeneration = admissionGate.currentGeneration()
+        let accountBProfiles = try await discovery(
+            in: environment,
+            discoveryAdmissionGate: admissionGate,
+            discoveryAdmissionGeneration: accountBGeneration
+        ).discoverProfiles()
+        let durableProfileIDs = Set(
+            try await environment.profileRepository.profiles().map(\.id)
+        )
+        let outboundProfileIDs = await transport.outboundProfileIDs()
+
+        XCTAssertEqual(accountBProfiles.map(\.id), [accountBProfile.id])
+        XCTAssertEqual(durableProfileIDs, [accountBProfile.id])
+        XCTAssertFalse(outboundProfileIDs.contains(accountAProfile.id))
+    }
+
     func testInFlightCreateKeepsDiscoveryProvenanceThroughAccountRevalidation()
         async throws
     {
@@ -2154,12 +2234,20 @@ final class SecondDeviceProfileAdoptionTests: XCTestCase {
 
     private func discovery(
         in environment: ProductionApplicationEnvironment,
-        profileDataEraser: (any ProfileDataErasing)? = nil
+        profileDataEraser: (any ProfileDataErasing)? = nil,
+        profileRepository: (any KidProfileRepository)? = nil,
+        discoveryAdmissionGate: FirstRunDiscoveryAdmissionGate? = nil,
+        discoveryAdmissionGeneration:
+            FirstRunDiscoveryAdmissionGate.Generation? = nil
     ) -> FirstRunProfileDiscoveryCoordinator {
-        FirstRunProfileDiscoveryCoordinator(
+        let admissionGate =
+            discoveryAdmissionGate ?? FirstRunDiscoveryAdmissionGate()
+        let admissionGeneration =
+            discoveryAdmissionGeneration ?? admissionGate.currentGeneration()
+        return FirstRunProfileDiscoveryCoordinator(
             familySyncCoordinator: environment.familySyncCoordinator,
             familySyncTransport: environment.familySyncTransport,
-            profileRepository: environment.profileRepository,
+            profileRepository: profileRepository ?? environment.profileRepository,
             practiceSettingsRepository: environment.practiceSettingsRepository,
             childSessionRepository: environment.childSessionRepository,
             onboardingRepository: environment.firstRunOnboardingRepository,
@@ -2167,7 +2255,9 @@ final class SecondDeviceProfileAdoptionTests: XCTestCase {
             familySyncJournalRepository:
                 environment.familySyncJournalRepository,
             familySyncApplyTransactionRepository:
-                environment.familySyncApplyTransactionRepository
+                environment.familySyncApplyTransactionRepository,
+            discoveryAdmissionGate: admissionGate,
+            discoveryAdmissionGeneration: admissionGeneration
         )
     }
 
@@ -2442,6 +2532,57 @@ private actor FailingOnceProfilesReadKidProfileRepository:
             throw CreationInterruption.injected
         }
         return try await base.profiles()
+    }
+
+    func profile(id: ProfileID) async throws -> KidProfile? {
+        try await base.profile(id: id)
+    }
+
+    func save(_ profile: KidProfile) async throws {
+        try await base.save(profile)
+    }
+
+    func delete(id: ProfileID) async throws {
+        try await base.delete(id: id)
+    }
+}
+
+private actor BlockingNonemptyProfilesReadRepository: KidProfileRepository {
+    private let base: any KidProfileRepository
+    private var hasBlocked = false
+    private var isBlocked = false
+    private var blockedWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    init(base: any KidProfileRepository) {
+        self.base = base
+    }
+
+    func profiles() async throws -> [KidProfile] {
+        let profiles = try await base.profiles()
+        guard !hasBlocked, !profiles.isEmpty else { return profiles }
+        hasBlocked = true
+        isBlocked = true
+        let waiters = blockedWaiters
+        blockedWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+        await withCheckedContinuation { continuation in
+            releaseContinuation = continuation
+        }
+        return profiles
+    }
+
+    func waitUntilNonemptyProfilesReadIsBlocked() async {
+        guard !isBlocked else { return }
+        await withCheckedContinuation { continuation in
+            blockedWaiters.append(continuation)
+        }
+    }
+
+    func releaseNonemptyProfilesRead() {
+        isBlocked = false
+        releaseContinuation?.resume()
+        releaseContinuation = nil
     }
 
     func profile(id: ProfileID) async throws -> KidProfile? {

@@ -937,6 +937,14 @@ does not install devices, mutate Apple portals, or merge itself.
   the onboarding completion marker. A failed final read therefore keeps the
   flow retryable and reuses the exact reserved Profile UUID instead of leaving
   a completed marker with no usable result.
+- A foreground iCloud-account revalidation now invalidates an in-flight Find
+  at the final repository and presentation boundaries. A result fetched from
+  account A is converted back to the durable reset state, Family Sync is opted
+  out, and only a fresh parent retry may expose account B candidates.
+- Added a deterministic account-switch race test that pauses Find after account
+  A has populated canonical repositories, completes foreground revalidation to
+  account B, and proves the stale result is rejected before a clean retry
+  returns only account B's exact Profile UUID.
 - Added red-to-green coverage for generic durability recovery, visible and
   compacted conflict-lock downgrade attempts, and final-read failures in both
   adoption and creation. The exact working-tree gate passes strict formatting,

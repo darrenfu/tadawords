@@ -579,7 +579,7 @@ public struct TadaWordsApplicationView: View {
     ) async throws -> [KidProfile] {
         let admissionGeneration =
             environment.firstRunDiscoveryAdmissionGate.currentGeneration()
-        let profiles = try await FirstRunProfileDiscoveryCoordinator(
+        let coordinator = FirstRunProfileDiscoveryCoordinator(
             familySyncCoordinator: environment.familySyncCoordinator,
             familySyncTransport: environment.familySyncTransport,
             profileRepository: environment.profileRepository,
@@ -590,8 +590,16 @@ public struct TadaWordsApplicationView: View {
             familySyncJournalRepository:
                 environment.familySyncJournalRepository,
             familySyncApplyTransactionRepository:
-                environment.familySyncApplyTransactionRepository
-        ).discoverProfiles()
+                environment.familySyncApplyTransactionRepository,
+            discoveryAdmissionGate:
+                environment.firstRunDiscoveryAdmissionGate,
+            discoveryAdmissionGeneration: admissionGeneration
+        )
+        let profiles = try await coordinator.discoverProfiles()
+        // The actor hop back to MainActor is another suspension boundary. A
+        // foreground/account transition in that gap must invalidate the result
+        // just like one that races the final repository write.
+        try await coordinator.requireCurrentDiscoveryGeneration()
         // Only a successful, current-generation account confirmation/full
         // fetch may make its candidates interactive. A foreground transition
         // during Find advances the generation and keeps admission closed.
