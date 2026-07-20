@@ -140,6 +140,8 @@ final class GuardianDashboardViewModel: ObservableObject {
     private var undoWordsByProfile: [ProfileID: [LearningMode: [WordPrompt]]] = [:]
     private var voiceprintSentences: [String] = []
     private var voiceprintPromptTask: Task<Void, Never>?
+    private var externalSyncRefreshGeneration: UInt64 = 0
+    private var syncPresentationRefreshGeneration: UInt64 = 0
 
     init(
         store: any GuardianFamilyStore,
@@ -383,9 +385,15 @@ final class GuardianDashboardViewModel: ObservableObject {
     /// navigation. If the Profile currently being viewed was deleted on
     /// another device, move to the Profile chooser immediately.
     func refreshAfterExternalSyncAndWait() async {
+        externalSyncRefreshGeneration &+= 1
+        let refreshGeneration = externalSyncRefreshGeneration
         let previouslyVisibleProfileID = snapshot?.profile.id
         do {
             var family = try await store.familySnapshot()
+            try Task.checkCancellation()
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
+            }
             let visibleProfileStillExists =
                 previouslyVisibleProfileID.map {
                     profileID in
@@ -405,8 +413,21 @@ final class GuardianDashboardViewModel: ObservableObject {
                     for: targetProfileID
                 )
             } else {
+                guard refreshGeneration == externalSyncRefreshGeneration else {
+                    return
+                }
                 dashboard = try await store.selectProfile(id: targetProfileID)
                 family = try await store.familySnapshot()
+            }
+            let refreshedReport: GuardianLearningReport?
+            if case .reports = destination {
+                refreshedReport = try await store.report(for: reportPeriod)
+            } else {
+                refreshedReport = nil
+            }
+            try Task.checkCancellation()
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
             }
             familySnapshot = family
             snapshot = dashboard
@@ -414,8 +435,8 @@ final class GuardianDashboardViewModel: ObservableObject {
             if previouslyVisibleProfileID != nil, !visibleProfileStillExists {
                 destination = .profiles
             }
-            if case .reports = destination {
-                report = try await store.report(for: reportPeriod)
+            if let refreshedReport {
+                report = refreshedReport
             }
             await applyAudioSnapshot()
         } catch GuardianFamilyStoreError.profileNotFound,
@@ -423,14 +444,26 @@ final class GuardianDashboardViewModel: ObservableObject {
         {
             // A remote owner can remove the final shared Profile. Keep the
             // parent in a recoverable creation flow instead of a stale editor.
-            familySnapshot = try? await store.familySnapshot()
+            let emptyFamily = try? await store.familySnapshot()
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
+            }
+            familySnapshot = emptyFamily
             snapshot = nil
             report = nil
             destination = .profileEditor(nil)
             await audioExperienceService.stopAmbientAudio()
+        } catch is CancellationError {
+            return
         } catch {
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
+            }
             errorMessage =
                 "Family Sync finished, but this page could not refresh. Please try again."
+        }
+        guard refreshGeneration == externalSyncRefreshGeneration else {
+            return
         }
         await refreshSyncStatusAndWait()
     }
@@ -1070,7 +1103,12 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     private func refreshSyncStatusAndWait() async {
+        syncPresentationRefreshGeneration &+= 1
+        let refreshGeneration = syncPresentationRefreshGeneration
         guard let familySyncCoordinator else {
+            guard refreshGeneration == syncPresentationRefreshGeneration else {
+                return
+            }
             isFamilySyncEnabled = false
             profileErasurePresentation = nil
             syncStatus = .deviceOnly(
@@ -1080,25 +1118,47 @@ final class GuardianDashboardViewModel: ObservableObject {
         }
         async let enabled = familySyncCoordinator.isEnabled()
         async let status = familySyncCoordinator.status()
-        isFamilySyncEnabled = await enabled
-        syncStatus = await status
-        await refreshProfileErasurePresentation(
+        let resolvedEnabled = await enabled
+        let resolvedStatus = await status
+        let erasurePresentation = await profileErasurePresentation(
             using: familySyncCoordinator,
-            isEnabled: isFamilySyncEnabled
+            isEnabled: resolvedEnabled
         )
+        guard refreshGeneration == syncPresentationRefreshGeneration else {
+            return
+        }
+        isFamilySyncEnabled = resolvedEnabled
+        syncStatus = resolvedStatus
+        profileErasurePresentation = erasurePresentation
     }
 
     private func refreshProfileErasurePresentation(
         using familySyncCoordinator: any FamilySyncCoordinating,
         isEnabled: Bool
     ) async {
+        syncPresentationRefreshGeneration &+= 1
+        let refreshGeneration = syncPresentationRefreshGeneration
+        let presentation = await profileErasurePresentation(
+            using: familySyncCoordinator,
+            isEnabled: isEnabled
+        )
+        guard refreshGeneration == syncPresentationRefreshGeneration else {
+            return
+        }
+        profileErasurePresentation = presentation
+    }
+
+    private func profileErasurePresentation(
+        using familySyncCoordinator: any FamilySyncCoordinating,
+        isEnabled: Bool
+    ) async -> GuardianProfileErasurePresentation? {
         do {
-            profileErasurePresentation = GuardianProfileErasurePresentation.make(
+            return GuardianProfileErasurePresentation.make(
                 lifecycles: try await familySyncCoordinator.profileErasureLifecycles(),
                 isFamilySyncEnabled: isEnabled
             )
         } catch {
-            profileErasurePresentation = .unavailable
+            return .unavailable
         }
     }
 

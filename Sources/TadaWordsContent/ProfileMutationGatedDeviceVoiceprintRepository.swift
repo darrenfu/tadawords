@@ -1,12 +1,21 @@
 import Foundation
 import TadaWordsDomain
 
+public enum ProfileMutationGatedDeviceVoiceprintRepositoryError:
+    Error,
+    Equatable,
+    Sendable
+{
+    case freshInstallationResetUnsupported
+}
+
 /// Applies the same Profile terminal fence used by JSON repositories to the
 /// device-local Keychain voiceprint adapter. A stale enrollment may finish
 /// after a remote deletion, but it can never persist a template after the
 /// deletion tombstone has sealed that Profile.
 public struct ProfileMutationGatedDeviceVoiceprintRepository:
     DeviceVoiceprintRepository,
+    FreshInstallationVoiceprintResetting,
     Sendable
 {
     private let base: any DeviceVoiceprintRepository
@@ -55,5 +64,15 @@ public struct ProfileMutationGatedDeviceVoiceprintRepository:
         ) {
             try await base.delete(for: profileID)
         }
+    }
+
+    public func resetVoiceprintsForFreshInstallation() async throws {
+        guard
+            let resetter = base as? any FreshInstallationVoiceprintResetting
+        else {
+            throw ProfileMutationGatedDeviceVoiceprintRepositoryError
+                .freshInstallationResetUnsupported
+        }
+        try await resetter.resetVoiceprintsForFreshInstallation()
     }
 }

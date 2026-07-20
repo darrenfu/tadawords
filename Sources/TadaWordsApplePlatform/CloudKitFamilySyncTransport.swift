@@ -52,6 +52,34 @@ struct CloudKitOwnerDeletionRecoveryExecutor {
     }
 }
 
+/// Remote root/zone deletion evidence must become a cross-device deletion
+/// barrier before the payload zone is erased or local state turns terminal.
+/// Keeping this as a distinct executor prevents those paths from accidentally
+/// using the owner-ledger replay variant whose ledger step is intentionally a
+/// no-op because the control record is already the fetched evidence.
+struct CloudKitRemoteOwnerDeletionDominanceExecutor {
+    func recover<T>(
+        isolation: isolated (any Actor) = #isolation,
+        record: FamilySyncRecord,
+        verifyOriginAccount: () async throws -> Void,
+        persistControlLedger: (FamilySyncRecord) async throws -> Void,
+        eraseZone: () async throws -> Void,
+        purgeLocalSources: () throws -> Void,
+        commitRecovery: () throws -> T
+    ) async throws -> T {
+        _ = isolation
+        return try await CloudKitOwnerDeletionRecoveryExecutor().recover(
+            verifyOriginAccount: verifyOriginAccount,
+            persistLedger: {
+                try await persistControlLedger(record)
+            },
+            eraseZone: eraseZone,
+            purgeLocalSources: purgeLocalSources,
+            commitRecovery: commitRecovery
+        )
+    }
+}
+
 struct CloudKitParticipantLeaveExecutor {
     func leave<T>(
         isolation: isolated (any Actor) = #isolation,
@@ -85,6 +113,183 @@ struct CloudKitProvenZoneDeletionRecoveryExecutor {
     }
 }
 
+/// Proves the Profile identity encoded in share metadata before CloudKit is
+/// allowed to accept the share, then validates the newly readable root against
+/// that same immutable identity before local commit.
+enum CloudKitAcceptedShareRootProof {
+    static func profileID(from rootRecordID: CKRecord.ID) throws -> ProfileID {
+        guard
+            let profileID = CloudKitDeterministicProfileRoute.profileID(
+                from: rootRecordID
+            )
+        else {
+            throw CloudKitFamilySyncError.malformedRecord(
+                rootRecordID.recordName
+            )
+        }
+        return profileID
+    }
+
+    static func validate(
+        _ root: CKRecord,
+        expectedRootRecordID: CKRecord.ID,
+        expectedShareRecordID: CKRecord.ID?,
+        profileID: ProfileID
+    ) throws {
+        guard root.recordType == CloudKitFamilyRecordCodec.Schema.rootRecordType,
+            root.recordID == expectedRootRecordID,
+            CloudKitDeterministicProfileRoute.profileID(
+                from: root.recordID
+            ) == profileID,
+            let encodedProfileID = root[
+                CloudKitFamilyRecordCodec.Schema.profileID
+            ] as? String,
+            UUID(uuidString: encodedProfileID) == profileID.rawValue,
+            expectedShareRecordID == nil
+                || root.share?.recordID == expectedShareRecordID
+        else {
+            throw CloudKitFamilySyncError.malformedRecord(
+                expectedRootRecordID.recordName
+            )
+        }
+    }
+}
+
+/// Executes the monotonic cleanup state machine under the transport's marker
+/// claim. Attempted/accepted phases cannot reach deletion or marker completion
+/// until the exact root+share have been observed and durably materialized.
+struct CloudKitAcceptedShareRecoveryExecutor {
+    func recover(
+        isolation: isolated (any Actor)? = #isolation,
+        marker: CloudKitPendingAcceptedShareCleanup,
+        verifyOriginAccount: () async throws -> Void,
+        completePrepared: (
+            CloudKitPendingAcceptedShareCleanup
+        ) throws -> Void,
+        materialize: (
+            CloudKitPendingAcceptedShareCleanup
+        ) async throws -> CloudKitPendingAcceptedShareCleanup,
+        deleteMaterializedShare: (
+            CloudKitPendingAcceptedShareCleanup
+        ) async throws -> Void,
+        completeMaterialized: (
+            CloudKitPendingAcceptedShareCleanup
+        ) throws -> Void
+    ) async throws {
+        _ = isolation
+        try await verifyOriginAccount()
+        var current = marker
+        switch current.effectivePhase {
+        case .prepared:
+            try completePrepared(current)
+            return
+        case .acceptanceAttempted, .accepted:
+            current = try await materialize(current)
+        case .materialized:
+            break
+        }
+        try await verifyOriginAccount()
+        try await deleteMaterializedShare(current)
+        try await verifyOriginAccount()
+        try completeMaterialized(current)
+    }
+}
+
+/// A per-share failure is proof that this acceptance did not commit only when
+/// the same invocation moved a never-attempted marker immediately into the
+/// external call. A marker already in the attempted state may represent an
+/// earlier server commit whose response was lost, so a later failure must not
+/// clear it.
+enum CloudKitAcceptedShareFailureProofPolicy {
+    static func canClearAfterExplicitPerShareFailure(
+        initialMarker: CloudKitPendingAcceptedShareCleanup,
+        attemptedMarker: CloudKitPendingAcceptedShareCleanup
+    ) -> Bool {
+        initialMarker.effectivePhase == .prepared
+            && attemptedMarker.effectivePhase == .acceptanceAttempted
+    }
+}
+
+/// Couples the externally committed CloudKit acceptance with one atomic local
+/// binding+marker commit. Any error before that commit compensates only while
+/// the exact durable marker still exists; an idempotent second completion can
+/// therefore never leave a share already made visible by the first path.
+struct CloudKitAcceptedShareTransactionExecutor {
+    func acceptAndCommit<T>(
+        isolation: isolated (any Actor)? = #isolation,
+        markerIsPending: () -> Bool,
+        acceptAndValidate: () async throws -> T,
+        commit: (T) throws -> Void,
+        compensate: () async throws -> Void
+    ) async throws -> T {
+        _ = isolation
+        do {
+            let accepted = try await acceptAndValidate()
+            try commit(accepted)
+            return accepted
+        } catch {
+            if markerIsPending() {
+                try? await compensate()
+            }
+            throw error
+        }
+    }
+}
+
+/// Keeps the all-origin accepted-share reservation check in front of every
+/// private-zone side effect. The second preflight protects the local commit;
+/// the transport's in-memory Profile claim prevents an acceptance from being
+/// staged while the async CloudKit creation is in flight.
+struct CloudKitPrivateRoutePreparationExecutor {
+    func prepare<T>(
+        isolation: isolated (any Actor)? = #isolation,
+        preflight: () throws -> Void,
+        createRemoteRoute: () async throws -> Void,
+        commitLocalRoute: () throws -> T
+    ) async throws -> T {
+        _ = isolation
+        try preflight()
+        try await createRemoteRoute()
+        try preflight()
+        return try commitLocalRoute()
+    }
+}
+
+struct CloudKitAcceptedShareOperationFence {
+    private(set) var engineFetchIsClaimed = false
+    private var cleanupMarkerIDs = Set<UUID>()
+
+    var acceptanceCanStage: Bool { !engineFetchIsClaimed }
+
+    mutating func claimEngineFetch() -> Bool {
+        guard !engineFetchIsClaimed else { return false }
+        engineFetchIsClaimed = true
+        return true
+    }
+
+    mutating func releaseEngineFetch() {
+        engineFetchIsClaimed = false
+    }
+
+    mutating func claimCleanup(
+        _ marker: CloudKitPendingAcceptedShareCleanup
+    ) -> Bool {
+        cleanupMarkerIDs.insert(marker.id).inserted
+    }
+
+    mutating func releaseCleanup(
+        _ marker: CloudKitPendingAcceptedShareCleanup
+    ) {
+        cleanupMarkerIDs.remove(marker.id)
+    }
+}
+
+enum CloudKitAcceptedShareFetchFence {
+    static func allowsEngineProgress(pendingMarkerCount: Int) -> Bool {
+        pendingMarkerCount == 0
+    }
+}
+
 /// CloudKit batch APIs return per-item proof. A successful outer call is not
 /// evidence that the requested zone/record deletion was committed, and a
 /// missing dictionary entry must therefore fail closed.
@@ -108,6 +313,40 @@ enum CloudKitTerminalDeletionProof {
             }
             throw error
         }
+    }
+}
+
+enum CloudKitTransportGenerationProof {
+    static func require(
+        expected: UInt64,
+        privateGeneration: UInt64,
+        sharedGeneration: UInt64,
+        eventBufferIsActive: Bool
+    ) throws {
+        guard privateGeneration == expected,
+            sharedGeneration == expected,
+            eventBufferIsActive
+        else {
+            throw CloudKitFamilySyncError.accountBindingMismatch
+        }
+    }
+}
+
+enum CloudKitAcceptedShareBindingFactory {
+    static func binding(
+        profileID: ProfileID,
+        rootRecordID: CKRecord.ID,
+        originAccountRecordName: String
+    ) -> ProfileCloudBinding {
+        ProfileCloudBinding(
+            profileID: profileID,
+            state: .sharedParticipant,
+            zoneName: rootRecordID.zoneID.zoneName,
+            ownerName: rootRecordID.zoneID.ownerName,
+            rootRecordName: rootRecordID.recordName,
+            originAccountRecordName: originAccountRecordName,
+            originErasureRoute: .participant
+        )
     }
 }
 
@@ -239,6 +478,12 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
     private var sharedDelegate: CloudKitFamilySyncEngineDelegate
     private var privateEngine: CKSyncEngine
     private var sharedEngine: CKSyncEngine
+    /// Serializes acceptance/recovery against CKSyncEngine fetch progression
+    /// across actor reentrancy. A process crash drops these volatile claims but
+    /// preserves every marker, which is when recovery takes ownership.
+    private var acceptedShareOperationFence =
+        CloudKitAcceptedShareOperationFence()
+    private var claimedPrivateRouteProfileIDs = Set<ProfileID>()
 
     public init(
         containerIdentifier: String = "iCloud.com.tadawords.app",
@@ -415,7 +660,49 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         if let accountChange = try await accountChangeBlockingUpload() {
             return FamilySyncTransportResult(accountChange: accountChange)
         }
+        guard acceptedShareOperationFence.claimEngineFetch() else {
+            return FamilySyncTransportResult(
+                failures: [
+                    FamilySyncTransportFailure(key: nil, category: .conflict)
+                ]
+            )
+        }
+        defer { acceptedShareOperationFence.releaseEngineFetch() }
         let requestedProfileIDs = Set(profileIDs)
+        let recoveryGeneration = privateDelegate.generation
+
+        // A marker exists only when CloudKit may have accepted a share that
+        // never reached the atomic local binding commit. Recover it before any
+        // Profile can fall back to a private route or upload child payload.
+        for marker in try metadataStore.pendingAcceptedShareCleanups() {
+            guard claimAcceptedShareCleanup(marker) else { continue }
+            do {
+                try await recoverAcceptedShareCleanup(
+                    marker,
+                    generation: recoveryGeneration
+                )
+                releaseAcceptedShareCleanup(marker)
+            } catch {
+                releaseAcceptedShareCleanup(marker)
+                throw error
+            }
+        }
+        let remainingAcceptedShareMarkers =
+            try metadataStore.pendingAcceptedShareCleanups()
+        guard
+            CloudKitAcceptedShareFetchFence.allowsEngineProgress(
+                pendingMarkerCount: remainingAcceptedShareMarkers.count
+            )
+        else {
+            // A concurrently accepting path owns this marker. Do not let
+            // CKSyncEngine consume its unbound shared root/children or advance
+            // the shared change token before the atomic binding commit.
+            return FamilySyncTransportResult(
+                failures: [
+                    FamilySyncTransportFailure(key: nil, category: .conflict)
+                ]
+            )
+        }
 
         var recoveredStagedRemoval = false
         for marker
@@ -433,12 +720,14 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
             case .ownerDeletionLedger:
                 try await revalidateAmbiguousOwnerDeletionLedger(
                     marker,
-                    binding: binding
+                    binding: binding,
+                    generation: recoveryGeneration
                 )
             case .rootRecordDeletion, .zoneDeletion:
                 let terminal = try await recoverAmbiguousRemoteRemoval(
                     marker,
-                    binding: binding
+                    binding: binding,
+                    generation: recoveryGeneration
                 )
                 recoveredStagedRemoval = recoveredStagedRemoval || terminal
             }
@@ -453,14 +742,16 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
             _ = try await CloudKitOwnerDeletionRecoveryExecutor().recover(
                 verifyOriginAccount: {
                     try await self.requireCurrentAccountMatchesOrigin(
-                        recovery.binding
+                        recovery.binding,
+                        generation: recoveryGeneration
                     )
                 },
                 persistLedger: {},
                 eraseZone: {
                     try await self.eraseOwnerPayloadZone(
                         zoneID,
-                        binding: recovery.binding
+                        binding: recovery.binding,
+                        generation: recoveryGeneration
                     )
                 },
                 purgeLocalSources: {
@@ -489,17 +780,26 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
                         "Root deletion recovery route is incomplete"
                     )
                 }
-                _ = try await CloudKitOwnerDeletionRecoveryExecutor().recover(
+                _ = try await CloudKitRemoteOwnerDeletionDominanceExecutor().recover(
+                    record: recovery.record,
                     verifyOriginAccount: {
                         try await self.requireCurrentAccountMatchesOrigin(
-                            recovery.binding
+                            recovery.binding,
+                            generation: recoveryGeneration
                         )
                     },
-                    persistLedger: {},
+                    persistControlLedger: { record in
+                        try await self.persistOwnerDeletionLedger(
+                            record,
+                            binding: recovery.binding,
+                            generation: recoveryGeneration
+                        )
+                    },
                     eraseZone: {
                         try await self.eraseOwnerPayloadZone(
                             zoneID,
-                            binding: recovery.binding
+                            binding: recovery.binding,
+                            generation: recoveryGeneration
                         )
                     },
                     purgeLocalSources: {
@@ -522,11 +822,15 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
                 _ = try await CloudKitParticipantLeaveExecutor().leave(
                     verifyOriginAccount: {
                         try await self.requireCurrentAccountMatchesOrigin(
-                            recovery.binding
+                            recovery.binding,
+                            generation: recoveryGeneration
                         )
                     },
                     leaveShare: {
-                        try await self.leaveSharedProfile(recovery.binding)
+                        try await self.leaveSharedProfile(
+                            recovery.binding,
+                            generation: recoveryGeneration
+                        )
                     },
                     purgeLocalSources: {
                         try CloudKitProfilePhotoAssetCodec.removeSources(
@@ -551,28 +855,81 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         }
 
         for recovery in try metadataStore.pendingRemoteZoneRemovalRecoveries() {
-            _ = try await CloudKitProvenZoneDeletionRecoveryExecutor().recover(
-                verifyOriginAccount: {
-                    try await self.requireCurrentAccountMatchesOrigin(
-                        recovery.binding
-                    )
-                },
-                purgeLocalSources: {
-                    try CloudKitProfilePhotoAssetCodec.removeSources(
-                        for: recovery.record.profileID,
-                        in: self.photoAssetSourceDirectory
-                    )
-                },
-                commit: {
-                    try self.metadataStore.commitRemoteProfileRemoval(
-                        record: recovery.record,
-                        recordID: recovery.recordID,
-                        scope: recovery.scope,
-                        receivedAt: recovery.receivedAt,
-                        terminalEvidence: .zoneDeletion
+            switch recovery.binding.erasureRoute {
+            case .owner:
+                guard let zoneID = recovery.binding.zoneID else {
+                    throw CloudKitFamilySyncError.operationFailed(
+                        "Zone deletion recovery route is incomplete"
                     )
                 }
-            )
+                _ = try await CloudKitRemoteOwnerDeletionDominanceExecutor().recover(
+                    record: recovery.record,
+                    verifyOriginAccount: {
+                        try await self.requireCurrentAccountMatchesOrigin(
+                            recovery.binding,
+                            generation: recoveryGeneration
+                        )
+                    },
+                    persistControlLedger: { record in
+                        try await self.persistOwnerDeletionLedger(
+                            record,
+                            binding: recovery.binding,
+                            generation: recoveryGeneration
+                        )
+                    },
+                    eraseZone: {
+                        // The callback already proved this zone absent. Repeat
+                        // the idempotent erase so the same proof contract is
+                        // used after the deletion barrier is committed.
+                        try await self.eraseOwnerPayloadZone(
+                            zoneID,
+                            binding: recovery.binding,
+                            generation: recoveryGeneration
+                        )
+                    },
+                    purgeLocalSources: {
+                        try CloudKitProfilePhotoAssetCodec.removeSources(
+                            for: recovery.record.profileID,
+                            in: self.photoAssetSourceDirectory
+                        )
+                    },
+                    commitRecovery: {
+                        try self.metadataStore.commitRemoteProfileRemoval(
+                            record: recovery.record,
+                            recordID: recovery.recordID,
+                            scope: recovery.scope,
+                            receivedAt: recovery.receivedAt,
+                            terminalEvidence: .zoneDeletion
+                        )
+                    }
+                )
+            case .participant:
+                _ = try await CloudKitProvenZoneDeletionRecoveryExecutor().recover(
+                    verifyOriginAccount: {
+                        try await self.requireCurrentAccountMatchesOrigin(
+                            recovery.binding,
+                            generation: recoveryGeneration
+                        )
+                    },
+                    purgeLocalSources: {
+                        try CloudKitProfilePhotoAssetCodec.removeSources(
+                            for: recovery.record.profileID,
+                            in: self.photoAssetSourceDirectory
+                        )
+                    },
+                    commit: {
+                        try self.metadataStore.commitRemoteProfileRemoval(
+                            record: recovery.record,
+                            recordID: recovery.recordID,
+                            scope: recovery.scope,
+                            receivedAt: recovery.receivedAt,
+                            terminalEvidence: .zoneDeletion
+                        )
+                    }
+                )
+            case .unresolved:
+                throw CloudKitFamilySyncError.accountBindingMismatch
+            }
             recoveredStagedRemoval = true
         }
 
@@ -606,7 +963,10 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         let ledgerRecords = try await fetchOwnerDeletionLedgers(
             for: requestedProfileIDs
         )
-        try await requireCurrentAccountRecordName(ledgerFetchAccount)
+        try await requireCurrentAccountRecordName(
+            ledgerFetchAccount,
+            generation: recoveryGeneration
+        )
         if !ledgerRecords.isEmpty {
             var recoveredLedger = false
             for record in ledgerRecords {
@@ -649,14 +1009,18 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
                 }
                 _ = try await CloudKitOwnerDeletionRecoveryExecutor().recover(
                     verifyOriginAccount: {
-                        try await self.requireCurrentAccountMatchesOrigin(binding)
+                        try await self.requireCurrentAccountMatchesOrigin(
+                            binding,
+                            generation: recoveryGeneration
+                        )
                     },
                     persistLedger: {},
                     eraseZone: {
                         if binding.state != .ownerDeleted {
                             try await self.eraseOwnerPayloadZone(
                                 zoneID,
-                                binding: binding
+                                binding: binding,
+                                generation: recoveryGeneration
                             )
                         }
                     },
@@ -717,6 +1081,13 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
     ) async throws -> FamilySyncTransportResult {
         if let accountChange = try await accountChangeBlockingUpload() {
             return FamilySyncTransportResult(accountChange: accountChange)
+        }
+        guard try metadataStore.pendingAcceptedShareCleanups().isEmpty else {
+            return FamilySyncTransportResult(
+                failures: [
+                    FamilySyncTransportFailure(key: nil, category: .conflict)
+                ]
+            )
         }
         guard !metadataStore.hasPendingInboxWorkForCurrentAccount() else {
             return FamilySyncTransportResult(
@@ -857,6 +1228,13 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
     }
 
     public func acknowledgeFetchedChanges(receiptIDs: Set<UUID>) async throws {
+        guard !receiptIDs.isEmpty else { return }
+        let generation = privateDelegate.generation
+        let accountRecordName = try await currentAuthorizedAccountRecordName()
+        try await requireCurrentAccountRecordName(
+            accountRecordName,
+            generation: generation
+        )
         try metadataStore.acknowledgeInbox(receiptIDs: receiptIDs)
     }
 
@@ -864,6 +1242,13 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         receiptIDs: Set<UUID>,
         category: FamilySyncPrivacySafeErrorCategory
     ) async throws {
+        guard !receiptIDs.isEmpty else { return }
+        let generation = privateDelegate.generation
+        let accountRecordName = try await currentAuthorizedAccountRecordName()
+        try await requireCurrentAccountRecordName(
+            accountRecordName,
+            generation: generation
+        )
         try metadataStore.quarantineInbox(
             receiptIDs: receiptIDs,
             category: category,
@@ -923,48 +1308,229 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
 
     public func acceptShare(at url: URL) async throws -> ProfileID {
         try await requireAuthorizedAccount()
+        let generation = privateDelegate.generation
+        let acceptingAccount = try await currentAuthorizedAccountRecordName()
         let fetched = try await container.shareMetadatas(for: [url])
+        try await requireCurrentAccountRecordName(
+            acceptingAccount,
+            generation: generation
+        )
         guard case .success(let metadata) = fetched[url] else {
             throw CloudKitFamilySyncError.operationFailed("Share metadata unavailable")
-        }
-        let accepted = try await container.accept([metadata])
-        guard case .success = accepted[metadata] else {
-            throw CloudKitFamilySyncError.operationFailed("Share acceptance failed")
         }
         guard let rootRecordID = metadata.hierarchicalRootRecordID else {
             throw CloudKitFamilySyncError.operationFailed("Shared root unavailable")
         }
-        let root = try await sharedDatabase.record(for: rootRecordID)
-        guard
-            let profileString = root[
-                CloudKitFamilyRecordCodec.Schema.profileID
-            ] as? String,
-            let profileUUID = UUID(uuidString: profileString)
-        else {
-            throw CloudKitFamilySyncError.malformedRecord(rootRecordID.recordName)
-        }
-        let profileID = ProfileID(rawValue: profileUUID)
-        let acceptedBinding = ProfileCloudBinding(
-            profileID: profileID,
-            state: .sharedParticipant,
-            zoneName: rootRecordID.zoneID.zoneName,
-            ownerName: rootRecordID.zoneID.ownerName,
-            rootRecordName: rootRecordID.recordName
+        let profileID = try CloudKitAcceptedShareRootProof.profileID(
+            from: rootRecordID
         )
+        guard acceptedShareOperationFence.acceptanceCanStage,
+            !claimedPrivateRouteProfileIDs.contains(profileID)
+        else {
+            throw CloudKitFamilySyncError.operationFailed(
+                "Profile synchronization already in progress"
+            )
+        }
+        let preparation: CloudKitPreparedAcceptedShareCleanup
         do {
-            try metadataStore.save(binding: acceptedBinding)
+            preparation = try metadataStore.prepareAcceptedShareCleanup(
+                profileID: profileID,
+                rootRecordID: rootRecordID,
+                shareRecordID: metadata.share.recordID,
+                originAccountRecordName: acceptingAccount
+            )
         } catch CloudKitFamilyPersistenceError.bindingConflict,
             CloudKitFamilyPersistenceError.accountBindingMismatch
         {
-            // CloudKit acceptance is externally committed before the Profile
-            // identity is known. If it collides with an existing local route,
-            // leave the just-accepted share best-effort and never replace the
-            // durable owner/participant provenance.
-            try? await leaveSharedProfile(acceptedBinding)
+            // The deterministic root exposes collisions before CloudKit gains
+            // access, so no compensation is needed and no existing route can
+            // be replaced.
             throw CloudKitFamilySyncError.accountBindingMismatch
         }
-        try metadataStore.saveSystemFields(for: root, scope: .sharedDatabase)
-        return profileID
+
+        switch preparation.state {
+        case .alreadyCommitted:
+            return profileID
+        case .staged(let initialMarker, _):
+            guard claimAcceptedShareCleanup(initialMarker) else {
+                let committed = metadataStore.binding(for: profileID)
+                if committed == initialMarker.binding,
+                    metadataStore.isBindingAuthorizedForConfirmedAccount(
+                        committed
+                    )
+                {
+                    return profileID
+                }
+                throw CloudKitFamilySyncError.operationFailed(
+                    "Share acceptance already in progress"
+                )
+            }
+            if initialMarker.effectivePhase == .materialized {
+                do {
+                    try await recoverAcceptedShareCleanup(
+                        initialMarker,
+                        generation: generation
+                    )
+                    releaseAcceptedShareCleanup(initialMarker)
+                } catch {
+                    releaseAcceptedShareCleanup(initialMarker)
+                    throw error
+                }
+                return try await acceptShare(at: url)
+            }
+            do {
+                let materialized =
+                    try await CloudKitAcceptedShareTransactionExecutor()
+                    .acceptAndCommit(
+                        markerIsPending: {
+                            self.metadataStore
+                                .isAcceptedShareCleanupPending(initialMarker)
+                        },
+                        acceptAndValidate: {
+                            try await self.requireCurrentAccountRecordName(
+                                acceptingAccount,
+                                generation: generation
+                            )
+                            let acceptedMarker: CloudKitPendingAcceptedShareCleanup
+                            switch metadata.participantStatus {
+                            case .pending:
+                                let attemptedMarker: CloudKitPendingAcceptedShareCleanup
+                                if initialMarker.effectivePhase == .prepared {
+                                    // This durable transition is immediately
+                                    // before the external acceptance call.
+                                    attemptedMarker = try self.metadataStore
+                                        .advanceAcceptedShareCleanup(
+                                            initialMarker,
+                                            to: .acceptanceAttempted
+                                        )
+                                } else {
+                                    attemptedMarker = initialMarker
+                                }
+                                let accepted = try await self.container.accept([
+                                    metadata
+                                ])
+                                try await self.requireCurrentAccountRecordName(
+                                    acceptingAccount,
+                                    generation: generation
+                                )
+                                guard let perShareResult = accepted[metadata]
+                                else {
+                                    throw CloudKitFamilySyncError.operationFailed(
+                                        "Share acceptance result unavailable"
+                                    )
+                                }
+                                switch perShareResult {
+                                case .success:
+                                    acceptedMarker = try self.metadataStore
+                                        .advanceAcceptedShareCleanup(
+                                            attemptedMarker,
+                                            to: .accepted
+                                        )
+                                case .failure(let error):
+                                    if CloudKitAcceptedShareFailureProofPolicy
+                                        .canClearAfterExplicitPerShareFailure(
+                                            initialMarker: initialMarker,
+                                            attemptedMarker: attemptedMarker
+                                        )
+                                    {
+                                        try self.metadataStore
+                                            .completeAcceptedShareCleanup(
+                                                attemptedMarker,
+                                                proof:
+                                                    .explicitAcceptanceFailure
+                                            )
+                                    }
+                                    throw error
+                                }
+                            case .accepted:
+                                let attemptedMarker =
+                                    initialMarker.effectivePhase == .prepared
+                                    ? try self.metadataStore
+                                        .advanceAcceptedShareCleanup(
+                                            initialMarker,
+                                            to: .acceptanceAttempted
+                                        ) : initialMarker
+                                acceptedMarker = try self.metadataStore
+                                    .advanceAcceptedShareCleanup(
+                                        attemptedMarker,
+                                        to: .accepted
+                                    )
+                            case .removed:
+                                let proof: CloudKitAcceptedShareCleanupProof =
+                                    initialMarker.effectivePhase == .prepared
+                                    ? .preparedWithoutAcceptance
+                                    : .metadataShowsRemovedParticipant
+                                try self.metadataStore
+                                    .completeAcceptedShareCleanup(
+                                        initialMarker,
+                                        proof: proof
+                                    )
+                                throw CloudKitFamilySyncError.operationFailed(
+                                    "Share invitation is no longer active"
+                                )
+                            case .unknown:
+                                throw CloudKitFamilySyncError.operationFailed(
+                                    "Share participation status unavailable"
+                                )
+                            @unknown default:
+                                throw CloudKitFamilySyncError.operationFailed(
+                                    "Share participation status unavailable"
+                                )
+                            }
+                            let root = try await self.sharedDatabase.record(
+                                for: rootRecordID
+                            )
+                            try await self.requireCurrentAccountRecordName(
+                                acceptingAccount,
+                                generation: generation
+                            )
+                            try CloudKitAcceptedShareRootProof.validate(
+                                root,
+                                expectedRootRecordID: rootRecordID,
+                                expectedShareRecordID:
+                                    acceptedMarker.shareRecordID,
+                                profileID: profileID
+                            )
+                            guard let shareRecordID = root.share?.recordID else {
+                                throw CloudKitFamilySyncError.operationFailed(
+                                    "Shared root is not linked to its share"
+                                )
+                            }
+                            let materializedMarker = try self.metadataStore
+                                .advanceAcceptedShareCleanup(
+                                    acceptedMarker,
+                                    to: .materialized,
+                                    shareRecordID: shareRecordID
+                                )
+                            return (root, materializedMarker)
+                        },
+                        commit: { validated in
+                            try self.metadataStore.commitAcceptedShareBinding(
+                                validated.1.binding,
+                                clearing: validated.1
+                            )
+                        },
+                        compensate: {
+                            try await self.recoverAcceptedShareCleanup(
+                                initialMarker,
+                                generation: generation
+                            )
+                        }
+                    )
+                // This cache is reconstructible. It is intentionally outside
+                // the acceptance transaction: a cache write failure after the
+                // atomic binding commit must never trigger participant leave.
+                try metadataStore.saveSystemFields(
+                    for: materialized.0,
+                    scope: .sharedDatabase
+                )
+                releaseAcceptedShareCleanup(initialMarker)
+                return profileID
+            } catch {
+                releaseAcceptedShareCleanup(initialMarker)
+                throw error
+            }
+        }
     }
 
     private struct ProfileRemovalBatchResult: Sendable {
@@ -1160,14 +1726,21 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
 
     private func persistOwnerDeletionLedger(
         _ tombstone: FamilySyncRecord,
-        binding: ProfileCloudBinding
+        binding: ProfileCloudBinding,
+        generation: UInt64? = nil
     ) async throws {
         let recordID = CloudKitFamilyDeletionLedgerCodec.recordID(
             for: tombstone.profileID
         )
-        try await requireCurrentAccountMatchesOrigin(binding)
+        try await requireCurrentAccountMatchesOrigin(
+            binding,
+            generation: generation
+        )
         let existing = try? await privateDatabase.record(for: recordID)
-        try await requireCurrentAccountMatchesOrigin(binding)
+        try await requireCurrentAccountMatchesOrigin(
+            binding,
+            generation: generation
+        )
         if let existing {
             let removedUnexpectedFields =
                 CloudKitFamilyDeletionLedgerCodec
@@ -1181,14 +1754,20 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
                 )
             }
             guard removedUnexpectedFields else { return }
-            try await requireCurrentAccountMatchesOrigin(binding)
+            try await requireCurrentAccountMatchesOrigin(
+                binding,
+                generation: generation
+            )
             let sanitized = try await privateDatabase.modifyRecords(
                 saving: [existing],
                 deleting: [],
                 savePolicy: .ifServerRecordUnchanged,
                 atomically: true
             )
-            try await requireCurrentAccountMatchesOrigin(binding)
+            try await requireCurrentAccountMatchesOrigin(
+                binding,
+                generation: generation
+            )
             guard case .success = sanitized.saveResults[recordID] else {
                 throw CloudKitFamilySyncError.operationFailed(
                     "Deletion ledger could not be sanitized"
@@ -1200,12 +1779,18 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         let controlZone = CKRecordZone(
             zoneID: CloudKitFamilyDeletionLedgerCodec.controlZoneID
         )
-        try await requireCurrentAccountMatchesOrigin(binding)
+        try await requireCurrentAccountMatchesOrigin(
+            binding,
+            generation: generation
+        )
         let zoneResult = try await privateDatabase.modifyRecordZones(
             saving: [controlZone],
             deleting: []
         )
-        try await requireCurrentAccountMatchesOrigin(binding)
+        try await requireCurrentAccountMatchesOrigin(
+            binding,
+            generation: generation
+        )
         if case .failure(let error) = zoneResult.saveResults[controlZone.zoneID],
             (error as? CKError)?.code != .serverRejectedRequest
         {
@@ -1215,24 +1800,39 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         let ledger = try CloudKitFamilyDeletionLedgerCodec.cloudRecord(
             for: tombstone
         )
-        try await requireCurrentAccountMatchesOrigin(binding)
+        try await requireCurrentAccountMatchesOrigin(
+            binding,
+            generation: generation
+        )
         let save = try await privateDatabase.modifyRecords(
             saving: [ledger],
             deleting: [],
             savePolicy: .changedKeys,
             atomically: true
         )
-        try await requireCurrentAccountMatchesOrigin(binding)
+        try await requireCurrentAccountMatchesOrigin(
+            binding,
+            generation: generation
+        )
         guard case .success = save.saveResults[ledger.recordID] else {
-            try await requireCurrentAccountMatchesOrigin(binding)
+            try await requireCurrentAccountMatchesOrigin(
+                binding,
+                generation: generation
+            )
             if let fetched = try? await privateDatabase.record(for: recordID),
                 CloudKitFamilyDeletionLedgerCodec.familyRecord(from: fetched)?
                     .profileID == tombstone.profileID
             {
-                try await requireCurrentAccountMatchesOrigin(binding)
+                try await requireCurrentAccountMatchesOrigin(
+                    binding,
+                    generation: generation
+                )
                 return
             }
-            try await requireCurrentAccountMatchesOrigin(binding)
+            try await requireCurrentAccountMatchesOrigin(
+                binding,
+                generation: generation
+            )
             throw CloudKitFamilySyncError.operationFailed(
                 "Deletion ledger could not be committed"
             )
@@ -1241,14 +1841,21 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
 
     private func eraseOwnerPayloadZone(
         _ zoneID: CKRecordZone.ID,
-        binding: ProfileCloudBinding
+        binding: ProfileCloudBinding,
+        generation: UInt64? = nil
     ) async throws {
-        try await requireCurrentAccountMatchesOrigin(binding)
+        try await requireCurrentAccountMatchesOrigin(
+            binding,
+            generation: generation
+        )
         let result = try await privateDatabase.modifyRecordZones(
             saving: [],
             deleting: [zoneID]
         )
-        try await requireCurrentAccountMatchesOrigin(binding)
+        try await requireCurrentAccountMatchesOrigin(
+            binding,
+            generation: generation
+        )
         try CloudKitTerminalDeletionProof.require(
             result.deleteResults[zoneID],
             acceptingAbsenceCodes: [.zoneNotFound, .unknownItem],
@@ -1256,8 +1863,94 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         )
     }
 
+    private func claimAcceptedShareCleanup(
+        _ marker: CloudKitPendingAcceptedShareCleanup
+    ) -> Bool {
+        acceptedShareOperationFence.claimCleanup(marker)
+    }
+
+    private func releaseAcceptedShareCleanup(
+        _ marker: CloudKitPendingAcceptedShareCleanup
+    ) {
+        acceptedShareOperationFence.releaseCleanup(marker)
+    }
+
+    private func recoverAcceptedShareCleanup(
+        _ marker: CloudKitPendingAcceptedShareCleanup,
+        generation: UInt64
+    ) async throws {
+        guard
+            let current = try metadataStore.pendingAcceptedShareCleanups()
+                .first(where: { $0.id == marker.id })
+        else { return }
+        try await CloudKitAcceptedShareRecoveryExecutor().recover(
+            marker: current,
+            verifyOriginAccount: {
+                try await self.requireCurrentAccountMatchesOrigin(
+                    current.binding,
+                    generation: generation
+                )
+            },
+            completePrepared: { prepared in
+                // This phase was persisted before any acceptance call could
+                // start, so no remote grant exists to compensate.
+                try self.metadataStore.completeAcceptedShareCleanup(
+                    prepared,
+                    proof: .preparedWithoutAcceptance
+                )
+            },
+            materialize: { pending in
+                // Accept completion may precede residual zone creation.
+                // Unknown/zone/permission here are RETRY, never absence.
+                let root = try await self.sharedDatabase.record(
+                    for: pending.rootRecordID
+                )
+                try await self.requireCurrentAccountMatchesOrigin(
+                    pending.binding,
+                    generation: generation
+                )
+                try CloudKitAcceptedShareRootProof.validate(
+                    root,
+                    expectedRootRecordID: pending.rootRecordID,
+                    expectedShareRecordID: pending.shareRecordID,
+                    profileID: pending.profileID
+                )
+                guard let observedShareID = root.share?.recordID else {
+                    throw CloudKitFamilySyncError.operationFailed(
+                        "Accepted share has not materialized"
+                    )
+                }
+                return try self.metadataStore.advanceAcceptedShareCleanup(
+                    pending,
+                    to: .materialized,
+                    shareRecordID: observedShareID
+                )
+            },
+            deleteMaterializedShare: { materialized in
+                guard let shareRecordID = materialized.shareRecordID else {
+                    throw CloudKitFamilySyncError.operationFailed(
+                        "Accepted share deletion route unavailable"
+                    )
+                }
+                try await self.deleteSharedParticipantShare(
+                    shareRecordID,
+                    binding: materialized.binding,
+                    generation: generation,
+                    acceptingMaterializedAbsence: true
+                )
+            },
+            completeMaterialized: { materialized in
+                try self.metadataStore.completeAcceptedShareCleanup(
+                    materialized,
+                    proof: .materializedShareDeletion
+                )
+            }
+        )
+    }
+
     private func leaveSharedProfile(
-        _ binding: ProfileCloudBinding
+        _ binding: ProfileCloudBinding,
+        generation: UInt64? = nil
     ) async throws {
         guard let rootID = binding.rootRecordID else {
             throw CloudKitFamilySyncError.malformedRecord(
@@ -1266,15 +1959,24 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         }
         let root: CKRecord
         do {
-            try await requireCurrentAccountMatchesOrigin(binding)
+            try await requireCurrentAccountMatchesOrigin(
+                binding,
+                generation: generation
+            )
             root = try await sharedDatabase.record(for: rootID)
-            try await requireCurrentAccountMatchesOrigin(binding)
+            try await requireCurrentAccountMatchesOrigin(
+                binding,
+                generation: generation
+            )
         } catch let error as CKError
             where error.code == .unknownItem
             || error.code == .zoneNotFound
             || error.code == .permissionFailure
         {
-            try await requireCurrentAccountMatchesOrigin(binding)
+            try await requireCurrentAccountMatchesOrigin(
+                binding,
+                generation: generation
+            )
             return
         }
         guard let shareID = root.share?.recordID else {
@@ -1282,21 +1984,41 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
                 "Shared leave proof unavailable"
             )
         }
-        try await requireCurrentAccountMatchesOrigin(binding)
+        try await deleteSharedParticipantShare(
+            shareID,
+            binding: binding,
+            generation: generation,
+            acceptingMaterializedAbsence: true
+        )
+    }
+
+    private func deleteSharedParticipantShare(
+        _ shareID: CKRecord.ID,
+        binding: ProfileCloudBinding,
+        generation: UInt64?,
+        acceptingMaterializedAbsence: Bool
+    ) async throws {
+        guard shareID.zoneID == binding.zoneID else {
+            throw CloudKitFamilySyncError.accountBindingMismatch
+        }
+        try await requireCurrentAccountMatchesOrigin(
+            binding,
+            generation: generation
+        )
         let result = try await sharedDatabase.modifyRecords(
             saving: [],
             deleting: [shareID],
             savePolicy: .ifServerRecordUnchanged,
             atomically: true
         )
-        try await requireCurrentAccountMatchesOrigin(binding)
+        try await requireCurrentAccountMatchesOrigin(
+            binding,
+            generation: generation
+        )
         try CloudKitTerminalDeletionProof.require(
             result.deleteResults[shareID],
-            acceptingAbsenceCodes: [
-                .unknownItem,
-                .zoneNotFound,
-                .permissionFailure,
-            ],
+            acceptingAbsenceCodes: acceptingMaterializedAbsence
+                ? [.unknownItem, .zoneNotFound, .permissionFailure] : [],
             operation: "Shared leave result unavailable"
         )
     }
@@ -1325,30 +2047,78 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
             guard !hasPersistedBinding else {
                 throw CloudKitFamilySyncError.accountBindingMismatch
             }
+            guard claimedPrivateRouteProfileIDs.insert(profileID).inserted else {
+                throw CloudKitFamilySyncError.operationFailed(
+                    "Profile route preparation already in progress"
+                )
+            }
             let zoneID = privateZoneID(for: profileID)
             let rootID = privateRootRecordID(for: profileID)
-            try await preparePrivateZone(zoneID, profileID: profileID, rootID: rootID)
-            let binding = ProfileCloudBinding(
-                profileID: profileID,
-                state: .privateOwner,
-                zoneName: zoneID.zoneName,
-                ownerName: zoneID.ownerName,
-                rootRecordName: rootID.recordName
-            )
-            try metadataStore.save(binding: binding)
-            return binding
+            let generation = privateDelegate.generation
+            do {
+                let account = try await currentAuthorizedAccountRecordName()
+                let binding = ProfileCloudBinding(
+                    profileID: profileID,
+                    state: .privateOwner,
+                    zoneName: zoneID.zoneName,
+                    ownerName: zoneID.ownerName,
+                    rootRecordName: rootID.recordName
+                )
+                let committed = try await CloudKitPrivateRoutePreparationExecutor()
+                    .prepare(
+                        preflight: {
+                            try self.metadataStore
+                                .ensurePrivateRoutePreparationAllowed(
+                                    for: profileID
+                                )
+                        },
+                        createRemoteRoute: {
+                            try await self.preparePrivateZone(
+                                zoneID,
+                                profileID: profileID,
+                                rootID: rootID,
+                                accountRecordName: account,
+                                generation: generation
+                            )
+                        },
+                        commitLocalRoute: {
+                            try self.metadataStore.save(binding: binding)
+                            return self.metadataStore.binding(for: profileID)
+                        }
+                    )
+                claimedPrivateRouteProfileIDs.remove(profileID)
+                return committed
+            } catch CloudKitFamilyPersistenceError.bindingConflict,
+                CloudKitFamilyPersistenceError.accountBindingMismatch
+            {
+                claimedPrivateRouteProfileIDs.remove(profileID)
+                throw CloudKitFamilySyncError.accountBindingMismatch
+            } catch {
+                claimedPrivateRouteProfileIDs.remove(profileID)
+                throw error
+            }
         }
     }
 
     private func preparePrivateZone(
         _ zoneID: CKRecordZone.ID,
         profileID: ProfileID,
-        rootID: CKRecord.ID
+        rootID: CKRecord.ID,
+        accountRecordName: String,
+        generation: UInt64
     ) async throws {
+        try await requireCurrentAccountRecordName(
+            accountRecordName,
+            generation: generation
+        )
         let zone = CKRecordZone(zoneID: zoneID)
         let zoneResult = try await privateDatabase.modifyRecordZones(
             saving: [zone],
             deleting: []
+        )
+        try await requireCurrentAccountRecordName(
+            accountRecordName,
+            generation: generation
         )
         if case .failure(let error) = zoneResult.saveResults[zoneID],
             (error as? CKError)?.code != .serverRejectedRequest
@@ -1357,6 +2127,10 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         }
 
         let fetched = try await privateDatabase.records(for: [rootID])
+        try await requireCurrentAccountRecordName(
+            accountRecordName,
+            generation: generation
+        )
         if case .success(let root) = fetched[rootID] {
             try metadataStore.saveSystemFields(for: root, scope: .privateDatabase)
             return
@@ -1372,6 +2146,10 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
             deleting: [],
             savePolicy: .ifServerRecordUnchanged,
             atomically: true
+        )
+        try await requireCurrentAccountRecordName(
+            accountRecordName,
+            generation: generation
         )
         guard case .success(let saved) = result.saveResults[rootID] else {
             throw CloudKitFamilySyncError.operationFailed("Unable to create profile root")
@@ -1395,7 +2173,8 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
 
     private func revalidateAmbiguousOwnerDeletionLedger(
         _ marker: CloudKitAmbiguousRemoteRemovalMarker,
-        binding: ProfileCloudBinding
+        binding: ProfileCloudBinding,
+        generation: UInt64
     ) async throws {
         guard marker.evidence == .ownerDeletionLedger,
             marker.scope == .privateDatabase,
@@ -1406,9 +2185,15 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         let recordID = CloudKitFamilyDeletionLedgerCodec.recordID(
             for: marker.profileID
         )
-        try await requireCurrentAccountMatchesOrigin(binding)
+        try await requireCurrentAccountMatchesOrigin(
+            binding,
+            generation: generation
+        )
         let results = try await privateDatabase.records(for: [recordID])
-        try await requireCurrentAccountMatchesOrigin(binding)
+        try await requireCurrentAccountMatchesOrigin(
+            binding,
+            generation: generation
+        )
         let records = try CloudKitOwnerDeletionLedgerFetchProof.records(
             requestedRecordIDs: [recordID],
             results: results
@@ -1427,7 +2212,8 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
 
     private func recoverAmbiguousRemoteRemoval(
         _ marker: CloudKitAmbiguousRemoteRemovalMarker,
-        binding: ProfileCloudBinding
+        binding: ProfileCloudBinding,
+        generation: UInt64
     ) async throws -> Bool {
         guard marker.evidence != .ownerDeletionLedger,
             binding.zoneID == marker.zoneID,
@@ -1441,7 +2227,10 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         return try await CloudKitAmbiguousRemoteRemovalRecoveryExecutor()
             .resolve(
                 verifyOriginAccount: {
-                    try await self.requireCurrentAccountMatchesOrigin(binding)
+                    try await self.requireCurrentAccountMatchesOrigin(
+                        binding,
+                        generation: generation
+                    )
                 },
                 fetchRootProof: {
                     let database =
@@ -1469,19 +2258,28 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
                                 "Ambiguous owner recovery route is incomplete"
                             )
                         }
-                        _ = try await CloudKitOwnerDeletionRecoveryExecutor()
+                        _ = try await CloudKitRemoteOwnerDeletionDominanceExecutor()
                             .recover(
+                                record: record,
                                 verifyOriginAccount: {
                                     try await self
                                         .requireCurrentAccountMatchesOrigin(
-                                            binding
+                                            binding,
+                                            generation: generation
                                         )
                                 },
-                                persistLedger: {},
+                                persistControlLedger: { record in
+                                    try await self.persistOwnerDeletionLedger(
+                                        record,
+                                        binding: binding,
+                                        generation: generation
+                                    )
+                                },
                                 eraseZone: {
                                     try await self.eraseOwnerPayloadZone(
                                         zoneID,
-                                        binding: binding
+                                        binding: binding,
+                                        generation: generation
                                     )
                                 },
                                 purgeLocalSources: {
@@ -1503,11 +2301,15 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
                         _ = try await CloudKitParticipantLeaveExecutor().leave(
                             verifyOriginAccount: {
                                 try await self.requireCurrentAccountMatchesOrigin(
-                                    binding
+                                    binding,
+                                    generation: generation
                                 )
                             },
                             leaveShare: {
-                                try await self.leaveSharedProfile(binding)
+                                try await self.leaveSharedProfile(
+                                    binding,
+                                    generation: generation
+                                )
                             },
                             purgeLocalSources: {
                                 try CloudKitProfilePhotoAssetCodec.removeSources(
@@ -1528,27 +2330,76 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
                     }
                 },
                 recoverZoneMissing: {
-                    _ = try await CloudKitProvenZoneDeletionRecoveryExecutor()
-                        .recover(
-                            verifyOriginAccount: {
-                                try await self.requireCurrentAccountMatchesOrigin(
-                                    binding
-                                )
-                            },
-                            purgeLocalSources: {
-                                try CloudKitProfilePhotoAssetCodec.removeSources(
-                                    for: marker.profileID,
-                                    in: self.photoAssetSourceDirectory
-                                )
-                            },
-                            commit: {
-                                _ = try self.metadataStore
-                                    .commitAmbiguousRemoteRemoval(
-                                        marker,
-                                        record: record
+                    switch binding.erasureRoute {
+                    case .owner:
+                        guard let zoneID = binding.zoneID else {
+                            throw CloudKitFamilySyncError.operationFailed(
+                                "Ambiguous owner recovery route is incomplete"
+                            )
+                        }
+                        _ = try await CloudKitRemoteOwnerDeletionDominanceExecutor()
+                            .recover(
+                                record: record,
+                                verifyOriginAccount: {
+                                    try await self.requireCurrentAccountMatchesOrigin(
+                                        binding,
+                                        generation: generation
                                     )
-                            }
-                        )
+                                },
+                                persistControlLedger: { record in
+                                    try await self.persistOwnerDeletionLedger(
+                                        record,
+                                        binding: binding,
+                                        generation: generation
+                                    )
+                                },
+                                eraseZone: {
+                                    try await self.eraseOwnerPayloadZone(
+                                        zoneID,
+                                        binding: binding,
+                                        generation: generation
+                                    )
+                                },
+                                purgeLocalSources: {
+                                    try CloudKitProfilePhotoAssetCodec.removeSources(
+                                        for: marker.profileID,
+                                        in: self.photoAssetSourceDirectory
+                                    )
+                                },
+                                commitRecovery: {
+                                    _ = try self.metadataStore
+                                        .commitAmbiguousRemoteRemoval(
+                                            marker,
+                                            record: record
+                                        )
+                                }
+                            )
+                    case .participant:
+                        _ = try await CloudKitProvenZoneDeletionRecoveryExecutor()
+                            .recover(
+                                verifyOriginAccount: {
+                                    try await self.requireCurrentAccountMatchesOrigin(
+                                        binding,
+                                        generation: generation
+                                    )
+                                },
+                                purgeLocalSources: {
+                                    try CloudKitProfilePhotoAssetCodec.removeSources(
+                                        for: marker.profileID,
+                                        in: self.photoAssetSourceDirectory
+                                    )
+                                },
+                                commit: {
+                                    _ = try self.metadataStore
+                                        .commitAmbiguousRemoteRemoval(
+                                            marker,
+                                            record: record
+                                        )
+                                }
+                            )
+                    case .unresolved:
+                        throw CloudKitFamilySyncError.accountBindingMismatch
+                    }
                 }
             )
     }
@@ -1565,8 +2416,12 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
     /// boundary; metadata authorization alone cannot detect a switch that has
     /// occurred before CKSyncEngine delivers its account-change callback.
     private func requireCurrentAccountMatchesOrigin(
-        _ binding: ProfileCloudBinding
+        _ binding: ProfileCloudBinding,
+        generation: UInt64? = nil
     ) async throws {
+        if let generation {
+            try await requireActiveGeneration(generation)
+        }
         guard let origin = binding.originAccountRecordName,
             metadataStore.isBindingAuthorizedForConfirmedAccount(binding)
         else {
@@ -1578,6 +2433,9 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         else {
             throw CloudKitFamilySyncError.accountBindingMismatch
         }
+        if let generation {
+            try await requireActiveGeneration(generation)
+        }
     }
 
     private func currentAuthorizedAccountRecordName() async throws -> String {
@@ -1587,8 +2445,12 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
     }
 
     private func requireCurrentAccountRecordName(
-        _ expected: String
+        _ expected: String,
+        generation: UInt64? = nil
     ) async throws {
+        if let generation {
+            try await requireActiveGeneration(generation)
+        }
         let current = try await container.userRecordID().recordName
         guard current == expected else {
             throw CloudKitFamilySyncError.accountBindingMismatch
@@ -1604,6 +2466,19 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         } catch {
             throw CloudKitFamilySyncError.accountBindingMismatch
         }
+        if let generation {
+            try await requireActiveGeneration(generation)
+        }
+    }
+
+    private func requireActiveGeneration(_ generation: UInt64) async throws {
+        let isActive = await eventBuffer.isActive(generation)
+        try CloudKitTransportGenerationProof.require(
+            expected: generation,
+            privateGeneration: privateDelegate.generation,
+            sharedGeneration: sharedDelegate.generation,
+            eventBufferIsActive: isActive
+        )
     }
 
     private func accountChangeBlockingUpload() async throws -> FamilySyncAccountChange? {
@@ -1793,14 +2668,18 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
 
     private func privateZoneID(for profileID: ProfileID) -> CKRecordZone.ID {
         CKRecordZone.ID(
-            zoneName: "TadaProfile-\(profileID.rawValue.uuidString)",
+            zoneName: CloudKitDeterministicProfileRoute.zoneName(
+                for: profileID
+            ),
             ownerName: CKCurrentUserDefaultName
         )
     }
 
     private func privateRootRecordID(for profileID: ProfileID) -> CKRecord.ID {
         CKRecord.ID(
-            recordName: "profile-root-\(profileID.rawValue.uuidString)",
+            recordName: CloudKitDeterministicProfileRoute.rootRecordName(
+                for: profileID
+            ),
             zoneID: privateZoneID(for: profileID)
         )
     }

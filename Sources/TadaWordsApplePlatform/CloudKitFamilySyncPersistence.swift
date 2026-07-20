@@ -314,6 +314,164 @@ struct CloudKitAmbiguousRemoteRemovalMarker: Codable, Equatable, Sendable {
     }
 }
 
+enum CloudKitAcceptedShareCleanupPhase: String, Codable, Sendable {
+    case prepared
+    case acceptanceAttempted
+    case accepted
+    case materialized
+}
+
+enum CloudKitAcceptedShareCleanupProof: Sendable {
+    case preparedWithoutAcceptance
+    case explicitAcceptanceFailure
+    case metadataShowsRemovedParticipant
+    case materializedShareDeletion
+}
+
+/// Durable intent created before CloudKit accepts a share. Its monotonic phase
+/// distinguishes a crash before the external call from an ambiguous call or a
+/// confirmed acceptance whose zone is still materializing server-side.
+struct CloudKitPendingAcceptedShareCleanup: Codable, Equatable, Sendable {
+    let id: UUID
+    let profileID: ProfileID
+    let zoneName: String
+    let ownerName: String
+    let rootRecordName: String
+    /// CKShare's record name is available in metadata before acceptance. The
+    /// zone/owner are the same immutable route already stored above.
+    let shareRecordName: String?
+    let originAccountRecordName: String
+    let stagedAt: Date
+    /// Optional only for snapshots written by the short-lived schema-v2 build
+    /// before phase-aware cleanup. Missing phase is interpreted as attempted,
+    /// never as safe-to-clear prepared state.
+    let phase: CloudKitAcceptedShareCleanupPhase?
+
+    init(
+        id: UUID,
+        profileID: ProfileID,
+        zoneName: String,
+        ownerName: String,
+        rootRecordName: String,
+        shareRecordName: String?,
+        originAccountRecordName: String,
+        stagedAt: Date,
+        phase: CloudKitAcceptedShareCleanupPhase?
+    ) {
+        self.id = id
+        self.profileID = profileID
+        self.zoneName = zoneName
+        self.ownerName = ownerName
+        self.rootRecordName = rootRecordName
+        self.shareRecordName = shareRecordName
+        self.originAccountRecordName = originAccountRecordName
+        self.stagedAt = stagedAt
+        self.phase = phase
+    }
+
+    var effectivePhase: CloudKitAcceptedShareCleanupPhase {
+        phase ?? .acceptanceAttempted
+    }
+
+    var zoneID: CKRecordZone.ID {
+        CKRecordZone.ID(zoneName: zoneName, ownerName: ownerName)
+    }
+
+    var rootRecordID: CKRecord.ID {
+        CKRecord.ID(recordName: rootRecordName, zoneID: zoneID)
+    }
+
+    var shareRecordID: CKRecord.ID? {
+        shareRecordName.map { CKRecord.ID(recordName: $0, zoneID: zoneID) }
+    }
+
+    var binding: ProfileCloudBinding {
+        ProfileCloudBinding(
+            profileID: profileID,
+            state: .sharedParticipant,
+            zoneName: zoneName,
+            ownerName: ownerName,
+            rootRecordName: rootRecordName,
+            originAccountRecordName: originAccountRecordName,
+            originErasureRoute: .participant
+        )
+    }
+
+    func hasSameIdentity(
+        as other: CloudKitPendingAcceptedShareCleanup
+    ) -> Bool {
+        id == other.id && profileID == other.profileID
+            && zoneName == other.zoneName && ownerName == other.ownerName
+            && rootRecordName == other.rootRecordName
+            && (shareRecordName == other.shareRecordName
+                || shareRecordName == nil || other.shareRecordName == nil)
+            && originAccountRecordName == other.originAccountRecordName
+    }
+
+    func advancing(
+        to phase: CloudKitAcceptedShareCleanupPhase,
+        shareRecordName: String? = nil
+    ) -> Self {
+        Self(
+            id: id,
+            profileID: profileID,
+            zoneName: zoneName,
+            ownerName: ownerName,
+            rootRecordName: rootRecordName,
+            shareRecordName: self.shareRecordName ?? shareRecordName,
+            originAccountRecordName: originAccountRecordName,
+            stagedAt: stagedAt,
+            phase: phase
+        )
+    }
+}
+
+struct CloudKitPreparedAcceptedShareCleanup: Equatable, Sendable {
+    enum State: Equatable, Sendable {
+        case staged(CloudKitPendingAcceptedShareCleanup, wasCreated: Bool)
+        case alreadyCommitted(ProfileCloudBinding)
+    }
+
+    let state: State
+}
+
+/// A shared Profile's durable identity is encoded in both the custom zone and
+/// root record names. Parsing this route before accepting a share lets the app
+/// stage compensation without trusting payload that is inaccessible until the
+/// external CloudKit acceptance has already committed.
+enum CloudKitDeterministicProfileRoute {
+    private static let zonePrefix = "TadaProfile-"
+    private static let rootPrefix = "profile-root-"
+
+    static func zoneName(for profileID: ProfileID) -> String {
+        "\(zonePrefix)\(profileID.rawValue.uuidString)"
+    }
+
+    static func rootRecordName(for profileID: ProfileID) -> String {
+        "\(rootPrefix)\(profileID.rawValue.uuidString)"
+    }
+
+    static func profileID(from rootRecordID: CKRecord.ID) -> ProfileID? {
+        guard rootRecordID.recordName.hasPrefix(rootPrefix) else { return nil }
+        let suffix = String(rootRecordID.recordName.dropFirst(rootPrefix.count))
+        guard let uuid = UUID(uuidString: suffix) else { return nil }
+        let profileID = ProfileID(rawValue: uuid)
+        guard rootRecordID.recordName == rootRecordName(for: profileID),
+            rootRecordID.zoneID.zoneName == zoneName(for: profileID)
+        else { return nil }
+        return profileID
+    }
+
+    static func matches(
+        profileID: ProfileID,
+        zoneName: String,
+        rootRecordName: String
+    ) -> Bool {
+        zoneName == self.zoneName(for: profileID)
+            && rootRecordName == self.rootRecordName(for: profileID)
+    }
+}
+
 struct CloudKitPreparedOwnerDeletionLedgerRecovery: Equatable, Sendable {
     let binding: ProfileCloudBinding
     let wasCreated: Bool
@@ -366,6 +524,9 @@ private struct CloudKitFamilyMetadataSnapshot: Codable {
     var protectedRecordKeys: [CloudKitProtectedRecordKey] = []
     var inbox: [CloudKitFamilyInboxEntry] = []
     var ambiguousRemoteRemovals: [CloudKitAmbiguousRemoteRemovalMarker]? = []
+    // Optional so schema-v2 snapshots written before durable share-acceptance
+    // compensation remain readable without guessing any CloudKit route.
+    var pendingAcceptedShareCleanups: [CloudKitPendingAcceptedShareCleanup]? = []
     // Optional so metadata written by the first schema-v2 development builds
     // remains readable. New snapshots always persist an explicit array.
     var acknowledgedTerminalRemovals: [CloudKitAcknowledgedTerminalRemoval]? = []
@@ -605,41 +766,288 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
     func save(binding: ProfileCloudBinding) throws {
         try withLock {
             var snapshot = loadLocked()
-            if let existing = snapshot.bindings.first(where: {
-                $0.profileID == binding.profileID
+            try replaceBinding(binding, in: &snapshot)
+            try persistLocked(snapshot)
+        }
+    }
+
+    /// Persists a pre-acceptance compensation marker before CloudKit can grant
+    /// access. Identical retries reuse the marker; a different Profile or root
+    /// may never claim the same shared zone.
+    func prepareAcceptedShareCleanup(
+        profileID: ProfileID,
+        rootRecordID: CKRecord.ID,
+        shareRecordID: CKRecord.ID,
+        originAccountRecordName: String,
+        stagedAt: Date = Date()
+    ) throws -> CloudKitPreparedAcceptedShareCleanup {
+        try withLock {
+            var snapshot = loadLocked()
+            guard !loadFailed, !snapshot.requiresAccountConfirmation,
+                snapshot.confirmedAccountRecordName == originAccountRecordName,
+                CloudKitDeterministicProfileRoute.profileID(
+                    from: rootRecordID
+                ) == profileID,
+                shareRecordID.zoneID == rootRecordID.zoneID,
+                !shareRecordID.recordName.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).isEmpty
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            let candidate = CloudKitPendingAcceptedShareCleanup(
+                id: UUID(),
+                profileID: profileID,
+                zoneName: rootRecordID.zoneID.zoneName,
+                ownerName: rootRecordID.zoneID.ownerName,
+                rootRecordName: rootRecordID.recordName,
+                shareRecordName: shareRecordID.recordName,
+                originAccountRecordName: originAccountRecordName,
+                stagedAt: stagedAt,
+                phase: .prepared
+            )
+            if let existingBinding = snapshot.bindings.first(where: {
+                $0.profileID == profileID
+                    || $0.zoneID == rootRecordID.zoneID
             }) {
-                if existing.originAccountRecordName == nil {
-                    // Any persisted route without account provenance is
-                    // ambiguous. Older builds could leave an unbound route
-                    // after switching accounts, and partial legacy metadata
-                    // may lack provenance for an active route. Only absence of
-                    // a binding proves this is a fresh Profile.
+                guard isAuthorized(existingBinding, in: snapshot) else {
                     throw CloudKitFamilyPersistenceError.accountBindingMismatch
                 }
-                if let origin = existing.originAccountRecordName,
-                    snapshot.requiresAccountConfirmation
-                        || snapshot.confirmedAccountRecordName != origin
-                {
-                    throw CloudKitFamilyPersistenceError.accountBindingMismatch
+                guard existingBinding == candidate.binding else {
+                    throw CloudKitFamilyPersistenceError.bindingConflict
                 }
-                guard canReplace(existing, with: binding) else {
+                return CloudKitPreparedAcceptedShareCleanup(
+                    state: .alreadyCommitted(existingBinding)
+                )
+            }
+            var pending = snapshot.pendingAcceptedShareCleanups ?? []
+            if let existing = pending.first(where: {
+                $0.profileID == profileID
+                    && $0.zoneID == rootRecordID.zoneID
+                    && $0.rootRecordName == rootRecordID.recordName
+                    && $0.shareRecordName == shareRecordID.recordName
+                    && $0.originAccountRecordName == originAccountRecordName
+            }) {
+                return CloudKitPreparedAcceptedShareCleanup(
+                    state: .staged(existing, wasCreated: false)
+                )
+            }
+            guard
+                !pending.contains(where: {
+                    $0.profileID == profileID
+                        || $0.zoneID == rootRecordID.zoneID
+                })
+            else {
+                throw CloudKitFamilyPersistenceError.bindingConflict
+            }
+            pending.append(candidate)
+            snapshot.pendingAcceptedShareCleanups = pending.sorted {
+                $0.id.uuidString < $1.id.uuidString
+            }
+            try persistLocked(snapshot)
+            return CloudKitPreparedAcceptedShareCleanup(
+                state: .staged(candidate, wasCreated: true)
+            )
+        }
+    }
+
+    /// Makes the accepted share visible locally and removes its cleanup intent
+    /// in one atomic metadata write. A crash observes either the retry marker
+    /// or the committed binding, never both and never neither.
+    func advanceAcceptedShareCleanup(
+        _ marker: CloudKitPendingAcceptedShareCleanup,
+        to phase: CloudKitAcceptedShareCleanupPhase,
+        shareRecordID: CKRecord.ID? = nil
+    ) throws -> CloudKitPendingAcceptedShareCleanup {
+        try withLock {
+            var snapshot = loadLocked()
+            guard !loadFailed, !snapshot.requiresAccountConfirmation,
+                snapshot.confirmedAccountRecordName
+                    == marker.originAccountRecordName,
+                let index = snapshot.pendingAcceptedShareCleanups?.firstIndex(
+                    where: {
+                        $0.id == marker.id && $0.hasSameIdentity(as: marker)
+                    }
+                )
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            let current = snapshot.pendingAcceptedShareCleanups?[index]
+            guard let current else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            if let shareRecordID {
+                guard shareRecordID.zoneID == current.zoneID,
+                    current.shareRecordName == nil
+                        || current.shareRecordName == shareRecordID.recordName
+                else {
                     throw CloudKitFamilyPersistenceError.bindingConflict
                 }
             }
-            if snapshot.bindings.contains(where: {
-                $0.profileID != binding.profileID
-                    && binding.zoneName != nil
-                    && $0.zoneName == binding.zoneName
-                    && $0.ownerName == binding.ownerName
-            }) {
+            let transitionIsAllowed =
+                switch (current.effectivePhase, phase) {
+                case (.prepared, .acceptanceAttempted),
+                    (.acceptanceAttempted, .accepted),
+                    (.acceptanceAttempted, .materialized),
+                    (.accepted, .materialized):
+                    true
+                case (let existing, let requested) where existing == requested:
+                    true
+                default:
+                    false
+                }
+            guard transitionIsAllowed else {
                 throw CloudKitFamilyPersistenceError.bindingConflict
             }
-            let stamped = binding.assigningOrigin(
-                accountRecordName: snapshot.confirmedAccountRecordName
+            if phase == .materialized {
+                guard current.shareRecordName != nil || shareRecordID != nil else {
+                    throw CloudKitFamilyPersistenceError.bindingConflict
+                }
+            }
+            let advanced = current.advancing(
+                to: phase,
+                shareRecordName: shareRecordID?.recordName
             )
-            snapshot.bindings.removeAll { $0.profileID == stamped.profileID }
-            snapshot.bindings.append(stamped)
-            snapshot.bindings.sort { $0.profileID.description < $1.profileID.description }
+            snapshot.pendingAcceptedShareCleanups?[index] = advanced
+            try persistLocked(snapshot)
+            return advanced
+        }
+    }
+
+    func commitAcceptedShareBinding(
+        _ binding: ProfileCloudBinding,
+        clearing marker: CloudKitPendingAcceptedShareCleanup
+    ) throws {
+        try withLock {
+            var snapshot = loadLocked()
+            guard !loadFailed, !snapshot.requiresAccountConfirmation,
+                snapshot.confirmedAccountRecordName
+                    == marker.originAccountRecordName,
+                binding == marker.binding
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            if let existing = snapshot.bindings.first(where: {
+                $0.profileID == binding.profileID
+                    || $0.zoneID == binding.zoneID
+            }), isAuthorized(existing, in: snapshot), existing == binding,
+                !(snapshot.pendingAcceptedShareCleanups ?? []).contains(where: {
+                    $0.id == marker.id
+                })
+            {
+                // A concurrent/double-tap acceptance may finish after the
+                // first path atomically committed this exact route. Treat the
+                // second completion as success; compensating leave would
+                // revoke a valid binding.
+                return
+            }
+            guard
+                let current = (snapshot.pendingAcceptedShareCleanups ?? []).first(
+                    where: { $0.id == marker.id }
+                ),
+                current.hasSameIdentity(as: marker),
+                current.effectivePhase == .materialized,
+                marker.effectivePhase == .materialized
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            snapshot.pendingAcceptedShareCleanups?.removeAll {
+                $0.id == current.id
+            }
+            try replaceBinding(binding, in: &snapshot)
+            try persistLocked(snapshot)
+        }
+    }
+
+    func pendingAcceptedShareCleanups()
+        throws -> [CloudKitPendingAcceptedShareCleanup]
+    {
+        try withLock {
+            let snapshot = loadLocked()
+            guard !loadFailed, !snapshot.requiresAccountConfirmation,
+                let confirmed = snapshot.confirmedAccountRecordName
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            return (snapshot.pendingAcceptedShareCleanups ?? []).filter {
+                $0.originAccountRecordName == confirmed
+            }.sorted { $0.id.uuidString < $1.id.uuidString }
+        }
+    }
+
+    func isAcceptedShareCleanupPending(
+        _ marker: CloudKitPendingAcceptedShareCleanup
+    ) -> Bool {
+        withLock {
+            (loadLocked().pendingAcceptedShareCleanups ?? []).contains {
+                $0.id == marker.id && $0.hasSameIdentity(as: marker)
+            }
+        }
+    }
+
+    /// A pending accepted share is a global Profile identity reservation even
+    /// while its origin account is dormant. Check every origin before any
+    /// replacement account mutates CloudKit to create a private fallback.
+    func ensurePrivateRoutePreparationAllowed(
+        for profileID: ProfileID
+    ) throws {
+        try withLock {
+            let snapshot = loadLocked()
+            guard !loadFailed, !snapshot.requiresAccountConfirmation,
+                snapshot.confirmedAccountRecordName != nil
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            let deterministicZone =
+                CloudKitDeterministicProfileRoute.zoneName(for: profileID)
+            guard
+                !(snapshot.pendingAcceptedShareCleanups ?? []).contains(where: {
+                    $0.profileID == profileID
+                        || $0.zoneName == deterministicZone
+                })
+            else {
+                throw CloudKitFamilyPersistenceError.bindingConflict
+            }
+        }
+    }
+
+    func completeAcceptedShareCleanup(
+        _ marker: CloudKitPendingAcceptedShareCleanup,
+        proof: CloudKitAcceptedShareCleanupProof
+    ) throws {
+        try withLock {
+            var snapshot = loadLocked()
+            guard !loadFailed, !snapshot.requiresAccountConfirmation,
+                snapshot.confirmedAccountRecordName
+                    == marker.originAccountRecordName
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            guard
+                let current = (snapshot.pendingAcceptedShareCleanups ?? []).first(
+                    where: { $0.id == marker.id }
+                )
+            else { return }
+            guard current.hasSameIdentity(as: marker) else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            let proofIsValid =
+                switch (proof, current.effectivePhase) {
+                case (.preparedWithoutAcceptance, .prepared),
+                    (.explicitAcceptanceFailure, .acceptanceAttempted),
+                    (.metadataShowsRemovedParticipant, .acceptanceAttempted),
+                    (.metadataShowsRemovedParticipant, .accepted),
+                    (.materializedShareDeletion, .materialized):
+                    true
+                default:
+                    false
+                }
+            guard proofIsValid else {
+                throw CloudKitFamilyPersistenceError.bindingConflict
+            }
+            snapshot.pendingAcceptedShareCleanups?.removeAll {
+                $0.id == current.id
+            }
             try persistLocked(snapshot)
         }
     }
@@ -2303,6 +2711,17 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
             let acknowledgedEntries = snapshot.inbox.filter {
                 receiptIDs.contains($0.receiptID)
             }
+            guard acknowledgedEntries.count == receiptIDs.count else {
+                throw CloudKitFamilyPersistenceError.missingInboxReceipt
+            }
+            guard !loadFailed, !snapshot.requiresAccountConfirmation,
+                snapshot.confirmedAccountRecordName != nil,
+                acknowledgedEntries.allSatisfy({
+                    isInboxEntryAuthorized($0, in: snapshot)
+                })
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
             var markers = snapshot.acknowledgedTerminalRemovals ?? []
             for entry in acknowledgedEntries {
                 guard let record = entry.record,
@@ -2339,6 +2758,14 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
             }
             guard selected.count == receiptIDs.count else {
                 throw CloudKitFamilyPersistenceError.missingInboxReceipt
+            }
+            guard !loadFailed, !snapshot.requiresAccountConfirmation,
+                snapshot.confirmedAccountRecordName != nil,
+                selected.allSatisfy({
+                    isInboxEntryAuthorized($0, in: snapshot)
+                })
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
             }
             for entry in selected {
                 let key =
@@ -2555,6 +2982,58 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
         return candidate.rootRecordName == existingRoot
     }
 
+    private func replaceBinding(
+        _ binding: ProfileCloudBinding,
+        in snapshot: inout CloudKitFamilyMetadataSnapshot
+    ) throws {
+        if let existing = snapshot.bindings.first(where: {
+            $0.profileID == binding.profileID
+        }) {
+            guard isAuthorized(existing, in: snapshot) else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            guard canReplace(existing, with: binding) else {
+                throw CloudKitFamilyPersistenceError.bindingConflict
+            }
+        }
+
+        if binding.state != .unbound {
+            guard !snapshot.requiresAccountConfirmation,
+                let confirmed = snapshot.confirmedAccountRecordName,
+                binding.originAccountRecordName == nil
+                    || binding.originAccountRecordName == confirmed
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+        }
+
+        guard
+            !snapshot.bindings.contains(where: {
+                $0.profileID != binding.profileID
+                    && binding.zoneName != nil
+                    && $0.zoneName == binding.zoneName
+                    && $0.ownerName == binding.ownerName
+            }),
+            !(snapshot.pendingAcceptedShareCleanups ?? []).contains(where: {
+                $0.profileID == binding.profileID
+                    || (binding.zoneName != nil
+                        && $0.zoneName == binding.zoneName
+                        && $0.ownerName == binding.ownerName)
+            })
+        else {
+            throw CloudKitFamilyPersistenceError.bindingConflict
+        }
+
+        let stamped = binding.assigningOrigin(
+            accountRecordName: snapshot.confirmedAccountRecordName
+        )
+        snapshot.bindings.removeAll { $0.profileID == stamped.profileID }
+        snapshot.bindings.append(stamped)
+        snapshot.bindings.sort {
+            $0.profileID.description < $1.profileID.description
+        }
+    }
+
     private func isAcknowledgedTerminalRemoval(
         _ record: FamilySyncRecord,
         in snapshot: CloudKitFamilyMetadataSnapshot
@@ -2624,6 +3103,33 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
                     return false
                 }
             }
+        }
+
+        var acceptedCleanupIDs = Set<UUID>()
+        var acceptedCleanupProfileIDs = Set<ProfileID>()
+        var acceptedCleanupZones = Set<String>()
+        for marker in snapshot.pendingAcceptedShareCleanups ?? [] {
+            let zoneKey = "\(marker.ownerName)|\(marker.zoneName)"
+            guard acceptedCleanupIDs.insert(marker.id).inserted,
+                acceptedCleanupProfileIDs.insert(marker.profileID).inserted,
+                acceptedCleanupZones.insert(zoneKey).inserted,
+                isNonEmpty(marker.zoneName),
+                isNonEmpty(marker.ownerName),
+                isNonEmpty(marker.rootRecordName),
+                isNonEmpty(marker.originAccountRecordName),
+                marker.phase == nil || isNonEmpty(marker.shareRecordName),
+                marker.effectivePhase != .materialized
+                    || isNonEmpty(marker.shareRecordName),
+                marker.shareRecordName == nil
+                    || marker.shareRecordName != marker.rootRecordName,
+                CloudKitDeterministicProfileRoute.matches(
+                    profileID: marker.profileID,
+                    zoneName: marker.zoneName,
+                    rootRecordName: marker.rootRecordName
+                ),
+                !profileIDs.contains(marker.profileID),
+                !zones.contains(zoneKey)
+            else { return false }
         }
 
         let receiptIDs = snapshot.inbox.map(\.receiptID)

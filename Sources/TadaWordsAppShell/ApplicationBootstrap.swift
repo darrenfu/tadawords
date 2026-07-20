@@ -121,6 +121,7 @@ enum ApplicationSnapshotStore: String, Equatable, Sendable {
 
 enum ApplicationBootstrapError: Error, Equatable, Sendable {
     case defaultProfileWasNotPersisted(ProfileID)
+    case freshInstallationVoiceprintResetUnavailable
     case profileSnapshotMissingWithDependentData
     case snapshotReadFailed(store: ApplicationSnapshotStore)
     case invalidSnapshotEnvelope(store: ApplicationSnapshotStore)
@@ -168,6 +169,12 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
     func bootstrap() async throws -> ProductionApplicationEnvironment {
         let dataPaths = ApplicationDataPaths(
             applicationSupportDirectory: try applicationSupportDirectory()
+        )
+        let dataDirectoryExistedAtStart = FileManager.default.fileExists(
+            atPath: dataPaths.dataDirectory.path
+        )
+        try await resetRetainedVoiceprintsForFreshInstallationIfNeeded(
+            dataDirectoryExistedAtStart: dataDirectoryExistedAtStart
         )
         let profileSnapshotExistedAtStart = FileManager.default.fileExists(
             atPath: dataPaths.profilesSnapshot.path
@@ -390,6 +397,27 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             timeZone: timeZone,
             dataPaths: dataPaths
         )
+    }
+
+    private func resetRetainedVoiceprintsForFreshInstallationIfNeeded(
+        dataDirectoryExistedAtStart: Bool
+    ) async throws {
+        guard !dataDirectoryExistedAtStart, let voiceprintRepository else {
+            return
+        }
+        guard
+            let resetter =
+                voiceprintRepository as? any FreshInstallationVoiceprintResetting
+        else {
+            throw ApplicationBootstrapError
+                .freshInstallationVoiceprintResetUnavailable
+        }
+
+        // This must stay before loadOrCreateDeviceID and every repository
+        // write. If Keychain rejects the reset, the absent directory remains
+        // absent so Retry performs the reset again instead of classifying the
+        // failed attempt as an existing installation.
+        try await resetter.resetVoiceprintsForFreshInstallation()
     }
 
     private func prepareFirstRunOnboarding(

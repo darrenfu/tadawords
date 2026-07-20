@@ -62,6 +62,10 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
 
     public func familySnapshot() async throws -> GuardianFamilySnapshot {
         let profiles = try await profileRepository.profiles()
+        // External receipt refreshes cancel the superseded task. Do not let a
+        // repository that ignores cancellation resume later and mutate the
+        // shared selection behind the newer Parent snapshot.
+        try Task.checkCancellation()
         guard !profiles.isEmpty else {
             return GuardianFamilySnapshot(
                 profiles: [],
@@ -81,6 +85,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         guard let profile = try await profileRepository.profile(id: id) else {
             throw GuardianFamilyStoreError.profileNotFound(id)
         }
+        try Task.checkCancellation()
         selectedProfileID = id
         return try await makeWordStore(for: profile).dashboardSnapshot()
     }
@@ -388,6 +393,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     private func selectedProfile() async throws -> KidProfile {
         let requestedProfileID = selectedProfileID
         let profiles = try await profileRepository.profiles()
+        try Task.checkCancellation()
         if let requestedProfileID,
             let selected = profiles.first(where: { $0.id == requestedProfileID })
         {

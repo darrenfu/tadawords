@@ -11,6 +11,7 @@ public struct GuardianRootView: View {
     private let imageTextRecognitionService: any ImageTextRecognizing
     private let presetWordCatalog: PresetWordCatalog
     private var externalDataRevision: UUID?
+    @State private var externalSyncRefreshTask: Task<Void, Never>?
 
     /// Preview convenience. Production composition must use `init(store:onExit:)`.
     public init(onExit: @escaping () -> Void = {}) {
@@ -129,9 +130,14 @@ public struct GuardianRootView: View {
         }
         .onChange(of: externalDataRevision) { _, revision in
             guard revision != nil else { return }
-            Task {
+            externalSyncRefreshTask?.cancel()
+            externalSyncRefreshTask = Task {
                 await model.refreshAfterExternalSyncAndWait()
             }
+        }
+        .onDisappear {
+            externalSyncRefreshTask?.cancel()
+            externalSyncRefreshTask = nil
         }
         .alert(
             "Something went wrong",

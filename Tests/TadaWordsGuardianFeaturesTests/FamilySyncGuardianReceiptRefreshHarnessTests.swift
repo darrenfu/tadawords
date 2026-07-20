@@ -125,6 +125,133 @@ final class FamilySyncGuardianReceiptRefreshHarnessTests: XCTestCase {
         )
         XCTAssertEqual(fixture.model.transitionKey, "parent-gate")
     }
+
+    func testOlderReceiptRefreshCannotRepublishDeletedKidAfterNewerRefresh()
+        async throws
+    {
+        let now = Date(timeIntervalSince1970: 2_177_100_000)
+        let profile = KidProfile(
+            displayName: "Mia",
+            avatar: .cartoonAnimal(assetID: "hare"),
+            selectedWorld: .moonpetalKingdom,
+            createdAt: now
+        )
+        let profiles = DelayedGuardianProfileLookupRepository(profile: profile)
+        let store = RepositoryGuardianFamilyStore(
+            profiles: [profile],
+            selectedProfileID: profile.id,
+            profileRepository: profiles,
+            wordPoolRepository: InMemoryWordPoolRepository(
+                deviceID: "guardian-inverted-receipt"
+            ),
+            practiceSettingsRepository: InMemoryPracticeSettingsRepository(),
+            dailyQuestRepository: InMemoryDailyQuestRepository(),
+            clock: GuardianReceiptClock(now: now),
+            timeZone: .gmt
+        )
+        let model = GuardianDashboardViewModel(
+            store: store,
+            audioPromptService: GuardianReceiptSilentAudioPromptService()
+        )
+        await model.refreshAfterExternalSyncAndWait()
+        XCTAssertEqual(model.snapshot?.profile.id, profile.id)
+
+        await profiles.delayNextProfileLookup()
+        let olderRefresh = Task {
+            await model.refreshAfterExternalSyncAndWait()
+        }
+        await profiles.waitForDelayedLookup()
+        await profiles.removeProfile()
+
+        let deletionRefresh = Task {
+            await model.refreshAfterExternalSyncAndWait()
+        }
+        await deletionRefresh.value
+
+        XCTAssertNil(model.snapshot)
+        XCTAssertEqual(model.familySnapshot?.profiles, [])
+        guard case .profileEditor(nil) = model.destination else {
+            return XCTFail("The newer deletion receipt must show Add Kid")
+        }
+
+        await profiles.resumeDelayedLookup()
+        await olderRefresh.value
+
+        XCTAssertNil(model.snapshot)
+        XCTAssertEqual(model.familySnapshot?.profiles, [])
+        guard case .profileEditor(nil) = model.destination else {
+            return XCTFail("A late older receipt must not restore the deleted Kid")
+        }
+    }
+
+    func testCancelledOlderReceiptCannotRestoreStaleStoreSelection()
+        async throws
+    {
+        let now = Date(timeIntervalSince1970: 2_177_200_000)
+        let first = KidProfile(
+            displayName: "Mia",
+            avatar: .cartoonAnimal(assetID: "hare"),
+            selectedWorld: .moonpetalKingdom,
+            createdAt: now
+        )
+        let second = KidProfile(
+            displayName: "Leo",
+            avatar: .cartoonAnimal(assetID: "fox"),
+            selectedWorld: .pawsAndPines,
+            createdAt: now.addingTimeInterval(1)
+        )
+        let latest = KidProfile(
+            displayName: "Ava",
+            avatar: .cartoonAnimal(assetID: "owl"),
+            selectedWorld: .frostlightWorld,
+            createdAt: now.addingTimeInterval(2)
+        )
+        let profiles = InvertedGuardianSelectionRepository(
+            profiles: [first, second, latest]
+        )
+        let store = RepositoryGuardianFamilyStore(
+            profiles: [first, second, latest],
+            selectedProfileID: first.id,
+            profileRepository: profiles,
+            wordPoolRepository: InMemoryWordPoolRepository(
+                deviceID: "guardian-selection-fence"
+            ),
+            practiceSettingsRepository: InMemoryPracticeSettingsRepository(),
+            dailyQuestRepository: InMemoryDailyQuestRepository(),
+            clock: GuardianReceiptClock(now: now),
+            timeZone: .gmt
+        )
+        let model = GuardianDashboardViewModel(
+            store: store,
+            audioPromptService: GuardianReceiptSilentAudioPromptService()
+        )
+        await model.refreshAfterExternalSyncAndWait()
+        XCTAssertEqual(model.snapshot?.profile.id, first.id)
+
+        await profiles.replaceProfiles([second, latest])
+        await profiles.delayNextLookup(for: second.id)
+        let olderRefresh = Task {
+            await model.refreshAfterExternalSyncAndWait()
+        }
+        await profiles.waitForDelayedLookup()
+
+        // GuardianRootView cancels the prior receipt task before starting the
+        // new one. The Profile repository deliberately ignores cancellation
+        // until its suspended lookup is released.
+        olderRefresh.cancel()
+        _ = try await store.selectProfile(id: latest.id)
+        await model.refreshAfterExternalSyncAndWait()
+        XCTAssertEqual(model.snapshot?.profile.id, latest.id)
+
+        await profiles.resumeDelayedLookup()
+        await olderRefresh.value
+
+        XCTAssertEqual(model.snapshot?.profile.id, latest.id)
+        let storedFamily = try await store.familySnapshot()
+        XCTAssertEqual(storedFamily.selectedProfileID, latest.id)
+        let storedDashboard = try await store.dashboardSnapshot()
+        XCTAssertEqual(storedDashboard.profile.id, latest.id)
+    }
 }
 
 @MainActor
@@ -237,5 +364,115 @@ private struct GuardianReceiptSilentAudioPromptService: AudioPromptService {
     func play(_ prompt: WordPrompt, for profileID: ProfileID) async throws {
         _ = prompt
         _ = profileID
+    }
+}
+
+private actor DelayedGuardianProfileLookupRepository: KidProfileRepository {
+    private var profile: KidProfile?
+    private var shouldDelayNextLookup = false
+    private var delayedLookupStarted = false
+    private var delayedLookupContinuation: CheckedContinuation<Void, Never>?
+
+    init(profile: KidProfile) {
+        self.profile = profile
+    }
+
+    func profiles() async throws -> [KidProfile] {
+        profile.map { [$0] } ?? []
+    }
+
+    func profile(id: ProfileID) async throws -> KidProfile? {
+        let captured = profile?.id == id ? profile : nil
+        guard shouldDelayNextLookup else { return captured }
+        shouldDelayNextLookup = false
+        delayedLookupStarted = true
+        await withCheckedContinuation { continuation in
+            delayedLookupContinuation = continuation
+        }
+        return captured
+    }
+
+    func save(_ profile: KidProfile) async throws {
+        self.profile = profile
+    }
+
+    func delete(id: ProfileID) async throws {
+        guard profile?.id == id else { return }
+        profile = nil
+    }
+
+    func delayNextProfileLookup() {
+        shouldDelayNextLookup = true
+        delayedLookupStarted = false
+    }
+
+    func waitForDelayedLookup() async {
+        while !delayedLookupStarted {
+            await Task.yield()
+        }
+    }
+
+    func removeProfile() {
+        profile = nil
+    }
+
+    func resumeDelayedLookup() {
+        delayedLookupContinuation?.resume()
+        delayedLookupContinuation = nil
+    }
+}
+
+private actor InvertedGuardianSelectionRepository: KidProfileRepository {
+    private var orderedProfiles: [KidProfile]
+    private var delayedProfileID: ProfileID?
+    private var delayedLookupStarted = false
+    private var delayedLookupContinuation: CheckedContinuation<Void, Never>?
+
+    init(profiles: [KidProfile]) {
+        orderedProfiles = profiles
+    }
+
+    func profiles() async throws -> [KidProfile] {
+        orderedProfiles
+    }
+
+    func profile(id: ProfileID) async throws -> KidProfile? {
+        let captured = orderedProfiles.first { $0.id == id }
+        guard delayedProfileID == id else { return captured }
+        delayedProfileID = nil
+        delayedLookupStarted = true
+        await withCheckedContinuation { continuation in
+            delayedLookupContinuation = continuation
+        }
+        return captured
+    }
+
+    func save(_ profile: KidProfile) async throws {
+        orderedProfiles.removeAll { $0.id == profile.id }
+        orderedProfiles.append(profile)
+    }
+
+    func delete(id: ProfileID) async throws {
+        orderedProfiles.removeAll { $0.id == id }
+    }
+
+    func replaceProfiles(_ profiles: [KidProfile]) {
+        orderedProfiles = profiles
+    }
+
+    func delayNextLookup(for profileID: ProfileID) {
+        delayedProfileID = profileID
+        delayedLookupStarted = false
+    }
+
+    func waitForDelayedLookup() async {
+        while !delayedLookupStarted {
+            await Task.yield()
+        }
+    }
+
+    func resumeDelayedLookup() {
+        delayedLookupContinuation?.resume()
+        delayedLookupContinuation = nil
     }
 }

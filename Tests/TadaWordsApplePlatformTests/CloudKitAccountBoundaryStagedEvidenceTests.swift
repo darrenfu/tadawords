@@ -1436,6 +1436,163 @@ final class CloudKitAccountBoundaryStagedEvidenceTests: XCTestCase {
     }
 }
 
+extension CloudKitAccountBoundaryStagedEvidenceTests {
+    func testReplacementAccountCannotAcknowledgeOriginTerminalReceipt() throws {
+        let fixture = try AccountBoundaryEvidenceFixture(
+            name: "foreign-account-ack"
+        )
+        defer { fixture.remove() }
+        let store = fixture.store()
+        try fixture.configureOriginAccount(in: store)
+        let receiptID = try fixture.stage(.zone, in: store)
+        XCTAssertEqual(try fixture.commit(.zone, in: store), receiptID)
+
+        XCTAssertEqual(
+            try store.confirm(
+                accountRecordName: AccountBoundaryEvidenceFixture.replacementAccount
+            ),
+            .switchedAccounts
+        )
+        XCTAssertThrowsError(
+            try store.acknowledgeInbox(receiptIDs: [receiptID])
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .accountBindingMismatch
+            )
+        }
+
+        XCTAssertEqual(
+            try store.confirm(
+                accountRecordName: AccountBoundaryEvidenceFixture.originAccount
+            ),
+            .switchedAccounts
+        )
+        let returnedStore = fixture.store()
+        XCTAssertEqual(returnedStore.inboxEntries().map(\.receiptID), [receiptID])
+        XCTAssertNoThrow(
+            try returnedStore.acknowledgeInbox(receiptIDs: [receiptID])
+        )
+        XCTAssertTrue(returnedStore.inboxEntries().isEmpty)
+    }
+
+    func testReplacementAccountCannotQuarantineOriginTerminalReceipt() throws {
+        let fixture = try AccountBoundaryEvidenceFixture(
+            name: "foreign-account-quarantine"
+        )
+        defer { fixture.remove() }
+        let store = fixture.store()
+        try fixture.configureOriginAccount(in: store)
+        let receiptID = try fixture.stage(.root, in: store)
+        XCTAssertEqual(try fixture.commit(.root, in: store), receiptID)
+
+        XCTAssertEqual(
+            try store.confirm(
+                accountRecordName: AccountBoundaryEvidenceFixture.replacementAccount
+            ),
+            .switchedAccounts
+        )
+        XCTAssertThrowsError(
+            try store.quarantineInbox(
+                receiptIDs: [receiptID],
+                category: .conflict,
+                at: fixture.now
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .accountBindingMismatch
+            )
+        }
+
+        XCTAssertEqual(
+            try store.confirm(
+                accountRecordName: AccountBoundaryEvidenceFixture.originAccount
+            ),
+            .switchedAccounts
+        )
+        let returnedStore = fixture.store()
+        XCTAssertEqual(returnedStore.inboxEntries().map(\.receiptID), [receiptID])
+        XCTAssertNoThrow(
+            try returnedStore.quarantineInbox(
+                receiptIDs: [receiptID],
+                category: .conflict,
+                at: fixture.now
+            )
+        )
+        XCTAssertTrue(returnedStore.inboxEntries().isEmpty)
+        XCTAssertEqual(returnedStore.quarantinedCount(), 1)
+    }
+
+    func testAcceptedShareCompensationBindingCarriesAccountProvenance() throws {
+        let fixture = try AccountBoundaryEvidenceFixture(
+            name: "accepted-share-compensation"
+        )
+        defer { fixture.remove() }
+        let store = fixture.store()
+        XCTAssertEqual(
+            try store.confirm(
+                accountRecordName: AccountBoundaryEvidenceFixture.originAccount
+            ),
+            .signedIn
+        )
+        let sharedZoneID = CKRecordZone.ID(
+            zoneName: "accepted-share-zone",
+            ownerName: "remote-owner"
+        )
+        let sharedRootID = CKRecord.ID(
+            recordName: "accepted-share-root",
+            zoneID: sharedZoneID
+        )
+
+        let binding = CloudKitAcceptedShareBindingFactory.binding(
+            profileID: fixture.profileID,
+            rootRecordID: sharedRootID,
+            originAccountRecordName: AccountBoundaryEvidenceFixture.originAccount
+        )
+        try store.save(binding: binding)
+        let persisted = store.binding(for: fixture.profileID)
+
+        XCTAssertEqual(
+            persisted.originAccountRecordName,
+            AccountBoundaryEvidenceFixture.originAccount
+        )
+        XCTAssertEqual(persisted.originErasureRoute, .participant)
+        XCTAssertTrue(store.isBindingAuthorizedForConfirmedAccount(persisted))
+    }
+
+    func testGenerationProofRejectsEitherReplacedEngineOrInactiveBuffer() {
+        XCTAssertNoThrow(
+            try CloudKitTransportGenerationProof.require(
+                expected: 7,
+                privateGeneration: 7,
+                sharedGeneration: 7,
+                eventBufferIsActive: true
+            )
+        )
+        let staleCandidates: [(UInt64, UInt64, Bool)] = [
+            (8, 7, true),
+            (7, 8, true),
+            (7, 7, false),
+        ]
+        for candidate in staleCandidates {
+            XCTAssertThrowsError(
+                try CloudKitTransportGenerationProof.require(
+                    expected: 7,
+                    privateGeneration: candidate.0,
+                    sharedGeneration: candidate.1,
+                    eventBufferIsActive: candidate.2
+                )
+            ) { error in
+                guard case .accountBindingMismatch = error as? CloudKitFamilySyncError
+                else {
+                    return XCTFail("Expected stale-generation rejection")
+                }
+            }
+        }
+    }
+}
+
 private enum StagedEvidence: String, CaseIterable, CustomStringConvertible {
     case ownerLedger
     case root

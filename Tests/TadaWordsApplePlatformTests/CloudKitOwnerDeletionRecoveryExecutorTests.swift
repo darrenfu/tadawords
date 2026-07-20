@@ -214,6 +214,119 @@ final class CloudKitOwnerDeletionRecoveryExecutorTests: XCTestCase {
             ]
         )
     }
+
+    @MainActor
+    func testRemoteDeletionDominancePersistsExactTombstoneBeforeZoneErase()
+        async throws
+    {
+        let record = try remoteDeletionRecord()
+        var persistedRecord: FamilySyncRecord?
+        var events: [String] = []
+
+        let result = try await CloudKitRemoteOwnerDeletionDominanceExecutor()
+            .recover(
+                record: record,
+                verifyOriginAccount: {
+                    events.append("verify")
+                },
+                persistControlLedger: { candidate in
+                    events.append("persist-control-ledger")
+                    persistedRecord = candidate
+                },
+                eraseZone: {
+                    events.append("erase-zone")
+                },
+                purgeLocalSources: {
+                    events.append("purge-local")
+                },
+                commitRecovery: {
+                    events.append("commit-terminal")
+                    return "complete"
+                }
+            )
+
+        XCTAssertEqual(result, "complete")
+        XCTAssertEqual(persistedRecord, record)
+        XCTAssertEqual(
+            events,
+            [
+                "verify",
+                "persist-control-ledger",
+                "verify",
+                "verify",
+                "erase-zone",
+                "verify",
+                "purge-local",
+                "verify",
+                "commit-terminal",
+            ]
+        )
+    }
+
+    @MainActor
+    func testRemoteDeletionDominanceStopsWhenControlLedgerCannotPersist()
+        async
+    {
+        let record: FamilySyncRecord
+        do {
+            record = try remoteDeletionRecord()
+        } catch {
+            return XCTFail("Unable to create test deletion record: \(error)")
+        }
+        var events: [String] = []
+
+        do {
+            _ = try await CloudKitRemoteOwnerDeletionDominanceExecutor().recover(
+                record: record,
+                verifyOriginAccount: {
+                    events.append("verify")
+                },
+                persistControlLedger: { _ in
+                    events.append("persist-control-ledger")
+                    throw RecoveryExecutorTestError.ledger
+                },
+                eraseZone: {
+                    events.append("unexpected-erase")
+                },
+                purgeLocalSources: {
+                    events.append("unexpected-purge")
+                },
+                commitRecovery: {
+                    events.append("unexpected-commit")
+                }
+            )
+            XCTFail("A missing deletion barrier must block terminal recovery")
+        } catch {
+            XCTAssertEqual(error as? RecoveryExecutorTestError, .ledger)
+        }
+
+        XCTAssertEqual(events, ["verify", "persist-control-ledger"])
+    }
+}
+
+private func remoteDeletionRecord() throws -> FamilySyncRecord {
+    let profileID = ProfileID()
+    let deletedAt = Date(timeIntervalSince1970: 0)
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .secondsSince1970
+    return FamilySyncRecord(
+        recordName: "profile-\(profileID)",
+        profileID: profileID,
+        kind: .profileDeletion,
+        payload: try encoder.encode(
+            ProfileDeletionTombstone(
+                profileID: profileID,
+                deletedAt: deletedAt
+            )
+        ),
+        updatedAt: deletedAt,
+        deviceID: "remote-deletion-dominance-test",
+        isDeleted: true,
+        logicalRevision: FamilySyncLogicalRevision(
+            counter: 1,
+            deviceID: "remote-deletion-dominance-test"
+        )
+    )
 }
 
 private func cloudError(_ code: CKError.Code) -> CKError {
@@ -228,4 +341,5 @@ private func cloudError(_ code: CKError.Code) -> CKError {
 private enum RecoveryExecutorTestError: Error, Equatable {
     case erase
     case commit
+    case ledger
 }

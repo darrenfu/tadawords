@@ -272,7 +272,9 @@ actor CloudKitFamilySyncEventBuffer {
         _ entries: [CloudKitFamilyInboxEntry],
         generation: UInt64
     ) {
-        guard generation == activeGeneration else { return }
+        guard generation == activeGeneration, accountChange == nil else {
+            return
+        }
         for entry in entries {
             receiptIDs.insert(entry.receiptID)
             if let record = entry.record {
@@ -407,19 +409,26 @@ actor CloudKitFamilySyncEventBuffer {
             do {
                 switch event {
                 case .signedIn(let recordName):
-                    accountChange = try metadataStore.handleAccountSignIn(
+                    let resolvedChange = try metadataStore.handleAccountSignIn(
                         recordName: recordName
                     )
+                    accountChange = resolvedChange
+                    if resolvedChange != nil {
+                        sealBufferedStateForAccountBoundary()
+                    }
                 case .signedOut:
+                    sealBufferedStateForAccountBoundary()
                     try metadataStore.handleAccountSignOut()
                     accountChange = .signedOut
                 case .switchedAccounts:
+                    sealBufferedStateForAccountBoundary()
                     try metadataStore.handleAccountSignOut()
                     accountChange = .switchedAccounts
                 }
             } catch {
                 // Account metadata is a privacy boundary. Fail closed and stop
                 // state-token persistence if that boundary cannot be written.
+                sealBufferedStateForAccountBoundary()
                 durabilityFailure = true
                 accountChange = .switchedAccounts
                 failures.append(
@@ -651,13 +660,21 @@ actor CloudKitFamilySyncEventBuffer {
                     quarantinedRecordCount += 1
                     continue
                 }
+                if Self.isTerminal(binding.state) {
+                    guard Self.terminalBinding(binding, matches: scope) else {
+                        quarantinedRecordCount += 1
+                        continue
+                    }
+                    // The callback can have been queued before the terminal
+                    // transition. Its payload has already been dominated by
+                    // the durable Profile erasure and needs no receipt.
+                    continue
+                }
                 guard binding.databaseScope == scope else {
                     quarantinedRecordCount += 1
                     continue
                 }
-                if Self.isTerminal(binding.state)
-                    || ownerLedgerRecoveryProfileIDs.contains(binding.profileID)
-                {
+                if ownerLedgerRecoveryProfileIDs.contains(binding.profileID) {
                     continue
                 }
                 if recordID.recordName == binding.rootRecordName {
@@ -1278,13 +1295,34 @@ actor CloudKitFamilySyncEventBuffer {
 
     private func latchAccountBoundary() {
         accountChange = .switchedAccounts
+        sealBufferedStateForAccountBoundary()
+    }
+
+    private func sealBufferedStateForAccountBoundary() {
         incoming.removeAll()
         deletions.removeAll()
         acknowledgements.removeAll()
         receiptIDs.removeAll()
         receipts.removeAll()
+        requiresFetchPass = false
+        ownerLedgerRecoveryProfileIDs.removeAll()
         cleanupOutgoingSources()
         outgoing.removeAll()
+    }
+
+    private static func terminalBinding(
+        _ binding: ProfileCloudBinding,
+        matches scope: CloudKitFamilyDatabaseScope
+    ) -> Bool {
+        switch (binding.erasureRoute, scope) {
+        case (.owner, .privateDatabase),
+            (.participant, .sharedDatabase):
+            true
+        case (.owner, .sharedDatabase),
+            (.participant, .privateDatabase),
+            (.unresolved, _):
+            false
+        }
     }
 
     private static func privateZoneID(for profileID: ProfileID) -> CKRecordZone.ID {

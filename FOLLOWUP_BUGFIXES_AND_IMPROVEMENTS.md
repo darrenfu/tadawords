@@ -812,7 +812,7 @@ signed cross-device acceptance remain separate gates under #19, #22, and #23.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
-| V076-PRIV-001 | P0 privacy | Profile erasure | Persist and show truthful requested, deleting, waiting/retry, needs-attention, and complete states after a Profile is locally removed. Completion requires an exact tombstone acknowledgement after the owner or participant cleanup route finishes. | Source complete; live acceptance open | Pre-commit: 960/960 Swift, 40/40 Issue Agent, and 11/11 release-preflight tests. Still required: exact committed-HEAD simulator matrix, LocalQA iPhone/iPad regression, and Production CloudKit destructive proof. |
+| V076-PRIV-001 | P0 privacy | Profile erasure | Persist and show truthful requested, deleting, waiting/retry, needs-attention, and complete states after a Profile is locally removed. Completion requires an exact tombstone acknowledgement after the owner or participant cleanup route finishes. | Source complete; live acceptance open | Pre-commit: 998/998 Swift, 40/40 Issue Agent, and 11/11 release-preflight tests. Still required: exact committed-HEAD simulator matrix, LocalQA iPhone/iPad regression, and Production CloudKit destructive proof. |
 
 ### 2026-07-19 v0.7.6 notes
 
@@ -837,9 +837,20 @@ signed cross-device acceptance remain separate gates under #19, #22, and #23.
 - Owner-ledger recovery commits its minimal inbox receipt and terminal binding
   atomically after per-zone deletion proof and rechecks the exact Apple Account
   provenance inside the same metadata transaction.
+- Remote owner root/zone deletion first persists the exact privacy-minimal
+  control-zone tombstone, then erases the payload zone, purges local sources,
+  and terminalizes. Every destructive or receipt-consumption boundary rechecks
+  the live Apple Account and CKSyncEngine generation.
+- Receipt-triggered child and Parent refreshes use monotonic generations and
+  cancellation, so an older suspended refresh cannot republish a Profile or
+  Kid after a newer deletion has won.
+- Production fresh installs use a random default Profile identity and clear
+  only Tada Words' device-local voiceprint Keychain service before creating any
+  local marker. Existing installs preserve enrollment, and reset failures fail
+  bootstrap closed for retry.
 - Parent-visible lifecycle and exported diagnostics use anonymous aggregates;
   they never expose Profile, Apple Account, share, nickname, word, photo, or
   voice data.
-- The pre-commit repository gate passes 960 Swift tests, 40 Issue Agent tests,
+- The pre-commit repository gate passes 998 Swift tests, 40 Issue Agent tests,
   and 11 release-preflight tests. Simulator and physical acceptance evidence
   will be recorded only after the exact committed HEAD passes.

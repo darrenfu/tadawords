@@ -1058,6 +1058,156 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         )
     }
 
+    func testRealAccountChangeSealsBufferedPayloadBeforeFetchCanExposeIt()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore(accountRecordName: "account-a")
+        let incomingRecord = fixture.record(
+            name: "incoming-before-boundary",
+            payload: "account-a-incoming"
+        )
+        let incomingCloud = try fixture.cloudRecord(
+            for: incomingRecord,
+            store: store
+        )
+        let outgoingRecord = fixture.record(
+            name: "outgoing-before-boundary",
+            payload: "account-a-outgoing"
+        )
+        let outgoingCloud = try fixture.cloudRecord(
+            for: outgoingRecord,
+            store: store
+        )
+        let outgoingAcknowledgement = FamilySyncChangeAcknowledgement(
+            operation: .save(outgoingRecord)
+        )
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([incomingCloud]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.handle(
+            .fetchedDeletions([
+                fixture.recordID(name: "deleted-before-boundary")
+            ]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await buffer.register(
+            CloudKitFamilyOutgoingChange(
+                acknowledgement: outgoingAcknowledgement,
+                record: outgoingCloud
+            ),
+            recordID: outgoingCloud.recordID,
+            scope: .privateDatabase,
+            generation: 1
+        )
+        await buffer.handle(
+            .sentRecords(saved: [outgoingCloud], failed: []),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+
+        await buffer.handle(
+            .accountChange(.switchedAccounts),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(3)
+        )
+        let result = await buffer.drain()
+
+        XCTAssertEqual(result.accountChange, .switchedAccounts)
+        XCTAssertTrue(result.records.isEmpty)
+        XCTAssertTrue(result.deletions.isEmpty)
+        XCTAssertTrue(result.acknowledged.isEmpty)
+        XCTAssertTrue(result.receiptIDs.isEmpty)
+        XCTAssertTrue(result.receipts.isEmpty)
+        XCTAssertFalse(result.requiresFetchPass)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+    }
+
+    func testSameAccountSignedInKeepsDurablyBufferedFetchAvailable()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore(accountRecordName: "account-a")
+        let record = fixture.record(
+            name: "same-account-buffered",
+            payload: "durable-account-a-payload"
+        )
+        let cloudRecord = try fixture.cloudRecord(for: record, store: store)
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([cloudRecord]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        let durableEntries = store.inboxEntries()
+        XCTAssertEqual(durableEntries.count, 1)
+        let durableEntry = try XCTUnwrap(durableEntries.first)
+
+        await buffer.handle(
+            .accountChange(.signedIn(recordName: "account-a")),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        let result = await buffer.drain()
+
+        XCTAssertNil(result.accountChange)
+        XCTAssertEqual(result.records, [record])
+        XCTAssertEqual(result.receiptIDs, [durableEntry.receiptID])
+        XCTAssertEqual(result.receipts.map(\.id), [durableEntry.receiptID])
+        XCTAssertTrue(result.deletions.isEmpty)
+        XCTAssertTrue(result.acknowledged.isEmpty)
+        XCTAssertFalse(result.requiresFetchPass)
+        XCTAssertEqual(store.inboxEntries(), [durableEntry])
+    }
+
+    func testReplayCannotReinsertCapturedOldAccountInboxAfterBoundaryLatch()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore(accountRecordName: "account-a")
+        let oldRecord = fixture.record(payload: "captured-account-a-payload")
+        _ = try store.appendInbox(
+            record: oldRecord,
+            recordID: fixture.recordID(name: oldRecord.recordName),
+            scope: .privateDatabase,
+            receivedAt: fixture.now
+        )
+        let capturedBeforeBoundary = store.inboxEntries()
+        XCTAssertEqual(capturedBeforeBoundary.count, 1)
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .accountChange(.switchedAccounts),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await buffer.replay(capturedBeforeBoundary, generation: 1)
+        let result = await buffer.drain()
+
+        XCTAssertEqual(result.accountChange, .switchedAccounts)
+        XCTAssertTrue(result.records.isEmpty)
+        XCTAssertTrue(result.deletions.isEmpty)
+        XCTAssertTrue(result.receiptIDs.isEmpty)
+        XCTAssertTrue(result.receipts.isEmpty)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+    }
+
     func testAccountBoundaryRejectsLaterCallbacksFromSameEngineGeneration()
         async throws
     {
@@ -1327,6 +1477,68 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         XCTAssertTrue(ignored.records.isEmpty)
         XCTAssertTrue(ignored.deletions.isEmpty)
         XCTAssertTrue(ignored.receiptIDs.isEmpty)
+        XCTAssertTrue(ignored.receipts.isEmpty)
+        XCTAssertTrue(ignored.failures.isEmpty)
+        XCTAssertEqual(ignored.quarantinedRecordCount, 0)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+        XCTAssertEqual(
+            try Data(contentsOf: fixture.metadataURL),
+            bytesBeforeCallback
+        )
+    }
+
+    func testTerminalParticipantAbsorbsQueuedChildDeletionWithoutQuarantine()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = CloudKitFamilyMetadataStore(snapshotURL: fixture.metadataURL)
+        try store.confirm(accountRecordName: "account-a")
+        let sharedZoneID = CKRecordZone.ID(
+            zoneName: "SharedTerminalParticipantZone",
+            ownerName: "share-owner"
+        )
+        let sharedRootID = CKRecord.ID(
+            recordName: "shared-profile-root",
+            zoneID: sharedZoneID
+        )
+        try store.save(
+            binding: ProfileCloudBinding(
+                profileID: fixture.profileID,
+                state: .sharedParticipant,
+                zoneName: sharedZoneID.zoneName,
+                ownerName: sharedZoneID.ownerName,
+                rootRecordName: sharedRootID.recordName
+            )
+        )
+        let participant = store.binding(for: fixture.profileID)
+        try store.markParticipantLeft(
+            profileID: fixture.profileID,
+            previous: participant
+        )
+        let bytesBeforeCallback = try Data(contentsOf: fixture.metadataURL)
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedDeletions([
+                CKRecord.ID(
+                    recordName: "late-shared-child",
+                    zoneID: sharedZoneID
+                )
+            ]),
+            scope: .sharedDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        let ignored = await buffer.drain()
+
+        XCTAssertNil(ignored.accountChange)
+        XCTAssertTrue(ignored.records.isEmpty)
+        XCTAssertTrue(ignored.deletions.isEmpty)
+        XCTAssertTrue(ignored.receiptIDs.isEmpty)
+        XCTAssertTrue(ignored.receipts.isEmpty)
+        XCTAssertTrue(ignored.failures.isEmpty)
+        XCTAssertEqual(ignored.quarantinedRecordCount, 0)
         XCTAssertTrue(store.inboxEntries().isEmpty)
         XCTAssertEqual(
             try Data(contentsOf: fixture.metadataURL),

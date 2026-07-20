@@ -49,6 +49,7 @@ final class TadaWordsAppModel: ObservableObject {
     private var worldProgressTask: Task<Void, Never>?
     private var focusedReplaySeed: FocusedReplaySeed?
     private var isApplicationActive = true
+    private var externalSyncRefreshGeneration: UInt64 = 0
 
     init(
         profiles: [KidProfile] = .previewProfiles,
@@ -504,9 +505,15 @@ final class TadaWordsAppModel: ObservableObject {
     /// only forced navigation is a remote deletion of the active Profile.
     func refreshAfterExternalSyncAndWait() async {
         guard let profileRepository else { return }
+        externalSyncRefreshGeneration &+= 1
+        let refreshGeneration = externalSyncRefreshGeneration
         do {
             let refreshedProfiles = try await profileRepository.profiles()
                 .sorted(by: Self.isProfileOrderedBefore)
+            try Task.checkCancellation()
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
+            }
             profiles = refreshedProfiles
 
             guard let selectedProfileID = selectedProfile?.id else {
@@ -516,6 +523,9 @@ final class TadaWordsAppModel: ObservableObject {
                     })
                 {
                     self.lastPlayedProfileID = nil
+                    guard refreshGeneration == externalSyncRefreshGeneration else {
+                        return
+                    }
                     try? await childSessionRepository?
                         .clearLastSelectedProfileID()
                 }
@@ -540,15 +550,32 @@ final class TadaWordsAppModel: ObservableObject {
                 destination = .profileChooser
                 try? await childSessionRepository?
                     .clearLastSelectedProfileID()
+                guard refreshGeneration == externalSyncRefreshGeneration else {
+                    return
+                }
                 await audioExperienceService.stopAmbientAudio()
                 return
             }
 
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
+            }
             selectedProfile = refreshedProfile
             await activateAudio(for: refreshedProfile)
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
+            }
             await refreshTodayRouteStatuses(for: refreshedProfile)
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
+            }
             await loadCalendar(for: refreshedProfile)
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
+            }
             await loadWorldProgress(for: refreshedProfile)
+        } catch is CancellationError {
+            return
         } catch {
             // Existing local state remains usable. The next foreground or
             // committed receipt retries from the repository source of truth.
