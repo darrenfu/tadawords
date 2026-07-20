@@ -121,6 +121,53 @@ final class FamilySyncUIReceiptRefreshHarnessTests: XCTestCase {
         let remembered = try await fixture.session.lastSelectedProfileID()
         XCTAssertNil(remembered)
     }
+
+    func testOlderReceiptRefreshCannotRepublishProfileAfterNewerDeletion()
+        async throws
+    {
+        let profile = KidProfile(
+            displayName: "Mia",
+            avatar: .cartoonAnimal(assetID: "hare"),
+            selectedWorld: .moonpetalKingdom,
+            createdAt: Date(timeIntervalSince1970: 2_176_100_000)
+        )
+        let profiles = InvertedReceiptKidProfileRepository(profiles: [profile])
+        let session = InMemoryChildSessionRepository()
+        let model = TadaWordsAppModel(
+            profiles: [profile],
+            childSessionRepository: session,
+            profileRepository: profiles
+        )
+        await model.selectProfileAndWait(profile)
+
+        let olderRefresh = Task {
+            await model.refreshAfterExternalSyncAndWait()
+        }
+        await profiles.waitForStartedRequestCount(1)
+        await profiles.replaceProfiles([])
+
+        let deletionRefresh = Task {
+            await model.refreshAfterExternalSyncAndWait()
+        }
+        await profiles.waitForStartedRequestCount(2)
+        await profiles.resumeRequest(1)
+        await deletionRefresh.value
+
+        XCTAssertTrue(model.profiles.isEmpty)
+        XCTAssertNil(model.selectedProfile)
+        guard case .profileChooser = model.destination else {
+            return XCTFail("The newer deletion receipt must win")
+        }
+
+        await profiles.resumeRequest(0)
+        await olderRefresh.value
+
+        XCTAssertTrue(model.profiles.isEmpty)
+        XCTAssertNil(model.selectedProfile)
+        guard case .profileChooser = model.destination else {
+            return XCTFail("A late older receipt must not resurrect the Kid")
+        }
+    }
 }
 
 @MainActor
@@ -246,4 +293,51 @@ private func childQuestSession(
 
 private enum ReceiptRefreshTestFailure: Error {
     case expectedQuest
+}
+
+private actor InvertedReceiptKidProfileRepository: KidProfileRepository {
+    private var storedProfiles: [KidProfile]
+    private var startedRequestCount = 0
+    private var continuations: [Int: CheckedContinuation<Void, Never>] = [:]
+
+    init(profiles: [KidProfile]) {
+        storedProfiles = profiles
+    }
+
+    func profiles() async throws -> [KidProfile] {
+        let request = startedRequestCount
+        startedRequestCount += 1
+        let capturedProfiles = storedProfiles
+        await withCheckedContinuation { continuation in
+            continuations[request] = continuation
+        }
+        return capturedProfiles
+    }
+
+    func profile(id: ProfileID) async throws -> KidProfile? {
+        storedProfiles.first(where: { $0.id == id })
+    }
+
+    func save(_ profile: KidProfile) async throws {
+        storedProfiles.removeAll(where: { $0.id == profile.id })
+        storedProfiles.append(profile)
+    }
+
+    func delete(id: ProfileID) async throws {
+        storedProfiles.removeAll(where: { $0.id == id })
+    }
+
+    func replaceProfiles(_ profiles: [KidProfile]) {
+        storedProfiles = profiles
+    }
+
+    func waitForStartedRequestCount(_ expectedCount: Int) async {
+        while startedRequestCount < expectedCount {
+            await Task.yield()
+        }
+    }
+
+    func resumeRequest(_ request: Int) {
+        continuations.removeValue(forKey: request)?.resume()
+    }
 }

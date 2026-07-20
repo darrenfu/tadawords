@@ -113,6 +113,42 @@ public struct FamilySyncOutboxEntry: Codable, Equatable, Sendable {
     }
 }
 
+/// Narrow outbox metadata needed to resume one Profile erasure. It deliberately
+/// excludes payloads and every unrelated journal entry.
+public struct ProfileDeletionPendingDeliveryEvidence: Equatable, Sendable {
+    public let acknowledgement: FamilySyncChangeAcknowledgement
+    public let firstQueuedAt: Date
+    public let lastQueuedAt: Date
+    public let retryCount: Int
+    public let nextRetryAt: Date?
+    public let lastAttemptAt: Date?
+    public let errorCategory: FamilySyncPrivacySafeErrorCategory?
+
+    public init(
+        acknowledgement: FamilySyncChangeAcknowledgement,
+        firstQueuedAt: Date,
+        lastQueuedAt: Date,
+        retryCount: Int,
+        nextRetryAt: Date?,
+        lastAttemptAt: Date?,
+        errorCategory: FamilySyncPrivacySafeErrorCategory?
+    ) {
+        self.acknowledgement = acknowledgement
+        self.firstQueuedAt = firstQueuedAt
+        self.lastQueuedAt = lastQueuedAt
+        self.retryCount = max(0, retryCount)
+        self.nextRetryAt = nextRetryAt
+        self.lastAttemptAt = lastAttemptAt
+        self.errorCategory = errorCategory
+    }
+}
+
+public enum ProfileDeletionDeliveryEvidence: Equatable, Sendable {
+    case notQueued
+    case pending(ProfileDeletionPendingDeliveryEvidence)
+    case acknowledged(FamilySyncChangeAcknowledgement)
+}
+
 public enum FamilySyncDurableCondition: String, Codable, Sendable {
     case idle
     case waitingForConnection
@@ -268,6 +304,7 @@ public enum FamilySyncJournalError: Error, Equatable, Sendable {
     case unsupportedSchemaVersion(snapshotURL: URL, found: Int, supported: Int)
     case duplicateManifestKey(FamilySyncChangeKey)
     case duplicateOutboxKey(FamilySyncChangeKey)
+    case inconsistentProfileDeletionEvidence
     case writeFailed(snapshotURL: URL, details: String)
 }
 
@@ -309,6 +346,16 @@ public protocol FamilySyncJournalRepository: Sendable {
     ) async throws
 
     func durableStatus() async throws -> FamilySyncDurableStatus
+
+    func profileDeletionDeliveryEvidence(
+        for profileID: ProfileID
+    ) async throws -> ProfileDeletionDeliveryEvidence
+
+    func requeueProfileDeletion(
+        for profileID: ProfileID,
+        errorCategory: FamilySyncPrivacySafeErrorCategory,
+        at date: Date
+    ) async throws
 }
 
 /// Test/demo fallback only. Production composition always injects the durable
@@ -412,7 +459,25 @@ public actor VolatileFamilySyncJournalRepository: FamilySyncJournalRepository {
         at date: Date
     ) {
         _ = date
+        let terminalProfileIDs = Set(
+            records.values.compactMap { record in
+                Self.isCanonicalProfileDeletion(record)
+                    ? record.profileID
+                    : nil
+            }
+        ).union(
+            incoming.compactMap { record in
+                Self.isCanonicalProfileDeletion(record)
+                    ? record.profileID
+                    : nil
+            }
+        )
+
         for record in incoming {
+            guard
+                !terminalProfileIDs.contains(record.profileID)
+                    || Self.isCanonicalProfileDeletion(record)
+            else { continue }
             let key = FamilySyncChangeKey(
                 profileID: record.profileID,
                 recordName: record.recordName
@@ -421,7 +486,24 @@ public actor VolatileFamilySyncJournalRepository: FamilySyncJournalRepository {
             acknowledged[key] = record.logicalRevision
             pending.remove(key)
         }
+
+        for profileID in terminalProfileIDs {
+            let deletionKey = Self.profileDeletionKey(for: profileID)
+            records = records.filter {
+                $0.key.profileID != profileID || $0.key == deletionKey
+            }
+            acknowledged = acknowledged.filter {
+                $0.key.profileID != profileID || $0.key == deletionKey
+            }
+            pending = pending.filter {
+                $0.profileID != profileID || $0 == deletionKey
+            }
+        }
+
         for deletion in deletions {
+            guard !terminalProfileIDs.contains(deletion.key.profileID) else {
+                continue
+            }
             records.removeValue(forKey: deletion.key)
             acknowledged.removeValue(forKey: deletion.key)
             pending.remove(deletion.key)
@@ -429,9 +511,18 @@ public actor VolatileFamilySyncJournalRepository: FamilySyncJournalRepository {
     }
 
     public func invalidateAcknowledgementsForAccountChange(at date: Date) {
-        _ = date
-        pending.formUnion(records.keys)
-        acknowledged.removeAll()
+        let completedDeletionKeys = Set<FamilySyncChangeKey>(
+            records.compactMap { element in
+                let (key, record) = element
+                guard record.kind == .profileDeletion, record.isDeleted,
+                    acknowledged[key] == record.logicalRevision,
+                    !pending.contains(key)
+                else { return nil }
+                return key
+            }
+        )
+        pending.formUnion(Set(records.keys).subtracting(completedDeletionKeys))
+        acknowledged = acknowledged.filter { completedDeletionKeys.contains($0.key) }
         lastSuccessAt = nil
         errorCategory = .account
         condition = .iCloudUnavailable
@@ -455,6 +546,77 @@ public actor VolatileFamilySyncJournalRepository: FamilySyncJournalRepository {
             errorCategory: errorCategory,
             condition: condition
         )
+    }
+
+    public func profileDeletionDeliveryEvidence(
+        for profileID: ProfileID
+    ) throws -> ProfileDeletionDeliveryEvidence {
+        let key = Self.profileDeletionKey(for: profileID)
+        guard let record = records[key], record.kind == .profileDeletion,
+            record.isDeleted
+        else {
+            return .notQueued
+        }
+        let acknowledgement = FamilySyncChangeAcknowledgement(
+            key: key,
+            revision: record.logicalRevision,
+            operation: .save
+        )
+        if pending.contains(key) {
+            return .pending(
+                ProfileDeletionPendingDeliveryEvidence(
+                    acknowledgement: acknowledgement,
+                    firstQueuedAt: record.updatedAt,
+                    lastQueuedAt: record.updatedAt,
+                    retryCount: 0,
+                    nextRetryAt: nil,
+                    lastAttemptAt: lastAttemptAt,
+                    errorCategory: errorCategory
+                )
+            )
+        }
+        if acknowledged[key] == record.logicalRevision {
+            return .acknowledged(acknowledgement)
+        }
+        return .notQueued
+    }
+
+    public func requeueProfileDeletion(
+        for profileID: ProfileID,
+        errorCategory: FamilySyncPrivacySafeErrorCategory,
+        at date: Date
+    ) throws {
+        let key = Self.profileDeletionKey(for: profileID)
+        guard let record = records[key], record.kind == .profileDeletion,
+            record.isDeleted
+        else {
+            throw FamilySyncJournalError.inconsistentProfileDeletionEvidence
+        }
+        acknowledged.removeValue(forKey: key)
+        pending.insert(key)
+        lastAttemptAt = date
+        self.errorCategory = errorCategory
+        condition = .needsAttention
+    }
+
+    private static func profileDeletionKey(
+        for profileID: ProfileID
+    ) -> FamilySyncChangeKey {
+        FamilySyncChangeKey(
+            profileID: profileID,
+            recordName: "profile-\(profileID)"
+        )
+    }
+
+    private static func isCanonicalProfileDeletion(
+        _ record: FamilySyncRecord
+    ) -> Bool {
+        record.kind == .profileDeletion
+            && record.isDeleted
+            && FamilySyncChangeKey(
+                profileID: record.profileID,
+                recordName: record.recordName
+            ) == profileDeletionKey(for: record.profileID)
     }
 }
 
@@ -719,16 +881,57 @@ public actor LocalJSONFamilySyncJournalRepository: FamilySyncJournalRepository {
         )
         var outbox = try dictionary(current.outbox, duplicate: .outbox)
 
+        let terminalProfileIDs = Set(
+            local.values.compactMap { manifest in
+                Self.isCanonicalProfileDeletion(manifest)
+                    ? manifest.key.profileID
+                    : nil
+            }
+        ).union(
+            records.compactMap { record in
+                Self.isCanonicalProfileDeletion(record)
+                    ? record.profileID
+                    : nil
+            }
+        )
+
         for record in records {
             let manifest = FamilySyncManifestEntry(record: record)
             let key = manifest.key
+            guard
+                !terminalProfileIDs.contains(key.profileID)
+                    || Self.isCanonicalProfileDeletion(manifest)
+            else { continue }
             acknowledged[key] = manifest
-            if local[key].map({ $0.revision <= manifest.revision }) ?? true {
+            if Self.isCanonicalProfileDeletion(manifest)
+                || (local[key].map { $0.revision <= manifest.revision } ?? true)
+            {
                 local[key] = manifest
                 outbox.removeValue(forKey: key)
             }
         }
+
+        // A versioned Profile tombstone is a terminal barrier. Once accepted,
+        // no child manifest or pending operation for that Profile is useful,
+        // and retaining one can both leak erased identifiers and create an
+        // impossible retry loop against a deleted CloudKit hierarchy.
+        for profileID in terminalProfileIDs {
+            let deletionKey = Self.profileDeletionKey(for: profileID)
+            local = local.filter {
+                $0.key.profileID != profileID || $0.key == deletionKey
+            }
+            acknowledged = acknowledged.filter {
+                $0.key.profileID != profileID || $0.key == deletionKey
+            }
+            outbox = outbox.filter {
+                $0.key.profileID != profileID || $0.key == deletionKey
+            }
+        }
+
         for deletion in deletions {
+            guard !terminalProfileIDs.contains(deletion.key.profileID) else {
+                continue
+            }
             acknowledged.removeValue(forKey: deletion.key)
             guard let existing = local[deletion.key] else { continue }
             // A CKSyncEngine fetch deletion has no logical revision. It can be
@@ -765,9 +968,24 @@ public actor LocalJSONFamilySyncJournalRepository: FamilySyncJournalRepository {
     public func invalidateAcknowledgementsForAccountChange(at date: Date) throws {
         let current = try loadedSnapshot()
         let local = try dictionary(current.localManifest, duplicate: .manifest)
+        let currentAcknowledged = try dictionary(
+            current.acknowledgedManifest,
+            duplicate: .manifest
+        )
         var outbox = try dictionary(current.outbox, duplicate: .outbox)
+        var retainedAcknowledgements: [FamilySyncChangeKey: FamilySyncManifestEntry] = [:]
         for manifest in local.values {
-            outbox[manifest.key] = queuedEntry(
+            let isCompletedProfileDeletion =
+                manifest.kind == .profileDeletion
+                && manifest.isDeleted
+                && outbox[manifest.key] == nil
+                && currentAcknowledged[manifest.key]?.hasSameServerValue(as: manifest)
+                    == true
+            if isCompletedProfileDeletion {
+                retainedAcknowledgements[manifest.key] = currentAcknowledged[manifest.key]
+                continue
+            }
+            let queued = queuedEntry(
                 key: manifest.key,
                 operation: manifest.kind == .profileDeletion
                     ? .save
@@ -776,11 +994,22 @@ public actor LocalJSONFamilySyncJournalRepository: FamilySyncJournalRepository {
                 existing: outbox[manifest.key],
                 now: date
             )
+            outbox[manifest.key] = FamilySyncOutboxEntry(
+                key: queued.key,
+                operation: queued.operation,
+                revision: queued.revision,
+                firstQueuedAt: queued.firstQueuedAt,
+                lastQueuedAt: queued.lastQueuedAt,
+                retryCount: queued.retryCount,
+                nextRetryAt: queued.nextRetryAt,
+                lastAttemptAt: date,
+                errorCategory: .account
+            )
         }
         try persist(
             snapshot(
                 local: local,
-                acknowledged: [:],
+                acknowledged: retainedAcknowledgements,
                 outbox: outbox,
                 previousStatus: FamilySyncDurableStatus(
                     pendingCount: outbox.count,
@@ -820,6 +1049,102 @@ public actor LocalJSONFamilySyncJournalRepository: FamilySyncJournalRepository {
 
     public func durableStatus() throws -> FamilySyncDurableStatus {
         try loadedSnapshot().status
+    }
+
+    public func profileDeletionDeliveryEvidence(
+        for profileID: ProfileID
+    ) throws -> ProfileDeletionDeliveryEvidence {
+        let current = try loadedSnapshot()
+        let local = try dictionary(current.localManifest, duplicate: .manifest)
+        let acknowledged = try dictionary(
+            current.acknowledgedManifest,
+            duplicate: .manifest
+        )
+        let outbox = try dictionary(current.outbox, duplicate: .outbox)
+        let key = Self.profileDeletionKey(for: profileID)
+        guard let manifest = local[key], manifest.kind == .profileDeletion,
+            manifest.isDeleted
+        else {
+            return .notQueued
+        }
+        let acknowledgement = FamilySyncChangeAcknowledgement(
+            key: key,
+            revision: manifest.revision,
+            operation: .save
+        )
+        if let entry = outbox[key] {
+            guard entry.operation == .save, entry.revision == manifest.revision else {
+                throw FamilySyncJournalError.inconsistentProfileDeletionEvidence
+            }
+            return .pending(
+                ProfileDeletionPendingDeliveryEvidence(
+                    acknowledgement: acknowledgement,
+                    firstQueuedAt: entry.firstQueuedAt,
+                    lastQueuedAt: entry.lastQueuedAt,
+                    retryCount: entry.retryCount,
+                    nextRetryAt: entry.nextRetryAt,
+                    lastAttemptAt: entry.lastAttemptAt,
+                    errorCategory: entry.errorCategory
+                )
+            )
+        }
+        if acknowledged[key]?.hasSameServerValue(as: manifest) == true {
+            return .acknowledged(acknowledgement)
+        }
+        return .notQueued
+    }
+
+    public func requeueProfileDeletion(
+        for profileID: ProfileID,
+        errorCategory: FamilySyncPrivacySafeErrorCategory,
+        at date: Date
+    ) throws {
+        let current = try loadedSnapshot()
+        let local = try dictionary(current.localManifest, duplicate: .manifest)
+        var acknowledged = try dictionary(
+            current.acknowledgedManifest,
+            duplicate: .manifest
+        )
+        var outbox = try dictionary(current.outbox, duplicate: .outbox)
+        let key = Self.profileDeletionKey(for: profileID)
+        guard let manifest = local[key], manifest.kind == .profileDeletion,
+            manifest.isDeleted
+        else {
+            throw FamilySyncJournalError.inconsistentProfileDeletionEvidence
+        }
+        let queued = queuedEntry(
+            key: key,
+            operation: .save,
+            revision: manifest.revision,
+            existing: outbox[key],
+            now: date
+        )
+        outbox[key] = FamilySyncOutboxEntry(
+            key: queued.key,
+            operation: queued.operation,
+            revision: queued.revision,
+            firstQueuedAt: queued.firstQueuedAt,
+            lastQueuedAt: queued.lastQueuedAt,
+            retryCount: queued.retryCount,
+            nextRetryAt: nil,
+            lastAttemptAt: date,
+            errorCategory: errorCategory
+        )
+        acknowledged.removeValue(forKey: key)
+        try persist(
+            snapshot(
+                local: local,
+                acknowledged: acknowledged,
+                outbox: outbox,
+                previousStatus: FamilySyncDurableStatus(
+                    pendingCount: outbox.count,
+                    lastAttemptAt: date,
+                    lastSuccessAt: current.status.lastSuccessAt,
+                    errorCategory: errorCategory,
+                    condition: .needsAttention
+                )
+            )
+        )
     }
 
     public func reloadFromDisk() {
@@ -995,6 +1320,29 @@ public actor LocalJSONFamilySyncJournalRepository: FamilySyncJournalRepository {
         }
         let jitter = 0.8 + (Double(scalar % 401) / 1_000.0)
         return min(3_600.0, base * jitter)
+    }
+
+    private static func profileDeletionKey(
+        for profileID: ProfileID
+    ) -> FamilySyncChangeKey {
+        FamilySyncChangeKey(
+            profileID: profileID,
+            recordName: "profile-\(profileID)"
+        )
+    }
+
+    private static func isCanonicalProfileDeletion(
+        _ manifest: FamilySyncManifestEntry
+    ) -> Bool {
+        manifest.kind == .profileDeletion
+            && manifest.isDeleted
+            && manifest.key == profileDeletionKey(for: manifest.key.profileID)
+    }
+
+    private static func isCanonicalProfileDeletion(
+        _ record: FamilySyncRecord
+    ) -> Bool {
+        isCanonicalProfileDeletion(FamilySyncManifestEntry(record: record))
     }
 
     private var snapshotFile: AtomicSnapshotFile {

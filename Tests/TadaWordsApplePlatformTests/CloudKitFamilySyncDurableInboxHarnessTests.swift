@@ -459,6 +459,7 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         let fixture = try CloudInboxHarnessFixture()
         defer { fixture.remove() }
         let store = CloudKitFamilyMetadataStore(snapshotURL: fixture.metadataURL)
+        try store.confirm(accountRecordName: "account-a")
         let record = fixture.record(payload: "first-device-payload")
         let item = try fixture.cloudRecord(for: record, store: store)
         let root = CKRecord(
@@ -486,8 +487,8 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         )
     }
 
-    func testAccountSwitchDropsOldAccountInboxAndNeverRebindsSharedProfileAsPrivate()
-        throws
+    func testAccountSwitchDropsOldBytesButPreservesFailClosedBindingProvenance()
+        async throws
     {
         let fixture = try CloudInboxHarnessFixture()
         defer { fixture.remove() }
@@ -504,7 +505,7 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
                 state: .sharedParticipant,
                 zoneName: sharedZoneID.zoneName,
                 ownerName: sharedZoneID.ownerName,
-                rootRecordName: nil
+                rootRecordName: "shared-family-root"
             )
         )
         let privateRecord = fixture.record(payload: "private")
@@ -537,20 +538,210 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
 
         let restarted = CloudKitFamilyMetadataStore(snapshotURL: fixture.metadataURL)
         XCTAssertTrue(restarted.inboxEntries().isEmpty)
-        XCTAssertEqual(restarted.binding(for: fixture.profileID).state, .unbound)
-        XCTAssertEqual(restarted.binding(for: sharedProfileID).state, .revoked)
-        XCTAssertNil(restarted.binding(for: sharedProfileID).databaseScope)
+        let retainedOwner = restarted.binding(for: fixture.profileID)
+        let retainedParticipant = restarted.binding(for: sharedProfileID)
+        XCTAssertEqual(retainedOwner.state, .privateOwner)
+        XCTAssertEqual(retainedOwner.originAccountRecordName, "account-a")
+        XCTAssertEqual(retainedOwner.erasureRoute, .owner)
+        XCTAssertEqual(retainedParticipant.state, .sharedParticipant)
+        XCTAssertEqual(retainedParticipant.originAccountRecordName, "account-a")
+        XCTAssertEqual(retainedParticipant.erasureRoute, .participant)
+        XCTAssertFalse(
+            restarted.isBindingAuthorizedForConfirmedAccount(retainedOwner)
+        )
+        XCTAssertFalse(
+            restarted.isBindingAuthorizedForConfirmedAccount(retainedParticipant)
+        )
 
-        // Confirmation invokes account invalidation again. A formerly shared
-        // route must remain terminal through that second pass instead of
-        // becoming `.unbound` and uploading the owner's Profile as a new
-        // private copy in the participant's replacement account.
+        // Confirmation invokes account invalidation again. It must preserve
+        // the old route without authorizing it for the replacement account.
         try restarted.confirm(accountRecordName: "account-b")
         let confirmed = CloudKitFamilyMetadataStore(
             snapshotURL: fixture.metadataURL
         )
-        XCTAssertEqual(confirmed.binding(for: sharedProfileID).state, .revoked)
-        XCTAssertNil(confirmed.binding(for: sharedProfileID).databaseScope)
+        XCTAssertEqual(confirmed.binding(for: fixture.profileID), retainedOwner)
+        XCTAssertEqual(confirmed.binding(for: sharedProfileID), retainedParticipant)
+        XCTAssertFalse(
+            confirmed.isBindingAuthorizedForConfirmedAccount(retainedOwner)
+        )
+
+        let replacementAccountRoot = CKRecord(
+            recordType: CloudKitFamilyRecordCodec.Schema.rootRecordType,
+            recordID: fixture.rootRecordID
+        )
+        replacementAccountRoot[CloudKitFamilyRecordCodec.Schema.profileID] =
+            fixture.profileID.rawValue.uuidString as NSString
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: confirmed)
+        await buffer.handle(
+            .fetchedRecords([replacementAccountRoot]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        let blocked = await buffer.drain()
+        XCTAssertEqual(blocked.accountChange, .switchedAccounts)
+        XCTAssertEqual(confirmed.binding(for: fixture.profileID), retainedOwner)
+
+        // Returning to the origin account re-authorizes the exact retained
+        // owner/participant route; no private fallback or route rewrite occurs.
+        try confirmed.confirm(accountRecordName: "account-a")
+        let returned = CloudKitFamilyMetadataStore(snapshotURL: fixture.metadataURL)
+        XCTAssertTrue(
+            returned.isBindingAuthorizedForConfirmedAccount(
+                returned.binding(for: fixture.profileID)
+            )
+        )
+        XCTAssertTrue(
+            returned.isBindingAuthorizedForConfirmedAccount(
+                returned.binding(for: sharedProfileID)
+            )
+        )
+    }
+
+    func testV1ActiveBindingsMigrateOriginAccountAndRouteBeforeUse() throws {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let participantID = ProfileID()
+        let legacy = LegacyCloudMetadataSnapshot(
+            schemaVersion: 1,
+            confirmedAccountRecordName: "account-a",
+            requiresAccountConfirmation: false,
+            bindings: [
+                ProfileCloudBinding(
+                    profileID: fixture.profileID,
+                    state: .privateOwner,
+                    zoneName: fixture.zoneID.zoneName,
+                    ownerName: fixture.zoneID.ownerName,
+                    rootRecordName: fixture.rootRecordID.recordName
+                ),
+                ProfileCloudBinding(
+                    profileID: participantID,
+                    state: .sharedParticipant,
+                    zoneName: "SharedLegacyZone",
+                    ownerName: "legacy-owner",
+                    rootRecordName: "legacy-root"
+                ),
+            ]
+        )
+        try JSONEncoder().encode(legacy).write(
+            to: fixture.metadataURL,
+            options: .atomic
+        )
+        let store = CloudKitFamilyMetadataStore(snapshotURL: fixture.metadataURL)
+
+        XCTAssertEqual(
+            try store.accountGate(currentAccountRecordName: "account-a"),
+            .authorized
+        )
+        let owner = store.binding(for: fixture.profileID)
+        let participant = store.binding(for: participantID)
+        XCTAssertEqual(owner.originAccountRecordName, "account-a")
+        XCTAssertEqual(owner.originErasureRoute, .owner)
+        XCTAssertEqual(participant.originAccountRecordName, "account-a")
+        XCTAssertEqual(participant.originErasureRoute, .participant)
+        XCTAssertTrue(store.isBindingAuthorizedForConfirmedAccount(owner))
+        XCTAssertTrue(store.isBindingAuthorizedForConfirmedAccount(participant))
+
+        let persistedObject = try XCTUnwrap(
+            try JSONSerialization.jsonObject(
+                with: Data(contentsOf: fixture.metadataURL)
+            ) as? [String: Any]
+        )
+        XCTAssertEqual(persistedObject["schemaVersion"] as? Int, 2)
+        let restarted = CloudKitFamilyMetadataStore(snapshotURL: fixture.metadataURL)
+        XCTAssertEqual(restarted.binding(for: fixture.profileID), owner)
+        XCTAssertEqual(restarted.binding(for: participantID), participant)
+    }
+
+    func testV1PersistedUnboundCannotBeClaimedByReplacementAccountRoot()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let legacy = LegacyCloudMetadataSnapshot(
+            schemaVersion: 1,
+            confirmedAccountRecordName: "account-a",
+            requiresAccountConfirmation: false,
+            bindings: [.unbound(fixture.profileID)]
+        )
+        try JSONEncoder().encode(legacy).write(
+            to: fixture.metadataURL,
+            options: .atomic
+        )
+        let store = CloudKitFamilyMetadataStore(snapshotURL: fixture.metadataURL)
+        XCTAssertEqual(
+            try store.accountGate(currentAccountRecordName: "account-b"),
+            .requiresConfirmation(.switchedAccounts)
+        )
+        try store.confirm(accountRecordName: "account-b")
+
+        let replacementAccountRoot = CKRecord(
+            recordType: CloudKitFamilyRecordCodec.Schema.rootRecordType,
+            recordID: fixture.rootRecordID
+        )
+        replacementAccountRoot[CloudKitFamilyRecordCodec.Schema.profileID] =
+            fixture.profileID.rawValue.uuidString as NSString
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+        await buffer.handle(
+            .fetchedRecords([replacementAccountRoot]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        let blocked = await buffer.drain()
+        let retained = store.binding(for: fixture.profileID)
+
+        XCTAssertEqual(blocked.accountChange, .switchedAccounts)
+        XCTAssertEqual(retained.state, .unbound)
+        XCTAssertNil(retained.originAccountRecordName)
+        XCTAssertEqual(retained.erasureRoute, .unresolved)
+    }
+
+    func testPersistedActiveBindingWithoutProvenanceIsCorruptAndPreserved()
+        throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let ambiguous = LegacyCloudMetadataSnapshot(
+            schemaVersion: 2,
+            confirmedAccountRecordName: "account-a",
+            requiresAccountConfirmation: false,
+            bindings: [
+                ProfileCloudBinding(
+                    profileID: fixture.profileID,
+                    state: .privateOwner,
+                    zoneName: fixture.zoneID.zoneName,
+                    ownerName: fixture.zoneID.ownerName,
+                    rootRecordName: fixture.rootRecordID.recordName
+                )
+            ]
+        )
+        let ambiguousBytes = try JSONEncoder().encode(ambiguous)
+        try ambiguousBytes.write(
+            to: fixture.metadataURL,
+            options: .atomic
+        )
+        let store = CloudKitFamilyMetadataStore(snapshotURL: fixture.metadataURL)
+        XCTAssertThrowsError(
+            try store.accountGate(currentAccountRecordName: "account-b")
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .corruptMetadata
+            )
+        }
+        XCTAssertThrowsError(
+            try store.confirm(accountRecordName: "account-b")
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .corruptMetadata
+            )
+        }
+        XCTAssertEqual(
+            try Data(contentsOf: fixture.metadataURL),
+            ambiguousBytes
+        )
     }
 
     func testCorruptMetadataSnapshotFailsClosedAtAccountGate() throws {
@@ -786,8 +977,9 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
     {
         let fixture = try CloudInboxHarnessFixture()
         defer { fixture.remove() }
-        let store = try fixture.configuredStore()
-        try store.confirm(accountRecordName: "old-account")
+        let store = try fixture.configuredStore(
+            accountRecordName: "old-account"
+        )
         let oldRecord = fixture.record(payload: "old-account-payload")
         let oldCloud = try fixture.cloudRecord(for: oldRecord, store: store)
         let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
@@ -822,7 +1014,9 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
     func testAccountConfirmationReportsOnlyAChangedAccountGeneration() throws {
         let fixture = try CloudInboxHarnessFixture()
         defer { fixture.remove() }
-        let store = try fixture.configuredStore()
+        let store = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
 
         XCTAssertEqual(
             try store.confirm(accountRecordName: "account-a"),
@@ -862,6 +1056,156 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
             .authorized,
             "A late callback from a replaced engine must not mutate new-account metadata"
         )
+    }
+
+    func testRealAccountChangeSealsBufferedPayloadBeforeFetchCanExposeIt()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore(accountRecordName: "account-a")
+        let incomingRecord = fixture.record(
+            name: "incoming-before-boundary",
+            payload: "account-a-incoming"
+        )
+        let incomingCloud = try fixture.cloudRecord(
+            for: incomingRecord,
+            store: store
+        )
+        let outgoingRecord = fixture.record(
+            name: "outgoing-before-boundary",
+            payload: "account-a-outgoing"
+        )
+        let outgoingCloud = try fixture.cloudRecord(
+            for: outgoingRecord,
+            store: store
+        )
+        let outgoingAcknowledgement = FamilySyncChangeAcknowledgement(
+            operation: .save(outgoingRecord)
+        )
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([incomingCloud]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.handle(
+            .fetchedDeletions([
+                fixture.recordID(name: "deleted-before-boundary")
+            ]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await buffer.register(
+            CloudKitFamilyOutgoingChange(
+                acknowledgement: outgoingAcknowledgement,
+                record: outgoingCloud
+            ),
+            recordID: outgoingCloud.recordID,
+            scope: .privateDatabase,
+            generation: 1
+        )
+        await buffer.handle(
+            .sentRecords(saved: [outgoingCloud], failed: []),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+
+        await buffer.handle(
+            .accountChange(.switchedAccounts),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(3)
+        )
+        let result = await buffer.drain()
+
+        XCTAssertEqual(result.accountChange, .switchedAccounts)
+        XCTAssertTrue(result.records.isEmpty)
+        XCTAssertTrue(result.deletions.isEmpty)
+        XCTAssertTrue(result.acknowledged.isEmpty)
+        XCTAssertTrue(result.receiptIDs.isEmpty)
+        XCTAssertTrue(result.receipts.isEmpty)
+        XCTAssertFalse(result.requiresFetchPass)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+    }
+
+    func testSameAccountSignedInKeepsDurablyBufferedFetchAvailable()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore(accountRecordName: "account-a")
+        let record = fixture.record(
+            name: "same-account-buffered",
+            payload: "durable-account-a-payload"
+        )
+        let cloudRecord = try fixture.cloudRecord(for: record, store: store)
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([cloudRecord]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        let durableEntries = store.inboxEntries()
+        XCTAssertEqual(durableEntries.count, 1)
+        let durableEntry = try XCTUnwrap(durableEntries.first)
+
+        await buffer.handle(
+            .accountChange(.signedIn(recordName: "account-a")),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        let result = await buffer.drain()
+
+        XCTAssertNil(result.accountChange)
+        XCTAssertEqual(result.records, [record])
+        XCTAssertEqual(result.receiptIDs, [durableEntry.receiptID])
+        XCTAssertEqual(result.receipts.map(\.id), [durableEntry.receiptID])
+        XCTAssertTrue(result.deletions.isEmpty)
+        XCTAssertTrue(result.acknowledged.isEmpty)
+        XCTAssertFalse(result.requiresFetchPass)
+        XCTAssertEqual(store.inboxEntries(), [durableEntry])
+    }
+
+    func testReplayCannotReinsertCapturedOldAccountInboxAfterBoundaryLatch()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore(accountRecordName: "account-a")
+        let oldRecord = fixture.record(payload: "captured-account-a-payload")
+        _ = try store.appendInbox(
+            record: oldRecord,
+            recordID: fixture.recordID(name: oldRecord.recordName),
+            scope: .privateDatabase,
+            receivedAt: fixture.now
+        )
+        let capturedBeforeBoundary = store.inboxEntries()
+        XCTAssertEqual(capturedBeforeBoundary.count, 1)
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .accountChange(.switchedAccounts),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await buffer.replay(capturedBeforeBoundary, generation: 1)
+        let result = await buffer.drain()
+
+        XCTAssertEqual(result.accountChange, .switchedAccounts)
+        XCTAssertTrue(result.records.isEmpty)
+        XCTAssertTrue(result.deletions.isEmpty)
+        XCTAssertTrue(result.receiptIDs.isEmpty)
+        XCTAssertTrue(result.receipts.isEmpty)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
     }
 
     func testAccountBoundaryRejectsLaterCallbacksFromSameEngineGeneration()
@@ -1074,6 +1418,144 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
             line: line
         )
     }
+
+    func testReplacementAccountChildDeletionCannotUseOriginAccountBinding()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore()
+        let retainedBinding = store.binding(for: fixture.profileID)
+        try store.confirm(accountRecordName: "account-b")
+        let bytesBeforeCallback = try Data(contentsOf: fixture.metadataURL)
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedDeletions([fixture.recordID(name: "stale-child")]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        let blocked = await buffer.drain()
+
+        XCTAssertEqual(blocked.accountChange, .switchedAccounts)
+        XCTAssertTrue(blocked.records.isEmpty)
+        XCTAssertTrue(blocked.deletions.isEmpty)
+        XCTAssertTrue(blocked.receiptIDs.isEmpty)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+        XCTAssertEqual(store.binding(for: fixture.profileID), retainedBinding)
+        XCTAssertEqual(
+            try Data(contentsOf: fixture.metadataURL),
+            bytesBeforeCallback,
+            "A replacement-account callback must not mutate origin-account metadata."
+        )
+    }
+
+    func testTerminalOwnerIgnoresLateChildDeletionWithoutReemittingReceipt()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore()
+        let owner = store.binding(for: fixture.profileID)
+        try store.markOwnerDeleted(
+            profileID: fixture.profileID,
+            previous: owner
+        )
+        let bytesBeforeCallback = try Data(contentsOf: fixture.metadataURL)
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedDeletions([fixture.recordID(name: "late-child")]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        let ignored = await buffer.drain()
+
+        XCTAssertNil(ignored.accountChange)
+        XCTAssertTrue(ignored.records.isEmpty)
+        XCTAssertTrue(ignored.deletions.isEmpty)
+        XCTAssertTrue(ignored.receiptIDs.isEmpty)
+        XCTAssertTrue(ignored.receipts.isEmpty)
+        XCTAssertTrue(ignored.failures.isEmpty)
+        XCTAssertEqual(ignored.quarantinedRecordCount, 0)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+        XCTAssertEqual(
+            try Data(contentsOf: fixture.metadataURL),
+            bytesBeforeCallback
+        )
+    }
+
+    func testTerminalParticipantAbsorbsQueuedChildDeletionWithoutQuarantine()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = CloudKitFamilyMetadataStore(snapshotURL: fixture.metadataURL)
+        try store.confirm(accountRecordName: "account-a")
+        let sharedZoneID = CKRecordZone.ID(
+            zoneName: "SharedTerminalParticipantZone",
+            ownerName: "share-owner"
+        )
+        let sharedRootID = CKRecord.ID(
+            recordName: "shared-profile-root",
+            zoneID: sharedZoneID
+        )
+        try store.save(
+            binding: ProfileCloudBinding(
+                profileID: fixture.profileID,
+                state: .sharedParticipant,
+                zoneName: sharedZoneID.zoneName,
+                ownerName: sharedZoneID.ownerName,
+                rootRecordName: sharedRootID.recordName
+            )
+        )
+        let participant = store.binding(for: fixture.profileID)
+        try store.markParticipantLeft(
+            profileID: fixture.profileID,
+            previous: participant
+        )
+        let bytesBeforeCallback = try Data(contentsOf: fixture.metadataURL)
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedDeletions([
+                CKRecord.ID(
+                    recordName: "late-shared-child",
+                    zoneID: sharedZoneID
+                )
+            ]),
+            scope: .sharedDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        let ignored = await buffer.drain()
+
+        XCTAssertNil(ignored.accountChange)
+        XCTAssertTrue(ignored.records.isEmpty)
+        XCTAssertTrue(ignored.deletions.isEmpty)
+        XCTAssertTrue(ignored.receiptIDs.isEmpty)
+        XCTAssertTrue(ignored.receipts.isEmpty)
+        XCTAssertTrue(ignored.failures.isEmpty)
+        XCTAssertEqual(ignored.quarantinedRecordCount, 0)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+        XCTAssertEqual(
+            try Data(contentsOf: fixture.metadataURL),
+            bytesBeforeCallback
+        )
+    }
+}
+
+private struct LegacyCloudMetadataSnapshot: Encodable {
+    let schemaVersion: Int
+    let confirmedAccountRecordName: String?
+    let requiresAccountConfirmation: Bool
+    let bindings: [ProfileCloudBinding]
+    let systemFields: [Int] = []
+    let quarantined: [Int] = []
+    let protectedRecordKeys: [Int] = []
+    let inbox: [Int] = []
 }
 
 private struct CloudInboxHarnessFixture {
@@ -1104,8 +1586,13 @@ private struct CloudInboxHarnessFixture {
         )
     }
 
-    func configuredStore() throws -> CloudKitFamilyMetadataStore {
+    func configuredStore(
+        accountRecordName: String? = "account-a"
+    ) throws -> CloudKitFamilyMetadataStore {
         let store = CloudKitFamilyMetadataStore(snapshotURL: metadataURL)
+        if let accountRecordName {
+            try store.confirm(accountRecordName: accountRecordName)
+        }
         try store.save(
             binding: ProfileCloudBinding(
                 profileID: profileID,

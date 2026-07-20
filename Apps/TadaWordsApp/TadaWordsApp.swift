@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import TadaWordsAppShell
 import TadaWordsApplePlatform
+import TadaWordsContent
 import TadaWordsDomain
 
 @main
@@ -11,7 +12,8 @@ struct TadaWordsApp: App {
 
     private let audioExperienceService: AppleAudioExperienceService
     private let audioPromptService: SystemAudioPromptService
-    private let voiceprintRepository: KeychainDeviceVoiceprintRepository
+    private let profileMutationGate: ProfileScopedMutationGate
+    private let voiceprintRepository: ProfileMutationGatedDeviceVoiceprintRepository
     private let speechRecognitionService: AppleSpeechRecognitionService
     private let voiceprintEnrollmentService: AppleVoiceprintEnrollmentService
     private let pictureHintProvider: AppleWordPictureHintService
@@ -27,7 +29,11 @@ struct TadaWordsApp: App {
 
     init() {
         let experience = AppleAudioExperienceService()
-        let voiceprints = KeychainDeviceVoiceprintRepository()
+        let mutationGate = ProfileScopedMutationGate()
+        let voiceprints = ProfileMutationGatedDeviceVoiceprintRepository(
+            base: KeychainDeviceVoiceprintRepository(),
+            mutationGate: mutationGate
+        )
         let teacherAudioCacheDirectory =
             ((try? Self.cachesDirectory())
             ?? FileManager.default.temporaryDirectory)
@@ -64,6 +70,7 @@ struct TadaWordsApp: App {
             appTimeZone = .current
         #endif
         audioExperienceService = experience
+        profileMutationGate = mutationGate
         voiceprintRepository = voiceprints
         pictureHintProvider = AppleWordPictureHintService()
         voiceprintEnrollmentService = AppleVoiceprintEnrollmentService(
@@ -111,6 +118,7 @@ struct TadaWordsApp: App {
                     notificationScheduler: notificationScheduler,
                     voiceprintEnrollmentService: voiceprintEnrollmentService,
                     voiceprintRepository: voiceprintRepository,
+                    profileMutationGate: profileMutationGate,
                     sensitiveActionAuthorizer: sensitiveActionAuthorizer,
                     interfaceOrientationController:
                         appDelegate.interfaceOrientationController
@@ -136,14 +144,21 @@ struct TadaWordsApp: App {
     )
 
     nonisolated private static let defaultProfileID: ProfileID = {
-        guard
-            let rawValue = UUID(
-                uuidString: "3B20FEF0-7E43-4B70-8F89-D37AD55454A1"
-            )
-        else {
-            preconditionFailure("The bundled default profile ID is invalid.")
-        }
-        return ProfileID(rawValue: rawValue)
+        #if DEBUG && targetEnvironment(simulator) && !LOCAL_DEVICE_QA
+            // UI fixtures need one stable identity across deterministic
+            // simulator launches. Physical and production installs must never
+            // reuse a bundled child identity.
+            guard
+                let rawValue = UUID(
+                    uuidString: "3B20FEF0-7E43-4B70-8F89-D37AD55454A1"
+                )
+            else {
+                preconditionFailure("The simulator profile ID is invalid.")
+            }
+            return ProfileID(rawValue: rawValue)
+        #else
+            return ProfileID()
+        #endif
     }()
 
     nonisolated private static func applicationSupportDirectory() throws -> URL {

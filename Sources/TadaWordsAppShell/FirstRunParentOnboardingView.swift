@@ -16,10 +16,10 @@ enum FirstRunPrivacyDisclosure {
 
 @MainActor
 struct FirstRunParentOnboardingView: View {
-    let initialProfile: KidProfile
     let purpose: FirstRunOnboardingPurpose
     let familySyncCapability: FamilySyncCapability
     let onFinish: @MainActor (FirstRunOnboardingSubmission) async throws -> Void
+    private let presentationProfile: KidProfile
 
     @State private var displayName: String
     @State private var avatarAssetID: String
@@ -32,28 +32,37 @@ struct FirstRunParentOnboardingView: View {
     @FocusState private var nicknameIsFocused: Bool
 
     init(
-        initialProfile: KidProfile,
+        initialProfile: KidProfile?,
         purpose: FirstRunOnboardingPurpose,
         familySyncCapability: FamilySyncCapability,
         onFinish: @escaping @MainActor (FirstRunOnboardingSubmission) async throws -> Void
     ) {
-        self.initialProfile = initialProfile
+        let presentationProfile =
+            initialProfile
+            ?? KidProfile(
+                displayName: "My Kid",
+                avatar: .cartoonAnimal(assetID: "hare"),
+                selectedWorld: .moonpetalKingdom,
+                schoolGrade: .preK,
+                createdAt: .distantPast
+            )
+        self.presentationProfile = presentationProfile
         self.purpose = purpose
         self.familySyncCapability = familySyncCapability
         self.onFinish = onFinish
         _displayName = State(
-            initialValue: initialProfile.displayName == "My Kid"
+            initialValue: presentationProfile.displayName == "My Kid"
                 ? ""
-                : initialProfile.displayName
+                : presentationProfile.displayName
         )
         _avatarAssetID = State(
-            initialValue: initialProfile.avatar.cartoonAnimalAssetID ?? "hare"
+            initialValue: presentationProfile.avatar.cartoonAnimalAssetID ?? "hare"
         )
-        _schoolGrade = State(initialValue: initialProfile.schoolGrade)
+        _schoolGrade = State(initialValue: presentationProfile.schoolGrade)
         _ageYears = State(
-            initialValue: purpose == .fullSetup ? nil : initialProfile.ageYears
+            initialValue: purpose == .fullSetup ? nil : presentationProfile.ageYears
         )
-        _selectedWorld = State(initialValue: initialProfile.selectedWorld)
+        _selectedWorld = State(initialValue: presentationProfile.selectedWorld)
     }
 
     var body: some View {
@@ -259,16 +268,16 @@ struct FirstRunParentOnboardingView: View {
 
             onboardingCard {
                 HStack(spacing: 14) {
-                    Image(systemName: initialProfile.avatar.onboardingSymbol)
+                    Image(systemName: presentationProfile.avatar.onboardingSymbol)
                         .font(.system(size: 34, weight: .bold))
                         .foregroundStyle(Color.white)
                         .frame(width: 68, height: 68)
                         .background(theme.primary, in: Circle())
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(initialProfile.displayName)
+                        Text(presentationProfile.displayName)
                             .font(.system(.title2, design: .rounded, weight: .black))
-                        Text("Existing profile • \(initialProfile.schoolGrade.displayName)")
+                        Text("Existing profile • \(presentationProfile.schoolGrade.displayName)")
                             .font(.system(.subheadline, design: .rounded, weight: .semibold))
                             .foregroundStyle(theme.ink.opacity(0.68))
                     }

@@ -14,11 +14,13 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     private let dailyQuestRepository: any DailyQuestRepository
     private let tombstoneRepository: (any ProfileDeletionTombstoneRepository)?
     private let childSessionRepository: (any ChildSessionRepository)?
+    private let voiceprintRepository: (any DeviceVoiceprintRepository)?
     private let handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)?
+    private let mutationGate: ProfileScopedMutationGate?
     private let onLocalMutation: @Sendable (ProfileID) -> Void
     private let clock: any AppClock
     private let timeZone: TimeZone
-    private var selectedProfileID: ProfileID
+    private var selectedProfileID: ProfileID?
 
     public init(
         profiles: [KidProfile],
@@ -31,12 +33,13 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         dailyQuestRepository: any DailyQuestRepository = InMemoryDailyQuestRepository(),
         tombstoneRepository: (any ProfileDeletionTombstoneRepository)? = nil,
         childSessionRepository: (any ChildSessionRepository)? = nil,
+        voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
         handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)? = nil,
+        mutationGate: ProfileScopedMutationGate? = nil,
         onLocalMutation: @escaping @Sendable (ProfileID) -> Void = { _ in },
         clock: any AppClock,
         timeZone: TimeZone = .current
     ) {
-        precondition(!profiles.isEmpty, "A family store requires at least one profile.")
         self.profileRepository = profileRepository
         self.wordPoolRepository = wordPoolRepository
         self.practiceSettingsRepository = practiceSettingsRepository
@@ -44,7 +47,9 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         self.dailyQuestRepository = dailyQuestRepository
         self.tombstoneRepository = tombstoneRepository
         self.childSessionRepository = childSessionRepository
+        self.voiceprintRepository = voiceprintRepository
         self.handwritingPreferenceRemover = handwritingPreferenceRemover
+        self.mutationGate = mutationGate
         self.onLocalMutation = onLocalMutation
         self.clock = clock
         self.timeZone = timeZone
@@ -52,11 +57,21 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
             selectedProfileID.flatMap { candidate in
                 profiles.contains(where: { $0.id == candidate }) ? candidate : nil
             }
-            ?? profiles[0].id
+            ?? profiles.first?.id
     }
 
     public func familySnapshot() async throws -> GuardianFamilySnapshot {
         let profiles = try await profileRepository.profiles()
+        // External receipt refreshes cancel the superseded task. Do not let a
+        // repository that ignores cancellation resume later and mutate the
+        // shared selection behind the newer Parent snapshot.
+        try Task.checkCancellation()
+        guard !profiles.isEmpty else {
+            return GuardianFamilySnapshot(
+                profiles: [],
+                selectedProfileID: nil
+            )
+        }
         let selectedProfile = try resolveSelectedProfile(in: profiles)
         return GuardianFamilySnapshot(
             profiles: profiles,
@@ -70,6 +85,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         guard let profile = try await profileRepository.profile(id: id) else {
             throw GuardianFamilyStoreError.profileNotFound(id)
         }
+        try Task.checkCancellation()
         selectedProfileID = id
         return try await makeWordStore(for: profile).dashboardSnapshot()
     }
@@ -280,29 +296,46 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         return report
     }
 
-    /// Deletes every profile-scoped local record before removing the profile
-    /// identity. The actor serializes the lifecycle boundary, and each durable
-    /// repository commits its own candidate atomically.
+    /// Deletes every Profile-scoped local record before removing its identity.
+    /// One shared lease covers the tombstone, every local purge, and the final
+    /// commit marker, so Family Sync cannot observe a half-finished deletion.
     public func deleteProfile(
         id: ProfileID
     ) async throws -> GuardianProfileDeletionResult {
-        let profiles = try await profileRepository.profiles()
-        guard profiles.count > 1 else {
-            throw GuardianFamilyStoreError.cannotDeleteOnlyProfile
+        let result = try await withProfileScopedMutationLease(
+            mutationGate,
+            for: id,
+            allowingTerminal: true
+        ) {
+            try await self.deleteProfileHoldingLease(id: id)
         }
+        // Fire-and-forget sync work must not inherit the transaction's
+        // TaskLocal lease marker. Notify only after the lease is released.
+        onLocalMutation(id)
+        return result
+    }
+
+    private func deleteProfileHoldingLease(
+        id: ProfileID
+    ) async throws -> GuardianProfileDeletionResult {
+        let profiles = try await profileRepository.profiles()
         guard let profile = profiles.first(where: { $0.id == id }) else {
             throw GuardianFamilyStoreError.profileNotFound(id)
         }
         // Read every dependency first so malformed durable data cannot begin a
         // partially applied delete.
         _ = try await makeWordStore(for: profile).dashboardSnapshot()
-        let fallback = profiles.first { $0.id != id }!
 
         let tombstone = ProfileDeletionTombstone(
             profileID: id,
             deletedAt: clock.now
         )
         try await tombstoneRepository?.save(tombstone)
+        await mutationGate?.seal(id)
+        // Voiceprint templates are sensitive device-local child data. Their
+        // throwing deletion is part of the durable local purge, never a
+        // best-effort cleanup after the deletion has been reported complete.
+        try await voiceprintRepository?.delete(for: id)
         try await wordPoolRepository.deleteAll(for: id)
         try await practiceSettingsRepository.delete(for: id)
         if let learning = learningRecordRepository
@@ -318,22 +351,41 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         try await profileRepository.delete(id: id)
         handwritingPreferenceRemover?.remove(for: id)
         try await tombstoneRepository?.markCommitted(for: id)
+        let remainingProfiles = try await profileRepository.profiles()
+        let nextSelectedProfileID =
+            selectedProfileID.flatMap { candidate in
+                remainingProfiles.contains(where: { $0.id == candidate })
+                    ? candidate
+                    : nil
+            } ?? remainingProfiles.first?.id
+        selectedProfileID = nextSelectedProfileID
         if let childSessionRepository,
             (try? await childSessionRepository.lastSelectedProfileID()) == id
         {
             // The session pointer is a convenience, not learning data. A
             // storage failure here must not roll back or misreport the
             // already committed profile deletion; bootstrap repairs it too.
-            try? await childSessionRepository.saveLastSelectedProfileID(
-                fallback.id
-            )
+            if let nextSelectedProfileID {
+                try? await childSessionRepository.saveLastSelectedProfileID(
+                    nextSelectedProfileID
+                )
+            } else {
+                try? await childSessionRepository.clearLastSelectedProfileID()
+            }
         }
-        if selectedProfileID == id {
-            selectedProfileID = fallback.id
+        let family = GuardianFamilySnapshot(
+            profiles: remainingProfiles,
+            selectedProfileID: nextSelectedProfileID
+        )
+        let dashboard: GuardianDashboardSnapshot?
+        if let nextProfile = family.selectedProfile {
+            dashboard = try await makeWordStore(for: nextProfile).dashboardSnapshot()
+        } else {
+            dashboard = nil
         }
-        onLocalMutation(id)
         return GuardianProfileDeletionResult(
-            dashboard: try await makeWordStore(for: fallback).dashboardSnapshot(),
+            family: family,
+            dashboard: dashboard,
             tombstone: tombstone
         )
     }
@@ -341,11 +393,14 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     private func selectedProfile() async throws -> KidProfile {
         let requestedProfileID = selectedProfileID
         let profiles = try await profileRepository.profiles()
-        if let selected = profiles.first(where: { $0.id == requestedProfileID }) {
+        try Task.checkCancellation()
+        if let requestedProfileID,
+            let selected = profiles.first(where: { $0.id == requestedProfileID })
+        {
             return selected
         }
         guard let fallback = profiles.first else {
-            throw GuardianFamilyStoreError.profileNotFound(requestedProfileID)
+            throw GuardianFamilyStoreError.noProfiles
         }
         if selectedProfileID == requestedProfileID {
             selectedProfileID = fallback.id
@@ -363,11 +418,13 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     private func resolveSelectedProfile(
         in profiles: [KidProfile]
     ) throws -> KidProfile {
-        if let selected = profiles.first(where: { $0.id == selectedProfileID }) {
+        if let selectedProfileID,
+            let selected = profiles.first(where: { $0.id == selectedProfileID })
+        {
             return selected
         }
         guard let fallback = profiles.first else {
-            throw GuardianFamilyStoreError.profileNotFound(selectedProfileID)
+            throw GuardianFamilyStoreError.noProfiles
         }
         selectedProfileID = fallback.id
         return fallback

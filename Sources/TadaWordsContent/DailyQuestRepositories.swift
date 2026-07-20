@@ -397,13 +397,17 @@ public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository,
             profileIDs
             .filter { ProfileScopedMutationLeaseContext.profileID != $0 }
             .sorted { $0.description < $1.description }
-        for id in ids { await mutationGate.acquire(id) }
+        var acquiredIDs: [ProfileID] = []
         do {
+            for id in ids {
+                try await mutationGate.acquire(id)
+                acquiredIDs.append(id)
+            }
             let value = try operation()
-            for id in ids.reversed() { await mutationGate.release(id) }
+            for id in acquiredIDs.reversed() { await mutationGate.release(id) }
             return value
         } catch {
-            for id in ids.reversed() { await mutationGate.release(id) }
+            for id in acquiredIDs.reversed() { await mutationGate.release(id) }
             throw error
         }
     }

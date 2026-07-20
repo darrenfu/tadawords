@@ -52,6 +52,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
     }
 
     public func profileIDsForSync() async throws -> [ProfileID] {
+        try await requireNoPendingLocalDeletion()
         async let profiles = profileRepository.profiles()
         async let tombstones = tombstoneRepository.tombstones()
         return Array(
@@ -61,7 +62,16 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
     }
 
     public func isProfileDeleted(_ profileID: ProfileID) async throws -> Bool {
-        try await tombstoneRepository.tombstone(for: profileID) != nil
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: profileID,
+            allowingTerminal: true
+        ) {
+            try await self.requireNoPendingLocalDeletion(for: profileID)
+            return try await self.tombstoneRepository.tombstone(
+                for: profileID
+            ) != nil
+        }
     }
 
     public func applyIfUnchanged(
@@ -78,7 +88,10 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
             return true
         }
 
-        await mutationGate.acquire(profileID)
+        try await mutationGate.acquire(
+            profileID,
+            allowingTerminal: true
+        )
         do {
             let applied = try await ProfileScopedMutationLeaseContext.$profileID
                 .withValue(profileID) {
@@ -113,6 +126,19 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
     public func records(
         for profileID: ProfileID
     ) async throws -> [FamilySyncRecord] {
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: profileID,
+            allowingTerminal: true
+        ) {
+            try await self.recordsHoldingLease(for: profileID)
+        }
+    }
+
+    private func recordsHoldingLease(
+        for profileID: ProfileID
+    ) async throws -> [FamilySyncRecord] {
+        try await requireNoPendingLocalDeletion(for: profileID)
         var records: [FamilySyncRecord] = []
         if let tombstone = try await tombstoneRepository.tombstone(
             for: profileID
@@ -276,6 +302,20 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         return records.sorted { $0.recordName < $1.recordName }
     }
 
+    private func requireNoPendingLocalDeletion(
+        for profileID: ProfileID? = nil
+    ) async throws {
+        let pending = try await tombstoneRepository.pendingTombstones()
+        guard
+            let tombstone = pending.first(where: {
+                profileID == nil || $0.profileID == profileID
+            })
+        else { return }
+        throw RepositoryFamilySyncError.pendingLocalProfileDeletion(
+            tombstone.profileID
+        )
+    }
+
     public func apply(
         _ records: [FamilySyncRecord],
         for profileID: ProfileID
@@ -284,7 +324,10 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
             try await applyDurably(records, for: profileID)
             return
         }
-        await mutationGate.acquire(profileID)
+        try await mutationGate.acquire(
+            profileID,
+            allowingTerminal: true
+        )
         do {
             try await ProfileScopedMutationLeaseContext.$profileID.withValue(
                 profileID
@@ -482,7 +525,10 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
             return
         }
 
-        await mutationGate.acquire(transaction.profileID)
+        try await mutationGate.acquire(
+            transaction.profileID,
+            allowingTerminal: true
+        )
         do {
             try await ProfileScopedMutationLeaseContext.$profileID
                 .withValue(transaction.profileID) {
@@ -699,6 +745,12 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
     }
 
     private func deleteProfileData(_ profileID: ProfileID) async throws {
+        // The device-only voice template is the most sensitive Profile-scoped
+        // artifact. Attempt its throwing deletion before any JSON purge so a
+        // corrupt learning/word snapshot cannot postpone voiceprint erasure.
+        // The durable tombstone has already sealed ordinary writes, and the
+        // caller does not mark the deletion committed until every step passes.
+        try await voiceprintRepository?.delete(for: profileID)
         try await wordPoolRepository.deleteAll(for: profileID)
         try await practiceSettingsRepository.delete(for: profileID)
         try await learningRepository.deleteLearningRecords(for: profileID)
@@ -707,7 +759,6 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         if try await childSessionRepository?.lastSelectedProfileID() == profileID {
             try await childSessionRepository?.clearLastSelectedProfileID()
         }
-        try await voiceprintRepository?.delete(for: profileID)
         handwritingPreferenceRemover?.remove(for: profileID)
     }
 
@@ -830,6 +881,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
 }
 
 public enum RepositoryFamilySyncError: Error, Equatable, Sendable {
+    case pendingLocalProfileDeletion(ProfileID)
     case profileMismatch
     case invalidRecordIdentity(
         recordName: String,

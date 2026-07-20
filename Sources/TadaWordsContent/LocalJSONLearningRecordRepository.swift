@@ -188,6 +188,7 @@ public enum LearningRecordRepositoryError: Error, Equatable, Sendable {
     case conflictingAttemptID(AttemptID)
     case conflictingCorrectionID(AttemptCorrectionID)
     case conflictingAttemptRoute(AttemptID)
+    case missingCorrectionRoute(AttemptID)
     case conflictingPromptAlias(
         profileID: ProfileID,
         learningMode: LearningMode,
@@ -253,6 +254,16 @@ public actor LocalJSONLearningRecordRepository: ProfileLearningRecordRepository,
             try loadedStorage().canonicalAttempts.first {
                 $0.id == correction.originalAttemptID
             }?.profileID ?? ProfileScopedMutationLeaseContext.profileID
+        guard profileID != nil || mutationGate == nil else {
+            // Production repositories share a terminal Profile fence. Without
+            // an immutable attempt, explicit sync route, or inherited Profile
+            // transaction there is no safe lease to acquire: the attempt may
+            // have just been erased. Legacy/in-memory repositories without a
+            // gate retain correction-before-attempt compatibility.
+            throw LearningRecordRepositoryError.missingCorrectionRoute(
+                correction.originalAttemptID
+            )
+        }
         try await withOptionalMutationLease(for: profileID) {
             var candidate = try loadedStorage()
             let didAppend: Bool
@@ -415,12 +426,16 @@ public actor LocalJSONLearningRecordRepository: ProfileLearningRecordRepository,
             profileIDs
             .filter { ProfileScopedMutationLeaseContext.profileID != $0 }
             .sorted { $0.description < $1.description }
-        for id in ids { await mutationGate.acquire(id) }
+        var acquiredIDs: [ProfileID] = []
         do {
+            for id in ids {
+                try await mutationGate.acquire(id)
+                acquiredIDs.append(id)
+            }
             try operation()
-            for id in ids.reversed() { await mutationGate.release(id) }
+            for id in acquiredIDs.reversed() { await mutationGate.release(id) }
         } catch {
-            for id in ids.reversed() { await mutationGate.release(id) }
+            for id in acquiredIDs.reversed() { await mutationGate.release(id) }
             throw error
         }
     }
@@ -435,7 +450,7 @@ public actor LocalJSONLearningRecordRepository: ProfileLearningRecordRepository,
             try operation()
             return
         }
-        await mutationGate.acquire(profileID)
+        try await mutationGate.acquire(profileID)
         do {
             try operation()
             await mutationGate.release(profileID)

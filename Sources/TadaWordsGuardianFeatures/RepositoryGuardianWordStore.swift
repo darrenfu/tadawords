@@ -226,7 +226,21 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
             reason: .guardianOverride,
             correctedAt: clock.now
         )
-        try await learningRecordRepository.append(correction)
+        if let routedRepository = learningRecordRepository
+            as? any RoutedAttemptCorrectionRepository
+        {
+            // The selected child is stable even if deletion removes the
+            // attempt between the report read and this append. Carrying the
+            // route forces the correction through that child's terminal gate
+            // instead of persisting an unowned fact.
+            try await routedRepository.append(
+                correction,
+                routedTo: profile.id,
+                sourceRecord: nil
+            )
+        } else {
+            try await learningRecordRepository.append(correction)
+        }
         let promptAttempts = allAttempts.filter {
             $0.wordPromptID == original.wordPromptID
         }

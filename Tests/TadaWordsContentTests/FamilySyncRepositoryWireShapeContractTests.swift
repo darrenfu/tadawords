@@ -900,6 +900,7 @@ private struct FamilySyncWireContractFixture {
                 deletedAt: now.addingTimeInterval(300)
             )
         )
+        try await tombstones.markCommitted(for: deletedProfileID)
 
         let store = RepositoryFamilySyncRecordStore(
             profileRepository: profiles,

@@ -10,7 +10,10 @@ public enum KeychainDeviceVoiceprintRepositoryError: Error, Equatable, Sendable 
 /// Stores only the final embedding template in the local data-protection
 /// keychain. `ThisDeviceOnly` and `kSecAttrSynchronizable = false` explicitly
 /// prevent backup migration and iCloud Keychain synchronization.
-public actor KeychainDeviceVoiceprintRepository: DeviceVoiceprintRepository {
+public actor KeychainDeviceVoiceprintRepository:
+    DeviceVoiceprintRepository,
+    FreshInstallationVoiceprintResetting
+{
     private let service: String
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
@@ -109,6 +112,25 @@ public actor KeychainDeviceVoiceprintRepository: DeviceVoiceprintRepository {
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainDeviceVoiceprintRepositoryError.keychain(
                 operation: "delete",
+                status: status
+            )
+        }
+    }
+
+    /// Removes only generic-password items in Tada Words' dedicated
+    /// non-synchronizing voiceprint service. Bootstrap calls this before it
+    /// writes any new-install marker, so a Keychain failure remains retryable
+    /// and cannot expose a retained template to a newly seeded child.
+    public func resetVoiceprintsForFreshInstallation() async throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrSynchronizable as String: false,
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainDeviceVoiceprintRepositoryError.keychain(
+                operation: "fresh-install-reset",
                 status: status
             )
         }

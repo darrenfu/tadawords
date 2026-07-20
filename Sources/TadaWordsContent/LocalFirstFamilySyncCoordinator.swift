@@ -75,6 +75,7 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
     private let transport: any FamilySyncTransport
     private let preferenceRepository: any FamilySyncPreferenceRepository
     private let journalRepository: any FamilySyncJournalRepository
+    private let profileDeletionRepository: (any ProfileDeletionTombstoneRepository)?
     private let deviceID: String
     private let clock: any AppClock
     private var currentStatus: FamilySyncStatus = .idle
@@ -93,6 +94,8 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
             InMemoryFamilySyncPreferenceRepository(),
         journalRepository: any FamilySyncJournalRepository =
             VolatileFamilySyncJournalRepository(),
+        profileDeletionRepository:
+            (any ProfileDeletionTombstoneRepository)? = nil,
         deviceID: String = "volatile-device",
         clock: any AppClock = SystemAppClock()
     ) {
@@ -100,6 +103,7 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
         self.transport = transport
         self.preferenceRepository = preferenceRepository
         self.journalRepository = journalRepository
+        self.profileDeletionRepository = profileDeletionRepository
         self.deviceID = deviceID.trimmingCharacters(in: .whitespacesAndNewlines)
         self.clock = clock
     }
@@ -127,6 +131,12 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                 if accountChange != nil {
                     try await journalRepository
                         .invalidateAcknowledgementsForAccountChange(at: clock.now)
+                    if accountChange != .signedIn {
+                        try await recordProfileErasureCondition(
+                            category: .account,
+                            at: clock.now
+                        )
+                    }
                 }
                 try await preferenceRepository.setEnabled(true, updatedAt: clock.now)
                 desiredEnabled = true
@@ -218,6 +228,17 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
         return currentStatus
     }
 
+    public func profileErasureLifecycles() async throws
+        -> [ProfileErasureLifecycle]
+    {
+        guard let profileDeletionRepository else { return [] }
+        try await repairProfileErasureLifecyclesFromJournal(
+            in: profileDeletionRepository,
+            at: clock.now
+        )
+        return try await profileDeletionRepository.erasureLifecycles()
+    }
+
     public func createShare(for profileID: ProfileID) async throws -> URL {
         guard transport.capability == .iCloud else {
             throw FamilySyncConsentError.deviceOnly
@@ -270,6 +291,12 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                 deviceID: deviceID,
                 now: now
             )
+            if let profileDeletionRepository {
+                try await repairProfileErasureLifecyclesFromJournal(
+                    in: profileDeletionRepository,
+                    at: now
+                )
+            }
         } catch {
             currentStatus = .failed(
                 message: Self.privacySafeMessage(for: error),
@@ -293,6 +320,18 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                     errorCategory: .connectivity,
                     at: now
                 )
+                do {
+                    try await recordProfileErasureCondition(
+                        category: .connectivity,
+                        at: now
+                    )
+                } catch {
+                    currentStatus = .failed(
+                        message: Self.privacySafeMessage(for: error),
+                        pendingCount: pendingCount
+                    )
+                    return currentStatus
+                }
                 currentStatus = await pendingOfflineStatus(
                     fallbackPendingCount: pendingCount
                 )
@@ -302,6 +341,18 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                     errorCategory: .account,
                     at: now
                 )
+                do {
+                    try await recordProfileErasureCondition(
+                        category: .account,
+                        at: now
+                    )
+                } catch {
+                    currentStatus = .failed(
+                        message: Self.privacySafeMessage(for: error),
+                        pendingCount: pendingCount
+                    )
+                    return currentStatus
+                }
                 currentStatus = .iCloudUnavailable(
                     message: Self.message(for: availability)
                 )
@@ -325,8 +376,23 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                 try await journalRepository.invalidateAcknowledgementsForAccountChange(
                     at: now
                 )
+                try await recordProfileErasureCondition(
+                    category: .account,
+                    at: now
+                )
                 currentStatus = .iCloudUnavailable(
                     message: Self.message(for: accountChange)
+                )
+                return currentStatus
+            }
+            if fetched.requiresFetchPass {
+                // A CloudKit callback staged deletion evidence that still
+                // requires transport-level proof (for example, verifying the
+                // owner's payload zone is absent). Do not expose or upload any
+                // child record until the coalesced recovery pass completes.
+                needsAnotherPass = true
+                currentStatus = .syncing(
+                    pendingCount: await durablePendingCount()
                 )
                 return currentStatus
             }
@@ -379,6 +445,10 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                     failures: fetched.failures,
                     at: now
                 )
+                try await recordProfileErasureCondition(
+                    category: fetched.failures[0].category,
+                    at: now
+                )
                 currentStatus = await parentVisibleFailureStatus(
                     for: fetched.failures[0].category,
                     fallbackPendingCount: await durablePendingCount()
@@ -411,6 +481,10 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
             if dueChanges.isEmpty {
                 sent = FamilySyncTransportResult()
             } else {
+                try await recordProfileErasureAttempts(
+                    in: dueChanges,
+                    at: now
+                )
                 try await journalRepository.recordAttempt(
                     keys: Set(dueChanges.map(\.key)),
                     at: now
@@ -420,6 +494,10 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
             guard await acceptResult(for: generation) else { return currentStatus }
             if let accountChange = sent.accountChange {
                 try await journalRepository.invalidateAcknowledgementsForAccountChange(
+                    at: now
+                )
+                try await recordProfileErasureCondition(
+                    category: .account,
                     at: now
                 )
                 currentStatus = .iCloudUnavailable(
@@ -435,11 +513,24 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                 conflictRequiresFetch
                 ? sent.failures.filter { $0.category != .conflict }
                 : sent.failures
+            try await validateAndResolveProfileErasureDispositions(
+                sent.profileErasureDispositions,
+                acknowledged: sent.acknowledged,
+                failures: sent.failures,
+                dueChanges: dueChanges,
+                at: now
+            )
             try await journalRepository.recordTransportResult(
                 acknowledged: sent.acknowledged,
                 failures: durableFailures,
                 at: now
             )
+            if let profileDeletionRepository {
+                try await repairProfileErasureLifecyclesFromJournal(
+                    in: profileDeletionRepository,
+                    at: now
+                )
+            }
 
             if conflictRequiresFetch {
                 // `serverRecordChanged` has already persisted the server
@@ -495,6 +586,12 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                     : failures,
                 at: now
             )
+            if let profileDeletionRepository {
+                try? await repairProfileErasureLifecyclesFromJournal(
+                    in: profileDeletionRepository,
+                    at: now
+                )
+            }
             currentStatus = await parentVisibleFailureStatus(
                 for: Self.category(for: error),
                 fallbackPendingCount: await durablePendingCount()
@@ -559,7 +656,7 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                     case .invalidRecordIdentity(let recordName, let kind),
                         .invalidRecordPayload(let recordName, let kind):
                         identity = (recordName, kind)
-                    case .profileMismatch:
+                    case .pendingLocalProfileDeletion, .profileMismatch:
                         throw error
                     }
                     guard
@@ -768,6 +865,225 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
         }
     }
 
+    private func recordProfileErasureAttempts(
+        in changes: [FamilySyncPendingOperation],
+        at date: Date
+    ) async throws {
+        guard let profileDeletionRepository else { return }
+        for profileID in Self.profileDeletionProfileIDs(in: changes) {
+            try await profileDeletionRepository.recordErasureEvent(
+                .attemptStarted(route: .unresolved, at: date),
+                for: profileID
+            )
+        }
+    }
+
+    private func validateAndResolveProfileErasureDispositions(
+        _ dispositions: [ProfileErasureTransportDisposition],
+        acknowledged: Set<FamilySyncChangeAcknowledgement>,
+        failures: [FamilySyncTransportFailure],
+        dueChanges: [FamilySyncPendingOperation],
+        at date: Date
+    ) async throws {
+        guard let profileDeletionRepository else { return }
+        let expected = Set(
+            dueChanges.compactMap { operation -> FamilySyncChangeAcknowledgement? in
+                guard case .save(let record) = operation,
+                    record.kind == .profileDeletion,
+                    record.isDeleted
+                else { return nil }
+                return FamilySyncChangeAcknowledgement(operation: operation)
+            }
+        )
+        guard !expected.isEmpty else {
+            if let unexpected = dispositions.first {
+                throw
+                    FamilySyncReconciliationError
+                    .invalidProfileErasureDisposition(unexpected.change.key)
+            }
+            return
+        }
+        var accepted:
+            [FamilySyncChangeAcknowledgement:
+                ProfileErasureTransportDisposition] = [:]
+        for disposition in dispositions {
+            let change = disposition.change
+            guard expected.contains(change), disposition.route != .unresolved else {
+                throw
+                    FamilySyncReconciliationError
+                    .invalidProfileErasureDisposition(change.key)
+            }
+            if let previous = accepted[change] {
+                guard previous == disposition else {
+                    throw
+                        FamilySyncReconciliationError
+                        .invalidProfileErasureDisposition(change.key)
+                }
+                continue
+            }
+            switch disposition.outcome {
+            case .completed:
+                guard acknowledged.contains(change),
+                    !failures.contains(where: { $0.key == change.key })
+                else {
+                    throw
+                        FamilySyncReconciliationError
+                        .invalidProfileErasureDisposition(change.key)
+                }
+            case .failed(let category, _):
+                guard !acknowledged.contains(change),
+                    failures.contains(where: {
+                        $0.key == change.key && $0.category == category
+                    })
+                else {
+                    throw
+                        FamilySyncReconciliationError
+                        .invalidProfileErasureDisposition(change.key)
+                }
+            }
+            accepted[change] = disposition
+            try await profileDeletionRepository.recordErasureEvent(
+                .routeResolved(route: disposition.route, at: date),
+                for: change.key.profileID
+            )
+        }
+        for change in expected.intersection(acknowledged) {
+            guard accepted[change]?.outcome == .completed else {
+                throw
+                    FamilySyncReconciliationError
+                    .invalidProfileErasureDisposition(change.key)
+            }
+        }
+    }
+
+    private func recordProfileErasureCondition(
+        category: FamilySyncPrivacySafeErrorCategory,
+        at date: Date
+    ) async throws {
+        guard let profileDeletionRepository else { return }
+        for lifecycle in try await profileDeletionRepository.erasureLifecycles()
+        where lifecycle.state != .complete {
+            if Self.isRetryableErasureCategory(category) {
+                let evidence =
+                    try await journalRepository
+                    .profileDeletionDeliveryEvidence(for: lifecycle.profileID)
+                let pending: ProfileDeletionPendingDeliveryEvidence?
+                if case .pending(let value) = evidence {
+                    pending = value
+                } else {
+                    pending = nil
+                }
+                try await profileDeletionRepository.recordErasureEvent(
+                    .retryScheduled(
+                        route: lifecycle.route,
+                        retryCount: pending?.retryCount ?? lifecycle.retryCount,
+                        nextRetryAt: pending?.nextRetryAt,
+                        category: category,
+                        at: pending?.lastAttemptAt ?? date
+                    ),
+                    for: lifecycle.profileID
+                )
+            } else {
+                try await profileDeletionRepository.recordErasureEvent(
+                    .needsAttention(
+                        route: lifecycle.route,
+                        category: category,
+                        at: date
+                    ),
+                    for: lifecycle.profileID
+                )
+            }
+        }
+    }
+
+    private func repairProfileErasureLifecyclesFromJournal(
+        in profileDeletionRepository: any ProfileDeletionTombstoneRepository,
+        at date: Date
+    ) async throws {
+        for lifecycle in try await profileDeletionRepository.erasureLifecycles()
+        where lifecycle.state != .complete {
+            switch try await journalRepository.profileDeletionDeliveryEvidence(
+                for: lifecycle.profileID
+            ) {
+            case .notQueued:
+                continue
+            case .pending(let evidence):
+                guard let category = evidence.errorCategory else { continue }
+                if Self.isRetryableErasureCategory(category) {
+                    try await profileDeletionRepository.recordErasureEvent(
+                        .retryScheduled(
+                            route: lifecycle.route,
+                            retryCount: evidence.retryCount,
+                            nextRetryAt: evidence.nextRetryAt,
+                            category: category,
+                            at: evidence.lastAttemptAt ?? date
+                        ),
+                        for: lifecycle.profileID
+                    )
+                } else {
+                    try await profileDeletionRepository.recordErasureEvent(
+                        .needsAttention(
+                            route: lifecycle.route,
+                            category: category,
+                            at: evidence.lastAttemptAt ?? date
+                        ),
+                        for: lifecycle.profileID
+                    )
+                }
+            case .acknowledged:
+                guard lifecycle.route != .unresolved else {
+                    // Older builds could persist an ACK without the route
+                    // evidence required by this lifecycle. Requeue the exact
+                    // tombstone for an idempotent route-aware pass instead of
+                    // claiming completion or permanently stranding deletion.
+                    try await journalRepository.requeueProfileDeletion(
+                        for: lifecycle.profileID,
+                        errorCategory: .compatibility,
+                        at: date
+                    )
+                    try await profileDeletionRepository.recordErasureEvent(
+                        .needsAttention(
+                            route: .unresolved,
+                            category: .compatibility,
+                            at: date
+                        ),
+                        for: lifecycle.profileID
+                    )
+                    continue
+                }
+                try await profileDeletionRepository.recordErasureEvent(
+                    .completed(route: lifecycle.route, at: date),
+                    for: lifecycle.profileID
+                )
+            }
+        }
+    }
+
+    private static func profileDeletionProfileIDs(
+        in changes: [FamilySyncPendingOperation]
+    ) -> [ProfileID] {
+        Set(
+            changes.compactMap { operation -> ProfileID? in
+                guard case .save(let record) = operation,
+                    record.kind == .profileDeletion,
+                    record.isDeleted
+                else { return nil }
+                return record.profileID
+            }
+        ).sorted { $0.description < $1.description }
+    }
+
+    private static func isRetryableErasureCategory(
+        _ category: FamilySyncPrivacySafeErrorCategory
+    ) -> Bool {
+        switch category {
+        case .connectivity, .rateLimited, .server:
+            true
+        case .account, .compatibility, .corruptState, .conflict, .unknown:
+            false
+        }
+    }
+
     private func durablePendingCount() async -> Int {
         (try? await journalRepository.durableStatus().pendingCount) ?? 0
     }
@@ -886,4 +1202,5 @@ public enum FamilySyncReconciliationError: Error, Equatable, Sendable {
     case failedAfterAcceptingShare
     case conflictingRevision(FamilySyncChangeKey)
     case missingReceiptForQuarantine(FamilySyncChangeKey)
+    case invalidProfileErasureDisposition(FamilySyncChangeKey)
 }

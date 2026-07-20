@@ -72,8 +72,85 @@ final class RepositoryFamilySyncDeletionPrivacyHarnessTests: XCTestCase {
         )
         XCTAssertLessThan(savedIndex, sessionIndex)
         XCTAssertLessThan(savedIndex, voiceprintIndex)
+        XCTAssertLessThan(
+            voiceprintIndex,
+            sessionIndex,
+            "Sensitive voiceprint deletion must precede the JSON/session purge"
+        )
         XCTAssertLessThan(sessionIndex, committedIndex)
         XCTAssertLessThan(voiceprintIndex, committedIndex)
+    }
+
+    func testVoiceprintDeletionFailureStopsBeforeAnyJSONProfilePurge()
+        async throws
+    {
+        let fixture = try DeletionPrivacyFixture()
+        defer { fixture.remove() }
+        try await fixture.profiles.save(fixture.profile)
+        _ = try await fixture.words.upsert([
+            WordPoolEntryDraft(
+                profileID: fixture.profile.id,
+                prompt: try WordPrompt(learningMode: .read, text: "cat"),
+                addedAt: fixture.now,
+                source: .guardianManual,
+                positionInBatch: 0
+            )
+        ])
+        let tombstone = ProfileDeletionTombstone(
+            profileID: fixture.profile.id,
+            deletedAt: fixture.now
+        )
+        let record = FamilySyncRecord(
+            recordName: "profile-\(fixture.profile.id)",
+            profileID: fixture.profile.id,
+            kind: .profileDeletion,
+            payload: try InspectableSnapshotJSONCodec.makeEncoder().encode(
+                tombstone
+            ),
+            updatedAt: tombstone.deletedAt,
+            deviceID: "owner-device",
+            isDeleted: true,
+            logicalRevision: FamilySyncLogicalRevision(
+                counter: 9,
+                deviceID: "owner-device"
+            )
+        )
+        let store = RepositoryFamilySyncRecordStore(
+            profileRepository: fixture.profiles,
+            wordPoolRepository: fixture.words,
+            practiceSettingsRepository: fixture.settings,
+            learningRepository: fixture.learning,
+            dailyQuestRepository: fixture.daily,
+            tombstoneRepository: fixture.tombstones,
+            voiceprintRepository: FailingDeletionVoiceprintRepository(
+                log: fixture.log
+            ),
+            deviceID: "participant-device"
+        )
+
+        do {
+            try await store.apply([record], for: fixture.profile.id)
+            XCTFail("The injected voiceprint deletion failure must escape")
+        } catch DeletionPrivacyFailure.voiceprintDeletion {
+            // The durable tombstone remains pending for an idempotent retry.
+        }
+
+        let retainedProfile = try await fixture.profiles.profile(
+            id: fixture.profile.id
+        )
+        let retainedWords = try await fixture.words.entries(
+            for: fixture.profile.id,
+            learningMode: .read,
+            includingInactive: true
+        )
+        let pending = try await fixture.tombstones.pendingTombstones()
+        XCTAssertEqual(retainedProfile, fixture.profile)
+        XCTAssertEqual(retainedWords.map(\.normalizedText), ["cat"])
+        XCTAssertEqual(pending.map(\.profileID), [fixture.profile.id])
+        XCTAssertEqual(
+            fixture.log.snapshot(),
+            [.tombstoneSaved, .voiceprintDeletionAttempt]
+        )
     }
 }
 
@@ -142,8 +219,13 @@ private struct DeletionPrivacyFixture {
 private enum DeletionPrivacyEvent: Equatable {
     case tombstoneSaved
     case sessionCleared
+    case voiceprintDeletionAttempt
     case voiceprintDeleted
     case tombstoneCommitted
+}
+
+private enum DeletionPrivacyFailure: Error {
+    case voiceprintDeletion
 }
 
 private final class DeletionPrivacyEventLog: @unchecked Sendable {
@@ -248,5 +330,30 @@ private actor TrackingDeviceVoiceprintRepository: DeviceVoiceprintRepository {
     func delete(for profileID: ProfileID) async throws {
         templates.removeValue(forKey: profileID)
         log.append(.voiceprintDeleted)
+    }
+}
+
+private actor FailingDeletionVoiceprintRepository: DeviceVoiceprintRepository {
+    private let log: DeletionPrivacyEventLog
+
+    init(log: DeletionPrivacyEventLog) {
+        self.log = log
+    }
+
+    func template(
+        for profileID: ProfileID
+    ) async throws -> DeviceVoiceprintTemplate? {
+        _ = profileID
+        return nil
+    }
+
+    func save(_ template: DeviceVoiceprintTemplate) async throws {
+        _ = template
+    }
+
+    func delete(for profileID: ProfileID) async throws {
+        _ = profileID
+        log.append(.voiceprintDeletionAttempt)
+        throw DeletionPrivacyFailure.voiceprintDeletion
     }
 }

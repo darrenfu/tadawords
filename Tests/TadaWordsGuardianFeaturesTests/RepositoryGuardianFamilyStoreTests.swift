@@ -351,6 +351,178 @@ final class RepositoryGuardianFamilyStoreTests: XCTestCase {
         XCTAssertTrue(secondDashboard.questCalendar.completionCountByDay.isEmpty)
     }
 
+    func testDeletingOnlyProfileLeavesEmptyFamilyAndAllowsExplicitFirstProfile()
+        async throws
+    {
+        let profile = KidProfile(
+            displayName: "Mia",
+            avatar: .cartoonAnimal(assetID: "hare"),
+            selectedWorld: .moonpetalKingdom,
+            voiceprintStatus: .enrolled(
+                modelVersion: "voice-v1",
+                enrolledAt: testDate.addingTimeInterval(-50)
+            ),
+            createdAt: testDate.addingTimeInterval(-100)
+        )
+        let profileRepository = InMemoryKidProfileRepository()
+        try await profileRepository.save(profile)
+
+        let wordPoolRepository = InMemoryWordPoolRepository()
+        let prompt = try WordPrompt(learningMode: .read, text: "dog")
+        _ = try await wordPoolRepository.upsert([
+            WordPoolEntryDraft(
+                profileID: profile.id,
+                prompt: prompt,
+                addedAt: testDate,
+                source: .guardianManual,
+                positionInBatch: 0
+            )
+        ])
+
+        let practiceSettingsRepository = InMemoryPracticeSettingsRepository()
+        try await practiceSettingsRepository.save(.defaults(for: profile.id))
+        let learningRecordRepository = InMemoryLearningRecordRepository()
+        try await learningRecordRepository.append(
+            AttemptEvent(
+                profileID: profile.id,
+                wordPromptID: prompt.id,
+                learningMode: .read,
+                evidence: .firstIndependentAttempt,
+                outcome: .correct,
+                occurredAt: testDate
+            )
+        )
+        let dailyQuestRepository = InMemoryDailyQuestRepository()
+        let dailyQuestCoordinator = DailyQuestCoordinator(
+            repository: dailyQuestRepository,
+            timeZone: .gmt
+        )
+        let questPlan = QuestPlan(
+            profileID: profile.id,
+            configuration: QuestConfiguration(
+                learningMode: .read,
+                newWordLimit: 1,
+                reviewWordLimit: 0,
+                attentionBudget: 1,
+                contentOrder: .newThenReview
+            ),
+            reviewWordIDs: [],
+            newWordIDs: [prompt.id],
+            createdAt: testDate
+        )
+        let questState = try await dailyQuestCoordinator.loadOrCreateToday(
+            candidate: questPlan,
+            on: testDate
+        )
+        _ = try await dailyQuestCoordinator.complete(
+            try XCTUnwrap(dailyQuestCoordinator.todayLaunch(from: questState)),
+            score: QuestScore(
+                points: 40,
+                firstIndependentCorrectCount: 1,
+                firstIndependentAttemptCount: 1,
+                stars: QuestStars(earned: [.completion]),
+                personalPaceAssessment: .unavailable
+            ),
+            world: profile.selectedWorld,
+            completedAt: testDate
+        )
+
+        let tombstoneRepository = InMemoryProfileDeletionTombstoneRepository()
+        let childSessionRepository = InMemoryChildSessionRepository(
+            lastSelectedProfileID: profile.id
+        )
+        let voiceprintRepository = FamilyStoreVoiceprintRepository()
+        try await voiceprintRepository.save(
+            DeviceVoiceprintTemplate(
+                profileID: profile.id,
+                embedding: try VoiceprintEmbedding(
+                    modelIdentifier: "voice-v1",
+                    vector: [1, 0]
+                ),
+                acceptedSegmentCount: 3,
+                acceptedSpeechDuration: ElapsedTime(seconds: 12),
+                enrolledAt: testDate.addingTimeInterval(-50)
+            )
+        )
+        let store = RepositoryGuardianFamilyStore(
+            profiles: [profile],
+            selectedProfileID: profile.id,
+            profileRepository: profileRepository,
+            wordPoolRepository: wordPoolRepository,
+            practiceSettingsRepository: practiceSettingsRepository,
+            learningRecordRepository: learningRecordRepository,
+            dailyQuestRepository: dailyQuestRepository,
+            tombstoneRepository: tombstoneRepository,
+            childSessionRepository: childSessionRepository,
+            voiceprintRepository: voiceprintRepository,
+            mutationGate: ProfileScopedMutationGate(),
+            clock: FamilyFixedClock(now: testDate),
+            timeZone: .gmt
+        )
+
+        let deletion = try await store.deleteProfile(id: profile.id)
+        let family = try await store.familySnapshot()
+        let deletedProfile = try await profileRepository.profile(id: profile.id)
+        let deletedWords = try await wordPoolRepository.entries(
+            for: profile.id,
+            learningMode: .read,
+            includingInactive: true
+        )
+        let deletedSettings = try await practiceSettingsRepository.settings(
+            for: profile.id
+        )
+        let deletedAttempts = try await learningRecordRepository.attempts(
+            for: profile.id,
+            wordPromptID: nil
+        )
+        let deletedCompletions = try await dailyQuestRepository.allCompletions(
+            for: profile.id
+        )
+        let lastSelectedProfileID =
+            try await childSessionRepository
+            .lastSelectedProfileID()
+        let deletedVoiceprint = try await voiceprintRepository.template(
+            for: profile.id
+        )
+        let persistedTombstone = try await tombstoneRepository.tombstone(
+            for: profile.id
+        )
+        let pendingTombstones = try await tombstoneRepository.pendingTombstones()
+
+        XCTAssertTrue(deletion.family.profiles.isEmpty)
+        XCTAssertNil(deletion.family.selectedProfileID)
+        XCTAssertNil(deletion.family.selectedProfile)
+        XCTAssertNil(deletion.dashboard)
+        XCTAssertEqual(family.profiles, [])
+        XCTAssertNil(family.selectedProfileID)
+        XCTAssertNil(deletedProfile)
+        XCTAssertTrue(deletedWords.isEmpty)
+        XCTAssertNil(deletedSettings)
+        XCTAssertTrue(deletedAttempts.isEmpty)
+        XCTAssertTrue(deletedCompletions.isEmpty)
+        XCTAssertNil(lastSelectedProfileID)
+        XCTAssertNil(deletedVoiceprint)
+        XCTAssertEqual(persistedTombstone, deletion.tombstone)
+        XCTAssertTrue(pendingTombstones.isEmpty)
+
+        let firstNewDashboard = try await store.createProfile(
+            from: GuardianProfileDraft(
+                displayName: "Nora",
+                avatarAssetID: "fox",
+                selectedWorld: .pawsAndPines,
+                ageYears: 4
+            )
+        )
+        let rebuiltFamily = try await store.familySnapshot()
+
+        XCTAssertNotEqual(firstNewDashboard.profile.id, profile.id)
+        XCTAssertEqual(rebuiltFamily.profiles, [firstNewDashboard.profile])
+        XCTAssertEqual(
+            rebuiltFamily.selectedProfileID,
+            firstNewDashboard.profile.id
+        )
+    }
+
     private let testDate = Date(timeIntervalSince1970: 2_000_000_000)
 
     private func makeFixture(
@@ -409,6 +581,24 @@ private actor FailingFamilyPracticeSettingsRepository: PracticeSettingsRepositor
 
 private enum FamilyStoreTestFailure: Error {
     case unavailable
+}
+
+private actor FamilyStoreVoiceprintRepository: DeviceVoiceprintRepository {
+    private var templates: [ProfileID: DeviceVoiceprintTemplate] = [:]
+
+    func template(
+        for profileID: ProfileID
+    ) async throws -> DeviceVoiceprintTemplate? {
+        templates[profileID]
+    }
+
+    func save(_ template: DeviceVoiceprintTemplate) async throws {
+        templates[template.profileID] = template
+    }
+
+    func delete(for profileID: ProfileID) async throws {
+        templates.removeValue(forKey: profileID)
+    }
 }
 
 private func assertThrowsErrorAsync(

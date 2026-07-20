@@ -102,6 +102,132 @@ final class ApplicationCompositionTests: XCTestCase {
         XCTAssertEqual(restartedSettingsSnapshot, originalSettingsSnapshot)
     }
 
+    func testCommittedDeletionOfOnlyProfileRemainsEmptyAcrossColdRestart()
+        async throws
+    {
+        let applicationSupportDirectory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(applicationSupportDirectory) }
+        let first = try await makeBootstrapper(
+            applicationSupportDirectory: applicationSupportDirectory
+        ).bootstrap()
+
+        let deletion = try await first.guardianStore.deleteProfile(
+            id: Self.defaultProfile.id
+        )
+        XCTAssertTrue(deletion.family.profiles.isEmpty)
+        XCTAssertNil(deletion.family.selectedProfileID)
+        XCTAssertNil(deletion.dashboard)
+
+        let restarted = try await makeBootstrapper(
+            applicationSupportDirectory: applicationSupportDirectory
+        ).bootstrap()
+        let restartedFamily = try await restarted.guardianStore.familySnapshot()
+        let persistedProfiles = try await restarted.profileRepository.profiles()
+        let persistedTombstone = try await restarted.tombstoneRepository.tombstone(
+            for: Self.defaultProfile.id
+        )
+        let pending = try await restarted.tombstoneRepository.pendingTombstones()
+
+        XCTAssertTrue(restarted.profiles.isEmpty)
+        XCTAssertTrue(restartedFamily.profiles.isEmpty)
+        XCTAssertNil(restartedFamily.selectedProfileID)
+        XCTAssertTrue(persistedProfiles.isEmpty)
+        XCTAssertEqual(persistedTombstone, deletion.tombstone)
+        XCTAssertTrue(pending.isEmpty)
+        XCTAssertNil(restarted.lastSelectedProfileID)
+    }
+
+    func testCrashReplayDeletingFinalProfileCannotSeedReplacementProfile()
+        async throws
+    {
+        let applicationSupportDirectory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(applicationSupportDirectory) }
+        let first = try await makeBootstrapper(
+            applicationSupportDirectory: applicationSupportDirectory
+        ).bootstrap()
+        let tombstone = ProfileDeletionTombstone(
+            profileID: Self.defaultProfile.id,
+            deletedAt: Self.testDate.addingTimeInterval(30)
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        let record = FamilySyncRecord(
+            recordName: "profile-\(Self.defaultProfile.id)",
+            profileID: Self.defaultProfile.id,
+            kind: .profileDeletion,
+            payload: try encoder.encode(tombstone),
+            updatedAt: tombstone.deletedAt,
+            deviceID: "remote-owner",
+            isDeleted: true,
+            logicalRevision: FamilySyncLogicalRevision(
+                counter: 9,
+                deviceID: "remote-owner"
+            )
+        )
+        guard
+            case .pending = try await first.familySyncApplyTransactionRepository
+                .begin(
+                    profileID: Self.defaultProfile.id,
+                    records: [record],
+                    at: Self.testDate
+                )
+        else {
+            return XCTFail("The deletion replay fixture must remain pending")
+        }
+
+        let restarted = try await makeBootstrapper(
+            applicationSupportDirectory: applicationSupportDirectory
+        ).bootstrap()
+        let family = try await restarted.guardianStore.familySnapshot()
+        let persistedProfiles = try await restarted.profileRepository.profiles()
+        let persistedTombstone = try await restarted.tombstoneRepository.tombstone(
+            for: Self.defaultProfile.id
+        )
+        let pendingTransactions =
+            try await restarted
+            .familySyncApplyTransactionRepository.pendingTransactions()
+
+        XCTAssertTrue(restarted.profiles.isEmpty)
+        XCTAssertTrue(family.profiles.isEmpty)
+        XCTAssertNil(family.selectedProfileID)
+        XCTAssertTrue(persistedProfiles.isEmpty)
+        XCTAssertEqual(persistedTombstone, tombstone)
+        XCTAssertTrue(pendingTransactions.isEmpty)
+    }
+
+    func testExistingEmptyProfileSnapshotWithoutTombstoneDoesNotSeedDefault()
+        async throws
+    {
+        let applicationSupportDirectory = try makeTemporaryDirectory()
+        defer { removeTemporaryDirectory(applicationSupportDirectory) }
+        let paths = ApplicationDataPaths(
+            applicationSupportDirectory: applicationSupportDirectory
+        )
+        let profileRepository = LocalJSONKidProfileRepository(
+            snapshotURL: paths.profilesSnapshot
+        )
+        try await profileRepository.save(Self.defaultProfile)
+        try await profileRepository.delete(id: Self.defaultProfile.id)
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: paths.profilesSnapshot.path)
+        )
+
+        let environment = try await makeBootstrapper(
+            applicationSupportDirectory: applicationSupportDirectory
+        ).bootstrap()
+        let family = try await environment.guardianStore.familySnapshot()
+        let persistedProfiles = try await environment.profileRepository.profiles()
+        let tombstones = try await environment.tombstoneRepository.tombstones()
+
+        XCTAssertTrue(environment.profiles.isEmpty)
+        XCTAssertTrue(family.profiles.isEmpty)
+        XCTAssertNil(family.selectedProfileID)
+        XCTAssertTrue(persistedProfiles.isEmpty)
+        XCTAssertTrue(tombstones.isEmpty)
+        XCTAssertTrue(environment.requiresFirstRunOnboarding)
+        XCTAssertEqual(environment.firstRunOnboardingPurpose, .fullSetup)
+    }
+
     func testCreatedChildAndLastSelectionSurviveColdRestart() async throws {
         let applicationSupportDirectory = try makeTemporaryDirectory()
         defer { removeTemporaryDirectory(applicationSupportDirectory) }
@@ -1039,12 +1165,18 @@ final class ApplicationCompositionTests: XCTestCase {
         ).bootstrap()
         let profiles = try await restarted.profileRepository.profiles()
         let pending = try await restarted.tombstoneRepository.pendingTombstones()
+        let erasureLifecycles = try await restarted.familySyncCoordinator
+            .profileErasureLifecycles()
         let selected = try await restarted.childSessionRepository
             .lastSelectedProfileID()
 
-        XCTAssertFalse(profiles.isEmpty)
+        XCTAssertTrue(profiles.isEmpty)
         XCTAssertFalse(profiles.contains(where: { $0.id == deletedID }))
         XCTAssertTrue(pending.isEmpty)
+        XCTAssertEqual(erasureLifecycles.count, 1)
+        XCTAssertEqual(erasureLifecycles.first?.profileID, deletedID)
+        XCTAssertEqual(erasureLifecycles.first?.state, .requested)
+        XCTAssertEqual(erasureLifecycles.first?.route, .unresolved)
         XCTAssertNil(selected)
         XCTAssertEqual(
             handwritingStore.selection(for: deletedID),
@@ -1115,7 +1247,6 @@ final class ApplicationCompositionTests: XCTestCase {
                 deletedAt: Self.testDate.addingTimeInterval(10)
             )
         )
-        try await first.profileRepository.delete(id: deletedID)
         try await first.tombstoneRepository.markCommitted(for: deletedID)
 
         _ = try await makeBootstrapper(

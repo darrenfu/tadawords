@@ -27,6 +27,7 @@ public struct TadaWordsRootView: View {
     @State private var isCalendarPresented = false
     @State private var isWorldPickerPresented = false
     @State private var isCollectionPresented = false
+    @State private var externalSyncRefreshTask: Task<Void, Never>?
 
     public init(onOpenGuardian: @escaping () -> Void = {}) {
         self.speechRecognitionService = UnavailableSpeechRecognitionService()
@@ -345,9 +346,14 @@ public struct TadaWordsRootView: View {
         }
         .onChange(of: externalDataRevision) { _, revision in
             guard revision != nil else { return }
-            Task {
+            externalSyncRefreshTask?.cancel()
+            externalSyncRefreshTask = Task {
                 await model.refreshAfterExternalSyncAndWait()
             }
+        }
+        .onDisappear {
+            externalSyncRefreshTask?.cancel()
+            externalSyncRefreshTask = nil
         }
         .sheet(isPresented: $isCalendarPresented) {
             ChildQuestCalendarView(

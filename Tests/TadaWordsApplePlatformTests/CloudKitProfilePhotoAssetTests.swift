@@ -459,8 +459,16 @@ final class CloudKitProfilePhotoAssetTests: XCTestCase {
         let otherSource = fixture.sourceDirectory.appendingPathComponent(
             "profile-photo-\(otherProfileID)-checksum.jpg"
         )
+        let ownTemporarySource = fixture.sourceDirectory.appendingPathComponent(
+            ".profile-photo-\(fixture.profileID)-interrupted.tmp"
+        )
+        let otherTemporarySource = fixture.sourceDirectory.appendingPathComponent(
+            ".profile-photo-\(otherProfileID)-interrupted.tmp"
+        )
         let unrelated = fixture.sourceDirectory.appendingPathComponent("keep.txt")
         try fixture.jpegData.write(to: otherSource)
+        try fixture.jpegData.write(to: ownTemporarySource)
+        try fixture.jpegData.write(to: otherTemporarySource)
         try Data("keep".utf8).write(to: unrelated)
 
         try CloudKitProfilePhotoAssetCodec.removeSources(
@@ -469,7 +477,13 @@ final class CloudKitProfilePhotoAssetTests: XCTestCase {
         )
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: ownSource.path))
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: ownTemporarySource.path)
+        )
         XCTAssertTrue(FileManager.default.fileExists(atPath: otherSource.path))
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: otherTemporarySource.path)
+        )
         XCTAssertTrue(FileManager.default.fileExists(atPath: unrelated.path))
     }
 
@@ -694,6 +708,7 @@ private struct Fixture {
 
     func configuredStore() throws -> CloudKitFamilyMetadataStore {
         let store = CloudKitFamilyMetadataStore(snapshotURL: metadataURL)
+        try store.confirm(accountRecordName: "photo-test-account")
         let zoneID = cloudRecord().recordID.zoneID
         try store.save(
             binding: ProfileCloudBinding(

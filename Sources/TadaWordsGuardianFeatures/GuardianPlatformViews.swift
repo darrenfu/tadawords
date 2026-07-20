@@ -10,6 +10,7 @@ struct GuardianFamilySyncDiagnosticReport: Equatable {
     init(
         status: FamilySyncStatus,
         isEnabled: Bool,
+        profileErasure: GuardianProfileErasurePresentation? = nil,
         generatedAt: Date = Date()
     ) {
         var fields = [
@@ -47,6 +48,20 @@ struct GuardianFamilySyncDiagnosticReport: Equatable {
         case .failed(_, let pendingCount):
             fields.append("State: needs_attention")
             fields.append("Pending changes: \(pendingCount)")
+        }
+        if let profileErasure {
+            fields.append(
+                "Profile erasure state: \(profileErasure.diagnosticState)"
+            )
+            if let count = profileErasure.count,
+                let retryCount = profileErasure.retryCount
+            {
+                fields.append("Profile erasure count: \(count)")
+                fields.append("Profile erasure retry count: \(retryCount)")
+            } else {
+                fields.append("Profile erasure count: unavailable")
+                fields.append("Profile erasure retry count: unavailable")
+            }
         }
         text = fields.joined(separator: "\n")
     }
@@ -150,6 +165,231 @@ struct GuardianFamilySyncPresentation: Equatable {
     }
 }
 
+enum GuardianProfileErasureAggregateState: Equatable {
+    case requested
+    case deleting
+    case waitingForConnection
+    case waitingForFamilySync
+    case needsAttention
+    case complete
+    case unavailable
+
+    fileprivate var severity: Int {
+        switch self {
+        case .complete:
+            0
+        case .requested:
+            1
+        case .deleting:
+            2
+        case .waitingForFamilySync, .waitingForConnection:
+            3
+        case .needsAttention:
+            4
+        case .unavailable:
+            5
+        }
+    }
+
+    fileprivate var diagnosticValue: String {
+        switch self {
+        case .requested:
+            "requested"
+        case .deleting:
+            "deleting"
+        case .waitingForConnection:
+            "waiting_for_connection"
+        case .waitingForFamilySync:
+            "waiting_for_family_sync"
+        case .needsAttention:
+            "needs_attention"
+        case .complete:
+            "complete"
+        case .unavailable:
+            "unavailable"
+        }
+    }
+
+    fileprivate var accessibilityValue: String {
+        switch self {
+        case .requested:
+            "requested"
+        case .deleting:
+            "deleting"
+        case .waitingForConnection:
+            "waiting"
+        case .waitingForFamilySync:
+            "waiting-for-family-sync"
+        case .needsAttention:
+            "needs-attention"
+        case .complete:
+            "complete"
+        case .unavailable:
+            "unavailable"
+        }
+    }
+}
+
+struct GuardianProfileErasurePresentation: Equatable {
+    let state: GuardianProfileErasureAggregateState
+    let count: Int?
+    let retryCount: Int?
+    let title: String
+    let message: String
+    let symbol: String
+    let showsRetryAction: Bool
+
+    var diagnosticState: String { state.diagnosticValue }
+
+    var accessibilityIdentifier: String {
+        "guardian.sync.erasure.\(state.accessibilityValue)"
+    }
+
+    static let unavailable = Self(
+        state: .unavailable,
+        count: nil,
+        retryCount: nil,
+        title: "Deletion status needs attention",
+        message:
+            "Tada Words couldn’t read the saved deletion status. No child data was restored or replaced. Try again.",
+        symbol: "exclamationmark.triangle.fill",
+        showsRetryAction: true
+    )
+
+    static func make(
+        lifecycles: [ProfileErasureLifecycle],
+        isFamilySyncEnabled: Bool
+    ) -> Self? {
+        guard !lifecycles.isEmpty else { return nil }
+
+        let severeState =
+            lifecycles
+            .map { aggregateState(for: $0.state) }
+            .max { $0.severity < $1.severity }!
+        let severeLifecycles = lifecycles.filter {
+            aggregateState(for: $0.state) == severeState
+        }
+
+        if !isFamilySyncEnabled, severeState != .needsAttention,
+            severeState != .complete
+        {
+            let active = lifecycles.filter { $0.state != .complete }
+            return presentation(
+                state: .waitingForFamilySync,
+                count: active.count,
+                retryCount: active.map(\.retryCount).max() ?? 0,
+                isFamilySyncEnabled: false
+            )
+        }
+
+        return presentation(
+            state: severeState,
+            count: severeLifecycles.count,
+            retryCount: severeLifecycles.map(\.retryCount).max() ?? 0,
+            isFamilySyncEnabled: isFamilySyncEnabled
+        )
+    }
+
+    private static func aggregateState(
+        for state: ProfileErasureState
+    ) -> GuardianProfileErasureAggregateState {
+        switch state {
+        case .requested:
+            .requested
+        case .deleting:
+            .deleting
+        case .waitingForConnection:
+            .waitingForConnection
+        case .needsAttention:
+            .needsAttention
+        case .complete:
+            .complete
+        }
+    }
+
+    private static func presentation(
+        state: GuardianProfileErasureAggregateState,
+        count: Int,
+        retryCount: Int,
+        isFamilySyncEnabled: Bool
+    ) -> Self {
+        let profile = count == 1 ? "profile" : "profiles"
+        let verb = count == 1 ? "is" : "are"
+        switch state {
+        case .requested:
+            return Self(
+                state: state,
+                count: count,
+                retryCount: retryCount,
+                title: "Deletion queued",
+                message:
+                    "\(count) deleted \(profile) \(verb) gone from this device. iCloud cleanup will begin shortly.",
+                symbol: "tray.full.fill",
+                showsRetryAction: false
+            )
+        case .deleting:
+            return Self(
+                state: state,
+                count: count,
+                retryCount: retryCount,
+                title: "Deleting profile data",
+                message:
+                    "\(count) deleted \(profile) \(verb) already gone from this device. Tada Words is finishing iCloud cleanup.",
+                symbol: "trash.fill",
+                showsRetryAction: false
+            )
+        case .waitingForConnection:
+            return Self(
+                state: state,
+                count: count,
+                retryCount: retryCount,
+                title: "Deletion is safely waiting",
+                message:
+                    "\(count) deleted \(profile) \(verb) gone from this device. Tada Words will retry when iCloud is available.",
+                symbol: "wifi.slash",
+                showsRetryAction: isFamilySyncEnabled
+            )
+        case .waitingForFamilySync:
+            return Self(
+                state: state,
+                count: count,
+                retryCount: retryCount,
+                title: "Deletion waiting for Family Sync",
+                message:
+                    "\(count) deleted \(profile) \(verb) already gone from this device. Turn on Family Sync to finish iCloud cleanup.",
+                symbol: "icloud.slash.fill",
+                showsRetryAction: false
+            )
+        case .needsAttention:
+            let message =
+                isFamilySyncEnabled
+                ? "\(count) deleted \(profile) \(verb) gone from this device, but iCloud cleanup needs you to try again."
+                : "\(count) deleted \(profile) \(verb) gone from this device. Turn on Family Sync, then try iCloud cleanup again."
+            return Self(
+                state: state,
+                count: count,
+                retryCount: retryCount,
+                title: "Deletion needs attention",
+                message: message,
+                symbol: "exclamationmark.triangle.fill",
+                showsRetryAction: isFamilySyncEnabled
+            )
+        case .complete:
+            return Self(
+                state: state,
+                count: count,
+                retryCount: retryCount,
+                title: "Profile removal complete",
+                message: "Remote cleanup for \(count) deleted \(profile) has finished.",
+                symbol: "checkmark.circle.fill",
+                showsRetryAction: false
+            )
+        case .unavailable:
+            return .unavailable
+        }
+    }
+}
+
 extension FamilySyncStatus {
     fileprivate var isOptedOut: Bool {
         if case .optedOut = self { return true }
@@ -161,6 +401,7 @@ extension FamilySyncStatus {
 struct GuardianFamilySyncView: View {
     let status: FamilySyncStatus
     let isEnabled: Bool
+    let profileErasure: GuardianProfileErasurePresentation?
     let shareURL: URL?
     let canManageAccess: Bool
     @Binding var shareURLText: String
@@ -170,6 +411,37 @@ struct GuardianFamilySyncView: View {
     let onCreateShare: () -> Void
     let onManageAccess: () -> Void
     let onAcceptShare: () -> Void
+    let onRetryProfileErasure: () -> Void
+
+    init(
+        status: FamilySyncStatus,
+        isEnabled: Bool,
+        profileErasure: GuardianProfileErasurePresentation? = nil,
+        shareURL: URL?,
+        canManageAccess: Bool,
+        shareURLText: Binding<String>,
+        onBack: @escaping () -> Void,
+        onSetEnabled: @escaping @MainActor (Bool) -> Void,
+        onSyncNow: @escaping () -> Void,
+        onCreateShare: @escaping () -> Void,
+        onManageAccess: @escaping () -> Void,
+        onAcceptShare: @escaping () -> Void,
+        onRetryProfileErasure: @escaping () -> Void = {}
+    ) {
+        self.status = status
+        self.isEnabled = isEnabled
+        self.profileErasure = profileErasure
+        self.shareURL = shareURL
+        self.canManageAccess = canManageAccess
+        _shareURLText = shareURLText
+        self.onBack = onBack
+        self.onSetEnabled = onSetEnabled
+        self.onSyncNow = onSyncNow
+        self.onCreateShare = onCreateShare
+        self.onManageAccess = onManageAccess
+        self.onAcceptShare = onAcceptShare
+        self.onRetryProfileErasure = onRetryProfileErasure
+    }
 
     private var presentation: GuardianFamilySyncPresentation {
         GuardianFamilySyncPresentation(status: status, isEnabled: isEnabled)
@@ -194,7 +466,8 @@ struct GuardianFamilySyncView: View {
                         ShareLink(
                             item: GuardianFamilySyncDiagnosticReport(
                                 status: status,
-                                isEnabled: isEnabled
+                                isEnabled: isEnabled,
+                                profileErasure: profileErasure
                             ).text
                         ) {
                             Label(
@@ -205,6 +478,33 @@ struct GuardianFamilySyncView: View {
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("guardian.sync.diagnostics")
                     }
+                }
+
+                if let profileErasure {
+                    GuardianCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label(
+                                profileErasure.title,
+                                systemImage: profileErasure.symbol
+                            )
+                            .font(.system(.title3, design: .rounded, weight: .bold))
+                            .accessibilityIdentifier("guardian.sync.erasure-status")
+
+                            Text(profileErasure.message)
+                                .foregroundStyle(
+                                    GuardianSemanticTokens.secondaryForeground
+                                )
+
+                            if profileErasure.showsRetryAction {
+                                Button("Try again", action: onRetryProfileErasure)
+                                    .buttonStyle(.borderedProminent)
+                                    .accessibilityIdentifier(
+                                        "guardian.sync.erasure.retry"
+                                    )
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("guardian.sync.erasure-card")
                 }
 
                 if presentation.showsPreferenceToggle {

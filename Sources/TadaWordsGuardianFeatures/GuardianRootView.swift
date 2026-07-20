@@ -11,6 +11,7 @@ public struct GuardianRootView: View {
     private let imageTextRecognitionService: any ImageTextRecognizing
     private let presetWordCatalog: PresetWordCatalog
     private var externalDataRevision: UUID?
+    @State private var externalSyncRefreshTask: Task<Void, Never>?
 
     /// Preview convenience. Production composition must use `init(store:onExit:)`.
     public init(onExit: @escaping () -> Void = {}) {
@@ -129,9 +130,14 @@ public struct GuardianRootView: View {
         }
         .onChange(of: externalDataRevision) { _, revision in
             guard revision != nil else { return }
-            Task {
+            externalSyncRefreshTask?.cancel()
+            externalSyncRefreshTask = Task {
                 await model.refreshAfterExternalSyncAndWait()
             }
+        }
+        .onDisappear {
+            externalSyncRefreshTask?.cancel()
+            externalSyncRefreshTask = nil
         }
         .alert(
             "Something went wrong",
@@ -217,7 +223,11 @@ public struct GuardianRootView: View {
             if let family = model.familySnapshot {
                 GuardianProfilesView(
                     family: family,
-                    onBack: model.showDashboard,
+                    onBack: {
+                        if model.returnFromProfiles() {
+                            onExit()
+                        }
+                    },
                     onSelect: model.selectProfile,
                     onEdit: model.showEditProfile,
                     onVoiceprint: model.showVoiceprint,
@@ -230,7 +240,11 @@ public struct GuardianRootView: View {
         case .profileEditor(let profile):
             GuardianProfileEditorView(
                 existingProfile: profile,
-                onBack: model.showProfiles,
+                onBack: {
+                    if model.returnFromProfileEditor() {
+                        onExit()
+                    }
+                },
                 onSave: { draft in
                     model.saveProfile(
                         existingProfile: profile,
@@ -322,15 +336,17 @@ public struct GuardianRootView: View {
             GuardianFamilySyncView(
                 status: model.syncStatus,
                 isEnabled: model.isFamilySyncEnabled,
+                profileErasure: model.profileErasurePresentation,
                 shareURL: model.shareURL,
                 canManageAccess: model.canManageFamilyAccess,
                 shareURLText: $model.shareURLText,
-                onBack: model.returnToParentSection,
+                onBack: model.returnFromFamilySync,
                 onSetEnabled: model.setFamilySyncEnabled,
                 onSyncNow: model.syncNow,
                 onCreateShare: model.createFamilyShare,
                 onManageAccess: model.manageFamilyAccess,
-                onAcceptShare: model.acceptFamilyShare
+                onAcceptShare: model.acceptFamilyShare,
+                onRetryProfileErasure: model.retryProfileErasure
             )
 
         case .thirdPartyNotices:

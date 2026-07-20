@@ -104,6 +104,15 @@ public protocol DeviceVoiceprintRepository: Sendable {
     func delete(for profileID: ProfileID) async throws
 }
 
+/// Deletes every voiceprint in an app-exclusive device-local repository when
+/// bootstrap has proven that no Tada Words Application Support directory
+/// exists. This is intentionally separate from ordinary Profile deletion: an
+/// implementation must scope the reset to Tada Words voiceprints and must not
+/// synchronize or inspect unrelated Keychain items.
+public protocol FreshInstallationVoiceprintResetting: Sendable {
+    func resetVoiceprintsForFreshInstallation() async throws
+}
+
 /// Generates a compact acoustic signature entirely in memory. Implementations
 /// must not retain or persist the source PCM samples.
 public protocol VoiceprintEmbeddingExtracting: Sendable {

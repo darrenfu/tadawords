@@ -123,7 +123,7 @@ public actor LocalJSONKidProfileRepository: KidProfileRepository {
             try operation()
             return
         }
-        await mutationGate.acquire(profileID)
+        try await mutationGate.acquire(profileID)
         do {
             try operation()
             await mutationGate.release(profileID)

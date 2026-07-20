@@ -796,3 +796,61 @@ gates pass.
   metadata limits/local-link/stale-claim contract passes 3/3, and the source
   content inventory independently verifies the current version, build, audio,
   picture, JSON, font, attribution, and absent-endpoint boundaries.
+
+## v0.7.6 — 2026-07-19
+
+Target release: `v0.7.6`
+
+Branch: `codex/profile-erasure-lifecycle-v0.7.6`
+
+Build: `2026071906`
+
+Overall state: source implementation and the pre-commit repository gate are
+complete for the P0, privacy-safe Profile erasure lifecycle tracked by #57.
+Production CloudKit, real-account erasure, exact committed-HEAD simulator and
+signed cross-device acceptance remain separate gates under #19, #22, and #23.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V076-PRIV-001 | P0 privacy | Profile erasure | Persist and show truthful requested, deleting, waiting/retry, needs-attention, and complete states after a Profile is locally removed. Completion requires an exact tombstone acknowledgement after the owner or participant cleanup route finishes. | Source complete; live acceptance open | Pre-commit: 998/998 Swift, 40/40 Issue Agent, and 11/11 release-preflight tests. Still required: exact committed-HEAD simulator matrix, LocalQA iPhone/iPad regression, and Production CloudKit destructive proof. |
+
+### 2026-07-19 v0.7.6 notes
+
+- Reserved version `0.7.6` and build `2026071906` for the reclaimed #57 batch.
+- Kept local deletion immediate and child flows nonblocking; the durable
+  lifecycle is written with the tombstone before any Profile payload purge.
+- Classified the lifecycle as device-local, privacy-minimal recovery evidence.
+  It must never contain or export a nickname, word, photo, learning payload,
+  Apple Account identifier, or share URL.
+- A transport send is not completion. Only the exact acknowledged tombstone
+  revision may complete the lifecycle after every required owner or participant
+  cleanup step succeeds.
+- Account changes fail closed: a cleanup belonging to the prior account cannot
+  be acknowledged by running against a newly confirmed account.
+- Profile deletion holds one shared mutation lease from durable tombstone write
+  through every local purge and the commit marker. Sync reads wait for that
+  lease, and an uncommitted tombstone cannot be exported after a local failure.
+- CloudKit metadata rejects duplicate Profile routes, reused zones, missing
+  roots, missing account provenance, and mismatched owner/participant routes
+  without rewriting the original bytes. Item records must be parented to the
+  exact persisted root, so a child of a rejected alternate root cannot apply.
+- Owner-ledger recovery commits its minimal inbox receipt and terminal binding
+  atomically after per-zone deletion proof and rechecks the exact Apple Account
+  provenance inside the same metadata transaction.
+- Remote owner root/zone deletion first persists the exact privacy-minimal
+  control-zone tombstone, then erases the payload zone, purges local sources,
+  and terminalizes. Every destructive or receipt-consumption boundary rechecks
+  the live Apple Account and CKSyncEngine generation.
+- Receipt-triggered child and Parent refreshes use monotonic generations and
+  cancellation, so an older suspended refresh cannot republish a Profile or
+  Kid after a newer deletion has won.
+- Production fresh installs use a random default Profile identity and clear
+  only Tada Words' device-local voiceprint Keychain service before creating any
+  local marker. Existing installs preserve enrollment, and reset failures fail
+  bootstrap closed for retry.
+- Parent-visible lifecycle and exported diagnostics use anonymous aggregates;
+  they never expose Profile, Apple Account, share, nickname, word, photo, or
+  voice data.
+- The pre-commit repository gate passes 998 Swift tests, 40 Issue Agent tests,
+  and 11 release-preflight tests. Simulator and physical acceptance evidence
+  will be recorded only after the exact committed HEAD passes.

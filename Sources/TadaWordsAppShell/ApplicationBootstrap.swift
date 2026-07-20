@@ -121,6 +121,7 @@ enum ApplicationSnapshotStore: String, Equatable, Sendable {
 
 enum ApplicationBootstrapError: Error, Equatable, Sendable {
     case defaultProfileWasNotPersisted(ProfileID)
+    case freshInstallationVoiceprintResetUnavailable
     case profileSnapshotMissingWithDependentData
     case snapshotReadFailed(store: ApplicationSnapshotStore)
     case invalidSnapshotEnvelope(store: ApplicationSnapshotStore)
@@ -140,6 +141,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
     private let notificationScheduler: (any LearningNotificationScheduling)?
     private let voiceprintRepository: (any DeviceVoiceprintRepository)?
     private let handwritingPreferenceRemover: any HandwritingPreferenceRemoving
+    private let profileMutationGate: ProfileScopedMutationGate
 
     init(
         applicationSupportDirectory: @escaping @Sendable () throws -> URL,
@@ -149,6 +151,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         familySyncTransport: any FamilySyncTransport = LocalOnlyFamilySyncTransport(),
         notificationScheduler: (any LearningNotificationScheduling)? = nil,
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
+        profileMutationGate: ProfileScopedMutationGate = ProfileScopedMutationGate(),
         handwritingPreferenceRemover: any HandwritingPreferenceRemoving =
             HandwritingPreferenceStore()
     ) {
@@ -159,6 +162,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         self.familySyncTransport = familySyncTransport
         self.notificationScheduler = notificationScheduler
         self.voiceprintRepository = voiceprintRepository
+        self.profileMutationGate = profileMutationGate
         self.handwritingPreferenceRemover = handwritingPreferenceRemover
     }
 
@@ -166,11 +170,19 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         let dataPaths = ApplicationDataPaths(
             applicationSupportDirectory: try applicationSupportDirectory()
         )
+        let dataDirectoryExistedAtStart = FileManager.default.fileExists(
+            atPath: dataPaths.dataDirectory.path
+        )
+        try await resetRetainedVoiceprintsForFreshInstallationIfNeeded(
+            dataDirectoryExistedAtStart: dataDirectoryExistedAtStart
+        )
+        let profileSnapshotExistedAtStart = FileManager.default.fileExists(
+            atPath: dataPaths.profilesSnapshot.path
+        )
         try preflightSnapshotSchemas(at: dataPaths)
         let deviceID = try loadOrCreateDeviceID(
             at: dataPaths.deviceIdentitySnapshot
         )
-        let profileMutationGate = ProfileScopedMutationGate()
         let profileRepository = LocalJSONKidProfileRepository(
             snapshotURL: dataPaths.profilesSnapshot,
             mutationGate: profileMutationGate
@@ -228,6 +240,14 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             clock: clock
         )
 
+        // Rebuild the process-local terminal admission fence from the durable
+        // privacy authority before crash replay or any ordinary repository
+        // mutation can run.
+        let deletionTombstones = try await tombstoneRepository.tombstones()
+        for tombstone in deletionTombstones {
+            await profileMutationGate.seal(tombstone.profileID)
+        }
+
         // Finish an accepted remote batch before any Profile snapshot is read
         // for onboarding or SwiftUI. A failed replay keeps the exact pending
         // bytes and fails bootstrap closed instead of showing partial state.
@@ -242,7 +262,8 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             dailyQuestRepository: dailyQuestRepository,
             childSessionRepository: childSessionRepository,
             voiceprintRepository: voiceprintRepository,
-            handwritingPreferenceRemover: handwritingPreferenceRemover
+            handwritingPreferenceRemover: handwritingPreferenceRemover,
+            mutationGate: profileMutationGate
         )
 
         let existingProfiles = try await profileRepository.profiles()
@@ -251,12 +272,24 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             existingProfiles: existingProfiles
         )
         let requiresFirstRunOnboarding = firstRunOnboardingPurpose != nil
-        let seedProfile = try await seedingProfile(
-            tombstoneRepository: tombstoneRepository
-        )
+        // Seed only a genuinely new installation. Once a family has durable
+        // deletion history, an empty Profile repository is intentional and
+        // must remain empty until someone explicitly creates a new child.
+        let seedProfile: KidProfile?
+        let currentDeletionTombstones = try await tombstoneRepository.tombstones()
+        if existingProfiles.isEmpty,
+            !profileSnapshotExistedAtStart,
+            currentDeletionTombstones.isEmpty
+        {
+            seedProfile = try await seedingProfile(
+                tombstoneRepository: tombstoneRepository
+            )
+        } else {
+            seedProfile = nil
+        }
         let profilesToValidate =
             existingProfiles.isEmpty
-            ? [seedProfile]
+            ? seedProfile.map { [$0] } ?? []
             : existingProfiles
         try await validateWordPool(
             wordPoolRepository,
@@ -302,6 +335,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             transport: familySyncTransport,
             preferenceRepository: familySyncPreferenceRepository,
             journalRepository: familySyncJournalRepository,
+            profileDeletionRepository: tombstoneRepository,
             deviceID: deviceID,
             clock: clock
         )
@@ -314,7 +348,9 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             dailyQuestRepository: dailyQuestRepository,
             tombstoneRepository: tombstoneRepository,
             childSessionRepository: childSessionRepository,
+            voiceprintRepository: voiceprintRepository,
             handwritingPreferenceRemover: handwritingPreferenceRemover,
+            mutationGate: profileMutationGate,
             onLocalMutation: { _ in
                 Task {
                     _ = await familySyncCoordinator.synchronize(
@@ -329,6 +365,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             ProductionLearningNotificationReconciler(
                 scheduler: scheduler,
                 profileRepository: profileRepository,
+                profileDeletionRepository: tombstoneRepository,
                 wordPoolRepository: wordPoolRepository,
                 practiceSettingsRepository: practiceSettingsRepository,
                 learningRecordRepository: learningRecordRepository,
@@ -362,6 +399,27 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         )
     }
 
+    private func resetRetainedVoiceprintsForFreshInstallationIfNeeded(
+        dataDirectoryExistedAtStart: Bool
+    ) async throws {
+        guard !dataDirectoryExistedAtStart, let voiceprintRepository else {
+            return
+        }
+        guard
+            let resetter =
+                voiceprintRepository as? any FreshInstallationVoiceprintResetting
+        else {
+            throw ApplicationBootstrapError
+                .freshInstallationVoiceprintResetUnavailable
+        }
+
+        // This must stay before loadOrCreateDeviceID and every repository
+        // write. If Keychain rejects the reset, the absent directory remains
+        // absent so Retry performs the reset again instead of classifying the
+        // failed attempt as an existing installation.
+        try await resetter.resetVoiceprintsForFreshInstallation()
+    }
+
     private func prepareFirstRunOnboarding(
         repository: LocalFirstRunOnboardingRepository,
         existingProfiles: [KidProfile]
@@ -375,7 +433,17 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
                 return nil
             }
             if state.status == .pending, let purpose = state.purpose {
-                return purpose
+                let resolvedPurpose =
+                    FirstRunOnboardingProfileSelection.resolvedPurpose(
+                        purpose,
+                        in: existingProfiles
+                    )
+                if resolvedPurpose != purpose {
+                    try await repository.normalizePendingPurpose(
+                        resolvedPurpose
+                    )
+                }
+                return resolvedPurpose
             }
             if state.status == .pending {
                 // Legacy pending markers predate the purpose field and came
@@ -412,26 +480,38 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         dailyQuestRepository: any DailyQuestHistoryRepository,
         childSessionRepository: LocalJSONChildSessionRepository,
         voiceprintRepository: (any DeviceVoiceprintRepository)?,
-        handwritingPreferenceRemover: any HandwritingPreferenceRemoving
+        handwritingPreferenceRemover: any HandwritingPreferenceRemoving,
+        mutationGate: ProfileScopedMutationGate
     ) async throws {
-        // Tombstones created by older builds may already be committed even
-        // though their UserDefaults entry was never cleaned up. Sweeping every
-        // tombstone is idempotent and repairs that historical residue.
-        for tombstone in try await tombstoneRepository.tombstones() {
-            try await voiceprintRepository?.delete(for: tombstone.profileID)
-            handwritingPreferenceRemover.remove(for: tombstone.profileID)
-        }
-        for tombstone in try await tombstoneRepository.pendingTombstones() {
+        // Sweep every tombstone, including committed records from older builds.
+        // This is idempotent and removes any Profile bytes that a process crash
+        // or historical best-effort cleanup left behind after commit.
+        let tombstones = try await tombstoneRepository.tombstones()
+        let pendingProfileIDs = Set(
+            try await tombstoneRepository.pendingTombstones().map(\.profileID)
+        )
+        for tombstone in tombstones {
             let profileID = tombstone.profileID
-            try await wordPoolRepository.deleteAll(for: profileID)
-            try await practiceSettingsRepository.delete(for: profileID)
-            try await learningRecordRepository.deleteLearningRecords(for: profileID)
-            try await dailyQuestRepository.deleteHistory(for: profileID)
-            try await profileRepository.delete(id: profileID)
-            if try await childSessionRepository.lastSelectedProfileID() == profileID {
-                try await childSessionRepository.clearLastSelectedProfileID()
+            try await withProfileScopedMutationLease(
+                mutationGate,
+                for: profileID,
+                allowingTerminal: true,
+                isolation: mutationGate
+            ) {
+                try await voiceprintRepository?.delete(for: profileID)
+                handwritingPreferenceRemover.remove(for: profileID)
+                try await wordPoolRepository.deleteAll(for: profileID)
+                try await practiceSettingsRepository.delete(for: profileID)
+                try await learningRecordRepository.deleteLearningRecords(for: profileID)
+                try await dailyQuestRepository.deleteHistory(for: profileID)
+                try await profileRepository.delete(id: profileID)
+                if try await childSessionRepository.lastSelectedProfileID() == profileID {
+                    try await childSessionRepository.clearLastSelectedProfileID()
+                }
+                if pendingProfileIDs.contains(profileID) {
+                    try await tombstoneRepository.markCommitted(for: profileID)
+                }
             }
-            try await tombstoneRepository.markCommitted(for: profileID)
         }
     }
 
@@ -631,10 +711,12 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
 
     private func loadOrCreateProfiles(
         existingProfiles: [KidProfile],
-        seedProfile: KidProfile,
+        seedProfile: KidProfile?,
         in repository: LocalJSONKidProfileRepository
     ) async throws -> [KidProfile] {
-        guard existingProfiles.isEmpty else { return existingProfiles }
+        guard existingProfiles.isEmpty, let seedProfile else {
+            return existingProfiles
+        }
 
         try await repository.save(seedProfile)
         let savedProfiles = try await repository.profiles()
@@ -760,6 +842,7 @@ private struct SnapshotSchemaRequirement {
 actor ProductionLearningNotificationReconciler {
     private let scheduler: any LearningNotificationScheduling
     private let profileRepository: any KidProfileRepository
+    private let profileDeletionRepository: (any ProfileDeletionTombstoneRepository)?
     private let wordPoolRepository: any WordPoolRepository
     private let practiceSettingsRepository: any PracticeSettingsRepository
     private let learningRecordRepository: (any AttemptEventRepository & WordProgressRepository)?
@@ -771,6 +854,8 @@ actor ProductionLearningNotificationReconciler {
     init(
         scheduler: any LearningNotificationScheduling,
         profileRepository: any KidProfileRepository,
+        profileDeletionRepository:
+            (any ProfileDeletionTombstoneRepository)? = nil,
         wordPoolRepository: any WordPoolRepository,
         practiceSettingsRepository: any PracticeSettingsRepository,
         learningRecordRepository:
@@ -782,6 +867,7 @@ actor ProductionLearningNotificationReconciler {
     ) {
         self.scheduler = scheduler
         self.profileRepository = profileRepository
+        self.profileDeletionRepository = profileDeletionRepository
         self.wordPoolRepository = wordPoolRepository
         self.practiceSettingsRepository = practiceSettingsRepository
         self.learningRecordRepository = learningRecordRepository
@@ -794,6 +880,24 @@ actor ProductionLearningNotificationReconciler {
     /// Runtime refreshes never prompt. Permission is requested only from the
     /// explicit Guardian settings save path.
     func reconcileAll() async {
+        let deletedProfileIDs: Set<ProfileID>
+        if let profileDeletionRepository {
+            // Tombstones are the durable deletion authority. Clear scheduled
+            // notifications even when a remote deletion has not yet finished
+            // every local purge step, and never rebuild them from stale rows.
+            guard
+                let tombstones =
+                    try? await profileDeletionRepository
+                    .tombstones()
+            else { return }
+            deletedProfileIDs = Set(tombstones.map(\.profileID))
+            for profileID in deletedProfileIDs {
+                await scheduler.removeNotifications(for: profileID)
+            }
+        } else {
+            deletedProfileIDs = []
+        }
+
         guard await scheduler.authorizationStatus() == .authorized else { return }
         guard let profiles = try? await profileRepository.profiles() else { return }
         let syncStatus = await familySyncCoordinator.status()
@@ -807,7 +911,7 @@ actor ProductionLearningNotificationReconciler {
         calendar.timeZone = timeZone
         let day = LocalDay(date: clock.now, timeZone: timeZone)
 
-        for profile in profiles {
+        for profile in profiles where !deletedProfileIDs.contains(profile.id) {
             guard
                 let settings = try? await practiceSettingsRepository.settings(
                     for: profile.id

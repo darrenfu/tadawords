@@ -360,8 +360,9 @@ content-consistency gate.
       provisional Pawgoo copyright until #33 passes.
 - [ ] Resolve #19 with a final-Profile/delete-all route and production
       destructive evidence before claiming complete in-app or CloudKit erasure.
-- [ ] Resolve #28's truthful Keychain/app-removal lifecycle and reconcile the
-      final app, policy, and support wording.
+- [ ] Complete #28's signed iPhone/iPad uninstall/reinstall proof for the
+      fail-closed Tada Words voiceprint-service reset, verify that an in-place
+      upgrade preserves enrollment, and reconcile final policy/support wording.
 - [ ] Complete #54 and verify that the deployed Pawgoo Privacy and Support copy
       matches bundled hints, Family Sync scope, deletion limits, and Keychain
       lifecycle on the exact RC.

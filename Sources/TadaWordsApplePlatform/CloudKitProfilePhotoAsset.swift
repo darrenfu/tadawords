@@ -272,11 +272,17 @@ enum CloudKitProfilePhotoAssetCodec {
         fileManager: FileManager = .default
     ) throws {
         guard fileManager.fileExists(atPath: directory.path) else { return }
-        let profilePrefix = "profile-photo-\(profileID)-"
+        let profilePrefixes = [
+            "profile-photo-\(profileID)-",
+            ".profile-photo-\(profileID)-",
+        ]
         for url in try fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: nil
-        ) where url.lastPathComponent.hasPrefix(profilePrefix) {
+        )
+        where profilePrefixes.contains(where: {
+            url.lastPathComponent.hasPrefix($0)
+        }) {
             try fileManager.removeItem(at: url)
         }
     }
@@ -311,7 +317,7 @@ enum CloudKitProfilePhotoAssetCodec {
                 return sourceURL
             }
             let temporaryURL = directory.appendingPathComponent(
-                ".profile-photo-\(UUID().uuidString).tmp"
+                ".profile-photo-\(attachment.metadata.profileID)-\(UUID().uuidString).tmp"
             )
             do {
                 try attachment.jpegData.write(to: temporaryURL)

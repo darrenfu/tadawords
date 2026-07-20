@@ -11,36 +11,45 @@ public enum GuardianWordStoreError: Error, Equatable, Sendable {
 
 public enum GuardianFamilyStoreError: Error, Equatable, Sendable {
     case profileNotFound(ProfileID)
+    case noProfiles
     case emptyDisplayName
     case displayNameTooLong(maximumCharacterCount: Int)
     case unsupportedAvatar(String)
     case invalidAge
-    case cannotDeleteOnlyProfile
     case learningHistoryUnavailable
 }
 
 public struct GuardianFamilySnapshot: Equatable, Sendable {
     public let profiles: [KidProfile]
-    public let selectedProfileID: ProfileID
+    public let selectedProfileID: ProfileID?
 
-    public init(profiles: [KidProfile], selectedProfileID: ProfileID) {
+    public init(profiles: [KidProfile], selectedProfileID: ProfileID?) {
         self.profiles = profiles
-        self.selectedProfileID = selectedProfileID
+        self.selectedProfileID =
+            selectedProfileID.flatMap { candidate in
+                profiles.contains(where: { $0.id == candidate }) ? candidate : nil
+            } ?? profiles.first?.id
     }
 
     public var selectedProfile: KidProfile? {
-        profiles.first(where: { $0.id == selectedProfileID })
+        guard let selectedProfileID else { return nil }
+        return profiles.first(where: { $0.id == selectedProfileID })
     }
 }
 
 public struct GuardianProfileDeletionResult: Sendable {
-    public let dashboard: GuardianDashboardSnapshot
+    public let family: GuardianFamilySnapshot
+    /// The next child's dashboard, or nil when the family intentionally
+    /// deleted its final Profile and should return to Profile creation.
+    public let dashboard: GuardianDashboardSnapshot?
     public let tombstone: ProfileDeletionTombstone
 
     public init(
-        dashboard: GuardianDashboardSnapshot,
+        family: GuardianFamilySnapshot,
+        dashboard: GuardianDashboardSnapshot?,
         tombstone: ProfileDeletionTombstone
     ) {
+        self.family = family
         self.dashboard = dashboard
         self.tombstone = tombstone
     }

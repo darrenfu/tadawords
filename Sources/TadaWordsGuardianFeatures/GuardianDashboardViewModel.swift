@@ -110,6 +110,7 @@ final class GuardianDashboardViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var syncStatus: FamilySyncStatus = .idle
     @Published private(set) var isFamilySyncEnabled = false
+    @Published private(set) var profileErasurePresentation: GuardianProfileErasurePresentation?
     @Published private(set) var shareURL: URL?
     @Published var shareURLText = ""
     @Published private(set) var voiceprintProgress: VoiceprintEnrollmentProgress?
@@ -139,6 +140,8 @@ final class GuardianDashboardViewModel: ObservableObject {
     private var undoWordsByProfile: [ProfileID: [LearningMode: [WordPrompt]]] = [:]
     private var voiceprintSentences: [String] = []
     private var voiceprintPromptTask: Task<Void, Never>?
+    private var externalSyncRefreshGeneration: UInt64 = 0
+    private var syncPresentationRefreshGeneration: UInt64 = 0
 
     init(
         store: any GuardianFamilyStore,
@@ -207,6 +210,7 @@ final class GuardianDashboardViewModel: ObservableObject {
         resetWordRemovalSession()
         destination = .dashboard
         refresh()
+        refreshSyncStatus()
     }
 
     func lockGuardianArea() {
@@ -250,8 +254,31 @@ final class GuardianDashboardViewModel: ObservableObject {
         destination = .profiles
     }
 
+    /// An empty family has no dashboard to return to. Closing Parents returns
+    /// the app to the first-run Profile creation flow instead of trapping the
+    /// parent between an empty chooser and editor.
+    @discardableResult
+    func returnFromProfiles() -> Bool {
+        guard familySnapshot?.profiles.isEmpty == true else {
+            showDashboard()
+            return false
+        }
+        lockGuardianArea()
+        return true
+    }
+
     func showNewProfile() {
         destination = .profileEditor(nil)
+    }
+
+    @discardableResult
+    func returnFromProfileEditor() -> Bool {
+        guard familySnapshot?.profiles.isEmpty == true else {
+            showProfiles()
+            return false
+        }
+        lockGuardianArea()
+        return true
     }
 
     func showEditProfile(_ profile: KidProfile) {
@@ -278,6 +305,17 @@ final class GuardianDashboardViewModel: ObservableObject {
     func showFamilySync() {
         destination = .familySync
         refreshSyncStatus()
+    }
+
+    func returnFromFamilySync() {
+        guard snapshot == nil else {
+            returnToParentSection()
+            return
+        }
+        destination =
+            familySnapshot?.profiles.isEmpty == false
+            ? .profiles
+            : .profileEditor(nil)
     }
 
     func showThirdPartyNotices() {
@@ -315,16 +353,28 @@ final class GuardianDashboardViewModel: ObservableObject {
         Task {
             defer { isLoading = false }
             do {
-                async let loadedFamily = store.familySnapshot()
-                async let loadedDashboard = store.dashboardSnapshot()
-                let (family, dashboard) = try await (
-                    loadedFamily,
-                    loadedDashboard
-                )
+                let family = try await store.familySnapshot()
                 familySnapshot = family
+                guard let selectedProfileID = family.selectedProfileID else {
+                    snapshot = nil
+                    report = nil
+                    destination = .profileEditor(nil)
+                    await audioExperienceService.stopAmbientAudio()
+                    return
+                }
+                let dashboard = try await store.dashboardSnapshot(
+                    for: selectedProfileID
+                )
                 showWordRemovalState(for: dashboard.profile.id)
                 snapshot = dashboard
                 await applyAudioSnapshot()
+            } catch GuardianFamilyStoreError.profileNotFound,
+                GuardianFamilyStoreError.noProfiles
+            {
+                familySnapshot = try? await store.familySnapshot()
+                snapshot = nil
+                report = nil
+                destination = .profileEditor(nil)
             } catch {
                 errorMessage = "Family data could not be loaded. Please try again."
             }
@@ -335,26 +385,49 @@ final class GuardianDashboardViewModel: ObservableObject {
     /// navigation. If the Profile currently being viewed was deleted on
     /// another device, move to the Profile chooser immediately.
     func refreshAfterExternalSyncAndWait() async {
+        externalSyncRefreshGeneration &+= 1
+        let refreshGeneration = externalSyncRefreshGeneration
         let previouslyVisibleProfileID = snapshot?.profile.id
         do {
             var family = try await store.familySnapshot()
+            try Task.checkCancellation()
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
+            }
             let visibleProfileStillExists =
                 previouslyVisibleProfileID.map {
                     profileID in
                     family.profiles.contains(where: { $0.id == profileID })
                 } ?? false
-            let targetProfileID =
-                visibleProfileStillExists
-                ? previouslyVisibleProfileID!
-                : family.selectedProfileID
+            guard
+                let targetProfileID =
+                    visibleProfileStillExists
+                    ? previouslyVisibleProfileID
+                    : family.selectedProfileID
+            else {
+                throw GuardianFamilyStoreError.noProfiles
+            }
             let dashboard: GuardianDashboardSnapshot
             if visibleProfileStillExists {
                 dashboard = try await store.dashboardSnapshot(
                     for: targetProfileID
                 )
             } else {
+                guard refreshGeneration == externalSyncRefreshGeneration else {
+                    return
+                }
                 dashboard = try await store.selectProfile(id: targetProfileID)
                 family = try await store.familySnapshot()
+            }
+            let refreshedReport: GuardianLearningReport?
+            if case .reports = destination {
+                refreshedReport = try await store.report(for: reportPeriod)
+            } else {
+                refreshedReport = nil
+            }
+            try Task.checkCancellation()
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
             }
             familySnapshot = family
             snapshot = dashboard
@@ -362,21 +435,37 @@ final class GuardianDashboardViewModel: ObservableObject {
             if previouslyVisibleProfileID != nil, !visibleProfileStillExists {
                 destination = .profiles
             }
-            if case .reports = destination {
-                report = try await store.report(for: reportPeriod)
+            if let refreshedReport {
+                report = refreshedReport
             }
             await applyAudioSnapshot()
-        } catch GuardianFamilyStoreError.profileNotFound {
+        } catch GuardianFamilyStoreError.profileNotFound,
+            GuardianFamilyStoreError.noProfiles
+        {
             // A remote owner can remove the final shared Profile. Keep the
             // parent in a recoverable creation flow instead of a stale editor.
-            familySnapshot = nil
+            let emptyFamily = try? await store.familySnapshot()
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
+            }
+            familySnapshot = emptyFamily
             snapshot = nil
             report = nil
             destination = .profileEditor(nil)
+            await audioExperienceService.stopAmbientAudio()
+        } catch is CancellationError {
+            return
         } catch {
+            guard refreshGeneration == externalSyncRefreshGeneration else {
+                return
+            }
             errorMessage =
                 "Family Sync finished, but this page could not refresh. Please try again."
         }
+        guard refreshGeneration == externalSyncRefreshGeneration else {
+            return
+        }
+        await refreshSyncStatusAndWait()
     }
 
     func selectProfile(_ profile: KidProfile) {
@@ -440,19 +529,24 @@ final class GuardianDashboardViewModel: ObservableObject {
                     return
                 }
                 let deletion = try await store.deleteProfile(id: profile.id)
-                try? await voiceprintRepository?.delete(for: profile.id)
                 await notificationScheduler?.removeNotifications(for: profile.id)
                 undoWordsByProfile[profile.id] = nil
                 confirmedWordRemovalProfileIDs.remove(profile.id)
-                showWordRemovalState(for: deletion.dashboard.profile.id)
-                snapshot = deletion.dashboard
-                familySnapshot = try await store.familySnapshot()
-                destination = .dashboard
+                if let dashboard = deletion.dashboard {
+                    showWordRemovalState(for: dashboard.profile.id)
+                    snapshot = dashboard
+                } else {
+                    snapshot = nil
+                    report = nil
+                }
+                familySnapshot = deletion.family
+                destination = .familySync
+                refreshSyncStatus()
             } catch let error as GuardianFamilyStoreError {
                 errorMessage = Self.profileErrorMessage(error)
             } catch {
                 errorMessage =
-                    "That child profile could not be deleted. No further changes were made."
+                    "Deletion paused safely. Try again; deleted data will not be restored."
             }
         }
     }
@@ -737,6 +831,27 @@ final class GuardianDashboardViewModel: ObservableObject {
         guard let familySyncCoordinator, isFamilySyncEnabled else { return }
         Task {
             syncStatus = await familySyncCoordinator.synchronize()
+            await refreshProfileErasurePresentation(
+                using: familySyncCoordinator,
+                isEnabled: isFamilySyncEnabled
+            )
+        }
+    }
+
+    func retryProfileErasure() {
+        guard let familySyncCoordinator else { return }
+        Task {
+            let isEnabled = await familySyncCoordinator.isEnabled()
+            isFamilySyncEnabled = isEnabled
+            if isEnabled {
+                syncStatus = await familySyncCoordinator.synchronize()
+            } else {
+                syncStatus = await familySyncCoordinator.status()
+            }
+            await refreshProfileErasurePresentation(
+                using: familySyncCoordinator,
+                isEnabled: isEnabled
+            )
         }
     }
 
@@ -755,8 +870,16 @@ final class GuardianDashboardViewModel: ObservableObject {
                     shareURL = nil
                     shareURLText = ""
                 }
+                await refreshProfileErasurePresentation(
+                    using: familySyncCoordinator,
+                    isEnabled: isFamilySyncEnabled
+                )
             } catch {
                 isFamilySyncEnabled = await familySyncCoordinator.isEnabled()
+                await refreshProfileErasurePresentation(
+                    using: familySyncCoordinator,
+                    isEnabled: isFamilySyncEnabled
+                )
                 errorMessage =
                     isEnabled
                     ? "Family sync could not be turned on. Learning data is still saved on this device."
@@ -974,18 +1097,68 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     private func refreshSyncStatus() {
+        Task {
+            await refreshSyncStatusAndWait()
+        }
+    }
+
+    private func refreshSyncStatusAndWait() async {
+        syncPresentationRefreshGeneration &+= 1
+        let refreshGeneration = syncPresentationRefreshGeneration
         guard let familySyncCoordinator else {
+            guard refreshGeneration == syncPresentationRefreshGeneration else {
+                return
+            }
             isFamilySyncEnabled = false
+            profileErasurePresentation = nil
             syncStatus = .deviceOnly(
                 message: "Learning data is saved on this device."
             )
             return
         }
-        Task {
-            async let enabled = familySyncCoordinator.isEnabled()
-            async let status = familySyncCoordinator.status()
-            isFamilySyncEnabled = await enabled
-            syncStatus = await status
+        async let enabled = familySyncCoordinator.isEnabled()
+        async let status = familySyncCoordinator.status()
+        let resolvedEnabled = await enabled
+        let resolvedStatus = await status
+        let erasurePresentation = await profileErasurePresentation(
+            using: familySyncCoordinator,
+            isEnabled: resolvedEnabled
+        )
+        guard refreshGeneration == syncPresentationRefreshGeneration else {
+            return
+        }
+        isFamilySyncEnabled = resolvedEnabled
+        syncStatus = resolvedStatus
+        profileErasurePresentation = erasurePresentation
+    }
+
+    private func refreshProfileErasurePresentation(
+        using familySyncCoordinator: any FamilySyncCoordinating,
+        isEnabled: Bool
+    ) async {
+        syncPresentationRefreshGeneration &+= 1
+        let refreshGeneration = syncPresentationRefreshGeneration
+        let presentation = await profileErasurePresentation(
+            using: familySyncCoordinator,
+            isEnabled: isEnabled
+        )
+        guard refreshGeneration == syncPresentationRefreshGeneration else {
+            return
+        }
+        profileErasurePresentation = presentation
+    }
+
+    private func profileErasurePresentation(
+        using familySyncCoordinator: any FamilySyncCoordinating,
+        isEnabled: Bool
+    ) async -> GuardianProfileErasurePresentation? {
+        do {
+            return GuardianProfileErasurePresentation.make(
+                lifecycles: try await familySyncCoordinator.profileErasureLifecycles(),
+                isFamilySyncEnabled: isEnabled
+            )
+        } catch {
+            return .unavailable
         }
     }
 
@@ -1072,6 +1245,8 @@ final class GuardianDashboardViewModel: ObservableObject {
         switch error {
         case .profileNotFound:
             "That child profile is no longer available."
+        case .noProfiles:
+            "Add a child profile to continue."
         case .emptyDisplayName:
             "Enter a nickname for this child."
         case .displayNameTooLong(let maximumCharacterCount):
@@ -1080,8 +1255,6 @@ final class GuardianDashboardViewModel: ObservableObject {
             "Choose one of the available animal icons."
         case .invalidAge:
             "Choose an age from 2 through 18."
-        case .cannotDeleteOnlyProfile:
-            "Keep at least one child profile."
         case .learningHistoryUnavailable:
             "Learning history is not available right now."
         }

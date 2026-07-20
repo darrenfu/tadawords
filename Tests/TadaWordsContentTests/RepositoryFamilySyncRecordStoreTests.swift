@@ -490,7 +490,7 @@ final class RepositoryFamilySyncRecordStoreTests: XCTestCase {
         // A local writer owns the same profile lease after the coordinator's
         // expected snapshot was read. The remote apply must wait, then re-read
         // and reject rather than overwrite the committed local edit.
-        await gate.acquire(initial.id)
+        try await gate.acquire(initial.id)
         let applyTask = Task {
             try await store.applyIfUnchanged(
                 [remoteRecord],

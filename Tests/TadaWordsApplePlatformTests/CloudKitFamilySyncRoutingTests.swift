@@ -302,15 +302,22 @@ final class CloudKitFamilySyncRoutingTests: XCTestCase {
             ownerName: privateZone.ownerName,
             rootRecordName: "healthy-private-root"
         )
-        try fixture.store.save(binding: malformedShared)
+        XCTAssertNil(
+            CloudKitFamilyWriteRoutePlanner.destination(for: malformedShared)
+        )
+        XCTAssertThrowsError(
+            try fixture.store.save(binding: malformedShared)
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .corruptMetadata
+            )
+        }
         try fixture.store.save(binding: healthyPrivate)
         let restarted = CloudKitFamilyMetadataStore(
             snapshotURL: fixture.metadataURL
         )
 
-        let blocked = CloudKitFamilyWriteRoutePlanner.destination(
-            for: restarted.binding(for: fixture.sharedProfileID)
-        )
         let allowed = try XCTUnwrap(
             CloudKitFamilyWriteRoutePlanner.destination(
                 for: restarted.binding(for: fixture.privateProfileID)
@@ -322,7 +329,10 @@ final class CloudKitFamilySyncRoutingTests: XCTestCase {
             metadataStore: restarted
         )
 
-        XCTAssertNil(blocked)
+        XCTAssertEqual(
+            restarted.binding(for: fixture.sharedProfileID),
+            .unbound(fixture.sharedProfileID)
+        )
         XCTAssertEqual(allowed.scope, .privateDatabase)
         XCTAssertEqual(privateRecord.recordID.zoneID, privateZone)
         XCTAssertEqual(
@@ -350,6 +360,7 @@ private struct CloudRoutingFixture {
         )
         metadataURL = directory.appendingPathComponent("metadata.json")
         store = CloudKitFamilyMetadataStore(snapshotURL: metadataURL)
+        try store.confirm(accountRecordName: "routing-account")
     }
 
     func cloudRecord(

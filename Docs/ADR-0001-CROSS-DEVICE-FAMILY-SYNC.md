@@ -3,7 +3,7 @@
 - **Status:** Accepted; the v0.7.0 source contract is implemented. Production CloudKit schema and physical-device acceptance remain open human gates.
 - **Date:** 2026-07-13
 - **Scope:** Kid Profiles, Read/Write pools, Profile settings, learning events and progress, Quest calendar, rewards, deletion, and family sharing
-- **Tracking:** [Epic #40](https://github.com/darrenfu/tadawords/issues/40), [transport #44](https://github.com/darrenfu/tadawords/issues/44), [Profile data #45](https://github.com/darrenfu/tadawords/issues/45), [canonical progress #42](https://github.com/darrenfu/tadawords/issues/42), [deletion #19](https://github.com/darrenfu/tadawords/issues/19), [atomic apply #43](https://github.com/darrenfu/tadawords/issues/43), and [two-device acceptance #41](https://github.com/darrenfu/tadawords/issues/41)
+- **Tracking:** [Epic #40](https://github.com/darrenfu/tadawords/issues/40), [transport #44](https://github.com/darrenfu/tadawords/issues/44), [Profile data #45](https://github.com/darrenfu/tadawords/issues/45), [canonical progress #42](https://github.com/darrenfu/tadawords/issues/42), [deletion #19](https://github.com/darrenfu/tadawords/issues/19), [erasure lifecycle #57](https://github.com/darrenfu/tadawords/issues/57), [atomic apply #43](https://github.com/darrenfu/tadawords/issues/43), and [two-device acceptance #41](https://github.com/darrenfu/tadawords/issues/41)
 
 ## Context
 
@@ -92,6 +92,73 @@ The tombstone is written before local Profile data is purged. It is retained in 
 
 Do not garbage-collect a tombstone until the product has an explicit device-membership/acknowledgement protocol. Permanent minimal tombstones are the required first-release choice.
 
+### Durable Profile-erasure lifecycle
+
+The local deletion tombstone and a device-local, privacy-safe erasure lifecycle
+are committed atomically. The lifecycle associates its Profile ID with only
+state, resolved route, attempt count, retry timing, and a bounded error
+category. Parent-visible status and exported diagnostics expose anonymous
+aggregates only: never a Profile ID, nickname, words, photo, Apple account
+identifier, share URL, or voice data.
+
+Erasure follows this crash-safe order:
+
+1. Persist `attemptStarted` with an unresolved route before calling CloudKit.
+2. Require an exact transport disposition for the due tombstone key and
+   revision, then persist the resolved owner or participant route.
+3. Record the matching journal acknowledgement or failure.
+4. Repair the lifecycle from the durable journal into `complete`,
+   `waitingForConnection`, or `needsAttention`.
+
+A generic transport success without an exact tombstone disposition cannot
+complete erasure. This ordering also permits a restart between any two steps:
+the next reconciliation replays or repairs the same idempotent operation rather
+than guessing that deletion finished.
+
+If an older build left a journal acknowledgement without durable route
+evidence, migration does not call it complete. It atomically requeues the exact
+tombstone, shows anonymous `needsAttention` state, and lets the next idempotent
+transport pass recover an owner or participant disposition.
+
+An owner route completes only after the deletion ledger is durable, the
+Profile zone and payload assets have been erased, and the binding is terminal.
+A participant route completes only after leave/revocation has been reconciled,
+local participant payload assets have been purged, and the binding is terminal.
+The completed state is terminal and is not requeued after an Apple-account
+change.
+
+Transport-only binding metadata preserves the originating Apple account. That
+identifier never enters lifecycle state, diagnostics, or cloud payload. A
+different signed-in account receives an account-category failure, needs parent
+attention, and cannot acknowledge an old account's erasure. Returning to the
+originating account may resume it. A genuinely fresh, never-synced unbound
+Profile can resolve to the current owner route.
+
+CloudKit deletion callbacks are account-order ambiguous. Before any live-account
+lookup suspension, the client durably writes a no-payload marker containing only
+the Profile ID, immutable zone/root route, origin-account fence, and observed
+evidence kind. A successful fence atomically promotes that exact marker into an
+explicit root, zone, or owner-ledger recovery fact. A mismatched account leaves
+the marker dormant. When the origin account returns, the client directly
+revalidates the exact root or control-ledger record; existence discards a false
+marker, explicit absence takes the conservative owner-erase/participant-leave
+route, and transient errors retain the marker. Active markers block uploads and
+terminal commit removes every marker for that Profile.
+
+For an owner ledger naming a previously unknown Profile, the deterministic
+owner binding and marker are published in one metadata snapshot. The marker
+records that the binding is provisional. Only an exact origin-account fetch
+proving the control ledger absent may atomically remove both; an existing
+binding, a legacy binding without that creation provenance, or a binding still
+referenced by another marker is retained conservatively.
+
+Offline and transient server failures remain `waitingForConnection` with a
+retry time. Account, compatibility, corruption, conflict, or unknown failures
+become `needsAttention`; **Try again** retains the same tombstone identity and
+never recreates deleted child data. Parent UI presents only anonymous aggregate
+counts and states. These source invariants still require signed Production
+CloudKit acceptance on physical devices before release.
+
 ## Parent consent and visible state
 
 Family Sync is a parent-only, sensitive action and remains off by default. Completing onboarding does not enable it. Turning it off stops future CloudKit access from this device but does not promise remote erasure; Profile deletion is the separate erasure action.
@@ -129,7 +196,7 @@ silently rewritten as handwriting for an older client.
 | Profile photo | 512 px / 256 KiB prepared JPEG, general-envelope stripping, validated `CKAsset`, durable upload source, corrupt-asset quarantine, and acknowledgement cleanup | Physical photo transfer through the real container |
 | Learning history | Immutable attempt/correction union, conflict quarantine, prompt-alias migration, deterministic progress and Ebbinghaus rebuild | Two devices completing real Read/Write Quests offline in both reconnect orders |
 | Plans, completion, and rewards | Stable business keys, causal staging, deterministic calendar/world/badge/collection projections, and Practice Again UUID semantics | Physical calendar/reward comparison after background reconciliation |
-| Deletion | Local ledger-before-purge, unconditional tombstone dominance, owner erasure workflow, participant-leave/revocation behavior, restart idempotence, and stale-device upload barrier | Explicitly authorized test-only destructive CloudKit proof |
+| Deletion | Local ledger-before-purge, unconditional tombstone dominance, durable privacy-safe erasure lifecycle, exact owner/participant acknowledgement, account-provenance guard, restart repair, terminal completion, and stale-device upload barrier | Explicitly authorized test-only destructive CloudKit proof, including account switch-away/back and offline restart |
 | Remote apply and UI | Profile-scoped durable apply transaction, exact pending bytes, commit receipts, bootstrap replay, notification reconciliation, and immediate Kid/Parent refresh without abandoning an active Quest | Real push/background delivery and human navigation recovery checks |
 | Coverage | Machine-readable data manifest and five-layer acceptance matrix plus deterministic retry, corruption, ordering, restart, account, route, and two-device harnesses. Six Family Sync UI flows pass on both target simulators in the source batch, and only the 19 directly observed manifest rows receive simulator evidence. | Exact committed-HEAD simulator artifacts are mandatory delivery evidence; every matrix row still marked simulator, physical, or human remains pending |
 | LocalQA | Explicit device-only bundle, no iCloud/APNs entitlement, safe simulator and signed-device UI validation | It intentionally cannot prove CloudKit behavior |

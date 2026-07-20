@@ -91,11 +91,68 @@ final class ProductionNotificationReconcilerTests: XCTestCase {
         XCTAssertEqual(requestCount, 0)
     }
 
+    func testRemoteDeletionTombstoneRemovesNotificationsAndBlocksReschedule()
+        async throws
+    {
+        let profile = KidProfile(
+            displayName: "Mia",
+            avatar: .cartoonAnimal(assetID: "hare"),
+            selectedWorld: .moonpetalKingdom,
+            createdAt: now
+        )
+        let profiles = InMemoryKidProfileRepository()
+        try await profiles.save(profile)
+        let settings = InMemoryPracticeSettingsRepository()
+        try await settings.save(
+            ProfilePracticeSettings(
+                profileID: profile.id,
+                notifications: LearningNotificationPreferences(
+                    questCompletionEnabled: true,
+                    syncFailureEnabled: true,
+                    weeklySummaryEnabled: true
+                )
+            )
+        )
+        let tombstones = InMemoryProfileDeletionTombstoneRepository()
+        try await tombstones.save(
+            ProfileDeletionTombstone(
+                profileID: profile.id,
+                deletedAt: now
+            )
+        )
+        let scheduler = NotificationSchedulerSpy()
+        let reconciler = ProductionLearningNotificationReconciler(
+            scheduler: scheduler,
+            profileRepository: profiles,
+            profileDeletionRepository: tombstones,
+            wordPoolRepository: InMemoryWordPoolRepository(),
+            practiceSettingsRepository: settings,
+            dailyQuestRepository: NotificationDailyRepository(
+                completedRunCount: 0
+            ),
+            familySyncCoordinator: NotificationSyncCoordinator(
+                currentStatus: .idle
+            ),
+            clock: NotificationClock(now: now),
+            timeZone: TimeZone(secondsFromGMT: 0) ?? .current
+        )
+
+        await reconciler.reconcileAll()
+
+        let removedProfileIDs = await scheduler.removedProfileIDs()
+        let contexts = await scheduler.contexts()
+        let requestCount = await scheduler.requestCount()
+        XCTAssertEqual(removedProfileIDs, [profile.id])
+        XCTAssertTrue(contexts.isEmpty)
+        XCTAssertEqual(requestCount, 0)
+    }
+
     private let now = Date(timeIntervalSince1970: 2_000_000_000)
 }
 
 private actor NotificationSchedulerSpy: LearningNotificationScheduling {
     private var savedContexts: [LearningNotificationContext] = []
+    private var removedIDs: [ProfileID] = []
     private var requests = 0
 
     func authorizationStatus() async -> LearningNotificationAuthorization {
@@ -118,10 +175,11 @@ private actor NotificationSchedulerSpy: LearningNotificationScheduling {
     }
 
     func removeNotifications(for profileID: ProfileID) async {
-        _ = profileID
+        removedIDs.append(profileID)
     }
 
     func contexts() -> [LearningNotificationContext] { savedContexts }
+    func removedProfileIDs() -> [ProfileID] { removedIDs }
     func requestCount() -> Int { requests }
 }
 
