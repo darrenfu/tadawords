@@ -274,7 +274,7 @@ public struct TadaWordsRootView: View {
             childSessionRepository: childSessionRepository,
             speechRecognitionService: speechRecognitionService,
             handwritingRecognitionService: DemoHandwritingRecognitionService(),
-            speechPermissionActions: SpeechPermissionActions { true },
+            speechPermissionActions: .demoAuthorized,
             demoLaunchRoute: DemoLaunchRoute.current,
             onOpenGuardian: onOpenGuardian
         )

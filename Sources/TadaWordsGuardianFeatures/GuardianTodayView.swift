@@ -394,6 +394,8 @@ struct GuardianAppAndFamilyView: View {
     let onBack: () -> Void
     let onOpenSoundAndAccessibility: () -> Void
     let onOpenNotifications: () -> Void
+    let speechPermissionState: SpeechPermissionState
+    let onOpenSpeechPermissions: () -> Void
     let onOpenFamilySync: () -> Void
     let onOpenThirdPartyNotices: () -> Void
 
@@ -420,6 +422,16 @@ struct GuardianAppAndFamilyView: View {
                 tint: GuardianPrimitiveTokens.ColorValue.orange,
                 accessibilityIdentifier: "guardian.app.notifications",
                 action: onOpenNotifications
+            )
+            GuardianNavigationTile(
+                title: "Speech & Microphone",
+                summary: GuardianSpeechPermissionPresentation.tileSummary(
+                    for: speechPermissionState
+                ),
+                symbol: "waveform.badge.mic",
+                tint: GuardianPrimitiveTokens.ColorValue.indigo,
+                accessibilityIdentifier: "guardian.app.speech-permissions",
+                action: onOpenSpeechPermissions
             )
             GuardianNavigationTile(
                 title: syncState == .thisDeviceOnly ? "Device Storage" : "Family Sync",
@@ -510,7 +522,7 @@ enum GuardianDataControlCopy {
         + "This removes that child’s words, settings, quest history, rewards, and saved picture from this device."
 
     static let permissionManagement =
-        "Open the iOS Settings app, choose Apps, then Tada Words to review Camera, Photos, Microphone, Speech Recognition, and Notifications."
+        "Use Speech & Microphone above for first setup. To review or change access later, open the iOS Settings app, choose Apps, then Tada Words to review Camera, Photos, Microphone, Speech Recognition, and Notifications."
 }
 
 private struct GuardianPrivacyAndSupportSection: View {

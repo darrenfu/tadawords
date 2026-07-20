@@ -53,11 +53,12 @@ be replaced with exact signed-release evidence during submission preparation:
   against production CloudKit and the exact signed release candidate.
 - **Pawgoo wording:** issue #54 owns alignment and deployment evidence for the
   public Privacy and Support pages; this document does not change the site.
-- **Child permission flow:** current Read practice can trigger Speech and
-  Microphone system authorization from a child-facing action. Apple Kids
-  guidance expects a parental gate before permission requests. Issue #55 must
-  move setup behind Parents and provide exact-device evidence before reviewer
-  permission steps are pasted.
+- **Child permission flow:** the v0.7.8 source candidate gives child Read only a
+  current-status check and adds Parents → App & Family → Speech & Microphone for
+  setup. Issue #55 still requires exact signed first-install, denied,
+  authorized, and revoked verification on iPhone and iPad before these steps are
+  paste-ready. See the
+  [shipping permission inventory](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md).
 
 Until every gate above is satisfied, this file is a metadata candidate, not an
 accepted release candidate or an App Store Connect checklist that is safe to
@@ -74,7 +75,7 @@ execute.
 | EU DSA trader status and displayed contact data | **Unresolved.** Do not infer from the public website. | [#23](https://github.com/darrenfu/tadawords/issues/23) |
 | Release method | **Unresolved.** Manual, automatic, and phased release remain unselected. | [#24](https://github.com/darrenfu/tadawords/issues/24), [#26](https://github.com/darrenfu/tadawords/issues/26) |
 | Exact RC and device acceptance | **Unresolved.** Captures must come from the accepted signed RC, not this documentation branch by default. | [#22](https://github.com/darrenfu/tadawords/issues/22) |
-| Kids permission requests | **Blocked.** The current child-facing Read action can directly trigger Speech and Microphone authorization. Do not give reviewers that path. The final flow and notes must start behind the Parent Gate. | [#55](https://github.com/darrenfu/tadawords/issues/55) |
+| Kids permission requests | **Source fixed; exact-device gate open.** Child Read has no request capability. The review path starts behind the Parent Gate at App & Family → Speech & Microphone, but first-install, denied, authorized, and revoked behavior still needs exact signed iPhone/iPad acceptance. | [#55](https://github.com/darrenfu/tadawords/issues/55), [permission inventory](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md) |
 | App Privacy answers | **Merged inventory; conditional answer set.** The source-backed inventory covers bundled picture hints, Family Sync, device-local data, support/export flows, the privacy manifest, and every configured or dormant network path. Exact signed-build and operating-practice gates remain. | [`APP_STORE_PRIVACY_v0.7.4.md`](APP_STORE_PRIVACY_v0.7.4.md), [#17](https://github.com/darrenfu/tadawords/issues/17), [#54](https://github.com/darrenfu/tadawords/issues/54) |
 | Shipped-content rights | **Merged inventory; human evidence blocked.** Twemoji provenance and in-app attribution are present. Cartesia account/tier evidence and Pawgoo authorship/rights-chain attestation remain open. | [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md), [#32](https://github.com/darrenfu/tadawords/issues/32), [#33](https://github.com/darrenfu/tadawords/issues/33) |
 
@@ -170,14 +171,14 @@ PARENT GATE AND WORD IMPORT
 
 READ PATH
 1. Return to the profile and choose “Read.”
-2. [BLOCKED BY ISSUE #55 — do not instruct the reviewer to grant Microphone or Speech Recognition from this child-facing screen. Replace this line only after the accepted build provides a Parents-gated permission setup, then describe that exact parent route before returning to Read practice.]
+2. [BLOCKED BY ISSUE #55 EXACT-DEVICE ACCEPTANCE — in Parents, open App & Family → Speech & Microphone and choose Set up access; verify the separate Speech Recognition and Microphone rows are Ready, then return to Read practice. Never instruct the reviewer to grant either permission from a child screen.]
 
 WRITE PATH
 1. Return to the lobby and choose “Write.”
 2. Choose “Write by Hand” or “Spell with Letters.” Handwriting recognition uses Apple Vision on the device; the letter option uses the app’s own A–Z keyboard.
 
 PERMISSIONS
-Do not paste permission guidance until issue #55 moves Speech and Microphone authorization setup behind the Parent Gate and the exact signed build is verified. Camera or Photos access is requested only after a parent chooses the corresponding import/profile-photo action. Notifications are optional and managed in the Parent area. Face ID may be requested only for a sensitive parent action present in the exact release candidate.
+Do not paste this proposed permission guidance until issue #55's exact signed build is verified. Speech and Microphone setup begins only after the Parent Gate under App & Family → Speech & Microphone; child Read only checks existing status and fails closed. Camera or Photos access is requested only after a parent chooses the corresponding import/profile-photo action. Notifications are optional and managed in the Parent area. Face ID may be requested only for a sensitive parent action present in the exact release candidate. The complete ownership list is in `SYSTEM_PERMISSION_INVENTORY_v0.7.8.md`.
 
 OFFLINE BEHAVIOR
 Core Read and Write practice, bundled presets, teacher-word audio, speech recognition, and handwriting recognition are designed to work without a network connection. Raw speech recordings are not saved or uploaded to Pawgoo.
@@ -280,7 +281,7 @@ exact RC preflight must confirm that these symbols and tests still apply.
 | Parents can type words or import word-sheet photos and review recognized words before adding them | [`GuardianQuickAddView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianQuickAddView.swift) (`GuardianWordManagerView`); [`AppleImageTextRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleImageTextRecognitionService.swift); [`ManualWordBatchParser.swift`](../Sources/TadaWordsContent/ManualWordBatchParser.swift) | [`TadaWordsCriticalFlowUITests.swift`](../Tests/TadaWordsUITests/TadaWordsCriticalFlowUITests.swift); [`AppleImageTextRecognitionTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleImageTextRecognitionTests.swift); [`ManualWordBatchParserTests.swift`](../Tests/TadaWordsContentTests/ManualWordBatchParserTests.swift) | Real Camera/Photos/Vision transfer still needs #22 device acceptance |
 | Separate Read and Write libraries exist for each Profile | [`RepositoryGuardianWordStore.swift`](../Sources/TadaWordsGuardianFeatures/RepositoryGuardianWordStore.swift); [`LocalJSONWordPoolRepository.swift`](../Sources/TadaWordsContent/LocalJSONWordPoolRepository.swift); [`GuardianQuickAddView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianQuickAddView.swift) | [`RepositoryGuardianWordStoreTests.swift`](../Tests/TadaWordsGuardianFeaturesTests/RepositoryGuardianWordStoreTests.swift); [`LocalJSONWordPoolRepositoryTests.swift`](../Tests/TadaWordsContentTests/LocalJSONWordPoolRepositoryTests.swift) | Capture only fictional Profiles |
 | Multiple Profiles keep separate words, progress, settings, worlds, and rewards on the current device | [`KidProfileRepositories.swift`](../Sources/TadaWordsContent/KidProfileRepositories.swift) (`LocalJSONKidProfileRepository`); [`RepositoryGuardianFamilyStore.swift`](../Sources/TadaWordsGuardianFeatures/RepositoryGuardianFamilyStore.swift); [`ProfileChooserView.swift`](../Sources/TadaWordsFeatures/ProfileChooserView.swift) | [`KidProfileRepositoryTests.swift`](../Tests/TadaWordsContentTests/KidProfileRepositoryTests.swift); [`RepositoryGuardianFamilyStoreTests.swift`](../Tests/TadaWordsGuardianFeaturesTests/RepositoryGuardianFamilyStoreTests.swift); [`TadaWordsAppModelTests.swift`](../Tests/TadaWordsFeaturesTests/TadaWordsAppModelTests.swift) | This row does not claim cross-device acceptance |
-| Read quests use speech recognition for spoken practice | [`ReadQuestView.swift`](../Sources/TadaWordsFeatures/ReadQuestView.swift); [`AppleSpeechRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechRecognitionService.swift); [`AppleSpeechPermissions.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechPermissions.swift) | [`AppleSpeechAdapterTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleSpeechAdapterTests.swift); critical Read UI tests | The current child-facing Read action can trigger system authorization. Issue #55 must deliver and verify a Parents-gated permission setup before this becomes paste-ready reviewer guidance; exact-RC permission behavior also remains in #22 |
+| Read quests use speech recognition for spoken practice | [`ReadQuestView.swift`](../Sources/TadaWordsFeatures/ReadQuestView.swift); [`AppleSpeechRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechRecognitionService.swift); [`AppleSpeechPermissions.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechPermissions.swift); [`SYSTEM_PERMISSION_INVENTORY_v0.7.8.md`](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md) | [`AppleSpeechAdapterTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleSpeechAdapterTests.swift); [`ChildSpeechPermissionRouteContractTests.swift`](../Tests/TadaWordsAppShellTests/ChildSpeechPermissionRouteContractTests.swift); [`GuardianSpeechPermissionTests.swift`](../Tests/TadaWordsGuardianFeaturesTests/GuardianSpeechPermissionTests.swift); critical Read UI tests | Child Read now has check-only authorization and Parents owns setup. Issue #55 and #22 still require exact signed first-install, denied, authorized, and revoked iPhone/iPad acceptance before this becomes paste-ready reviewer guidance |
 | Write offers handwriting and an in-app letter keyboard | [`WriteInputChooserView.swift`](../Sources/TadaWordsFeatures/WriteInputChooserView.swift); [`WriteQuestView.swift`](../Sources/TadaWordsFeatures/WriteQuestView.swift); [`SpellQuestView.swift`](../Sources/TadaWordsFeatures/SpellQuestView.swift); [`AppleHandwritingRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleHandwritingRecognitionService.swift) | [`AppleHandwritingRecognitionTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleHandwritingRecognitionTests.swift); [`SpellQuestTests.swift`](../Tests/TadaWordsFeaturesTests/SpellQuestTests.swift) | Exact-RC device handwriting requires #22 |
 | Adaptive spaced review prioritizes due and difficult words from outcomes, help, retries, and pace | [`AdaptiveRetrievalScheduler.swift`](../Sources/TadaWordsLearning/AdaptiveRetrievalScheduler.swift); [`ReviewPriority.swift`](../Sources/TadaWordsLearning/ReviewPriority.swift); [`QuestPlanner.swift`](../Sources/TadaWordsLearning/QuestPlanner.swift) | [`AdaptiveRetrievalSchedulerTests.swift`](../Tests/TadaWordsLearningTests/AdaptiveRetrievalSchedulerTests.swift); [`ReviewPriorityTests.swift`](../Tests/TadaWordsLearningTests/ReviewPriorityTests.swift); [`QuestPlannerTests.swift`](../Tests/TadaWordsLearningTests/QuestPlannerTests.swift) | Public copy says “adaptive spaced review,” not a medical or guaranteed learning outcome |
 | Parent controls are behind a multiplication challenge | [`GuardianParentGateView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianParentGateView.swift); [`GuardianRootView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianRootView.swift) | [`GuardianParentGateTests.swift`](../Tests/TadaWordsGuardianFeaturesTests/GuardianParentGateTests.swift); critical Parent UI tests | A parental gate is not itself parental consent under privacy law |
@@ -314,10 +315,10 @@ final-Profile/delete-all, and human gates pass.
   Profile deletion guidance, but it cannot delete the sole remaining Profile
   and has no complete delete-all reset. Issue #19 owns the required behavior
   and destructive exact-RC proof.
-- **Child-facing Speech or Microphone authorization:** issue #55 must move
-  permission setup behind the Parent Gate and pass exact-device verification.
-  Apple Kids guidance expects parental gates for permission requests; do not
-  paste the current Read authorization path into review notes.
+- **Child-facing Speech or Microphone authorization:** the v0.7.8 source moves
+  permission setup behind the Parent Gate and removes requesting capability from
+  child features. Issue #55 still requires exact-device verification; do not
+  paste the proposed reviewer path until that evidence exists.
 - **A specific Kids Category age band, price, storefront set, DSA status, or
   release method:** human decisions in #23/#24/#26.
 - **“Improves reading,” “proven,” “guaranteed,” or similar outcome claims:** no

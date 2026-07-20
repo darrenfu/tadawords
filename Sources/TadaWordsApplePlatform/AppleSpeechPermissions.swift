@@ -1,32 +1,32 @@
 import AVFoundation
 import Speech
+import TadaWordsDomain
 
-public enum ApplePermissionStatus: String, Equatable, Sendable {
-    case notDetermined
-    case restricted
-    case denied
-    case authorized
-}
-
-public struct AppleSpeechPermissionState: Equatable, Sendable {
-    public let speechRecognition: ApplePermissionStatus
-    public let microphone: ApplePermissionStatus
-
-    public init(
-        speechRecognition: ApplePermissionStatus,
-        microphone: ApplePermissionStatus
-    ) {
-        self.speechRecognition = speechRecognition
-        self.microphone = microphone
-    }
-
-    public var isAuthorized: Bool {
-        speechRecognition == .authorized && microphone == .authorized
-    }
-}
+public typealias ApplePermissionStatus = SpeechPermissionStatus
+public typealias AppleSpeechPermissionState = SpeechPermissionState
 
 public protocol AppleSpeechPermissionChecking: Sendable {
     func currentState() -> AppleSpeechPermissionState
+}
+
+struct AppleSpeechPermissionRequestPlan: Equatable {
+    let requestsSpeechRecognition: Bool
+    let requestsMicrophone: Bool
+
+    init(
+        requestsSpeechRecognition: Bool,
+        requestsMicrophone: Bool
+    ) {
+        self.requestsSpeechRecognition = requestsSpeechRecognition
+        self.requestsMicrophone = requestsMicrophone
+    }
+
+    init(state: AppleSpeechPermissionState) {
+        self.init(
+            requestsSpeechRecognition: state.speechRecognition == .notDetermined,
+            requestsMicrophone: state.microphone == .notDetermined
+        )
+    }
 }
 
 public struct SystemAppleSpeechPermissionChecker: AppleSpeechPermissionChecking {
@@ -61,11 +61,12 @@ public struct AppleSpeechPermissionController: Sendable {
 
     public func requestPermissions() async -> AppleSpeechPermissionState {
         let current = checker.currentState()
+        let plan = AppleSpeechPermissionRequestPlan(state: current)
 
-        if current.speechRecognition == .notDetermined {
+        if plan.requestsSpeechRecognition {
             _ = await requestSpeechRecognitionPermission()
         }
-        if current.microphone == .notDetermined {
+        if plan.requestsMicrophone {
             _ = await requestMicrophonePermission()
         }
 

@@ -19,8 +19,8 @@ struct ReadQuestView: View {
     @State private var attemptState = QuestAttemptStateMachine()
     @State private var isListening = false
     @State private var isPaused = false
-    @State private var isRequestingPermission = false
-    @State private var didRequestPermission = false
+    @State private var isCheckingPermission = false
+    @State private var didCheckPermission = false
     @State private var permissionWasDenied = false
     @State private var listeningTask: Task<Void, Never>?
     @State private var completionTask: Task<Void, Never>?
@@ -328,7 +328,7 @@ struct ReadQuestView: View {
         }
         .buttonStyle(.plain)
         .disabled(
-            isListening || isRequestingPermission || isPaused
+            isListening || isCheckingPermission || isPaused
                 || attemptState.completedSummary != nil
         )
         .accessibilityElement(children: .ignore)
@@ -337,7 +337,7 @@ struct ReadQuestView: View {
     }
 
     private var microphoneAccessibilityLabel: String {
-        if isRequestingPermission {
+        if isCheckingPermission {
             return "Checking microphone permission"
         }
         let action = isListening ? "Listening" : "Start listening"
@@ -351,7 +351,7 @@ struct ReadQuestView: View {
 
     private var microphoneStatusTitle: String? {
         KidReadMicrophonePresentation.visibleStatus(
-            isRequestingPermission: isRequestingPermission,
+            isCheckingPermission: isCheckingPermission,
             isListening: isListening
         )
     }
@@ -372,13 +372,11 @@ struct ReadQuestView: View {
                         .multilineTextAlignment(.center)
                         .foregroundStyle(theme.ink.opacity(0.76))
 
-                    if feedback.showsPermissionAction && didRequestPermission {
-                        Text(
-                            "A parent can allow Speech Recognition and Microphone in Settings."
-                        )
-                        .font(.system(.caption, design: .rounded, weight: .medium))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(theme.ink.opacity(0.66))
+                    if feedback.showsParentGuidance && didCheckPermission {
+                        Text(ChildSpeechPermissionCopy.parentSetupHint)
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(theme.ink.opacity(0.66))
                     }
 
                     if attemptState.canSkipAfterTechnicalIssues {
@@ -436,7 +434,7 @@ struct ReadQuestView: View {
     private func startListening() {
         guard
             !isListening,
-            !isRequestingPermission,
+            !isCheckingPermission,
             !isPaused,
             attemptState.completedSummary == nil
         else {
@@ -444,18 +442,18 @@ struct ReadQuestView: View {
         }
 
         let shouldResetResponseClock =
-            ReadPermissionTimingPolicy.shouldResetResponseClock(
-                hasRequestedPermission: didRequestPermission,
+            ReadPermissionCheckTimingPolicy.shouldResetResponseClock(
+                hasCheckedPermission: didCheckPermission,
                 wasPreviouslyDenied: permissionWasDenied
             )
         permissionWasDenied = false
-        isRequestingPermission = true
+        isCheckingPermission = true
         questTimer.suspend(for: .speechRecognition)
         listeningTask?.cancel()
         listeningTask = Task { @MainActor in
-            let isAuthorized = await permissionActions.requestAuthorization()
-            didRequestPermission = true
-            isRequestingPermission = false
+            let isAuthorized = await permissionActions.isAuthorized()
+            didCheckPermission = true
+            isCheckingPermission = false
             guard !Task.isCancelled, !isPaused else {
                 if !isPaused {
                     questTimer.resume(from: .speechRecognition)
@@ -466,14 +464,12 @@ struct ReadQuestView: View {
                 permissionWasDenied = true
                 questTimer.resume(from: .speechRecognition)
                 responseClock.reset(at: questTimer.elapsedSeconds)
-                announceForAccessibility(
-                    "A parent can allow Speech Recognition and Microphone in Settings."
-                )
+                announceForAccessibility(ChildSpeechPermissionCopy.blockedMessage)
                 return
             }
 
-            // Authorization precedes beginAttempt so the first system prompt is
-            // never recorded as a technical learning attempt.
+            // The check only reads current authorization. Parent setup owns all
+            // system prompts, so a child tap can never start one.
             if shouldResetResponseClock {
                 responseClock.reset(at: questTimer.elapsedSeconds)
             }
@@ -634,10 +630,10 @@ struct ReadQuestView: View {
         switch reason {
         case .permissionDenied:
             return ReadFeedback(
-                message: "A parent needs to turn on the microphone first.",
+                message: ChildSpeechPermissionCopy.blockedMessage,
                 symbol: "mic.slash.fill",
                 kind: .technical,
-                showsPermissionAction: true
+                showsParentGuidance: true
             )
         case .noUsableAudio:
             return ReadFeedback(
@@ -766,7 +762,7 @@ struct ReadQuestView: View {
         attemptState = QuestAttemptStateMachine(policy: .read)
         isListening = false
         isPaused = false
-        isRequestingPermission = false
+        isCheckingPermission = false
         pendingAttemptTiming = .unmeasured
         replayCountSinceLastAttempt = 0
         isPlayingPronunciationHint = false
@@ -780,7 +776,7 @@ struct ReadQuestView: View {
         hintPlaybackTask?.cancel()
         attemptState.cancelAttempt()
         isListening = false
-        isRequestingPermission = false
+        isCheckingPermission = false
         isPlayingPronunciationHint = false
         questTimer.suspend(for: .userPause)
         questTimer.resume(from: .speechRecognition)
@@ -798,5 +794,5 @@ private struct ReadFeedback {
     let message: String
     let symbol: String
     var kind: TadaFeedbackKind = .tryAgain
-    var showsPermissionAction = false
+    var showsParentGuidance = false
 }

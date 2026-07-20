@@ -60,6 +60,10 @@ final class GuardianParentNavigationTests: XCTestCase {
             .appAndFamily
         )
         XCTAssertEqual(
+            GuardianDestination.speechPermissions.parentSectionForBack,
+            .appAndFamily
+        )
+        XCTAssertEqual(
             GuardianDestination.familySync.parentSectionForBack,
             .appAndFamily
         )
@@ -216,6 +220,11 @@ final class GuardianParentNavigationTests: XCTestCase {
         XCTAssertEqual(model.transitionKey, "parent-section-wordsAndPractice")
 
         model.showSettings(.notifications)
+        model.returnToParentSection()
+        XCTAssertEqual(model.transitionKey, "parent-section-appAndFamily")
+
+        model.showSpeechPermissions()
+        XCTAssertEqual(model.transitionKey, "speech-permissions")
         model.returnToParentSection()
         XCTAssertEqual(model.transitionKey, "parent-section-appAndFamily")
 

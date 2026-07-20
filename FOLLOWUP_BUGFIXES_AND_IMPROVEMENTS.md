@@ -892,3 +892,45 @@ Store Connect record is created or changed by this batch.
 - The focused release-preflight suite passes 16/16. A real signed archive and
   exported app do not yet exist, so this batch makes no Production-readiness
   claim beyond the source/tooling gate.
+
+## v0.7.8 — 2026-07-20
+
+Target release: `v0.7.8`
+
+Branch: `codex/issue55-parent-speech-permission-v0.7.8`
+
+Build: `2026071908`
+
+Overall state: source implementation separates the child check-only Speech and
+Microphone boundary from the Parents-only permission request capability. Exact
+signed first-install, denied, authorized, restricted, and revoked acceptance on
+one iPhone and one iPad remains required before #55 or the App Store gate can
+close.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| APPSTORE-019-KIDS | P1 privacy | Permission requests | Child launch, Profile switch, Read entry, replay, relaunch, and debug demo/deep-link routes must never trigger Speech Recognition or Microphone system prompts. Parents needs a clear setup route with separate status for both permissions. | Source implemented; exact-device gate open | Deterministic negative route, status, authorized-compatibility, and fail-closed tests; then exact signed first-install, denied, authorized, and revoked verification on one iPhone and one iPad |
+
+### 2026-07-20 v0.7.8 notes
+
+- Reserved existing version `0.7.8` and build `2026071908`; no competing branch
+  or version was created.
+- Removed all requesting capability from `TadaWordsFeatures`. Child Read can
+  only check existing authorization and shows an age-appropriate Ask a Parent
+  state without counting the permission failure as a learning attempt.
+- Added Parents → App & Family → Speech & Microphone with independent Speech
+  Recognition and Microphone status, explicit setup, already-authorized
+  compatibility, and iOS Settings guidance for denied, restricted, or revoked
+  access.
+- Kept Voice setup as a second adult-owned permission entry point. The Apple
+  controller requests only each still-undetermined permission and never
+  re-requests a denied or restricted status.
+- Added `Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md`, enumerating Speech,
+  Microphone, Camera, Photos, Notifications, device-owner authentication, and
+  non-prompting APNs/CloudKit service ownership.
+- Source/unit/documentation gates do not claim simulator, signed-device, or
+  human acceptance. Those remain serialized release evidence under #55/#22.
+- The pre-commit repository gate passes 1,016 Swift tests, 40 Issue Agent tests,
+  and 16 release-preflight tests after integrating the v0.7.7 Production APNs
+  gate. Exact committed-HEAD verification is recorded separately after the
+  implementation commit.

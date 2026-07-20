@@ -27,6 +27,58 @@ final class AppleSpeechAdapterTests: XCTestCase {
         )
     }
 
+    func testPermissionRequestPlanHandlesSpeechAndMicrophoneSeparately() {
+        XCTAssertEqual(
+            AppleSpeechPermissionRequestPlan(
+                state: AppleSpeechPermissionState(
+                    speechRecognition: .notDetermined,
+                    microphone: .authorized
+                )
+            ),
+            AppleSpeechPermissionRequestPlan(
+                requestsSpeechRecognition: true,
+                requestsMicrophone: false
+            )
+        )
+        XCTAssertEqual(
+            AppleSpeechPermissionRequestPlan(
+                state: AppleSpeechPermissionState(
+                    speechRecognition: .denied,
+                    microphone: .notDetermined
+                )
+            ),
+            AppleSpeechPermissionRequestPlan(
+                requestsSpeechRecognition: false,
+                requestsMicrophone: true
+            )
+        )
+        XCTAssertEqual(
+            AppleSpeechPermissionRequestPlan(
+                state: AppleSpeechPermissionState(
+                    speechRecognition: .authorized,
+                    microphone: .authorized
+                )
+            ),
+            AppleSpeechPermissionRequestPlan(
+                requestsSpeechRecognition: false,
+                requestsMicrophone: false
+            )
+        )
+        XCTAssertEqual(
+            AppleSpeechPermissionRequestPlan(
+                state: AppleSpeechPermissionState(
+                    speechRecognition: .denied,
+                    microphone: .restricted
+                )
+            ),
+            AppleSpeechPermissionRequestPlan(
+                requestsSpeechRecognition: false,
+                requestsMicrophone: false
+            ),
+            "Denied or restricted access must never cause a repeated iOS prompt."
+        )
+    }
+
     func testSpeechConfigurationReplacesZeroMaximumDuration() {
         let configuration = AppleSpeechRecognitionConfiguration(
             maximumAllowedRecordingDuration: .zero,
