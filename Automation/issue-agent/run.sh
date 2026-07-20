@@ -31,6 +31,10 @@ if ! /usr/bin/lockf -s -t 0 9; then
     exit 0
 fi
 
+python3 "$SCRIPT_DIR/issue_agent.py" cleanup-leases \
+    --state-dir "$TADA_AGENT_STATE_DIR" \
+    --control-repo "$TADA_AGENT_CONTROL_REPO"
+
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 snapshot="$TADA_AGENT_STATE_DIR/snapshot-$stamp.json"
 last_message="$TADA_AGENT_LOG_DIR/run-$stamp-final.md"

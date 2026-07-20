@@ -122,11 +122,14 @@ exit "${FAKE_CODEX_EXIT:-0}"
         result = self.run_worker(FAKE_CLAIMABLE="1")
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual([call[0] for call in self.calls()], ["inspect", "reserve", "acknowledge"])
-        reserve = self.calls()[1]
+        self.assertEqual(
+            [call[0] for call in self.calls()],
+            ["cleanup-leases", "inspect", "reserve", "acknowledge"],
+        )
+        reserve = self.calls()[2]
         self.assertIn("--repo", reserve)
         self.assertIn("--control-repo", reserve)
-        acknowledge = self.calls()[2]
+        acknowledge = self.calls()[3]
         self.assertIn("--repo", acknowledge)
         self.assertIn("--control-repo", acknowledge)
         self.assertIn("--require-durable-outcome", acknowledge)
@@ -140,7 +143,7 @@ exit "${FAKE_CODEX_EXIT:-0}"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             [call[0] for call in self.calls()],
-            ["inspect", "reconcile", "inspect"],
+            ["cleanup-leases", "inspect", "reconcile", "inspect"],
         )
         self.assertFalse(self.codex_args.exists())
 
@@ -148,7 +151,10 @@ exit "${FAKE_CODEX_EXIT:-0}"
         result = self.run_worker(FAKE_EVENT="1", FAKE_ACK_EXIT="1")
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual([call[0] for call in self.calls()], ["inspect", "acknowledge"])
+        self.assertEqual(
+            [call[0] for call in self.calls()],
+            ["cleanup-leases", "inspect", "acknowledge"],
+        )
         self.assertIn("no durable GitHub outcome", (self.logs / "poll.log").read_text())
 
     def test_lockf_contention_skips_before_inspection(self):
@@ -210,7 +216,10 @@ sleep 2
 
         self.assertEqual(first.returncode, 0, first_stderr or first_stdout)
         self.assertEqual(second.returncode, 0, second.stderr)
-        self.assertEqual([call[0] for call in self.calls()], ["inspect", "acknowledge"])
+        self.assertEqual(
+            [call[0] for call in self.calls()],
+            ["cleanup-leases", "inspect", "acknowledge"],
+        )
         self.assertIn("another worker holds", (self.logs / "poll.log").read_text())
 
 

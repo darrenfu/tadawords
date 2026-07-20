@@ -15,6 +15,35 @@ assert SPEC and SPEC.loader
 issue_agent = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(issue_agent)
 
+TEST_MAIN_OID = "9" * 40
+TEST_PROTECTION_DIGEST = "8" * 64
+TEST_REPO = "owner/repo"
+
+
+def canonical_issue_refs(*numbers):
+    return [f"{TEST_REPO}#{number}" for number in numbers]
+
+
+def pull_request_events(
+    repo, pull_requests, acknowledged, *, closing_issue_refs=()
+):
+    candidates = [
+        {"baseRefOid": TEST_MAIN_OID, **pull_request}
+        for pull_request in pull_requests
+    ]
+    with mock.patch.object(
+        issue_agent,
+        "live_closing_issue_references",
+        return_value=list(closing_issue_refs),
+    ):
+        return issue_agent.pull_request_events(
+            repo,
+            candidates,
+            acknowledged,
+            TEST_MAIN_OID,
+            TEST_PROTECTION_DIGEST,
+        )
+
 
 def issue(number, title, labels, body=""):
     return {
@@ -346,19 +375,34 @@ class IssueAgentTests(unittest.TestCase):
         }
 
         with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
-            events = issue_agent.pull_request_events("owner/repo", [candidate], set())
+            events = pull_request_events(
+                TEST_REPO,
+                [candidate],
+                set(),
+                closing_issue_refs=canonical_issue_refs(85),
+            )
+
+        closing_refs = canonical_issue_refs(85)
+        closing_digest = issue_agent.closing_issue_references_digest(closing_refs)
 
         self.assertEqual(
             events,
             [
                 {
-                    "id": f"auto-merge:85:{head}:{issue_agent.pr_body_digest(body)}",
+                    "id": (
+                        f"auto-merge:85:{head}:{TEST_MAIN_OID}:"
+                        f"{issue_agent.pr_body_digest(body)}:{closing_digest}:"
+                        f"{TEST_PROTECTION_DIGEST}"
+                    ),
                     "type": "automatic_merge_candidate",
                     "pr": 85,
                     "head": head,
                     "base": "main",
+                    "base_oid": TEST_MAIN_OID,
                     "body_digest": issue_agent.pr_body_digest(body),
-                    "closing_issues": [85],
+                    "closing_issue_refs": closing_refs,
+                    "closing_refs_digest": closing_digest,
+                    "protection_digest": TEST_PROTECTION_DIGEST,
                     "url": "https://example.test/pull/86",
                 }
             ],
@@ -393,7 +437,7 @@ class IssueAgentTests(unittest.TestCase):
                 issue_agent, "run_json", side_effect=[[], []]
             ):
                 self.assertEqual(
-                    issue_agent.pull_request_events("owner/repo", [candidate], set()),
+                    pull_request_events("owner/repo", [candidate], set()),
                     [],
                 )
 
@@ -412,10 +456,14 @@ class IssueAgentTests(unittest.TestCase):
         }
 
         with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
-            events = issue_agent.pull_request_events("owner/repo", [candidate], set())
+            events = pull_request_events("owner/repo", [candidate], set())
 
         self.assertEqual(len(events), 1)
-        self.assertEqual(events[0]["closing_issues"], [])
+        self.assertEqual(events[0]["closing_issue_refs"], [])
+        self.assertEqual(
+            events[0]["closing_refs_digest"],
+            issue_agent.closing_issue_references_digest([]),
+        )
         self.assertEqual(events[0]["body_digest"], issue_agent.pr_body_digest(body))
 
     def test_new_head_invalidates_acknowledged_auto_merge_candidate(self):
@@ -435,16 +483,24 @@ class IssueAgentTests(unittest.TestCase):
         }
 
         with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
-            events = issue_agent.pull_request_events(
-                "owner/repo",
+            events = pull_request_events(
+                TEST_REPO,
                 [candidate],
                 {f"auto-merge:85:{old_head}:{issue_agent.pr_body_digest(body)}"},
+                closing_issue_refs=canonical_issue_refs(85),
             )
 
         self.assertEqual(len(events), 1)
+        closing_digest = issue_agent.closing_issue_references_digest(
+            canonical_issue_refs(85)
+        )
         self.assertEqual(
             events[0]["id"],
-            f"auto-merge:85:{new_head}:{issue_agent.pr_body_digest(body)}",
+            (
+                f"auto-merge:85:{new_head}:{TEST_MAIN_OID}:"
+                f"{issue_agent.pr_body_digest(body)}:{closing_digest}:"
+                f"{TEST_PROTECTION_DIGEST}"
+            ),
         )
         self.assertEqual(events[0]["head"], new_head)
 
@@ -471,14 +527,44 @@ class IssueAgentTests(unittest.TestCase):
         ]
 
         with mock.patch.object(issue_agent, "run_json", side_effect=[[], comments]):
-            events = issue_agent.pull_request_events("owner/repo", [candidate], set())
+            events = pull_request_events("owner/repo", [candidate], set())
 
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["type"], "merge_authorized")
         self.assertEqual(events[0]["head"], head)
         self.assertEqual(events[0]["base"], "main")
         self.assertEqual(events[0]["body_digest"], issue_agent.pr_body_digest(body))
-        self.assertEqual(events[0]["closing_issues"], [])
+        self.assertEqual(events[0]["closing_issue_refs"], [])
+
+    def test_candidate_uses_github_sidebar_closing_refs_not_body_regex(self):
+        head = "7" * 40
+        body = "Refs #85\n"
+        candidate = {
+            "number": 85,
+            "headRefName": "agent/batch-automation-v0.7.11",
+            "headRefOid": head,
+            "baseRefName": "main",
+            "labels": [{"name": "awaiting-human-review"}],
+            "reviewDecision": "APPROVED",
+            "isDraft": False,
+            "body": body,
+            "url": "https://example.test/pull/85",
+        }
+        sidebar_refs = canonical_issue_refs(85)
+
+        with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
+            events = pull_request_events(
+                TEST_REPO,
+                [candidate],
+                set(),
+                closing_issue_refs=sidebar_refs,
+            )
+
+        self.assertEqual(events[0]["closing_issue_refs"], sidebar_refs)
+        self.assertEqual(
+            events[0]["closing_refs_digest"],
+            issue_agent.closing_issue_references_digest(sidebar_refs),
+        )
 
     def test_body_edit_at_same_head_produces_a_new_auto_merge_event(self):
         head = "a" * 40
@@ -495,10 +581,10 @@ class IssueAgentTests(unittest.TestCase):
         }
 
         with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
-            first = issue_agent.pull_request_events("owner/repo", [candidate], set())
+            first = pull_request_events("owner/repo", [candidate], set())
         updated = {**candidate, "body": "Refs #85\n\nUpdated evidence.\n"}
         with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
-            second = issue_agent.pull_request_events(
+            second = pull_request_events(
                 "owner/repo", [updated], {first[0]["id"]}
             )
 
@@ -521,7 +607,7 @@ class IssueAgentTests(unittest.TestCase):
 
         with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
             self.assertEqual(
-                issue_agent.pull_request_events("owner/repo", [candidate], set()),
+                pull_request_events("owner/repo", [candidate], set()),
                 [],
             )
 
@@ -532,6 +618,8 @@ class IssueAgentTests(unittest.TestCase):
         fields = run_json.call_args.args[0][-1]
         self.assertIn("body", fields)
         self.assertIn("baseRefName", fields)
+        self.assertIn("baseRefOid", fields)
+        self.assertIn("statusCheckRollup", fields)
 
 
 if __name__ == "__main__":

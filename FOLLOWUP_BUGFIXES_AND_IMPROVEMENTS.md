@@ -1092,25 +1092,45 @@ of scope.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
-| V0711-DELIVERY-001 | P1 automation | Delivery | Replace the mandatory owner `/merge` comment with standing exact-HEAD authorization while retaining every evidence, blocker, high-risk, and post-merge gate. Keep `/merge` optional and provide a verified rollback to the prior comment policy. | Source complete; packaged-artifact verification pending | Issue Agent focused/full tests, repository check, exact-HEAD iPhone/iPad simulator build, and signed LocalQA iPhone/M4 iPad identity/install/launch evidence |
+| V0711-DELIVERY-001 | P1 automation | Delivery | Replace the mandatory owner `/merge` comment with standing exact-HEAD authorization while retaining every evidence, blocker, high-risk, and post-merge gate. Keep `/merge` optional and provide a verified rollback to the prior comment policy. | Guarded-merge hardening in progress; packaged-artifact verification pending | Per-PR base OID plus canonical protection/closing-reference digests, strict server-enforced exact-head status, repository-wide merge lease, fsync-backed pending-intent recovery, no resend after an uncertain request, Issue Agent focused/full tests, repository check, exact-HEAD iPhone/iPad simulator build, and signed LocalQA iPhone/M4 iPad identity/install/launch evidence |
 
 ### 2026-07-20 v0.7.11 notes
 
 - Reserved version `0.7.11` and build `2026072011` for the reclaimed Issue #85
   delivery-policy batch.
 - A ready, non-draft, unblocked agent PR now produces a deterministic automatic
-  merge candidate keyed by its full HEAD and PR-body SHA-256 digest without
-  requiring a GitHub comment; stacked/non-`main` PRs are excluded.
+  merge candidate keyed by its full HEAD, per-PR base OID, PR-body SHA-256,
+  paginated canonical closing-reference digest, and verified branch-protection
+  digest without requiring a GitHub comment;
+  stacked/non-`main` PRs are excluded.
 - New commits produce a new candidate and invalidate previous checks, artifacts,
   device evidence, reviews, and readiness.
-- A base change or any PR-body edit also invalidates the candidate at the same
-  commit; `Refs`-only PRs remain valid and linked-Issue closure is verified only
-  for exact closing references that are actually present.
+- A base change, PR-body edit, or canonical closing-reference change also
+  invalidates the candidate at the same commit. The worker paginates GitHub's
+  sidebar-aware GraphQL connection, rejects cross-repository closure, and keeps
+  `Refs`-only PRs valid.
 - The optional owner `/merge <sha>` command remains supported and is subject to
   the same current-HEAD preflight.
+- Merge mutation is centralized in a guarded core command. It requires strict
+  server-side up-to-date protection and the exact-head status, acquires a
+  repository-wide remote lease for the single-writer metadata boundary,
+  persists fsync-backed preparation and sent-or-unknown state, forbids
+  admin/update/rebase bypasses, and sends the full HEAD as GitHub's merge
+  compare-and-swap value. An uncertain request is reconciliation-only and is
+  never resent.
 - Durable acknowledgement after merge now requires the exact tested HEAD, a
-  merge commit reachable from fresh `origin/main`, an identical merged tree,
-  and closure of every exact linked Issue through that PR.
+  merge commit reachable from fresh `origin/main`, the intended base as its
+  first parent, an identical merged tree, and closure of every canonical linked
+  Issue through that PR. Pending intents survive process death without silent
+  capacity truncation and are replayed even when the PR is no longer returned
+  by the open-PR listing.
+- Canonical closing-reference reads reject GraphQL partial errors, malformed
+  nodes, and malformed pagination. Durable acknowledgement fsyncs an outstanding
+  lease-cleanup record before releasing the exact unique remote lease; the next
+  poll recovers unfinished cleanup before repository inspection after a crash.
+- GitHub has no compare-and-swap for PR metadata. Automated writers must honor
+  the merge-critical lease; owner edits during the short critical section are a
+  documented trusted-operator boundary rather than an atomic GitHub guarantee.
 - Destructive data work, irreversible provider/account mutations, credentials,
   authentication, ambiguous product choices, and mismatched target environments
   remain explicit human gates.

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import unittest
 from pathlib import Path
 
@@ -60,6 +61,50 @@ class DeliveryPolicyContractTests(unittest.TestCase):
         self.assertIn("restore the prior mandatory-comment merge gate", readme)
         self.assertIn("900-second", readme)
         self.assertIn("safe no-op poll", readme)
+
+    def test_guarded_merge_and_server_side_base_protection_are_mandatory(self):
+        agents = self.document("AGENTS.md")
+        readme = self.document("Automation/issue-agent/README.md")
+        prompt = self.document("Automation/issue-agent/agent-prompt.md")
+        protection = json.loads(
+            self.document("Automation/issue-agent/main-branch-protection.json")
+        )
+        documents = "\n".join((agents, readme, prompt))
+
+        self.assertIn("guarded-merge", documents)
+        self.assertIn("base oid", documents.casefold())
+        self.assertIn("fsync", documents.casefold())
+        self.assertIn("never uses an admin bypass", " ".join(readme.split()))
+        self.assertTrue(protection["required_status_checks"]["strict"])
+        self.assertEqual(protection["required_status_checks"]["contexts"], [])
+        self.assertTrue(protection["enforce_admins"])
+        self.assertEqual(
+            protection["required_status_checks"]["checks"][0]["context"],
+            "tadawords/exact-head-gates",
+        )
+        self.assertFalse(protection["allow_force_pushes"])
+        self.assertFalse(protection["allow_deletions"])
+
+    def test_metadata_trust_boundary_and_no_resend_rule_are_explicit(self):
+        documents = "\n".join(
+            self.document(path)
+            for path in (
+                "AGENTS.md",
+                ".github/pull_request_template.md",
+                "Automation/issue-agent/README.md",
+                "Automation/issue-agent/agent-prompt.md",
+            )
+        ).casefold()
+
+        for required in (
+            "closingissuesreferences",
+            "merge-critical",
+            "no cas for pr metadata",
+            "trusted-operator boundary",
+            "never resends",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, documents)
 
     def test_device_na_exception_excludes_every_packaged_metadata_change(self):
         agents = self.document("AGENTS.md")

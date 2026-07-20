@@ -44,11 +44,46 @@ skip fresh checks. Re-fetch GitHub and Git state before every mutation.
    the repository owner and names that HEAD. If any gate is unmet, report exact
    evidence, durably block/release the affected work, and do not merge.
 
-   Only after the preflight passes may you squash-merge. Then fetch
+   Only after the preflight passes may you request a merge, and the only
+   permitted mutation path is the repository core command below. Do not call
+   `gh pr merge`, the pull-request merge API, `git push main`, `--admin`, update
+   branch, or rebase directly:
+
+   ```sh
+   python3 "$TADA_AGENT_CORE" guarded-merge \
+     --snapshot "$TADA_AGENT_SNAPSHOT" \
+     --state-dir "$TADA_AGENT_STATE_DIR" \
+     --repo "$TADA_AGENT_REPO" \
+     --control-repo "$TADA_AGENT_CONTROL_REPO" \
+     --event-id '<exact snapshot event id>' \
+     --confirm-gates-head '<full tested HEAD>'
+   ```
+
+   The command must fail closed unless the event pins the per-PR base OID and
+   the server enforces strict up-to-date status checks, admin enforcement,
+   linear history, pull-request entry, resolved conversations, and the
+   `tadawords/exact-head-gates` context. It paginates GitHub's canonical closing
+   references, rejects cross-repository closures, acquires the repository-wide
+   `refs/heads/agent-leases/merge-critical` ref, durably records preparation,
+   and records sent-or-unknown immediately before GitHub's exact-head merge
+   compare-and-swap. A pending intent from a prior run has priority. Never
+   resend a sent-or-unknown request, even if an eventually consistent read still
+   says OPEN.
+
+   All automated writers must stop PR-title/body, label, review, check,
+   closing-link, and merge mutations while another event owns that remote ref.
+   GitHub does not offer a CAS for PR metadata; repository-owner edits during
+   this short critical section are an explicit trusted-operator boundary.
+   Acknowledgement must first fsync the verified event plus pending lease
+   cleanup, then delete the exact unique lease by CAS, then fsync cleanup
+   completion. The runner recovers unfinished cleanup before inspection.
+
+   Then fetch
    `origin/main` and verify the PR reports the same tested HEAD, the merge commit
-   is reachable from fresh `origin/main`, the merged tree equals the tested HEAD
-   tree, the merged PR body retains the exact recorded digest and closing set,
-   and every exact `Closes #N` Issue present closed through that PR. A
+   is reachable from fresh `origin/main`, its first parent equals the recorded
+   base OID, the merged tree equals the tested HEAD tree, the merged PR body
+   retains the exact recorded digest and paginated canonical closing set,
+   and every recorded Issue closed through that PR. A
    closed-but-unmerged PR is
    not a durable merge outcome. Do not acknowledge the event or claim completion
    until all post-merge checks pass.
