@@ -179,6 +179,109 @@ final class FirstRunOnboardingTests: XCTestCase {
         XCTAssertEqual(migratedState?.startedAt, legacyState.startedAt)
     }
 
+    func testLiveEmptyFamilyNormalizesPendingConsentRefreshToFullSetup()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let repository = LocalFirstRunOnboardingRepository(
+            snapshotURL: directory.appendingPathComponent("first-run.json")
+        )
+        try await repository.markPending(
+            startedAt: testDate.addingTimeInterval(-30),
+            purpose: .consentRefresh
+        )
+
+        let resolvedPurpose =
+            FirstRunOnboardingProfileSelection.resolvedPurpose(
+                .consentRefresh,
+                in: []
+            )
+        try await repository.normalizePendingPurpose(
+            resolvedPurpose
+        )
+
+        let state = try await repository.state()
+        XCTAssertEqual(resolvedPurpose, .fullSetup)
+        XCTAssertEqual(state?.purpose, .fullSetup)
+        XCTAssertEqual(
+            state?.startedAt,
+            testDate.addingTimeInterval(-30),
+            "Normalizing a live receipt must not restart the consent clock"
+        )
+    }
+
+    func testRestartAfterRemoteFinalProfileDeletionCreatesFreshProfile()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let paths = ApplicationDataPaths(applicationSupportDirectory: directory)
+        let deletedProfile = KidProfile(
+            displayName: "Mia",
+            avatar: .cartoonAnimal(assetID: "hare"),
+            selectedWorld: .moonpetalKingdom,
+            createdAt: testDate.addingTimeInterval(-100)
+        )
+        try await LocalJSONKidProfileRepository(
+            snapshotURL: paths.profilesSnapshot
+        ).save(deletedProfile)
+        let onboarding = LocalFirstRunOnboardingRepository(
+            snapshotURL: paths.firstRunOnboardingSnapshot
+        )
+        try await onboarding.markPending(
+            startedAt: testDate.addingTimeInterval(-50),
+            purpose: .consentRefresh
+        )
+        let tombstones = LocalJSONProfileDeletionTombstoneRepository(
+            snapshotURL: paths.profileDeletionTombstonesSnapshot
+        )
+        try await tombstones.save(
+            ProfileDeletionTombstone(
+                profileID: deletedProfile.id,
+                deletedAt: testDate
+            )
+        )
+
+        let environment = try await bootstrap(in: directory)
+        let pendingState = try await environment.firstRunOnboardingRepository
+            .state()
+        XCTAssertTrue(environment.profiles.isEmpty)
+        XCTAssertTrue(environment.requiresFirstRunOnboarding)
+        XCTAssertEqual(environment.firstRunOnboardingPurpose, .fullSetup)
+        XCTAssertEqual(pendingState?.purpose, .fullSetup)
+
+        let coordinator = FirstRunOnboardingCoordinator(
+            profileRepository: environment.profileRepository,
+            childSessionRepository: environment.childSessionRepository,
+            onboardingRepository: environment.firstRunOnboardingRepository,
+            guardianStore: environment.guardianStore,
+            clock: OnboardingClock(now: testDate.addingTimeInterval(10))
+        )
+        let completion = try await coordinator.complete(
+            profileID: nil,
+            submission: FirstRunOnboardingSubmission(
+                action: .createProfile(
+                    GuardianProfileDraft(
+                        displayName: "Coco",
+                        avatarAssetID: "owl",
+                        selectedWorld: .buildItBay,
+                        schoolGrade: .preK,
+                        ageYears: 4
+                    )
+                )
+            )
+        )
+        let created = try XCTUnwrap(completion.profiles.first)
+        XCTAssertNotEqual(created.id, deletedProfile.id)
+        XCTAssertEqual(completion.selectedProfileID, created.id)
+
+        let restarted = try await bootstrap(in: directory)
+        XCTAssertFalse(restarted.requiresFirstRunOnboarding)
+        XCTAssertEqual(restarted.profiles.map(\.id), [created.id])
+        XCTAssertEqual(restarted.lastSelectedProfileID, created.id)
+    }
+
     func testConsentRefreshPreservesLastSelectedProfileAcrossMultipleProfiles()
         async throws
     {

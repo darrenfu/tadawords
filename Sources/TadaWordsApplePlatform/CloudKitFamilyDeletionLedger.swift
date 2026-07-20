@@ -60,6 +60,7 @@ enum CloudKitFamilyDeletionLedgerCodec {
             ledger[Schema.envelopeSchemaVersion] is NSNumber
         else { return nil }
         let profileID = ProfileID(rawValue: profileUUID)
+        guard ledger.recordID == recordID(for: profileID) else { return nil }
         let deletedAt = ledger.modificationDate ?? .distantPast
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .secondsSince1970
@@ -114,23 +115,48 @@ enum CloudKitFamilyDeletionLedgerCodec {
 enum CloudKitFamilyProfileRemovalMode: Equatable, Sendable {
     case ownerGlobalDeletion
     case participantLeave
-    case alreadyTerminal
+    case alreadyTerminal(ProfileErasureRoute)
+    case accountBlocked(ProfileErasureRoute)
+}
+
+enum CloudKitFamilyProfileRemovalBindingPlan: Equatable, Sendable {
+    case prepareOwnerBinding
+    case usePersisted(ProfileCloudBinding)
 }
 
 /// Pure classification used by the live send path and deletion acceptance
 /// tests. Most importantly, `.sharedParticipant` can never select the owner's
 /// private control ledger.
 enum CloudKitFamilyProfileRemovalPlanner {
+    static func bindingPlan(
+        for binding: ProfileCloudBinding,
+        hasPersistedBinding: Bool
+    ) -> CloudKitFamilyProfileRemovalBindingPlan {
+        if binding.state == .unbound, !hasPersistedBinding {
+            return .prepareOwnerBinding
+        }
+        return .usePersisted(binding)
+    }
+
     static func mode(
-        for binding: ProfileCloudBinding
+        for binding: ProfileCloudBinding,
+        isOriginAccountAuthorized: Bool
     ) -> CloudKitFamilyProfileRemovalMode {
+        let route = binding.erasureRoute
+        guard isOriginAccountAuthorized else {
+            return .accountBlocked(route)
+        }
         switch binding.state {
-        case .privateOwner, .unbound, .ownerDeleted:
-            .ownerGlobalDeletion
+        case .privateOwner:
+            return .ownerGlobalDeletion
         case .sharedParticipant:
-            .participantLeave
+            return .participantLeave
+        case .ownerDeleted:
+            return .alreadyTerminal(.owner)
         case .revoked, .participantLeft:
-            .alreadyTerminal
+            return .alreadyTerminal(.participant)
+        case .unbound:
+            return .accountBlocked(.unresolved)
         }
     }
 }

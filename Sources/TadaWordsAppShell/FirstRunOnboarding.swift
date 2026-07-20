@@ -93,6 +93,24 @@ actor LocalFirstRunOnboardingRepository {
         )
     }
 
+    /// Repairs a still-pending flow after Family Sync changes the family shape
+    /// underneath it. In particular, consent refresh cannot continue once the
+    /// final Profile has been deleted on another device.
+    func normalizePendingPurpose(
+        _ purpose: FirstRunOnboardingPurpose
+    ) throws {
+        guard let current = try state(), current.status == .pending else {
+            return
+        }
+        guard current.purpose != purpose else { return }
+        try persist(
+            .pending(
+                startedAt: current.startedAt,
+                purpose: purpose
+            )
+        )
+    }
+
     func markCompleted(
         profileID: ProfileID,
         completedAt: Date,
@@ -138,6 +156,13 @@ struct FirstRunOnboardingCompletion: Sendable {
 }
 
 enum FirstRunOnboardingProfileSelection {
+    static func resolvedPurpose(
+        _ requestedPurpose: FirstRunOnboardingPurpose,
+        in profiles: [KidProfile]
+    ) -> FirstRunOnboardingPurpose {
+        profiles.isEmpty ? .fullSetup : requestedPurpose
+    }
+
     static func profile(
         in profiles: [KidProfile],
         purpose: FirstRunOnboardingPurpose,
@@ -206,7 +231,7 @@ actor FirstRunOnboardingCoordinator {
     }
 
     func complete(
-        profileID: ProfileID,
+        profileID: ProfileID?,
         submission: FirstRunOnboardingSubmission
     ) async throws -> FirstRunOnboardingCompletion {
         guard
@@ -215,11 +240,13 @@ actor FirstRunOnboardingCoordinator {
         else {
             throw FirstRunOnboardingError.consentRequired
         }
-        guard let existing = try await profileRepository.profile(id: profileID) else {
-            throw FirstRunOnboardingError.profileNotFound
-        }
         switch submission.action {
         case .confirmExistingProfiles:
+            guard let profileID,
+                let existing = try await profileRepository.profile(id: profileID)
+            else {
+                throw FirstRunOnboardingError.profileNotFound
+            }
             let profiles = try await profileRepository.profiles()
             let lastSelectedProfileID =
                 try await childSessionRepository
@@ -240,6 +267,12 @@ actor FirstRunOnboardingCoordinator {
                 selectedProfileID: selectedProfileID
             )
         case .createProfile(let draft):
+            let existing: KidProfile?
+            if let profileID {
+                existing = try await profileRepository.profile(id: profileID)
+            } else {
+                existing = nil
+            }
             return try await createProfile(
                 from: draft,
                 replacing: existing,
@@ -250,7 +283,7 @@ actor FirstRunOnboardingCoordinator {
 
     private func createProfile(
         from draft: GuardianProfileDraft,
-        replacing existing: KidProfile,
+        replacing existing: KidProfile?,
         consentVersion: Int
     ) async throws -> FirstRunOnboardingCompletion {
         let displayName = draft.displayName.trimmingCharacters(
@@ -277,26 +310,41 @@ actor FirstRunOnboardingCoordinator {
             throw FirstRunOnboardingError.unsupportedAvatar
         }
 
-        let profile = KidProfile(
-            id: existing.id,
-            displayName: displayName,
-            avatar: draft.avatar,
-            selectedWorld: draft.selectedWorld,
-            starterWorld: draft.selectedWorld,
-            guardianUnlockedWorlds: [draft.selectedWorld],
-            schoolGrade: draft.schoolGrade,
-            ageYears: ageYears,
-            voiceprintStatus: existing.voiceprintStatus,
-            createdAt: existing.createdAt,
-            updatedAt: clock.now
-        )
+        let profile: KidProfile
+        if let existing {
+            profile = KidProfile(
+                id: existing.id,
+                displayName: displayName,
+                avatar: draft.avatar,
+                selectedWorld: draft.selectedWorld,
+                starterWorld: draft.selectedWorld,
+                guardianUnlockedWorlds: [draft.selectedWorld],
+                schoolGrade: draft.schoolGrade,
+                ageYears: ageYears,
+                voiceprintStatus: existing.voiceprintStatus,
+                createdAt: existing.createdAt,
+                updatedAt: clock.now
+            )
+            try await profileRepository.save(profile)
+            _ = try await guardianStore.selectProfile(id: profile.id)
+        } else {
+            let created = try await guardianStore.createProfile(
+                from: GuardianProfileDraft(
+                    displayName: displayName,
+                    avatar: draft.avatar,
+                    selectedWorld: draft.selectedWorld,
+                    schoolGrade: draft.schoolGrade,
+                    ageYears: ageYears,
+                    guardianUnlockedWorlds: [draft.selectedWorld]
+                )
+            )
+            profile = created.profile
+        }
 
         // The completion marker is committed last. If the app is interrupted,
         // the flow reopens with the safely persisted profile instead of
         // exposing a half-configured child home.
-        try await profileRepository.save(profile)
         try await childSessionRepository.saveLastSelectedProfileID(profile.id)
-        _ = try await guardianStore.selectProfile(id: profile.id)
         try await onboardingRepository.markCompleted(
             profileID: profile.id,
             completedAt: clock.now,

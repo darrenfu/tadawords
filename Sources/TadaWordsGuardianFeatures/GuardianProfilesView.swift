@@ -438,7 +438,7 @@ struct GuardianProfileEditorView: View {
             }
             .buttonStyle(.bordered)
             Text(
-                "Deletes this child’s related local data together. At least one profile must remain."
+                "Deletes this child’s profile, words, progress, and device voice setup together."
             )
             .font(.system(.caption, design: .rounded, weight: .medium))
             .foregroundStyle(GuardianSemanticTokens.secondaryForeground)

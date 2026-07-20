@@ -30,6 +30,18 @@ reference and metadata; the JPEG travels in a CloudKit `CKAsset`. Durable
 upload-source files and fully hydrated inbox bytes are device-local recovery
 artifacts and are removed after acknowledgement.
 
+Account-ambiguous CloudKit deletion callbacks are first stored as device-local,
+no-payload markers. A marker contains only Profile ID, immutable zone/root
+routing, origin-account provenance, evidence kind, and receipt time. It is
+never general replay data and remains dormant under a different Apple account;
+the origin account must directly revalidate CloudKit before it can be promoted,
+discarded, or terminally committed.
+
+If an unknown owner-ledger callback requires a deterministic recovery binding,
+that binding and its no-payload marker are one atomic device-local write. A
+provisional-binding bit is retained across restart/account switches and is used
+only to roll back both records after exact origin-account ledger absence proof.
+
 A completed terminal removal also purges the target Profile's transport inbox,
 quarantine envelope, protected-record lock, CloudKit system fields, and staged
 photo sources. Pending/outgoing engine changes for that Profile zone are
@@ -62,6 +74,10 @@ snapshots for every arrival permutation of the same canonical facts.
   private/shared `CKSyncEngine` state. Terminal removal purges the target
   Profile/zone metadata while retaining unrelated zones and the shared
   database-level change token.
+- Privacy-minimal Profile-erasure lifecycle state: opaque Profile ID, owner or
+  participant route, requested/attempt/retry/success timestamps, bounded retry
+  counts, and a privacy-safe error category. It contains no nickname, word,
+  photo, learning payload, Apple Account identifier, or share URL.
 - Unacknowledged CKAsset upload source files and exact remote-apply payloads;
   successful commits retain only privacy-minimal receipts.
 - OS notification permission, scheduled request identifiers, push token, and
@@ -85,6 +101,7 @@ Source acceptance is tracked by
 [#45](https://github.com/darrenfu/tadawords/issues/45),
 [#42](https://github.com/darrenfu/tadawords/issues/42),
 [#19](https://github.com/darrenfu/tadawords/issues/19),
+[#57](https://github.com/darrenfu/tadawords/issues/57),
 [#43](https://github.com/darrenfu/tadawords/issues/43), and
 [#41](https://github.com/darrenfu/tadawords/issues/41). Production schema
 deployment, destructive remote-erasure proof, and same-account/different-account

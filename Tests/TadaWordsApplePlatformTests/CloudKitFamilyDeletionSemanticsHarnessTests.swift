@@ -14,6 +14,7 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
         let store = CloudKitFamilyMetadataStore(
             snapshotURL: fixture.metadataURL
         )
+        try store.confirm(accountRecordName: "account-a")
         let targetBinding = ProfileCloudBinding(
             profileID: fixture.profileID,
             state: .privateOwner,
@@ -30,6 +31,10 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
         )
         try store.save(binding: targetBinding)
         try store.save(binding: unrelatedBinding)
+        let persistedTargetBinding = store.binding(for: fixture.profileID)
+        let persistedUnrelatedBinding = store.binding(
+            for: fixture.unrelatedProfileID
+        )
 
         let targetRecordID = CKRecord.ID(
             recordName: "target-child-record",
@@ -96,7 +101,7 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
 
         try store.markOwnerDeleted(
             profileID: fixture.profileID,
-            previous: targetBinding
+            previous: persistedTargetBinding
         )
 
         // Recreate the store to prove the terminal state and byte purge were
@@ -109,7 +114,7 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
         XCTAssertEqual(terminal.zoneID, fixture.ownerZoneID)
         XCTAssertEqual(
             restarted.binding(for: fixture.unrelatedProfileID),
-            unrelatedBinding
+            persistedUnrelatedBinding
         )
 
         XCTAssertNil(
@@ -174,6 +179,7 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
         let store = CloudKitFamilyMetadataStore(
             snapshotURL: fixture.metadataURL
         )
+        try store.confirm(accountRecordName: "account-a")
         let binding = ProfileCloudBinding(
             profileID: fixture.profileID,
             state: .sharedParticipant,
@@ -182,6 +188,7 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
             rootRecordName: "shared-profile-root"
         )
         try store.save(binding: binding)
+        let persistedBinding = store.binding(for: fixture.profileID)
         let recordID = CKRecord.ID(
             recordName: "participant-child-record",
             zoneID: fixture.sharedZoneID
@@ -199,7 +206,7 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
 
         try store.markParticipantLeft(
             profileID: fixture.profileID,
-            previous: binding
+            previous: persistedBinding
         )
 
         let restarted = CloudKitFamilyMetadataStore(
@@ -304,6 +311,44 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
         XCTAssertNoThrow(try decoded.validateCompatibility())
     }
 
+    func testDeletionLedgerRejectsProfileIDThatDoesNotMatchItsRecordID()
+        throws
+    {
+        let profileID = ProfileID()
+        let deletedAt = Date(timeIntervalSince1970: 2_173_000_550)
+        let tombstone = FamilySyncRecord(
+            recordName: "profile-\(profileID)",
+            profileID: profileID,
+            kind: .profileDeletion,
+            payload: try JSONEncoder().encode(
+                ProfileDeletionTombstone(
+                    profileID: profileID,
+                    deletedAt: deletedAt
+                )
+            ),
+            updatedAt: deletedAt,
+            deviceID: "owner-device",
+            isDeleted: true
+        )
+        let ledger = try CloudKitFamilyDeletionLedgerCodec.cloudRecord(
+            for: tombstone
+        )
+        let mismatchedProfileID = ProfileID()
+        ledger[CloudKitFamilyDeletionLedgerCodec.Schema.profileID] =
+            mismatchedProfileID.rawValue.uuidString as NSString
+
+        XCTAssertNotEqual(
+            ledger.recordID,
+            CloudKitFamilyDeletionLedgerCodec.recordID(
+                for: mismatchedProfileID
+            )
+        )
+        XCTAssertNil(
+            CloudKitFamilyDeletionLedgerCodec.familyRecord(from: ledger),
+            "A deletion ledger must not tombstone a Profile other than the one named by its deterministic record ID."
+        )
+    }
+
     func testLedgerWithUnexpectedChildFieldIsRejectedUntilSanitized() throws {
         let profileID = ProfileID()
         let payload = try JSONEncoder().encode(
@@ -360,20 +405,75 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            CloudKitFamilyProfileRemovalPlanner.mode(for: shared),
+            CloudKitFamilyProfileRemovalPlanner.mode(
+                for: shared,
+                isOriginAccountAuthorized: true
+            ),
             .participantLeave
         )
         XCTAssertEqual(
-            CloudKitFamilyProfileRemovalPlanner.mode(for: participantLeft),
-            .alreadyTerminal
+            CloudKitFamilyProfileRemovalPlanner.mode(
+                for: participantLeft,
+                isOriginAccountAuthorized: true
+            ),
+            .alreadyTerminal(.participant)
         )
         XCTAssertNotEqual(
-            CloudKitFamilyProfileRemovalPlanner.mode(for: shared),
+            CloudKitFamilyProfileRemovalPlanner.mode(
+                for: shared,
+                isOriginAccountAuthorized: true
+            ),
             .ownerGlobalDeletion,
             "A participant device has no authority to publish the owner's global deletion ledger"
         )
     }
 
+    func testUnboundOrWrongAccountRemovalFailsClosedWithoutOwnerAuthority() {
+        let profileID = ProfileID()
+        let unbound = ProfileCloudBinding.unbound(profileID)
+        let owner = ProfileCloudBinding(
+            profileID: profileID,
+            state: .privateOwner,
+            zoneName: "OwnerZone",
+            ownerName: CKCurrentUserDefaultName,
+            rootRecordName: "root",
+            originAccountRecordName: "account-a",
+            originErasureRoute: .owner
+        )
+
+        XCTAssertEqual(
+            CloudKitFamilyProfileRemovalPlanner.mode(
+                for: unbound,
+                isOriginAccountAuthorized: true
+            ),
+            .accountBlocked(.unresolved)
+        )
+        XCTAssertEqual(
+            CloudKitFamilyProfileRemovalPlanner.mode(
+                for: owner,
+                isOriginAccountAuthorized: false
+            ),
+            .accountBlocked(.owner)
+        )
+        XCTAssertEqual(
+            CloudKitFamilyProfileRemovalPlanner.bindingPlan(
+                for: unbound,
+                hasPersistedBinding: false
+            ),
+            .prepareOwnerBinding,
+            "A never-synchronized local Profile must first establish a durable owner route."
+        )
+        XCTAssertEqual(
+            CloudKitFamilyProfileRemovalPlanner.bindingPlan(
+                for: unbound,
+                hasPersistedBinding: true
+            ),
+            .usePersisted(unbound),
+            "A persisted ambiguous route must never be converted into a new-account owner."
+        )
+    }
+
+    @MainActor
     func testSharedZoneRevocationDurablyEmitsLocalProfilePurgeAcrossRestart()
         async throws
     {
@@ -382,6 +482,7 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
         let firstStore = CloudKitFamilyMetadataStore(
             snapshotURL: fixture.metadataURL
         )
+        try firstStore.confirm(accountRecordName: "account-a")
         try firstStore.save(
             binding: ProfileCloudBinding(
                 profileID: fixture.profileID,
@@ -403,38 +504,43 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
         )
         let firstResult = await firstBuffer.drain()
 
-        let purge = try XCTUnwrap(
-            firstResult.records.first { record in
-                record.profileID == fixture.profileID
-                    && record.kind == .profileDeletion
-                    && record.isDeleted
-            },
-            "A revoked shared zone needs a durable local-only purge signal"
-        )
-        XCTAssertEqual(firstResult.receiptIDs.count, 1)
+        XCTAssertTrue(firstResult.records.isEmpty)
+        XCTAssertTrue(firstResult.receiptIDs.isEmpty)
+        XCTAssertTrue(firstResult.requiresFetchPass)
         XCTAssertEqual(firstStore.inboxEntries().count, 1)
-        XCTAssertEqual(firstStore.binding(for: fixture.profileID).state, .revoked)
+        XCTAssertEqual(
+            firstStore.binding(for: fixture.profileID).state,
+            .sharedParticipant
+        )
 
         let restartedStore = CloudKitFamilyMetadataStore(
             snapshotURL: fixture.metadataURL
+        )
+        try await completeProvenZoneRecovery(restartedStore)
+        let purge = try XCTUnwrap(
+            restartedStore.replayableInboxEntries().first?.record
         )
         let restartedBuffer = CloudKitFamilySyncEventBuffer(
             metadataStore: restartedStore
         )
         await restartedBuffer.replay(
-            restartedStore.inboxEntries(),
+            restartedStore.replayableInboxEntries(),
             generation: 1
         )
         let replayed = await restartedBuffer.drain()
 
         XCTAssertEqual(replayed.records, [purge])
-        XCTAssertEqual(replayed.receiptIDs, firstResult.receiptIDs)
+        XCTAssertEqual(
+            replayed.receiptIDs,
+            Set(restartedStore.replayableInboxEntries().map(\.receiptID))
+        )
         XCTAssertEqual(
             restartedStore.binding(for: fixture.profileID).state,
             .revoked
         )
     }
 
+    @MainActor
     func testSharedZoneRevocationPurgesChildBytesButPreservesMinimalDeletionBarrier()
         async throws
     {
@@ -443,6 +549,7 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
         let store = CloudKitFamilyMetadataStore(
             snapshotURL: fixture.metadataURL
         )
+        try store.confirm(accountRecordName: "account-a")
         try store.save(
             binding: ProfileCloudBinding(
                 profileID: fixture.profileID,
@@ -487,17 +594,18 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
             now: fixture.now
         )
         let result = await buffer.drain()
+        XCTAssertTrue(result.records.isEmpty)
+        XCTAssertTrue(result.receiptIDs.isEmpty)
+        try await completeProvenZoneRecovery(store)
 
         let restarted = CloudKitFamilyMetadataStore(
             snapshotURL: fixture.metadataURL
         )
-        let durable = try XCTUnwrap(restarted.inboxEntries().only)
+        let durable = try XCTUnwrap(restarted.replayableInboxEntries().only)
         let removal = try XCTUnwrap(durable.record)
         XCTAssertEqual(removal.kind, .profileDeletion)
         XCTAssertTrue(removal.isDeleted)
         XCTAssertEqual(removal.profileID, fixture.profileID)
-        XCTAssertEqual(result.records, [removal])
-        XCTAssertEqual(result.receiptIDs, [durable.receiptID])
         XCTAssertEqual(
             try JSONDecoder().decode(
                 ProfileDeletionTombstone.self,
@@ -620,6 +728,7 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testRepeatedSharedZoneRevocationAcrossRestartKeepsOneStablePurgeReceipt()
         async throws
     {
@@ -628,6 +737,7 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
         let firstStore = CloudKitFamilyMetadataStore(
             snapshotURL: fixture.metadataURL
         )
+        try firstStore.confirm(accountRecordName: "account-a")
         try firstStore.save(
             binding: ProfileCloudBinding(
                 profileID: fixture.profileID,
@@ -646,9 +756,14 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
             generation: 1,
             now: fixture.now
         )
-        let first = await firstBuffer.drain()
-        let firstReceipt = try XCTUnwrap(first.receiptIDs.first)
-        let firstRecord = try XCTUnwrap(first.records.first)
+        let staged = await firstBuffer.drain()
+        XCTAssertTrue(staged.records.isEmpty)
+        try await completeProvenZoneRecovery(firstStore)
+        let firstEntry = try XCTUnwrap(
+            firstStore.replayableInboxEntries().first
+        )
+        let firstReceipt = firstEntry.receiptID
+        let firstRecord = try XCTUnwrap(firstEntry.record)
 
         let restartedStore = CloudKitFamilyMetadataStore(
             snapshotURL: fixture.metadataURL
@@ -662,6 +777,10 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
             generation: 1,
             now: fixture.now.addingTimeInterval(300)
         )
+        await restartedBuffer.replay(
+            restartedStore.replayableInboxEntries(),
+            generation: 1
+        )
         let repeated = await restartedBuffer.drain()
 
         XCTAssertEqual(
@@ -674,6 +793,28 @@ final class CloudKitFamilyDeletionSemanticsHarnessTests: XCTestCase {
         XCTAssertEqual(
             restartedStore.binding(for: fixture.profileID).state,
             .revoked
+        )
+    }
+
+    @MainActor
+    private func completeProvenZoneRecovery(
+        _ store: CloudKitFamilyMetadataStore
+    ) async throws {
+        let recovery = try XCTUnwrap(
+            store.pendingRemoteZoneRemovalRecoveries().only
+        )
+        _ = try await CloudKitProvenZoneDeletionRecoveryExecutor().recover(
+            verifyOriginAccount: {},
+            purgeLocalSources: {},
+            commit: {
+                try store.commitRemoteProfileRemoval(
+                    record: recovery.record,
+                    recordID: recovery.recordID,
+                    scope: recovery.scope,
+                    receivedAt: recovery.receivedAt,
+                    terminalEvidence: .zoneDeletion
+                )
+            }
         )
     }
 }

@@ -253,6 +253,55 @@ final class LocalJSONLearningRecordRepositoryTests: XCTestCase {
         XCTAssertEqual(restoredCorrections, [appendedCorrection])
     }
 
+    func testGuardedRepositoryRejectsStaleCorrectionAfterProfileDeletion()
+        async throws
+    {
+        let snapshotURL = try makeSnapshotURL()
+        let mutationGate = ProfileScopedMutationGate()
+        let repository = LocalJSONLearningRecordRepository(
+            snapshotURL: snapshotURL,
+            mutationGate: mutationGate
+        )
+        let original = attempt(number: 1, outcome: .incorrect)
+        let staleCorrection = correction(
+            number: 1,
+            attemptID: original.id,
+            outcome: .correct
+        )
+        try await repository.append(original)
+
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: original.profileID,
+            allowingTerminal: true,
+            isolation: mutationGate
+        ) {
+            await mutationGate.seal(original.profileID)
+            try await repository.deleteLearningRecords(for: original.profileID)
+        }
+        let bytesAfterDeletion = try Data(contentsOf: snapshotURL)
+
+        do {
+            try await repository.append(staleCorrection)
+            XCTFail("A stale correction must not recreate deleted learning data.")
+        } catch {
+            XCTAssertEqual(
+                error as? LearningRecordRepositoryError,
+                .missingCorrectionRoute(original.id)
+            )
+        }
+
+        XCTAssertEqual(try Data(contentsOf: snapshotURL), bytesAfterDeletion)
+        let restarted = LocalJSONLearningRecordRepository(
+            snapshotURL: snapshotURL,
+            mutationGate: mutationGate
+        )
+        let corrections = try await restarted.corrections(for: original.id)
+        let route = try await restarted.correctionRoute(for: original.id)
+        XCTAssertEqual(corrections, [])
+        XCTAssertNil(route)
+    }
+
     func testAppendAtomicallyRebuildsProgressWithoutAnExplicitSave()
         async throws
     {

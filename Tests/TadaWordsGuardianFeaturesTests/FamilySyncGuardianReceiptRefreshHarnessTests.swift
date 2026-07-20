@@ -105,11 +105,25 @@ final class FamilySyncGuardianReceiptRefreshHarnessTests: XCTestCase {
         await fixture.model.refreshAfterExternalSyncAndWait()
 
         XCTAssertNil(fixture.model.snapshot)
-        XCTAssertNil(fixture.model.familySnapshot)
+        XCTAssertEqual(fixture.model.familySnapshot?.profiles, [])
+        XCTAssertNil(fixture.model.familySnapshot?.selectedProfileID)
         guard case .profileEditor(let profile) = fixture.model.destination else {
             return XCTFail("Deleting the final shared Kid needs a recoverable create page")
         }
         XCTAssertNil(profile)
+
+        XCTAssertTrue(
+            fixture.model.returnFromProfileEditor(),
+            "Back must tell GuardianRootView to invoke onExit for an empty family"
+        )
+        XCTAssertEqual(fixture.model.transitionKey, "parent-gate")
+
+        fixture.model.showProfiles()
+        XCTAssertTrue(
+            fixture.model.returnFromProfiles(),
+            "The empty Kids page must also exit instead of opening a blank dashboard"
+        )
+        XCTAssertEqual(fixture.model.transitionKey, "parent-gate")
     }
 }
 

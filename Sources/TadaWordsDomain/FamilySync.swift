@@ -469,7 +469,9 @@ public struct FamilySyncFetchedReceipt: Hashable, Sendable {
     }
 }
 
-public enum FamilySyncPrivacySafeErrorCategory: String, Codable, Equatable, Sendable {
+public enum FamilySyncPrivacySafeErrorCategory:
+    String, Codable, Equatable, Hashable, Sendable
+{
     case account
     case connectivity
     case rateLimited
@@ -478,6 +480,103 @@ public enum FamilySyncPrivacySafeErrorCategory: String, Codable, Equatable, Send
     case corruptState
     case conflict
     case unknown
+}
+
+/// Privacy-minimal role used to explain a Profile erasure without retaining
+/// an Apple Account identifier, share URL, or any child-owned content.
+public enum ProfileErasureRoute: String, Codable, Equatable, Hashable, Sendable {
+    case unresolved
+    case owner
+    case participant
+}
+
+public enum ProfileErasureState: String, Codable, Equatable, Hashable, Sendable {
+    case requested
+    case deleting
+    case waitingForConnection
+    case needsAttention
+    case complete
+}
+
+/// A bounded, Profile-scoped summary of remote erasure progress. This value is
+/// intentionally unsuitable for child UI and diagnostics must aggregate it
+/// before display so the opaque Profile ID never leaves the repository layer.
+public struct ProfileErasureLifecycle: Codable, Equatable, Sendable {
+    public let profileID: ProfileID
+    public let route: ProfileErasureRoute
+    public let state: ProfileErasureState
+    public let requestedAt: Date
+    public let attemptCount: Int
+    public let retryCount: Int
+    public let lastAttemptAt: Date?
+    public let nextRetryAt: Date?
+    public let lastSuccessAt: Date?
+    public let errorCategory: FamilySyncPrivacySafeErrorCategory?
+
+    public init(
+        profileID: ProfileID,
+        route: ProfileErasureRoute = .unresolved,
+        state: ProfileErasureState = .requested,
+        requestedAt: Date,
+        attemptCount: Int = 0,
+        retryCount: Int = 0,
+        lastAttemptAt: Date? = nil,
+        nextRetryAt: Date? = nil,
+        lastSuccessAt: Date? = nil,
+        errorCategory: FamilySyncPrivacySafeErrorCategory? = nil
+    ) {
+        self.profileID = profileID
+        self.route = route
+        self.state = state
+        self.requestedAt = requestedAt
+        self.attemptCount = max(0, attemptCount)
+        self.retryCount = max(0, retryCount)
+        self.lastAttemptAt = lastAttemptAt
+        self.nextRetryAt = nextRetryAt
+        self.lastSuccessAt = lastSuccessAt
+        self.errorCategory = errorCategory
+    }
+}
+
+public enum ProfileErasureTransportOutcome: Equatable, Hashable, Sendable {
+    case completed
+    case failed(
+        category: FamilySyncPrivacySafeErrorCategory,
+        retryAfter: TimeInterval? = nil
+    )
+}
+
+/// Exact transport evidence for one versioned Profile tombstone. A completed
+/// disposition is emitted only after the route-specific remote cleanup has
+/// finished; a failed disposition still preserves the resolved owner or
+/// participant route for durable Parent-facing status.
+public struct ProfileErasureTransportDisposition: Equatable, Hashable, Sendable {
+    public let change: FamilySyncChangeAcknowledgement
+    public let route: ProfileErasureRoute
+    public let outcome: ProfileErasureTransportOutcome
+
+    public init(
+        change: FamilySyncChangeAcknowledgement,
+        route: ProfileErasureRoute,
+        outcome: ProfileErasureTransportOutcome
+    ) {
+        self.change = change
+        self.route = route
+        self.outcome = outcome
+    }
+}
+
+public struct ProfileErasureTransportReceipt: Equatable, Hashable, Sendable {
+    public let acknowledgement: FamilySyncChangeAcknowledgement
+    public let route: ProfileErasureRoute
+
+    public init(
+        acknowledgement: FamilySyncChangeAcknowledgement,
+        route: ProfileErasureRoute
+    ) {
+        self.acknowledgement = acknowledgement
+        self.route = route
+    }
 }
 
 public struct FamilySyncTransportFailure: Equatable, Sendable {
@@ -511,6 +610,7 @@ public struct FamilySyncTransportResult: Sendable {
     public let quarantinedRecordCount: Int
     public let receiptIDs: Set<UUID>
     public let receipts: [FamilySyncFetchedReceipt]
+    public let profileErasureDispositions: [ProfileErasureTransportDisposition]
     /// `false` means the transport replayed its durable local inbox without
     /// contacting CloudKit. The coordinator must apply and acknowledge those
     /// receipts, then fetch again before it is safe to upload local changes.
@@ -530,6 +630,7 @@ public struct FamilySyncTransportResult: Sendable {
         quarantinedRecordCount: Int = 0,
         receiptIDs: Set<UUID> = [],
         receipts: [FamilySyncFetchedReceipt] = [],
+        profileErasureDispositions: [ProfileErasureTransportDisposition] = [],
         reachedServerHead: Bool = true,
         replayedDurableInbox: Bool = false,
         requiresFetchPass: Bool = false
@@ -541,10 +642,21 @@ public struct FamilySyncTransportResult: Sendable {
         self.accountChange = accountChange
         self.quarantinedRecordCount = quarantinedRecordCount
         self.receipts = receipts
+        self.profileErasureDispositions = profileErasureDispositions
         self.receiptIDs = receiptIDs.union(receipts.map(\.id))
         self.reachedServerHead = reachedServerHead
         self.replayedDurableInbox = replayedDurableInbox
         self.requiresFetchPass = requiresFetchPass
+    }
+
+    public var profileErasureReceipts: [ProfileErasureTransportReceipt] {
+        profileErasureDispositions.compactMap { disposition in
+            guard disposition.outcome == .completed else { return nil }
+            return ProfileErasureTransportReceipt(
+                acknowledgement: disposition.change,
+                route: disposition.route
+            )
+        }
     }
 }
 
@@ -737,9 +849,22 @@ public protocol FamilySyncCoordinating: Sendable {
 
     func status() async -> FamilySyncStatus
 
+    /// Returns privacy-minimal Profile-erasure evidence for Parent UI. A
+    /// corrupt or unreadable lifecycle must throw so callers never mistake an
+    /// unavailable status for an empty history.
+    func profileErasureLifecycles() async throws -> [ProfileErasureLifecycle]
+
     func createShare(for profileID: ProfileID) async throws -> URL
 
     func acceptShare(at url: URL) async throws
+}
+
+extension FamilySyncCoordinating {
+    public func profileErasureLifecycles() async throws
+        -> [ProfileErasureLifecycle]
+    {
+        []
+    }
 }
 
 public enum FamilySyncConflictResolver {

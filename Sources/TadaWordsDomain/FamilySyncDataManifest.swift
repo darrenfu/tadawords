@@ -150,6 +150,10 @@ public enum FamilySyncDataManifest {
         local("familySyncPreference.*", "Consent and opt-out are explicit on each device."),
         local("familySyncJournal.*", "Transport recovery metadata; no child payload."),
         local(
+            "profileDeletionLifecycle.*",
+            "Privacy-minimal local proof of requested, retrying, attention, and acknowledged remote Profile removal; it contains no child content or Apple Account identifier."
+        ),
+        local(
             "familySyncApplyTransaction.*",
             "Crash-recovery payload is local-only; committed receipts are privacy-minimal."),
         local(

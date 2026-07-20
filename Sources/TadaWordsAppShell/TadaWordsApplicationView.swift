@@ -143,6 +143,7 @@ public struct TadaWordsApplicationView: View {
         notificationScheduler: (any LearningNotificationScheduling)? = nil,
         voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)? = nil,
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
+        profileMutationGate: ProfileScopedMutationGate = ProfileScopedMutationGate(),
         sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing =
             AllowSensitiveGuardianActions(),
         interfaceOrientationController: any InterfaceOrientationControlling =
@@ -157,7 +158,8 @@ public struct TadaWordsApplicationView: View {
             timeZone: timeZone,
             familySyncTransport: resolvedFamilySyncTransport,
             notificationScheduler: notificationScheduler,
-            voiceprintRepository: voiceprintRepository
+            voiceprintRepository: voiceprintRepository,
+            profileMutationGate: profileMutationGate
         )
         launchMode = .production
         self.audioPromptService = audioPromptService
@@ -282,7 +284,11 @@ public struct TadaWordsApplicationView: View {
             refreshedChildState == nil
             ? environment.lastSelectedProfileID
             : refreshedChildState?.lastSelectedProfileID
-        let onboardingPurpose = environment.firstRunOnboardingPurpose ?? .fullSetup
+        let onboardingPurpose =
+            FirstRunOnboardingProfileSelection.resolvedPurpose(
+                environment.firstRunOnboardingPurpose ?? .fullSetup,
+                in: childProfiles
+            )
         let onboardingProfile = FirstRunOnboardingProfileSelection.profile(
             in: childProfiles,
             purpose: onboardingPurpose,
@@ -292,32 +298,24 @@ public struct TadaWordsApplicationView: View {
             if environment.requiresFirstRunOnboarding
                 && !hasCompletedFirstRunOnboarding
             {
-                if let profile = onboardingProfile {
-                    FirstRunParentOnboardingView(
-                        initialProfile: profile,
-                        purpose: onboardingPurpose,
-                        familySyncCapability: familySyncCapability,
-                        onFinish: { submission in
-                            try await completeFirstRunOnboarding(
-                                submission: submission,
-                                profileID: profile.id,
-                                environment: environment
-                            )
-                        }
-                    )
-                    .onAppear {
-                        applyOrientation(for: .firstRunParents)
+                FirstRunParentOnboardingView(
+                    initialProfile: onboardingProfile,
+                    purpose: onboardingPurpose,
+                    familySyncCapability: familySyncCapability,
+                    onFinish: { submission in
+                        try await completeFirstRunOnboarding(
+                            submission: submission,
+                            profileID: onboardingProfile?.id,
+                            environment: environment
+                        )
                     }
-                } else {
-                    ApplicationFailureView(
-                        failure: ApplicationBootstrapFailure(
-                            error: FirstRunOnboardingError.profileNotFound
-                        ),
-                        onRetry: bootstrapModel.retry
-                    )
-                    .onAppear {
-                        applyOrientation(for: .firstRunParents)
-                    }
+                )
+                .id(
+                    "first-run-\(onboardingPurpose.rawValue)-"
+                        + (onboardingProfile?.id.description ?? "empty-family")
+                )
+                .onAppear {
+                    applyOrientation(for: .firstRunParents)
                 }
             } else {
                 Group {
@@ -451,6 +449,13 @@ public struct TadaWordsApplicationView: View {
                 environment.childSessionRepository.lastSelectedProfileID()
             let refreshedProfiles = try await profiles
             let savedProfileID = try await lastSelectedProfileID
+            if refreshedProfiles.isEmpty,
+                environment.requiresFirstRunOnboarding,
+                !hasCompletedFirstRunOnboarding
+            {
+                try? await environment.firstRunOnboardingRepository
+                    .normalizePendingPurpose(.fullSetup)
+            }
             refreshedChildState = RefreshedChildState(
                 profiles: refreshedProfiles,
                 lastSelectedProfileID: savedProfileID.flatMap { candidate in
@@ -469,7 +474,7 @@ public struct TadaWordsApplicationView: View {
 
     private func completeFirstRunOnboarding(
         submission: FirstRunOnboardingSubmission,
-        profileID: ProfileID,
+        profileID: ProfileID?,
         environment: ProductionApplicationEnvironment
     ) async throws {
         let coordinator = FirstRunOnboardingCoordinator(

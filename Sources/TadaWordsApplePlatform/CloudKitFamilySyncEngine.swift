@@ -182,6 +182,22 @@ enum CloudKitFamilyAccountEngineEvent: Sendable {
     case switchedAccounts
 }
 
+struct CloudKitLiveAccountVerifier: @unchecked Sendable {
+    private let operation: (ProfileCloudBinding) async throws -> Void
+
+    init(
+        _ operation: @escaping (ProfileCloudBinding) async throws -> Void
+    ) {
+        self.operation = operation
+    }
+
+    func verify(_ binding: ProfileCloudBinding) async throws {
+        try await operation(binding)
+    }
+
+    static let noOp = CloudKitLiveAccountVerifier { _ in }
+}
+
 actor CloudKitFamilySyncEventBuffer {
     private var activeGeneration: UInt64 = 1
     private var outgoing: [String: CloudKitFamilyOutgoingChange] = [:]
@@ -195,10 +211,16 @@ actor CloudKitFamilySyncEventBuffer {
     private var receipts: [UUID: FamilySyncFetchedReceipt] = [:]
     private var durabilityFailure = false
     private var requiresFetchPass = false
+    private var ownerLedgerRecoveryProfileIDs = Set<ProfileID>()
     private let metadataStore: CloudKitFamilyMetadataStore
+    private let liveAccountVerifier: CloudKitLiveAccountVerifier
 
-    init(metadataStore: CloudKitFamilyMetadataStore) {
+    init(
+        metadataStore: CloudKitFamilyMetadataStore,
+        liveAccountVerifier: CloudKitLiveAccountVerifier = .noOp
+    ) {
         self.metadataStore = metadataStore
+        self.liveAccountVerifier = liveAccountVerifier
     }
 
     func nextGeneration() -> UInt64 {
@@ -215,6 +237,7 @@ actor CloudKitFamilySyncEventBuffer {
         receipts.removeAll()
         durabilityFailure = false
         requiresFetchPass = false
+        ownerLedgerRecoveryProfileIDs.removeAll()
         return activeGeneration
     }
 
@@ -372,7 +395,7 @@ actor CloudKitFamilySyncEventBuffer {
         scope: CloudKitFamilyDatabaseScope,
         generation: UInt64,
         now: Date = Date()
-    ) {
+    ) async {
         guard generation == activeGeneration else { return }
         // Once an account boundary is observed, every later callback from the
         // same engines is untrusted until confirmation installs a new
@@ -418,9 +441,15 @@ actor CloudKitFamilySyncEventBuffer {
                     : leftPriority < rightPriority
             }.map(\.element)
             for cloudRecord in orderedRecords {
+                guard generation == activeGeneration,
+                    accountChange == nil
+                else { break }
                 if let binding = metadataStore.binding(
                     for: cloudRecord.recordID.zoneID
-                ), Self.isTerminal(binding.state) {
+                ),
+                    Self.isTerminal(binding.state)
+                        || ownerLedgerRecoveryProfileIDs.contains(binding.profileID)
+                {
                     // A callback already queued before terminal erasure must
                     // not recreate system fields or quarantine child payload.
                     continue
@@ -443,34 +472,50 @@ actor CloudKitFamilySyncEventBuffer {
                         continue
                     }
                     do {
+                        if metadataStore.binding(for: record.profileID).state
+                            == .ownerDeleted
+                        {
+                            continue
+                        }
+                        let zoneID = Self.privateZoneID(for: record.profileID)
+                        let prepared =
+                            try metadataStore
+                            .prepareAndStageAmbiguousOwnerDeletionLedgerRecovery(
+                                profileID: record.profileID,
+                                zoneID: zoneID,
+                                rootRecordName: Self.privateRootRecordID(
+                                    for: record.profileID
+                                ).recordName,
+                                receivedAt: now
+                            )
+                        let binding = prepared.binding
+                        ownerLedgerRecoveryProfileIDs.insert(record.profileID)
+                        requiresFetchPass = true
+                        do {
+                            try await liveAccountVerifier.verify(binding)
+                        } catch {
+                            guard generation == activeGeneration,
+                                accountChange == nil
+                            else { continue }
+                            throw error
+                        }
+                        guard generation == activeGeneration,
+                            accountChange == nil
+                        else { continue }
+                        _ = try metadataStore.promoteAmbiguousRemoteRemoval(
+                            markerID: prepared.markerID,
+                            record: record
+                        )
                         try metadataStore.saveSystemFields(
                             for: cloudRecord,
                             scope: scope
                         )
-                        try metadataStore.markOwnerDeleted(
-                            profileID: record.profileID
-                        )
-                        let receiptID = try metadataStore.appendInbox(
-                            record: record,
-                            recordID: cloudRecord.recordID,
-                            scope: scope,
-                            receivedAt: now
-                        )
-                        let key = FamilySyncChangeKey(
-                            profileID: record.profileID,
-                            recordName: record.recordName
-                        )
-                        receiptIDs.insert(receiptID)
-                        receipts[receiptID] = FamilySyncFetchedReceipt(
-                            id: receiptID,
-                            key: key,
-                            operation: .save,
-                            revision: record.logicalRevision
-                        )
-                        incoming[key] = FamilySyncConflictResolver.resolved(
-                            local: incoming[key],
-                            remote: record
-                        )
+                    } catch CloudKitFamilyPersistenceError.accountBindingMismatch {
+                        latchAccountBoundary()
+                    } catch CloudKitFamilySyncError.accountBindingMismatch {
+                        latchAccountBoundary()
+                    } catch CloudKitFamilyPersistenceError.bindingConflict {
+                        latchAccountBoundary()
                     } catch {
                         durabilityFailure = true
                         failures.append(
@@ -599,23 +644,39 @@ actor CloudKitFamilySyncEventBuffer {
             }
         case .fetchedDeletions(let recordIDs):
             for recordID in recordIDs {
+                guard generation == activeGeneration,
+                    accountChange == nil
+                else { break }
                 guard let binding = metadataStore.binding(for: recordID.zoneID) else {
                     quarantinedRecordCount += 1
                     continue
                 }
+                guard binding.databaseScope == scope else {
+                    quarantinedRecordCount += 1
+                    continue
+                }
+                if Self.isTerminal(binding.state)
+                    || ownerLedgerRecoveryProfileIDs.contains(binding.profileID)
+                {
+                    continue
+                }
                 if recordID.recordName == binding.rootRecordName {
                     do {
-                        try appendTerminalProfileRemoval(
+                        try await stageRootProfileRemoval(
                             profileID: binding.profileID,
                             recordID: recordID,
                             scope: scope,
-                            now: now
+                            now: now,
+                            generation: generation
                         )
-                        // The durable purge fact is the recovery barrier. If
-                        // the process dies after revoking the route but before
-                        // writing that fact, the next fetch would refuse the
-                        // revoked binding and could never replay the deletion.
-                        try metadataStore.revokeBinding(for: recordID.zoneID)
+                    } catch CloudKitFamilyPersistenceError.accountBindingMismatch {
+                        latchAccountBoundary()
+                        break
+                    } catch CloudKitFamilySyncError.accountBindingMismatch {
+                        latchAccountBoundary()
+                        break
+                    } catch CloudKitFamilyPersistenceError.bindingConflict {
+                        quarantinedRecordCount += 1
                     } catch {
                         durabilityFailure = true
                         failures.append(
@@ -626,6 +687,15 @@ actor CloudKitFamilySyncEventBuffer {
                         )
                     }
                     continue
+                }
+                guard
+                    metadataStore.isBindingAuthorizedForConfirmedAccount(binding)
+                else {
+                    // Child deletions carry no privacy-minimal recovery route.
+                    // Unlike the root callback above, they cannot be staged
+                    // safely across an unobserved account boundary.
+                    latchAccountBoundary()
+                    break
                 }
                 let key = FamilySyncChangeKey(
                     profileID: binding.profileID,
@@ -657,6 +727,9 @@ actor CloudKitFamilySyncEventBuffer {
             }
         case .deletedZones(let zoneIDs):
             for zoneID in zoneIDs {
+                guard generation == activeGeneration,
+                    accountChange == nil
+                else { break }
                 do {
                     guard let binding = metadataStore.binding(for: zoneID) else {
                         quarantinedRecordCount += 1
@@ -668,13 +741,21 @@ actor CloudKitFamilySyncEventBuffer {
                             recordName: "profile-\(binding.profileID)",
                             zoneID: zoneID
                         )
-                    try appendTerminalProfileRemoval(
+                    try await stageProvenZoneProfileRemoval(
                         profileID: binding.profileID,
                         recordID: recordID,
                         scope: scope,
-                        now: now
+                        now: now,
+                        generation: generation
                     )
-                    try metadataStore.revokeBinding(for: zoneID)
+                } catch CloudKitFamilyPersistenceError.accountBindingMismatch {
+                    latchAccountBoundary()
+                    break
+                } catch CloudKitFamilySyncError.accountBindingMismatch {
+                    latchAccountBoundary()
+                    break
+                } catch CloudKitFamilyPersistenceError.bindingConflict {
+                    quarantinedRecordCount += 1
                 } catch {
                     durabilityFailure = true
                     failures.append(
@@ -779,6 +860,7 @@ actor CloudKitFamilySyncEventBuffer {
         receiptIDs.removeAll()
         receipts.removeAll()
         requiresFetchPass = false
+        ownerLedgerRecoveryProfileIDs.removeAll()
         cleanupOutgoingSources()
         outgoing.removeAll()
         return result
@@ -834,63 +916,106 @@ actor CloudKitFamilySyncEventBuffer {
         }
     }
 
-    private func appendTerminalProfileRemoval(
+    private func stageProvenZoneProfileRemoval(
         profileID: ProfileID,
         recordID: CKRecord.ID,
         scope: CloudKitFamilyDatabaseScope,
-        now: Date
-    ) throws {
-        // A deleted CKRecord/zone does not include its server deletion date.
-        // Use a stable semantic date rather than the callback time: CloudKit
-        // may replay the same zone deletion after process restart, and a fresh
-        // timestamp would turn one terminal fact into a same-revision,
-        // different-checksum conflict with a second inbox receipt.
-        let semanticDeletionDate = Date(timeIntervalSince1970: 0)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .secondsSince1970
-        // The payload checksum is part of inbox deduplication. JSON object key
-        // order is otherwise unspecified, so the same semantic tombstone could
-        // acquire a second receipt after process restart.
-        encoder.outputFormatting = [.sortedKeys]
-        let record = FamilySyncRecord(
-            recordName: "profile-\(profileID)",
+        now: Date,
+        generation: UInt64
+    ) async throws {
+        let binding = metadataStore.binding(for: profileID)
+        let bindingMatchesScope: Bool =
+            switch (scope, binding.state) {
+            case (.privateDatabase, .privateOwner),
+                (.privateDatabase, .ownerDeleted),
+                (.sharedDatabase, .sharedParticipant),
+                (.sharedDatabase, .revoked),
+                (.sharedDatabase, .participantLeft):
+                true
+            default:
+                false
+            }
+        guard binding.zoneID == recordID.zoneID,
+            bindingMatchesScope
+        else {
+            throw CloudKitFamilyPersistenceError.accountBindingMismatch
+        }
+        guard !Self.isTerminal(binding.state) else { return }
+        let markerID = try metadataStore.stageAmbiguousRemoteRemoval(
             profileID: profileID,
-            kind: .profileDeletion,
-            payload: try encoder.encode(
-                ProfileDeletionTombstone(
-                    profileID: profileID,
-                    deletedAt: semanticDeletionDate
-                )
-            ),
-            updatedAt: semanticDeletionDate,
-            deviceID: "cloud-share-revocation",
-            isDeleted: true,
-            logicalRevision: FamilySyncLogicalRevision(
-                counter: 0,
-                deviceID: "cloud-share-revocation"
-            )
-        )
-        let key = FamilySyncChangeKey(
-            profileID: profileID,
-            recordName: record.recordName
-        )
-        let receiptID = try metadataStore.appendInbox(
-            record: record,
             recordID: recordID,
             scope: scope,
+            evidence: .zoneDeletion,
             receivedAt: now
         )
-        receiptIDs.insert(receiptID)
-        receipts[receiptID] = FamilySyncFetchedReceipt(
-            id: receiptID,
-            key: key,
-            operation: .save,
-            revision: record.logicalRevision
+        ownerLedgerRecoveryProfileIDs.insert(profileID)
+        requiresFetchPass = true
+        do {
+            try await liveAccountVerifier.verify(binding)
+        } catch {
+            guard generation == activeGeneration, accountChange == nil else {
+                return
+            }
+            throw error
+        }
+        guard generation == activeGeneration, accountChange == nil else {
+            // A same-account rebuild or account switch won the actor race.
+            // The marker remains durable for the new generation to revalidate.
+            return
+        }
+        let record = try terminalProfileRemovalRecord(profileID: profileID)
+        _ = try metadataStore.promoteAmbiguousRemoteRemoval(
+            markerID: markerID,
+            record: record
         )
-        incoming[key] = FamilySyncConflictResolver.resolved(
-            local: incoming[key],
-            remote: record
+    }
+
+    private func stageRootProfileRemoval(
+        profileID: ProfileID,
+        recordID: CKRecord.ID,
+        scope: CloudKitFamilyDatabaseScope,
+        now: Date,
+        generation: UInt64
+    ) async throws {
+        let binding = metadataStore.binding(for: profileID)
+        guard binding.zoneID == recordID.zoneID,
+            binding.rootRecordID == recordID,
+            binding.databaseScope == scope,
+            !Self.isTerminal(binding.state)
+        else {
+            throw CloudKitFamilyPersistenceError.bindingConflict
+        }
+        let markerID = try metadataStore.stageAmbiguousRemoteRemoval(
+            profileID: profileID,
+            recordID: recordID,
+            scope: scope,
+            evidence: .rootRecordDeletion,
+            receivedAt: now
         )
+        ownerLedgerRecoveryProfileIDs.insert(profileID)
+        requiresFetchPass = true
+        do {
+            try await liveAccountVerifier.verify(binding)
+        } catch {
+            guard generation == activeGeneration, accountChange == nil else {
+                return
+            }
+            throw error
+        }
+        guard generation == activeGeneration, accountChange == nil else {
+            return
+        }
+        let record = try terminalProfileRemovalRecord(profileID: profileID)
+        _ = try metadataStore.promoteAmbiguousRemoteRemoval(
+            markerID: markerID,
+            record: record
+        )
+    }
+
+    private func terminalProfileRemovalRecord(
+        profileID: ProfileID
+    ) throws -> FamilySyncRecord {
+        try CloudKitRemoteProfileRemovalRecordFactory.record(for: profileID)
     }
 
     private func handleRootRecord(
@@ -942,6 +1067,20 @@ actor CloudKitFamilySyncEventBuffer {
                 )
             )
             try metadataStore.saveSystemFields(for: record, scope: scope)
+        } catch CloudKitFamilyPersistenceError.accountBindingMismatch {
+            // A root fetched under a replacement Apple Account cannot claim a
+            // Profile whose durable route belongs to the origin account.
+            // Keep the old binding intact and surface only a privacy-safe
+            // account category; never quarantine or log either account ID.
+            latchAccountBoundary()
+        } catch CloudKitFamilyPersistenceError.bindingConflict {
+            quarantine(
+                record,
+                scope: scope,
+                category: .conflict,
+                envelopeData: nil,
+                now: Date()
+            )
         } catch {
             durabilityFailure = true
             failures.append(FamilySyncTransportFailure(key: nil, category: .corruptState))
@@ -961,7 +1100,10 @@ actor CloudKitFamilySyncEventBuffer {
                 == record.kind.rawValue,
             let binding = metadataStore.binding(for: cloudRecord.recordID.zoneID),
             binding.profileID == record.profileID,
-            binding.databaseScope == scope
+            binding.databaseScope == scope,
+            let expectedRootRecordID = binding.rootRecordID,
+            cloudRecord.parent?.recordID == expectedRootRecordID,
+            metadataStore.isBindingAuthorizedForConfirmedAccount(binding)
         else { return false }
         if let schema = cloudRecord[
             CloudKitFamilyRecordCodec.Schema.schemaVersion
@@ -1132,6 +1274,31 @@ actor CloudKitFamilySyncEventBuffer {
         default:
             3
         }
+    }
+
+    private func latchAccountBoundary() {
+        accountChange = .switchedAccounts
+        incoming.removeAll()
+        deletions.removeAll()
+        acknowledgements.removeAll()
+        receiptIDs.removeAll()
+        receipts.removeAll()
+        cleanupOutgoingSources()
+        outgoing.removeAll()
+    }
+
+    private static func privateZoneID(for profileID: ProfileID) -> CKRecordZone.ID {
+        CKRecordZone.ID(
+            zoneName: "TadaProfile-\(profileID.rawValue.uuidString)",
+            ownerName: CKCurrentUserDefaultName
+        )
+    }
+
+    private static func privateRootRecordID(for profileID: ProfileID) -> CKRecord.ID {
+        CKRecord.ID(
+            recordName: "profile-root-\(profileID.rawValue.uuidString)",
+            zoneID: privateZoneID(for: profileID)
+        )
     }
 
     private static func isTerminal(
