@@ -465,6 +465,8 @@ struct CloudKitAmbiguousRemoteRemovalRecoveryExecutor {
 /// never start nested fetch/send operations.
 public actor CloudKitFamilySyncTransport: FamilySyncTransport {
     public nonisolated let capability = FamilySyncCapability.iCloud
+    public nonisolated let initialProfilePolicy =
+        FamilySyncInitialProfilePolicy.discoverBeforeCreating
 
     private let container: CKContainer
     private let privateDatabase: CKDatabase
@@ -668,6 +670,7 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
             )
         }
         defer { acceptedShareOperationFence.releaseEngineFetch() }
+        await rebuildEnginesAfterDurabilityFailureIfNeeded()
         let requestedProfileIDs = Set(profileIDs)
         let recoveryGeneration = privateDelegate.generation
 
@@ -701,6 +704,18 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
                 failures: [
                     FamilySyncTransportFailure(key: nil, category: .conflict)
                 ]
+            )
+        }
+
+        guard
+            await eventBuffer.retryStagedUnboundRecords(
+                generation: recoveryGeneration
+            )
+        else {
+            return result(
+                await eventBuffer.drain(),
+                reachedServerHead: false,
+                replayedDurableInbox: false
             )
         }
 
@@ -1082,6 +1097,10 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         if let accountChange = try await accountChangeBlockingUpload() {
             return FamilySyncTransportResult(accountChange: accountChange)
         }
+        // `push` and direct transport clients are not required to perform a
+        // fetch first. Give every next engine operation the same same-process
+        // recovery path after a callback failed to reach durable storage.
+        await rebuildEnginesAfterDurabilityFailureIfNeeded()
         guard try metadataStore.pendingAcceptedShareCleanups().isEmpty else {
             return FamilySyncTransportResult(
                 failures: [
@@ -2532,6 +2551,22 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
             delegate: sharedDelegate,
             subscriptionID: "tada-family-shared-v2"
         )
+    }
+
+    private func rebuildEnginesAfterDurabilityFailureIfNeeded() async {
+        let failedGeneration = privateDelegate.generation
+        guard
+            await eventBuffer.requiresEngineRebuild(
+                generation: failedGeneration
+            )
+        else { return }
+
+        // `durabilityFailure` keeps every stateUpdate callback from persisting
+        // while cancellation drains the failed engines. `rebuildEngines()`
+        // then loads the last durable serialization, so callbacks consumed
+        // only in memory are fetched again without requiring an app restart.
+        await cancelEngines()
+        await rebuildEngines()
     }
 
     private func cancelEngines() async {

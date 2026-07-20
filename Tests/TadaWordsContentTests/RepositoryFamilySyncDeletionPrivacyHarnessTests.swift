@@ -5,6 +5,81 @@ import XCTest
 @testable import TadaWordsContent
 
 final class RepositoryFamilySyncDeletionPrivacyHarnessTests: XCTestCase {
+    func testRepositoryProfileDataEraserOrdersDeletionAndUnadoptedBoundaries()
+        async throws
+    {
+        let profileID = ProfileID()
+        let log = DeletionPrivacyEventLog()
+        let eraser = RepositoryProfileDataEraser(
+            operations: ProfileDataErasureOperations(
+                deleteVoiceprint: { id in
+                    XCTAssertEqual(id, profileID)
+                    log.append(.voiceprintDeleted)
+                },
+                deleteWordPool: { id in
+                    XCTAssertEqual(id, profileID)
+                    log.append(.wordPoolDeleted)
+                },
+                deletePracticeSettings: { id in
+                    XCTAssertEqual(id, profileID)
+                    log.append(.practiceSettingsDeleted)
+                },
+                deleteLearningRecords: { id in
+                    XCTAssertEqual(id, profileID)
+                    log.append(.learningRecordsDeleted)
+                },
+                deleteDailyQuestHistory: { id in
+                    XCTAssertEqual(id, profileID)
+                    log.append(.dailyQuestHistoryDeleted)
+                },
+                deleteProfile: { id in
+                    XCTAssertEqual(id, profileID)
+                    log.append(.profileDeleted)
+                },
+                clearChildSession: { id in
+                    XCTAssertEqual(id, profileID)
+                    log.append(.sessionCleared)
+                },
+                removeHandwritingPreference: { id in
+                    XCTAssertEqual(id, profileID)
+                    log.append(.handwritingPreferenceDeleted)
+                }
+            )
+        )
+
+        try await eraser.eraseProfileData(for: profileID)
+
+        XCTAssertEqual(
+            log.snapshot(),
+            [
+                .voiceprintDeleted,
+                .wordPoolDeleted,
+                .practiceSettingsDeleted,
+                .learningRecordsDeleted,
+                .dailyQuestHistoryDeleted,
+                .profileDeleted,
+                .sessionCleared,
+                .handwritingPreferenceDeleted,
+            ]
+        )
+
+        try await eraser.eraseUnadoptedProfileData(for: profileID)
+
+        XCTAssertEqual(
+            Array(log.snapshot().suffix(8)),
+            [
+                .voiceprintDeleted,
+                .wordPoolDeleted,
+                .practiceSettingsDeleted,
+                .learningRecordsDeleted,
+                .dailyQuestHistoryDeleted,
+                .sessionCleared,
+                .handwritingPreferenceDeleted,
+                .profileDeleted,
+            ]
+        )
+    }
+
     func testDeletionClearsSessionAndVoiceprintBeforeTombstoneCommit()
         async throws
     {
@@ -221,6 +296,12 @@ private enum DeletionPrivacyEvent: Equatable {
     case sessionCleared
     case voiceprintDeletionAttempt
     case voiceprintDeleted
+    case wordPoolDeleted
+    case practiceSettingsDeleted
+    case learningRecordsDeleted
+    case dailyQuestHistoryDeleted
+    case profileDeleted
+    case handwritingPreferenceDeleted
     case tombstoneCommitted
 }
 

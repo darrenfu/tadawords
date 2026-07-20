@@ -69,10 +69,12 @@ public actor LocalJSONChildSessionRepository: ChildSessionRepository {
     }
 
     public func saveLastSelectedProfileID(_ profileID: ProfileID) async throws {
-        if let current = try? loadedSnapshot(),
-            current.lastSelectedProfileID == profileID
-        {
-            return
+        do {
+            if try loadedSnapshot().lastSelectedProfileID == profileID {
+                return
+            }
+        } catch let error as LocalChildSessionRepositoryError {
+            if case .unsupportedSchemaVersion = error { throw error }
         }
         // A malformed preference must not become a permanent latch. The next
         // explicit player selection is authoritative and atomically repairs it.
@@ -80,8 +82,12 @@ public actor LocalJSONChildSessionRepository: ChildSessionRepository {
     }
 
     public func clearLastSelectedProfileID() async throws {
-        if let current = try? loadedSnapshot(), current.lastSelectedProfileID == nil {
-            return
+        do {
+            if try loadedSnapshot().lastSelectedProfileID == nil {
+                return
+            }
+        } catch let error as LocalChildSessionRepositoryError {
+            if case .unsupportedSchemaVersion = error { throw error }
         }
         try persist(ChildSessionSnapshot(lastSelectedProfileID: nil))
     }

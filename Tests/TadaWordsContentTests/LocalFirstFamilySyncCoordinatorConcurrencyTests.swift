@@ -131,6 +131,61 @@ final class LocalFirstFamilySyncCoordinatorConcurrencyTests: XCTestCase {
         XCTAssertFalse(events.contains("send"))
     }
 
+    func testFirstRunDisableWaitsForAcceptedApplyToReachQuiescence()
+        async throws
+    {
+        let profileID = ProfileID()
+        let applyBarrier = AsyncFetchBarrier()
+        let remote = makeRecord(
+            profileID: profileID,
+            payload: "account-a",
+            revision: .init(counter: 2, deviceID: "cloud-a")
+        )
+        let store = ConcurrencySyncStore(
+            profileID: profileID,
+            records: [],
+            applyBarrier: applyBarrier
+        )
+        let transport = SequencedSyncTransport(
+            fetchResults: [FamilySyncTransportResult(records: [remote])]
+        )
+        let coordinator = LocalFirstFamilySyncCoordinator(
+            store: store,
+            transport: transport,
+            preferenceRepository: InMemoryFamilySyncPreferenceRepository(
+                isEnabled: true
+            )
+        )
+        let syncTask = Task { await coordinator.synchronize() }
+        await applyBarrier.waitUntilEntered()
+        let completion = AsyncCompletionProbe()
+        let disableTask = Task {
+            let status = try await coordinator.disableAndAwaitQuiescence()
+            await completion.markCompleted()
+            return status
+        }
+        for _ in 0..<100 {
+            if await transport.events().contains("suspend") { break }
+            await Task.yield()
+        }
+
+        let eventsBeforeResume = await transport.events()
+        let completedBeforeResume = await completion.isCompleted()
+        XCTAssertTrue(eventsBeforeResume.contains("suspend"))
+        XCTAssertFalse(completedBeforeResume)
+        await applyBarrier.resume()
+        let disabled = try await disableTask.value
+        _ = await syncTask.value
+
+        guard case .optedOut = disabled else {
+            return XCTFail("Expected the discovery fence to stay opted out")
+        }
+        let completedAfterResume = await completion.isCompleted()
+        let stored = await store.currentRecords()
+        XCTAssertTrue(completedAfterResume)
+        XCTAssertEqual(stored, [remote])
+    }
+
     func testPoisonRecordIsQuarantinedWithoutBlockingGoodRecord() async {
         let profileID = ProfileID()
         let good = makeRecord(
@@ -223,15 +278,18 @@ private actor ConcurrencySyncStore: FamilySyncRecordStore {
     let profileID: ProfileID
     var values: [FamilySyncRecord]
     let rejectedRecordName: String?
+    let applyBarrier: AsyncFetchBarrier?
 
     init(
         profileID: ProfileID,
         records: [FamilySyncRecord],
-        rejectedRecordName: String? = nil
+        rejectedRecordName: String? = nil,
+        applyBarrier: AsyncFetchBarrier? = nil
     ) {
         self.profileID = profileID
         values = records
         self.rejectedRecordName = rejectedRecordName
+        self.applyBarrier = applyBarrier
     }
 
     func profileIDsForSync() async throws -> [ProfileID] { [profileID] }
@@ -241,6 +299,7 @@ private actor ConcurrencySyncStore: FamilySyncRecordStore {
     }
 
     func apply(_ records: [FamilySyncRecord], for profileID: ProfileID) async throws {
+        if let applyBarrier { await applyBarrier.enterAndWait() }
         var byName = Dictionary(uniqueKeysWithValues: values.map { ($0.recordName, $0) })
         for record in records { byName[record.recordName] = record }
         values = byName.values.sorted { $0.recordName < $1.recordName }
@@ -349,6 +408,18 @@ private actor AsyncFetchBarrier {
     func resume() {
         resumeContinuation?.resume()
         resumeContinuation = nil
+    }
+}
+
+private actor AsyncCompletionProbe {
+    private var completed = false
+
+    func markCompleted() {
+        completed = true
+    }
+
+    func isCompleted() -> Bool {
+        completed
     }
 }
 

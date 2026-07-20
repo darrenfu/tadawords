@@ -87,14 +87,20 @@ struct ProductionApplicationEnvironment: Sendable {
     let practiceSettingsRepository: LocalJSONPracticeSettingsRepository
     let dailyQuestRepository: LocalJSONDailyQuestRepository
     let childSessionRepository: LocalJSONChildSessionRepository
+    let profileDataEraser: RepositoryProfileDataEraser
     let lastSelectedProfileID: ProfileID?
     let guardianStore: RepositoryGuardianFamilyStore
     let familySyncCoordinator: LocalFirstFamilySyncCoordinator
+    let familySyncTransport: any FamilySyncTransport
+    let familySyncJournalRepository: LocalJSONFamilySyncJournalRepository
     let familySyncApplyTransactionRepository: LocalJSONFamilySyncApplyTransactionRepository
     let tombstoneRepository: LocalJSONProfileDeletionTombstoneRepository
     let notificationReconciler: ProductionLearningNotificationReconciler?
     let firstRunOnboardingRepository: LocalFirstRunOnboardingRepository
+    let firstRunDiscoveryAdmissionGate: FirstRunDiscoveryAdmissionGate
     let firstRunOnboardingPurpose: FirstRunOnboardingPurpose?
+    let firstRunProfileIntent: FirstRunProfileIntent?
+    let firstRunPendingCreatedProfileID: ProfileID?
     let requiresFirstRunOnboarding: Bool
     let clock: any AppClock
     let timeZone: TimeZone
@@ -224,6 +230,16 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             LocalJSONFamilySyncApplyTransactionRepository(
                 snapshotURL: dataPaths.familySyncApplyTransactionsSnapshot
             )
+        let profileDataEraser = RepositoryProfileDataEraser(
+            profileRepository: profileRepository,
+            wordPoolRepository: wordPoolRepository,
+            practiceSettingsRepository: practiceSettingsRepository,
+            learningRecordRepository: learningRecordRepository,
+            dailyQuestRepository: dailyQuestRepository,
+            childSessionRepository: childSessionRepository,
+            voiceprintRepository: voiceprintRepository,
+            handwritingPreferenceRemover: handwritingPreferenceRemover
+        )
         let syncStore = RepositoryFamilySyncRecordStore(
             profileRepository: profileRepository,
             wordPoolRepository: wordPoolRepository,
@@ -236,6 +252,16 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             voiceprintRepository: voiceprintRepository,
             handwritingPreferenceRemover: handwritingPreferenceRemover,
             mutationGate: profileMutationGate,
+            excludedProfileIDs: {
+                guard
+                    let state = try await firstRunOnboardingRepository.state(),
+                    state.status == .pending,
+                    let pendingProfileID = state.pendingCreatedProfileID
+                else {
+                    return []
+                }
+                return [pendingProfileID]
+            },
             deviceID: deviceID,
             clock: clock
         )
@@ -271,7 +297,31 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             repository: firstRunOnboardingRepository,
             existingProfiles: existingProfiles
         )
+        let firstRunState = try await firstRunOnboardingRepository.state()
+        if firstRunState?.discoveryResetPhase != nil {
+            // A legacy Find flow can relaunch after the iCloud account has
+            // changed. Persist opt-out before the environment exposes remote
+            // notification/connectivity handlers, then suspend any transport
+            // generation retained by this process. Find will explicitly
+            // re-confirm the current account before enabling sync again.
+            try await familySyncPreferenceRepository.setEnabled(
+                false,
+                updatedAt: clock.now
+            )
+            await familySyncTransport.suspend()
+        }
+        let firstRunProfileIntent = firstRunState?.profileIntent
+        let firstRunPendingCreatedProfileID =
+            firstRunState?.pendingCreatedProfileID
         let requiresFirstRunOnboarding = firstRunOnboardingPurpose != nil
+        // Keep first-run actions closed until the application view completes
+        // its initial foreground revalidation. Durable repository gates remain
+        // authoritative across relaunches; this fence covers the same-process
+        // window before their asynchronous write begins.
+        let firstRunDiscoveryAdmissionGate =
+            FirstRunDiscoveryAdmissionGate(
+                initiallyClosed: requiresFirstRunOnboarding
+            )
         // Seed only a genuinely new installation. Once a family has durable
         // deletion history, an empty Profile repository is intentional and
         // must remain empty until someone explicitly creates a new child.
@@ -279,7 +329,8 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         let currentDeletionTombstones = try await tombstoneRepository.tombstones()
         if existingProfiles.isEmpty,
             !profileSnapshotExistedAtStart,
-            currentDeletionTombstones.isEmpty
+            currentDeletionTombstones.isEmpty,
+            familySyncTransport.initialProfilePolicy == .seedLocalProfile
         {
             seedProfile = try await seedingProfile(
                 tombstoneRepository: tombstoneRepository
@@ -309,7 +360,8 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         )
         try validateDefaultProfileSeeding(
             existingProfiles: existingProfiles,
-            dataPaths: dataPaths
+            dataPaths: dataPaths,
+            firstRunState: firstRunState
         )
         let profiles = try await loadOrCreateProfiles(
             existingProfiles: existingProfiles,
@@ -383,15 +435,22 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             practiceSettingsRepository: practiceSettingsRepository,
             dailyQuestRepository: dailyQuestRepository,
             childSessionRepository: childSessionRepository,
+            profileDataEraser: profileDataEraser,
             lastSelectedProfileID: lastSelectedProfileID,
             guardianStore: guardianStore,
             familySyncCoordinator: familySyncCoordinator,
+            familySyncTransport: familySyncTransport,
+            familySyncJournalRepository: familySyncJournalRepository,
             familySyncApplyTransactionRepository:
                 familySyncApplyTransactionRepository,
             tombstoneRepository: tombstoneRepository,
             notificationReconciler: notificationReconciler,
             firstRunOnboardingRepository: firstRunOnboardingRepository,
+            firstRunDiscoveryAdmissionGate:
+                firstRunDiscoveryAdmissionGate,
             firstRunOnboardingPurpose: firstRunOnboardingPurpose,
+            firstRunProfileIntent: firstRunProfileIntent,
+            firstRunPendingCreatedProfileID: firstRunPendingCreatedProfileID,
             requiresFirstRunOnboarding: requiresFirstRunOnboarding,
             clock: clock,
             timeZone: timeZone,
@@ -625,6 +684,12 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
                 supportedVersion: DailyQuestSnapshot.currentSchemaVersion
             ),
             SnapshotSchemaRequirement(
+                store: .childSession,
+                url: paths.childSessionSnapshot,
+                supportedVersion: ChildSessionSnapshot.currentSchemaVersion,
+                rejectsInvalidEnvelope: false
+            ),
+            SnapshotSchemaRequirement(
                 store: .profileDeletionTombstones,
                 url: paths.profileDeletionTombstonesSnapshot,
                 supportedVersion:
@@ -634,6 +699,13 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
                 store: .firstRunOnboarding,
                 url: paths.firstRunOnboardingSnapshot,
                 supportedVersion: FirstRunOnboardingState.currentSchemaVersion
+            ),
+            SnapshotSchemaRequirement(
+                store: .familySyncPreference,
+                url: paths.familySyncPreferenceSnapshot,
+                supportedVersion:
+                    FamilySyncPreferenceSnapshot.currentSchemaVersion,
+                rejectsInvalidEnvelope: false
             ),
             SnapshotSchemaRequirement(
                 store: .familySyncJournal,
@@ -674,6 +746,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
                 from: data
             )
         } catch {
+            guard requirement.rejectsInvalidEnvelope else { return }
             throw ApplicationBootstrapError.invalidSnapshotEnvelope(
                 store: requirement.store
             )
@@ -802,7 +875,8 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
 
     private func validateDefaultProfileSeeding(
         existingProfiles: [KidProfile],
-        dataPaths: ApplicationDataPaths
+        dataPaths: ApplicationDataPaths,
+        firstRunState: FirstRunOnboardingState?
     ) throws {
         guard existingProfiles.isEmpty else { return }
         guard
@@ -823,9 +897,54 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
                 FileManager.default.fileExists(atPath: $0.path)
             })
         else {
+            if try isRecoverablePendingProfileCreation(
+                state: firstRunState,
+                dataPaths: dataPaths
+            ) {
+                return
+            }
             throw ApplicationBootstrapError
                 .profileSnapshotMissingWithDependentData
         }
+    }
+
+    private func isRecoverablePendingProfileCreation(
+        state: FirstRunOnboardingState?,
+        dataPaths: ApplicationDataPaths
+    ) throws -> Bool {
+        guard state?.status == .pending,
+            state?.profileIntent == .createNew,
+            let pendingProfileID = state?.pendingCreatedProfileID
+        else {
+            return false
+        }
+        // Only the one write boundary produced by first-run createProfile is
+        // recoverable: exact default settings for the durably reserved UUID,
+        // with no word, learning, or quest bytes. Every broader orphan shape
+        // remains a saved-data error rather than being guessed or erased.
+        guard
+            !FileManager.default.fileExists(
+                atPath: dataPaths.wordPoolSnapshot.path
+            ),
+            !FileManager.default.fileExists(
+                atPath: dataPaths.learningRecordsSnapshot.path
+            ),
+            !FileManager.default.fileExists(
+                atPath: dataPaths.dailyQuestsSnapshot.path
+            ),
+            FileManager.default.fileExists(
+                atPath: dataPaths.practiceSettingsSnapshot.path
+            )
+        else {
+            return false
+        }
+        let snapshot = try JSONDecoder().decode(
+            PracticeSettingsSnapshot.self,
+            from: Data(contentsOf: dataPaths.practiceSettingsSnapshot)
+        )
+        return snapshot.schemaVersion
+            == PracticeSettingsSnapshot.currentSchemaVersion
+            && snapshot.settings == [.defaults(for: pendingProfileID)]
     }
 }
 
@@ -837,6 +956,19 @@ private struct SnapshotSchemaRequirement {
     let store: ApplicationSnapshotStore
     let url: URL
     let supportedVersion: Int
+    let rejectsInvalidEnvelope: Bool
+
+    init(
+        store: ApplicationSnapshotStore,
+        url: URL,
+        supportedVersion: Int,
+        rejectsInvalidEnvelope: Bool = true
+    ) {
+        self.store = store
+        self.url = url
+        self.supportedVersion = supportedVersion
+        self.rejectsInvalidEnvelope = rejectsInvalidEnvelope
+    }
 }
 
 actor ProductionLearningNotificationReconciler {

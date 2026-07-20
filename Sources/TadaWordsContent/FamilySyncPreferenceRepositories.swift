@@ -92,9 +92,12 @@ public actor LocalJSONFamilySyncPreferenceRepository: FamilySyncPreferenceReposi
     }
 
     public func setEnabled(_ isEnabled: Bool, updatedAt: Date) async throws {
-        if let current = try? loadedSnapshot() {
+        do {
+            let current = try loadedSnapshot()
             if isEnabled, current.hasCurrentOptIn { return }
             if !isEnabled, !current.isEnabled { return }
+        } catch let error as LocalFamilySyncPreferenceRepositoryError {
+            if case .unsupportedSchemaVersion = error { throw error }
         }
         try persist(
             FamilySyncPreferenceSnapshot(

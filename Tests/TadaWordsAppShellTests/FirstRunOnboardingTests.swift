@@ -7,6 +7,325 @@ import XCTest
 @testable import TadaWordsAppShell
 
 final class FirstRunOnboardingTests: XCTestCase {
+    func testStaleForegroundGenerationCannotReopenAdmission() throws {
+        let gate = FirstRunDiscoveryAdmissionGate()
+        let first = gate.closeForAccountRevalidation()
+        let second = gate.closeForAccountRevalidation()
+
+        XCTAssertFalse(gate.reopen(ifCurrent: first))
+        XCTAssertTrue(gate.admissionIsClosed())
+        XCTAssertThrowsError(try gate.requireAdmissionAllowed())
+
+        XCTAssertTrue(gate.reopen(ifCurrent: second))
+        XCTAssertFalse(gate.admissionIsClosed())
+        XCTAssertNoThrow(try gate.requireAdmissionAllowed())
+    }
+
+    func testFutureSchemaFailsClosedWithoutRewritingExactBytes() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let snapshotURL = directory.appendingPathComponent("first-run.json")
+        let original = Data(
+            "{\"schemaVersion\":4,\"status\":\"pending\",\"startedAt\":0,\"future\":true}"
+                .utf8
+        )
+        try original.write(to: snapshotURL)
+        let repository = LocalFirstRunOnboardingRepository(
+            snapshotURL: snapshotURL
+        )
+
+        for _ in 0..<2 {
+            do {
+                _ = try await repository.state()
+                XCTFail("A future onboarding schema must fail closed.")
+            } catch {
+                XCTAssertEqual(
+                    error as? FirstRunOnboardingRepositoryError,
+                    .unsupportedSchemaVersion(
+                        found: 4,
+                        supported: FirstRunOnboardingState.currentSchemaVersion
+                    )
+                )
+            }
+            XCTAssertEqual(try Data(contentsOf: snapshotURL), original)
+        }
+    }
+
+    func testLegacyFullSetupDiscoveryMigratesToDurableResetGateBeforeAdmission()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let snapshotURL = directory.appendingPathComponent("first-run.json")
+        let legacy = FirstRunOnboardingState(
+            schemaVersion: 2,
+            status: .pending,
+            startedAt: testDate,
+            completedAt: nil,
+            profileID: nil,
+            consentVersion: nil,
+            consentedAt: nil,
+            purpose: .fullSetup,
+            profileIntent: .discoverExisting
+        )
+        try JSONEncoder().encode(legacy).write(to: snapshotURL, options: .atomic)
+
+        let first = LocalFirstRunOnboardingRepository(snapshotURL: snapshotURL)
+        let migrated = try await first.state()
+        XCTAssertEqual(
+            migrated?.schemaVersion,
+            FirstRunOnboardingState.currentSchemaVersion
+        )
+        XCTAssertEqual(migrated?.discoveryResetPhase, .required)
+
+        let restarted = LocalFirstRunOnboardingRepository(
+            snapshotURL: snapshotURL
+        )
+        try await restarted.markPending(
+            startedAt: testDate.addingTimeInterval(30),
+            purpose: .fullSetup
+        )
+        do {
+            _ = try await restarted.beginProfileCreation(
+                proposedProfileID: nil,
+                startedAt: testDate
+            )
+            XCTFail("Legacy discovery must fail closed before Create.")
+        } catch {
+            XCTAssertEqual(
+                error as? FirstRunOnboardingRepositoryError,
+                .discoveryResetRequired
+            )
+        }
+    }
+
+    func testLegacyConsentRefreshDiscoveryDoesNotGainDestructiveResetGate()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let snapshotURL = directory.appendingPathComponent("first-run.json")
+        let legacy = FirstRunOnboardingState(
+            schemaVersion: 2,
+            status: .pending,
+            startedAt: testDate,
+            completedAt: nil,
+            profileID: defaultProfile.id,
+            consentVersion: nil,
+            consentedAt: nil,
+            purpose: .consentRefresh,
+            profileIntent: .discoverExisting
+        )
+        try JSONEncoder().encode(legacy).write(to: snapshotURL, options: .atomic)
+
+        let repository = LocalFirstRunOnboardingRepository(
+            snapshotURL: snapshotURL
+        )
+        let decoded = try await repository.state()
+        try await repository.requireDiscoveryResetCompleted()
+
+        XCTAssertEqual(decoded, legacy)
+        XCTAssertNil(decoded?.discoveryResetPhase)
+    }
+
+    func testFullSetupDiscoveryResetGatePersistsAcrossRelaunchUntilFinished()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let snapshotURL = directory.appendingPathComponent("first-run.json")
+        let first = LocalFirstRunOnboardingRepository(snapshotURL: snapshotURL)
+        try await first.markPending(
+            startedAt: testDate,
+            purpose: .fullSetup
+        )
+
+        _ = try await first.prepareForProfileDiscovery()
+        let fencedState = try await first.state()
+        XCTAssertEqual(
+            fencedState?.schemaVersion,
+            FirstRunOnboardingState.currentSchemaVersion
+        )
+        XCTAssertEqual(fencedState?.discoveryResetPhase, .required)
+
+        let restarted = LocalFirstRunOnboardingRepository(
+            snapshotURL: snapshotURL
+        )
+        do {
+            _ = try await restarted.beginProfileCreation(
+                proposedProfileID: nil,
+                startedAt: testDate
+            )
+            XCTFail("Create must remain blocked after a reset interruption.")
+        } catch {
+            XCTAssertEqual(
+                error as? FirstRunOnboardingRepositoryError,
+                .discoveryResetRequired
+            )
+        }
+        do {
+            try await restarted.requireDiscoveryResetCompleted()
+            XCTFail("Adoption/completion must share the durable reset gate.")
+        } catch {
+            XCTAssertEqual(
+                error as? FirstRunOnboardingRepositoryError,
+                .discoveryResetRequired
+            )
+        }
+
+        try await restarted.finishDiscoveryReset()
+        try await restarted.requireProfileCreationAllowed()
+        do {
+            try await restarted.requireDiscoveryResetCompleted()
+            XCTFail("Adoption must wait for an account-bound fetch.")
+        } catch {
+            XCTAssertEqual(
+                error as? FirstRunOnboardingRepositoryError,
+                .discoveryResetRequired
+            )
+        }
+        try await restarted.beginAccountBoundDiscovery()
+        try await restarted.finishProfileDiscovery()
+        try await restarted.requireDiscoveryResetCompleted()
+        let createdID = try await restarted.beginProfileCreation(
+            proposedProfileID: nil,
+            startedAt: testDate
+        )
+        let completedResetState = try await restarted.state()
+        XCTAssertEqual(completedResetState?.profileIntent, .createNew)
+        XCTAssertEqual(completedResetState?.pendingCreatedProfileID, createdID)
+        XCTAssertNil(completedResetState?.discoveryResetPhase)
+    }
+
+    func testDiscoveryResetCannotFinishUntilPendingCreateContainmentCommits()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let repository = LocalFirstRunOnboardingRepository(
+            snapshotURL: directory.appendingPathComponent("first-run.json")
+        )
+        try await repository.markPending(
+            startedAt: testDate,
+            purpose: .fullSetup
+        )
+        let pendingID = try await repository.beginProfileCreation(
+            proposedProfileID: nil,
+            startedAt: testDate
+        )
+        let preparedID = try await repository.prepareForProfileDiscovery()
+        XCTAssertEqual(preparedID, pendingID)
+
+        do {
+            try await repository.finishDiscoveryReset()
+            XCTFail("The reset fence must retain the exact pending identity.")
+        } catch {
+            XCTAssertEqual(
+                error as? FirstRunOnboardingRepositoryError,
+                .pendingProfileCreationChanged
+            )
+        }
+
+        try await repository.finishPendingProfileContainment(
+            profileID: pendingID
+        )
+        try await repository.finishDiscoveryReset()
+        try await repository.beginAccountBoundDiscovery()
+        try await repository.finishProfileDiscovery()
+        try await repository.requireDiscoveryResetCompleted()
+    }
+
+    func testForegroundRearmsSuccessfulPendingDiscoveryBeforeAccountCanChange()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let repository = LocalFirstRunOnboardingRepository(
+            snapshotURL: directory.appendingPathComponent("first-run.json")
+        )
+        try await repository.markPending(
+            startedAt: testDate,
+            purpose: .fullSetup
+        )
+        _ = try await repository.prepareForProfileDiscovery()
+        try await repository.finishDiscoveryReset()
+        try await repository.beginAccountBoundDiscovery()
+        try await repository.finishProfileDiscovery()
+        try await repository.requireDiscoveryResetCompleted()
+
+        let didRearm = try await repository.rearmPendingDiscoveryReset()
+        XCTAssertTrue(didRearm)
+        do {
+            try await repository.requireProfileCreationAllowed()
+            XCTFail("Foreground reentry must require another explicit Find.")
+        } catch {
+            XCTAssertEqual(
+                error as? FirstRunOnboardingRepositoryError,
+                .discoveryResetRequired
+            )
+        }
+    }
+
+    func testFailedResetFenceWritePreservesPriorDurableBytesAcrossRelaunch()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let snapshotURL = directory.appendingPathComponent("first-run.json")
+        let repository = LocalFirstRunOnboardingRepository(
+            snapshotURL: snapshotURL
+        )
+        try await repository.markPending(
+            startedAt: testDate,
+            purpose: .fullSetup
+        )
+        _ = try await repository.prepareForProfileDiscovery()
+        let fencedBytes = try Data(contentsOf: snapshotURL)
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o500],
+            ofItemAtPath: directory.path
+        )
+        do {
+            try await repository.finishDiscoveryReset()
+            XCTFail("An unwritable directory must reject reset completion.")
+        } catch {
+            // The raw file-system error is intentionally propagated.
+        }
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: directory.path
+        )
+
+        XCTAssertEqual(try Data(contentsOf: snapshotURL), fencedBytes)
+        let restarted = LocalFirstRunOnboardingRepository(
+            snapshotURL: snapshotURL
+        )
+        let restartedState = try await restarted.state()
+        XCTAssertEqual(restartedState?.discoveryResetPhase, .required)
+    }
+
+    func testPresentationIdentitySurvivesPendingCreateContainmentReceipt()
+        throws
+    {
+        let pendingProfileID = ProfileID()
+
+        let beforeContainment = FirstRunOnboardingPresentationIdentity.value(
+            purpose: .fullSetup,
+            onboardingProfileID: pendingProfileID
+        )
+        let afterRemoteReceipt = FirstRunOnboardingPresentationIdentity.value(
+            purpose: .fullSetup,
+            onboardingProfileID: nil
+        )
+
+        XCTAssertEqual(
+            beforeContainment,
+            afterRemoteReceipt,
+            "A committed receipt must not recreate the onboarding view and discard one-tap Find results."
+        )
+    }
+
     func testFreshInstallStaysPendingAcrossRestartUntilParentFinishes() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

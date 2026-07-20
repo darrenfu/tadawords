@@ -119,6 +119,184 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         )
     }
 
+    func testConflictProtectionSurvivesDiagnosticEvictionAndCompatibilityReplay()
+        throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore()
+        let record = fixture.record(
+            name: "evicted-conflict",
+            payload: "must-remain-blocked"
+        )
+        let recordID = fixture.recordID(name: record.recordName)
+        let receiptID = try store.appendInbox(
+            record: record,
+            recordID: recordID,
+            scope: .privateDatabase,
+            receivedAt: fixture.now
+        )
+        try store.quarantine(
+            CloudKitFamilyQuarantineEntry(
+                id: UUID(),
+                scope: .privateDatabase,
+                recordName: recordID.recordName,
+                zoneName: recordID.zoneID.zoneName,
+                ownerName: recordID.zoneID.ownerName,
+                reason: .conflict,
+                envelopeData: Data("immutable-conflict".utf8),
+                quarantinedAt: fixture.now
+            )
+        )
+        for index in 0..<200 {
+            try store.quarantine(
+                CloudKitFamilyQuarantineEntry(
+                    id: UUID(),
+                    scope: .privateDatabase,
+                    recordName: "compatibility-\(index)",
+                    zoneName: fixture.zoneID.zoneName,
+                    ownerName: fixture.zoneID.ownerName,
+                    reason: .compatibility,
+                    envelopeData: nil,
+                    quarantinedAt: fixture.now.addingTimeInterval(
+                        Double(index + 1)
+                    )
+                )
+            )
+        }
+
+        let restarted = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        XCTAssertEqual(restarted.quarantinedCount(), 200)
+        XCTAssertTrue(
+            restarted.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            ),
+            "Evicting diagnostic bytes must not erase a proven conflict disposition"
+        )
+        XCTAssertTrue(
+            restarted.isQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            )
+        )
+
+        try restarted.quarantineInbox(
+            receiptIDs: [receiptID],
+            category: .compatibility,
+            at: fixture.now.addingTimeInterval(299)
+        )
+        let afterInboxQuarantine = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        XCTAssertTrue(afterInboxQuarantine.inboxEntries().isEmpty)
+        XCTAssertTrue(
+            afterInboxQuarantine.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            ),
+            "Quarantining an older receipt cannot downgrade a later conflict disposition"
+        )
+
+        try afterInboxQuarantine.quarantine(
+            CloudKitFamilyQuarantineEntry(
+                id: UUID(),
+                scope: .privateDatabase,
+                recordName: recordID.recordName,
+                zoneName: recordID.zoneID.zoneName,
+                ownerName: recordID.zoneID.ownerName,
+                reason: .compatibility,
+                envelopeData: Data("later-compatibility-envelope".utf8),
+                quarantinedAt: fixture.now.addingTimeInterval(300)
+            )
+        )
+
+        let replayed = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        XCTAssertTrue(
+            replayed.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            ),
+            "A later compatibility callback cannot downgrade the durable conflict lock"
+        )
+        XCTAssertThrowsError(
+            try replayed.appendInboxReplacingQuarantine(
+                record: record,
+                recordID: recordID,
+                scope: .privateDatabase,
+                receivedAt: fixture.now.addingTimeInterval(301)
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .conflictProtectedRecord
+            )
+        }
+    }
+
+    func testReceiptQuarantineCannotDowngradeVisibleConflictDisposition() throws {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore()
+        let record = fixture.record(
+            name: "visible-conflict",
+            payload: "older-inbox-envelope"
+        )
+        let recordID = fixture.recordID(name: record.recordName)
+        let receiptID = try store.appendInbox(
+            record: record,
+            recordID: recordID,
+            scope: .privateDatabase,
+            receivedAt: fixture.now
+        )
+        try store.quarantine(
+            CloudKitFamilyQuarantineEntry(
+                id: UUID(),
+                scope: .privateDatabase,
+                recordName: recordID.recordName,
+                zoneName: recordID.zoneID.zoneName,
+                ownerName: recordID.zoneID.ownerName,
+                reason: .conflict,
+                envelopeData: Data("newer-conflicting-envelope".utf8),
+                quarantinedAt: fixture.now.addingTimeInterval(1)
+            )
+        )
+
+        try store.quarantineInbox(
+            receiptIDs: [receiptID],
+            category: .compatibility,
+            at: fixture.now.addingTimeInterval(2)
+        )
+
+        let restarted = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        XCTAssertTrue(restarted.inboxEntries().isEmpty)
+        XCTAssertTrue(
+            restarted.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            )
+        )
+        XCTAssertThrowsError(
+            try restarted.appendInboxReplacingQuarantine(
+                record: record,
+                recordID: recordID,
+                scope: .privateDatabase,
+                receivedAt: fixture.now.addingTimeInterval(3)
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .conflictProtectedRecord
+            )
+        }
+    }
+
     func testDurableValidReplacementAtomicallyClearsPriorQuarantine() throws {
         let fixture = try CloudInboxHarnessFixture()
         defer { fixture.remove() }
@@ -155,6 +333,62 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         XCTAssertEqual(restarted.inboxEntries().first?.record, record)
         XCTAssertEqual(restarted.quarantinedCount(), 0)
         XCTAssertFalse(
+            restarted.isQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            )
+        )
+    }
+
+    func testAppendInboxCannotClearDurableConflictProtection() throws {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore()
+        let record = fixture.record(
+            name: "conflict-protected-record",
+            payload: "must-stay-blocked"
+        )
+        let recordID = fixture.recordID(name: record.recordName)
+        try store.quarantine(
+            CloudKitFamilyQuarantineEntry(
+                id: UUID(),
+                scope: .privateDatabase,
+                recordName: recordID.recordName,
+                zoneName: recordID.zoneID.zoneName,
+                ownerName: recordID.zoneID.ownerName,
+                reason: .conflict,
+                envelopeData: Data("conflicting-envelope".utf8),
+                quarantinedAt: fixture.now
+            )
+        )
+        let quarantineCount = store.quarantinedCount()
+
+        XCTAssertThrowsError(
+            try store.appendInboxReplacingQuarantine(
+                record: record,
+                recordID: recordID,
+                scope: .privateDatabase,
+                receivedAt: fixture.now.addingTimeInterval(1)
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .conflictProtectedRecord
+            )
+        }
+
+        let restarted = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        XCTAssertTrue(restarted.inboxEntries().isEmpty)
+        XCTAssertEqual(restarted.quarantinedCount(), quarantineCount)
+        XCTAssertTrue(
+            restarted.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            )
+        )
+        XCTAssertTrue(
             restarted.isQuarantined(
                 recordID: recordID,
                 scope: .privateDatabase
@@ -259,6 +493,26 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
     {
         try await assertSameRevisionConflict(first: "alpha", second: "beta")
         try await assertSameRevisionConflict(first: "beta", second: "alpha")
+    }
+
+    func testAtomicConflictWriteFailureRetriesFailClosedInSameProcess()
+        async throws
+    {
+        for kind in StagedConflictKind.allCases {
+            try await assertAtomicConflictWriteFailureRetriesInSameProcess(
+                kind: kind
+            )
+        }
+    }
+
+    func testAtomicConflictWriteFailureReplaysFailClosedFromOldCursorAfterRelaunch()
+        async throws
+    {
+        for kind in StagedConflictKind.allCases {
+            try await assertAtomicConflictWriteFailureReplaysAfterRelaunch(
+                kind: kind
+            )
+        }
     }
 
     func testGoodRecordAppliesWhileWrongProfileAndMalformedEnvelopeAreQuarantined()
@@ -485,6 +739,620 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
             store.binding(for: fixture.profileID).rootRecordID,
             fixture.rootRecordID
         )
+    }
+
+    func testItemBeforeRootAcrossCallbacksDefersThenPersistsPrivateCursor()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let record = fixture.record(payload: "cross-callback-private")
+        let item = try fixture.cloudRecord(for: record, store: store)
+        let root = fixture.rootCloudRecord()
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("private-after-item")
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([item]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+
+        XCTAssertNil(stateStore.load(.privateDatabase))
+        let canPersistBeforeRoot = await buffer.canPersistEngineState(1)
+        XCTAssertFalse(canPersistBeforeRoot)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+        let beforeRoot = await buffer.drain()
+        XCTAssertTrue(beforeRoot.records.isEmpty)
+        XCTAssertEqual(beforeRoot.quarantinedRecordCount, 0)
+
+        await buffer.handle(
+            .fetchedRecords([root]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await buffer.handle(
+            .finishedFetchingZone(fixture.zoneID, succeeded: true),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let result = await buffer.drain()
+
+        XCTAssertEqual(result.records, [record])
+        XCTAssertEqual(store.inboxEntries().map(\.record), [record])
+        XCTAssertEqual(store.binding(for: fixture.profileID).state, .privateOwner)
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced)
+        )
+    }
+
+    func testProcessRestartReplaysItemBecausePreRootCursorWasNotPersisted()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let record = fixture.record(payload: "restart-replay")
+        let item = try fixture.cloudRecord(for: record, store: store)
+        let root = fixture.rootCloudRecord()
+        let stateStore = fixture.stateStore()
+        let unsafe = try fixture.serialization("must-not-survive-crash")
+
+        let firstProcess = CloudKitFamilySyncEventBuffer(metadataStore: store)
+        await firstProcess.handle(
+            .fetchedRecords([item]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await firstProcess.persistEngineState(
+            unsafe,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        XCTAssertNil(stateStore.load(.privateDatabase))
+
+        // A new buffer represents a process relaunch from the still-old token.
+        let restarted = CloudKitFamilySyncEventBuffer(metadataStore: store)
+        await restarted.handle(
+            .fetchedRecords([item]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await restarted.handle(
+            .fetchedRecords([root]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let replayed = await restarted.drain()
+
+        XCTAssertEqual(replayed.records, [record])
+        XCTAssertEqual(store.inboxEntries().map(\.record), [record])
+    }
+
+    func testSharedAndPrivatePreRootStagingAndCursorsRemainScopeIsolated()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let privateRecord = fixture.record(payload: "private")
+        let privateItem = try fixture.cloudRecord(for: privateRecord, store: store)
+        let sharedProfileID = ProfileID()
+        let shared = try fixture.discoveryRecords(
+            profileID: sharedProfileID,
+            payload: "shared",
+            ownerName: "shared-owner",
+            scope: .sharedDatabase,
+            store: store
+        )
+        let stateStore = fixture.stateStore()
+        let privateState = try fixture.serialization("private-deferred")
+        let sharedState = try fixture.serialization("shared-deferred")
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([privateItem]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.handle(
+            .fetchedRecords([shared.item]),
+            scope: .sharedDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            privateState,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await buffer.persistEngineState(
+            sharedState,
+            scope: .sharedDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+
+        await buffer.handle(
+            .fetchedRecords([shared.root]),
+            scope: .sharedDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+
+        XCTAssertNil(stateStore.load(.privateDatabase))
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.sharedDatabase)),
+            try fixture.encoded(sharedState)
+        )
+        XCTAssertEqual(store.binding(for: sharedProfileID).state, .sharedParticipant)
+        XCTAssertEqual(store.binding(for: fixture.profileID).state, .unbound)
+
+        await buffer.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let result = await buffer.drain()
+
+        XCTAssertEqual(Set(result.records), [privateRecord, shared.record])
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(privateState)
+        )
+    }
+
+    func testSuccessfulZoneBoundaryQuarantinesRootlessItemBeforeAdvancingCursor()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let record = fixture.record(payload: "root-never-arrives")
+        let item = try fixture.cloudRecord(for: record, store: store)
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("rootless-quarantined")
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([item]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        XCTAssertNil(stateStore.load(.privateDatabase))
+
+        await buffer.handle(
+            .finishedFetchingZone(fixture.zoneID, succeeded: true),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        let result = await buffer.drain()
+
+        XCTAssertTrue(result.records.isEmpty)
+        XCTAssertEqual(result.quarantinedRecordCount, 1)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+        XCTAssertEqual(store.binding(for: fixture.profileID).state, .unbound)
+        XCTAssertTrue(
+            store.isQuarantined(
+                recordID: item.recordID,
+                scope: .privateDatabase
+            )
+        )
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced)
+        )
+    }
+
+    func testRootlessQuarantineWriteFailureRetriesBeforeAdvancingCursor()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let item = try fixture.cloudRecord(
+            for: fixture.record(payload: "rootless-retry"),
+            store: store
+        )
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("rootless-retry")
+        let writablePermissions = 0o755
+        let readOnlyPermissions = 0o555
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: writablePermissions],
+                ofItemAtPath: fixture.directory.path
+            )
+        }
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([item]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: readOnlyPermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        await buffer.handle(
+            .finishedFetchingZone(fixture.zoneID, succeeded: true),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        let failed = await buffer.drain()
+
+        XCTAssertEqual(failed.failures.map(\.category), [.corruptState])
+        XCTAssertNil(stateStore.load(.privateDatabase))
+        XCTAssertFalse(
+            store.isQuarantined(
+                recordID: item.recordID,
+                scope: .privateDatabase
+            )
+        )
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: writablePermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        let recovered = await buffer.retryStagedUnboundRecords(generation: 1)
+        let retry = await buffer.drain()
+
+        XCTAssertTrue(recovered)
+        XCTAssertTrue(retry.failures.isEmpty)
+        XCTAssertEqual(retry.quarantinedRecordCount, 1)
+        XCTAssertTrue(
+            store.isQuarantined(
+                recordID: item.recordID,
+                scope: .privateDatabase
+            )
+        )
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced)
+        )
+    }
+
+    func testFailedZoneBoundaryKeepsRootlessItemRetryableUntilRootArrives()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let record = fixture.record(payload: "retryable-root")
+        let item = try fixture.cloudRecord(for: record, store: store)
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("retryable-deferred")
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([item]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await buffer.handle(
+            .finishedFetchingZone(fixture.zoneID, succeeded: false),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+
+        XCTAssertNil(stateStore.load(.privateDatabase))
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+
+        await buffer.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let result = await buffer.drain()
+
+        XCTAssertEqual(result.records, [record])
+        XCTAssertEqual(result.quarantinedRecordCount, 0)
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced)
+        )
+    }
+
+    func testPartialPromotionWriteFailureRetriesRemainingInSameProcess()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let firstRecord = fixture.record(
+            name: "first-same-process",
+            payload: "first"
+        )
+        let secondRecord = fixture.record(
+            name: "second-same-process",
+            payload: "second"
+        )
+        let firstItem = try fixture.cloudRecord(for: firstRecord, store: store)
+        let secondItem = try fixture.cloudRecord(for: secondRecord, store: store)
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("same-process-promotion")
+        let writablePermissions = 0o755
+        let readOnlyPermissions = 0o555
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: writablePermissions],
+                ofItemAtPath: fixture.directory.path
+            )
+        }
+        let buffer = CloudKitFamilySyncEventBuffer(
+            metadataStore: store,
+            beforePromotingStagedRecord: { index in
+                guard index == 1 else { return }
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: readOnlyPermissions],
+                    ofItemAtPath: fixture.directory.path
+                )
+            }
+        )
+
+        await buffer.handle(
+            .fetchedRecords([firstItem, secondItem]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await buffer.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await buffer.handle(
+            .finishedFetchingZone(fixture.zoneID, succeeded: true),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let partial = await buffer.drain()
+
+        XCTAssertEqual(partial.records, [firstRecord])
+        XCTAssertEqual(partial.failures.map(\.category), [.corruptState])
+        XCTAssertEqual(partial.quarantinedRecordCount, 0)
+        XCTAssertNil(stateStore.load(.privateDatabase))
+        XCTAssertEqual(store.inboxEntries().map(\.record), [firstRecord])
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: writablePermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        let recovered = await buffer.retryStagedUnboundRecords(generation: 1)
+        let retry = await buffer.drain()
+
+        XCTAssertTrue(recovered)
+        XCTAssertEqual(retry.records, [secondRecord])
+        XCTAssertTrue(retry.failures.isEmpty)
+        XCTAssertEqual(
+            Set(store.inboxEntries().compactMap(\.record)),
+            [firstRecord, secondRecord]
+        )
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced)
+        )
+    }
+
+    func testPartialPromotionWriteFailureReplaysIdempotentlyFromOldCursor()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let firstRecord = fixture.record(
+            name: "first-after-root",
+            payload: "first"
+        )
+        let secondRecord = fixture.record(
+            name: "second-after-root",
+            payload: "second"
+        )
+        let firstItem = try fixture.cloudRecord(for: firstRecord, store: store)
+        let secondItem = try fixture.cloudRecord(for: secondRecord, store: store)
+        let stateStore = fixture.stateStore()
+        let unsafe = try fixture.serialization("partial-promotion")
+        let writablePermissions = 0o755
+        let readOnlyPermissions = 0o555
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: writablePermissions],
+                ofItemAtPath: fixture.directory.path
+            )
+        }
+        let buffer = CloudKitFamilySyncEventBuffer(
+            metadataStore: store,
+            beforePromotingStagedRecord: { index in
+                guard index == 1 else { return }
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: readOnlyPermissions],
+                    ofItemAtPath: fixture.directory.path
+                )
+            }
+        )
+
+        await buffer.handle(
+            .fetchedRecords([firstItem, secondItem]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            unsafe,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await buffer.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await buffer.handle(
+            .finishedFetchingZone(fixture.zoneID, succeeded: true),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let partial = await buffer.drain()
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: writablePermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        XCTAssertEqual(partial.records, [firstRecord])
+        XCTAssertEqual(partial.failures.map(\.category), [.corruptState])
+        XCTAssertEqual(partial.quarantinedRecordCount, 0)
+        XCTAssertNil(stateStore.load(.privateDatabase))
+        XCTAssertEqual(store.inboxEntries().map(\.record), [firstRecord])
+
+        let restartedStore = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        let restarted = CloudKitFamilySyncEventBuffer(
+            metadataStore: restartedStore
+        )
+        await restarted.handle(
+            .fetchedRecords([firstItem, secondItem]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let replayed = await restarted.drain()
+
+        XCTAssertEqual(Set(replayed.records), [firstRecord, secondRecord])
+        XCTAssertEqual(
+            Set(restartedStore.inboxEntries().compactMap(\.record)),
+            [firstRecord, secondRecord]
+        )
+    }
+
+    func testMalformedRouteCannotStageOrForgeBindingAndAccountBoundaryDropsStaging()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let record = fixture.record(payload: "hostile-route")
+        let hostileItem = try fixture.cloudRecord(for: record, store: store)
+        hostileItem.parent = CKRecord.Reference(
+            recordID: CKRecord.ID(
+                recordName: "not-the-deterministic-root",
+                zoneID: fixture.zoneID
+            ),
+            action: .none
+        )
+        let hostileRoot = CKRecord(
+            recordType: CloudKitFamilyRecordCodec.Schema.rootRecordType,
+            recordID: CKRecord.ID(
+                recordName: "not-the-deterministic-root",
+                zoneID: fixture.zoneID
+            )
+        )
+        hostileRoot[CloudKitFamilyRecordCodec.Schema.profileID] =
+            fixture.profileID.rawValue.uuidString as NSString
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([hostileItem, hostileRoot]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        let hostile = await buffer.drain()
+
+        XCTAssertTrue(hostile.records.isEmpty)
+        XCTAssertEqual(hostile.quarantinedRecordCount, 2)
+        XCTAssertEqual(store.binding(for: fixture.profileID).state, .unbound)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+
+        let validItem = try fixture.cloudRecord(for: record, store: store)
+        let stateStore = fixture.stateStore()
+        let unsafe = try fixture.serialization("old-account-staged")
+        await buffer.handle(
+            .fetchedRecords([validItem]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await buffer.persistEngineState(
+            unsafe,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await buffer.handle(
+            .accountChange(.switchedAccounts),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        await buffer.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(3)
+        )
+        let sealed = await buffer.drain()
+
+        XCTAssertEqual(sealed.accountChange, .switchedAccounts)
+        XCTAssertTrue(sealed.records.isEmpty)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+        XCTAssertNil(stateStore.load(.privateDatabase))
     }
 
     func testAccountSwitchDropsOldBytesButPreservesFailClosedBindingProvenance()
@@ -1251,6 +2119,324 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         )
     }
 
+    private enum StagedConflictKind: CaseIterable {
+        case sameRevision
+        case immutable
+    }
+
+    private func assertAtomicConflictWriteFailureRetriesInSameProcess(
+        kind: StagedConflictKind,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let variants = stagedConflictVariants(kind: kind, fixture: fixture)
+        let firstCloud = try fixture.cloudRecord(for: variants.first, store: store)
+        let secondCloud = try fixture.cloudRecord(for: variants.second, store: store)
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("conflict-same-process-\(kind)")
+        let writablePermissions = 0o755
+        let readOnlyPermissions = 0o555
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: writablePermissions],
+                ofItemAtPath: fixture.directory.path
+            )
+        }
+        let buffer = CloudKitFamilySyncEventBuffer(
+            metadataStore: store,
+            beforePromotingStagedRecord: { index in
+                guard index == 1 else { return }
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: readOnlyPermissions],
+                    ofItemAtPath: fixture.directory.path
+                )
+            }
+        )
+
+        await buffer.handle(
+            .fetchedRecords([firstCloud, secondCloud]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await buffer.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        let failed = await buffer.drain()
+
+        XCTAssertTrue(failed.records.isEmpty, file: file, line: line)
+        XCTAssertTrue(failed.receiptIDs.isEmpty, file: file, line: line)
+        XCTAssertTrue(failed.receipts.isEmpty, file: file, line: line)
+        XCTAssertEqual(
+            failed.failures.map(\.category),
+            [.corruptState],
+            file: file,
+            line: line
+        )
+        XCTAssertNil(stateStore.load(.privateDatabase), file: file, line: line)
+        XCTAssertEqual(store.inboxEntries().map(\.record), [variants.first])
+        XCTAssertFalse(
+            store.isConflictQuarantined(
+                recordID: firstCloud.recordID,
+                scope: .privateDatabase
+            ),
+            file: file,
+            line: line
+        )
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: writablePermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        let recovered = await buffer.retryStagedUnboundRecords(generation: 1)
+        let retried = await buffer.drain()
+
+        XCTAssertTrue(recovered, file: file, line: line)
+        assertConflictRemainsFailClosed(
+            result: retried,
+            store: store,
+            recordID: firstCloud.recordID,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced),
+            "The deferred cursor may advance only after the atomic conflict write succeeds",
+            file: file,
+            line: line
+        )
+
+        XCTAssertThrowsError(
+            try store.appendInboxReplacingQuarantine(
+                record: variants.second,
+                recordID: secondCloud.recordID,
+                scope: .privateDatabase,
+                receivedAt: fixture.now.addingTimeInterval(2)
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .conflictProtectedRecord,
+                file: file,
+                line: line
+            )
+        }
+        XCTAssertTrue(store.inboxEntries().isEmpty, file: file, line: line)
+        XCTAssertTrue(
+            store.isConflictQuarantined(
+                recordID: secondCloud.recordID,
+                scope: .privateDatabase
+            ),
+            file: file,
+            line: line
+        )
+    }
+
+    private func assertAtomicConflictWriteFailureReplaysAfterRelaunch(
+        kind: StagedConflictKind,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let variants = stagedConflictVariants(kind: kind, fixture: fixture)
+        let firstCloud = try fixture.cloudRecord(for: variants.first, store: store)
+        let secondCloud = try fixture.cloudRecord(for: variants.second, store: store)
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("conflict-relaunch-\(kind)")
+        let writablePermissions = 0o755
+        let readOnlyPermissions = 0o555
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: writablePermissions],
+                ofItemAtPath: fixture.directory.path
+            )
+        }
+        let firstProcess = CloudKitFamilySyncEventBuffer(
+            metadataStore: store,
+            beforePromotingStagedRecord: { index in
+                guard index == 1 else { return }
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: readOnlyPermissions],
+                    ofItemAtPath: fixture.directory.path
+                )
+            }
+        )
+
+        await firstProcess.handle(
+            .fetchedRecords([firstCloud, secondCloud]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await firstProcess.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await firstProcess.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        let failed = await firstProcess.drain()
+
+        XCTAssertTrue(failed.records.isEmpty, file: file, line: line)
+        XCTAssertTrue(failed.receiptIDs.isEmpty, file: file, line: line)
+        XCTAssertEqual(
+            failed.failures.map(\.category),
+            [.corruptState],
+            file: file,
+            line: line
+        )
+        XCTAssertNil(stateStore.load(.privateDatabase), file: file, line: line)
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: writablePermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        let restartedStore = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        let restarted = CloudKitFamilySyncEventBuffer(
+            metadataStore: restartedStore
+        )
+        await restarted.replay(
+            restartedStore.replayableInboxEntries(),
+            generation: 1
+        )
+        await restarted.handle(
+            .fetchedRecords([firstCloud, secondCloud]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        await restarted.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        let replayed = await restarted.drain()
+
+        assertConflictRemainsFailClosed(
+            result: replayed,
+            store: restartedStore,
+            recordID: firstCloud.recordID,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced),
+            "Relaunch must replay from the old cursor before persisting its replacement",
+            file: file,
+            line: line
+        )
+    }
+
+    private func stagedConflictVariants(
+        kind: StagedConflictKind,
+        fixture: CloudInboxHarnessFixture
+    ) -> (first: FamilySyncRecord, second: FamilySyncRecord) {
+        let recordName = "staged-conflict-\(kind)"
+        switch kind {
+        case .sameRevision:
+            let revision = FamilySyncLogicalRevision(
+                counter: 7,
+                deviceID: "same-revision-device"
+            )
+            return (
+                fixture.record(
+                    name: recordName,
+                    payload: "first-revision-payload",
+                    revision: revision
+                ),
+                fixture.record(
+                    name: recordName,
+                    payload: "second-revision-payload",
+                    revision: revision
+                )
+            )
+        case .immutable:
+            return (
+                FamilySyncRecord(
+                    recordName: recordName,
+                    profileID: fixture.profileID,
+                    kind: .attempt,
+                    payload: Data("first-immutable-payload".utf8),
+                    updatedAt: fixture.now,
+                    deviceID: "immutable-device-a",
+                    logicalRevision: FamilySyncLogicalRevision(
+                        counter: 1,
+                        deviceID: "immutable-device-a"
+                    )
+                ),
+                FamilySyncRecord(
+                    recordName: recordName,
+                    profileID: fixture.profileID,
+                    kind: .attempt,
+                    payload: Data("second-immutable-payload".utf8),
+                    updatedAt: fixture.now.addingTimeInterval(1),
+                    deviceID: "immutable-device-b",
+                    logicalRevision: FamilySyncLogicalRevision(
+                        counter: 2,
+                        deviceID: "immutable-device-b"
+                    )
+                )
+            )
+        }
+    }
+
+    private func assertConflictRemainsFailClosed(
+        result: FamilySyncTransportResult,
+        store: CloudKitFamilyMetadataStore,
+        recordID: CKRecord.ID,
+        file: StaticString,
+        line: UInt
+    ) {
+        XCTAssertTrue(result.records.isEmpty, file: file, line: line)
+        XCTAssertTrue(result.deletions.isEmpty, file: file, line: line)
+        XCTAssertTrue(result.receiptIDs.isEmpty, file: file, line: line)
+        XCTAssertTrue(result.receipts.isEmpty, file: file, line: line)
+        XCTAssertTrue(result.acknowledged.isEmpty, file: file, line: line)
+        XCTAssertTrue(result.failures.isEmpty, file: file, line: line)
+        XCTAssertTrue(store.inboxEntries().isEmpty, file: file, line: line)
+        XCTAssertEqual(store.quarantinedCount(), 1, file: file, line: line)
+        XCTAssertTrue(
+            store.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            ),
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            store.isQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            ),
+            file: file,
+            line: line
+        )
+    }
+
     private func assertSameRevisionConflict(
         first firstPayload: String,
         second secondPayload: String,
@@ -1559,6 +2745,12 @@ private struct LegacyCloudMetadataSnapshot: Encodable {
 }
 
 private struct CloudInboxHarnessFixture {
+    struct DiscoveryRecords {
+        let record: FamilySyncRecord
+        let item: CKRecord
+        let root: CKRecord
+    }
+
     let directory: URL
     let metadataURL: URL
     let profileID = ProfileID()
@@ -1577,11 +2769,15 @@ private struct CloudInboxHarnessFixture {
         )
         metadataURL = directory.appendingPathComponent("metadata.json")
         zoneID = CKRecordZone.ID(
-            zoneName: "TadaCloudInboxHarnessZone",
+            zoneName: CloudKitDeterministicProfileRoute.zoneName(
+                for: profileID
+            ),
             ownerName: CKCurrentUserDefaultName
         )
         rootRecordID = CKRecord.ID(
-            recordName: "profile-root",
+            recordName: CloudKitDeterministicProfileRoute.rootRecordName(
+                for: profileID
+            ),
             zoneID: zoneID
         )
     }
@@ -1603,6 +2799,97 @@ private struct CloudInboxHarnessFixture {
             )
         )
         return store
+    }
+
+    func unboundStore(
+        accountRecordName: String = "account-a"
+    ) throws -> CloudKitFamilyMetadataStore {
+        let store = CloudKitFamilyMetadataStore(snapshotURL: metadataURL)
+        try store.confirm(accountRecordName: accountRecordName)
+        return store
+    }
+
+    func rootCloudRecord() -> CKRecord {
+        let root = CKRecord(
+            recordType: CloudKitFamilyRecordCodec.Schema.rootRecordType,
+            recordID: rootRecordID
+        )
+        root[CloudKitFamilyRecordCodec.Schema.profileID] =
+            profileID.rawValue.uuidString as NSString
+        return root
+    }
+
+    func discoveryRecords(
+        profileID: ProfileID,
+        payload: String,
+        ownerName: String,
+        scope: CloudKitFamilyDatabaseScope,
+        store: CloudKitFamilyMetadataStore
+    ) throws -> DiscoveryRecords {
+        let zoneID = CKRecordZone.ID(
+            zoneName: CloudKitDeterministicProfileRoute.zoneName(for: profileID),
+            ownerName: ownerName
+        )
+        let rootID = CKRecord.ID(
+            recordName: CloudKitDeterministicProfileRoute.rootRecordName(
+                for: profileID
+            ),
+            zoneID: zoneID
+        )
+        let record = FamilySyncRecord(
+            recordName: "profile-\(profileID)",
+            profileID: profileID,
+            kind: .wordPoolEntry,
+            payload: Data(payload.utf8),
+            updatedAt: now,
+            deviceID: "remote",
+            logicalRevision: FamilySyncLogicalRevision(
+                counter: 1,
+                deviceID: "remote"
+            )
+        )
+        let item = try CloudKitFamilyRecordCodec.cloudRecord(
+            for: record,
+            recordID: CKRecord.ID(
+                recordName: record.recordName,
+                zoneID: zoneID
+            ),
+            rootRecordID: rootID,
+            scope: scope,
+            metadataStore: store
+        )
+        let root = CKRecord(
+            recordType: CloudKitFamilyRecordCodec.Schema.rootRecordType,
+            recordID: rootID
+        )
+        root[CloudKitFamilyRecordCodec.Schema.profileID] =
+            profileID.rawValue.uuidString as NSString
+        return DiscoveryRecords(record: record, item: item, root: root)
+    }
+
+    func stateStore() -> CloudKitFamilySyncStateStore {
+        CloudKitFamilySyncStateStore(
+            directory: directory.appendingPathComponent(
+                "deferred-engine-state",
+                isDirectory: true
+            )
+        )
+    }
+
+    func serialization(
+        _ marker: String
+    ) throws -> CKSyncEngine.State.Serialization {
+        let data = Data(marker.utf8).base64EncodedString()
+        return try JSONDecoder().decode(
+            CKSyncEngine.State.Serialization.self,
+            from: Data(#"{"data":"\#(data)"}"#.utf8)
+        )
+    }
+
+    func encoded(
+        _ serialization: CKSyncEngine.State.Serialization?
+    ) throws -> Data? {
+        try serialization.map { try JSONEncoder().encode($0) }
     }
 
     func record(

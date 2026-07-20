@@ -339,6 +339,19 @@ public protocol FamilySyncJournalRepository: Sendable {
 
     func invalidateAcknowledgementsForAccountChange(at date: Date) async throws
 
+    /// Removes cached, nonterminal records that were only discovered during an
+    /// unfinished first-run flow. The caller must hold a durable disabled-sync
+    /// fence. Canonical Profile-deletion evidence is always retained so an
+    /// account change cannot weaken a privacy boundary.
+    func discardUnadoptedProfileState() async throws
+
+    /// Returns every Profile identity referenced by nonterminal cached state.
+    /// Callers must snapshot this set before discarding the journal so they
+    /// can erase canonical child data even when no Profile row exists.
+    func unadoptedProfileIDs() async throws -> Set<ProfileID>
+
+    func hasUnadoptedProfileState() async throws -> Bool
+
     func recordParentVisibleCondition(
         _ condition: FamilySyncDurableCondition,
         errorCategory: FamilySyncPrivacySafeErrorCategory?,
@@ -526,6 +539,68 @@ public actor VolatileFamilySyncJournalRepository: FamilySyncJournalRepository {
         lastSuccessAt = nil
         errorCategory = .account
         condition = .iCloudUnavailable
+    }
+
+    public func discardUnadoptedProfileState() {
+        let retainedRecords = records.filter {
+            Self.isCanonicalProfileDeletion($0.value)
+        }
+        acknowledged = acknowledged.filter { key, revision in
+            retainedRecords[key]?.logicalRevision == revision
+        }
+        pending = pending.filter { retainedRecords[$0] != nil }
+        records = retainedRecords
+        guard pending.isEmpty else { return }
+        lastAttemptAt = nil
+        lastSuccessAt = nil
+        errorCategory = nil
+        condition = .idle
+    }
+
+    public func unadoptedProfileIDs() async throws -> Set<ProfileID> {
+        var profileIDs = Set(
+            records.compactMap { _, record in
+                Self.isCanonicalProfileDeletion(record)
+                    ? nil
+                    : record.profileID
+            }
+        )
+        profileIDs.formUnion(
+            acknowledged.compactMap { key, revision in
+                guard
+                    let record = records[key],
+                    Self.isCanonicalProfileDeletion(record),
+                    record.logicalRevision == revision
+                else { return key.profileID }
+                return nil
+            }
+        )
+        profileIDs.formUnion(
+            pending.compactMap { key in
+                guard
+                    let record = records[key],
+                    Self.isCanonicalProfileDeletion(record)
+                else { return key.profileID }
+                return nil
+            }
+        )
+        return profileIDs
+    }
+
+    public func hasUnadoptedProfileState() -> Bool {
+        let terminalRecordKeys = Set(
+            records.compactMap { key, record in
+                Self.isCanonicalProfileDeletion(record) ? key : nil
+            }
+        )
+        let acknowledgedIsTerminal = acknowledged.allSatisfy { key, revision in
+            guard let record = records[key] else { return false }
+            return terminalRecordKeys.contains(key)
+                && record.logicalRevision == revision
+        }
+        return records.keys.contains { !terminalRecordKeys.contains($0) }
+            || !acknowledgedIsTerminal
+            || pending.contains { !terminalRecordKeys.contains($0) }
     }
 
     public func recordParentVisibleCondition(
@@ -1020,6 +1095,108 @@ public actor LocalJSONFamilySyncJournalRepository: FamilySyncJournalRepository {
                 )
             )
         )
+    }
+
+    public func discardUnadoptedProfileState() throws {
+        let current = try loadedSnapshot()
+        let local = try dictionary(current.localManifest, duplicate: .manifest)
+        let acknowledged = try dictionary(
+            current.acknowledgedManifest,
+            duplicate: .manifest
+        )
+        let outbox = try dictionary(current.outbox, duplicate: .outbox)
+        let retainedLocal = local.filter {
+            Self.isCanonicalProfileDeletion($0.value)
+        }
+        let retainedAcknowledged = acknowledged.filter { key, manifest in
+            guard let localManifest = retainedLocal[key] else { return false }
+            return Self.isCanonicalProfileDeletion(manifest)
+                && manifest.hasSameServerValue(as: localManifest)
+        }
+        let retainedOutbox = outbox.filter { key, entry in
+            guard let manifest = retainedLocal[key] else { return false }
+            return entry.operation == .save
+                && entry.revision == manifest.revision
+        }
+        let retainedStatus =
+            retainedOutbox.isEmpty ? FamilySyncDurableStatus.empty : current.status
+        try persist(
+            snapshot(
+                local: retainedLocal,
+                acknowledged: retainedAcknowledged,
+                outbox: retainedOutbox,
+                previousStatus: retainedStatus
+            )
+        )
+    }
+
+    public func unadoptedProfileIDs() async throws -> Set<ProfileID> {
+        let current = try loadedSnapshot()
+        let local = try dictionary(current.localManifest, duplicate: .manifest)
+        let acknowledged = try dictionary(
+            current.acknowledgedManifest,
+            duplicate: .manifest
+        )
+        let outbox = try dictionary(current.outbox, duplicate: .outbox)
+        var profileIDs = Set(
+            local.values.compactMap { manifest in
+                Self.isCanonicalProfileDeletion(manifest)
+                    ? nil
+                    : manifest.key.profileID
+            }
+        )
+        profileIDs.formUnion(
+            acknowledged.compactMap { key, manifest in
+                guard
+                    Self.isCanonicalProfileDeletion(manifest),
+                    let localManifest = local[key],
+                    Self.isCanonicalProfileDeletion(localManifest),
+                    manifest.hasSameServerValue(as: localManifest)
+                else { return manifest.key.profileID }
+                return nil
+            }
+        )
+        profileIDs.formUnion(
+            outbox.compactMap { key, entry in
+                guard let manifest = local[key] else {
+                    return key.profileID
+                }
+                let isTerminal =
+                    Self.isCanonicalProfileDeletion(manifest)
+                    && entry.operation == .save
+                    && entry.revision == manifest.revision
+                return isTerminal ? nil : key.profileID
+            }
+        )
+        return profileIDs
+    }
+
+    public func hasUnadoptedProfileState() throws -> Bool {
+        let current = try loadedSnapshot()
+        let local = try dictionary(current.localManifest, duplicate: .manifest)
+        let acknowledged = try dictionary(
+            current.acknowledgedManifest,
+            duplicate: .manifest
+        )
+        let outbox = try dictionary(current.outbox, duplicate: .outbox)
+        let hasLocalState = local.values.contains {
+            !Self.isCanonicalProfileDeletion($0)
+        }
+        let hasAcknowledgedState = acknowledged.contains { key, manifest in
+            guard
+                Self.isCanonicalProfileDeletion(manifest),
+                let localManifest = local[key],
+                Self.isCanonicalProfileDeletion(localManifest)
+            else { return true }
+            return !manifest.hasSameServerValue(as: localManifest)
+        }
+        let hasOutboxState = outbox.contains { key, entry in
+            guard let manifest = local[key] else { return true }
+            return !Self.isCanonicalProfileDeletion(manifest)
+                || entry.operation != .save
+                || entry.revision != manifest.revision
+        }
+        return hasLocalState || hasAcknowledgedState || hasOutboxState
     }
 
     public func recordParentVisibleCondition(

@@ -794,6 +794,17 @@ public enum FamilySyncCapability: Equatable, Sendable {
     case iCloud
 }
 
+/// Controls whether first launch may publish a locally generated Profile
+/// before a parent has had a chance to look for an existing family in iCloud.
+///
+/// Device-only transports keep the historical local seed. A transport that can
+/// discover an existing family must opt into discovery-first bootstrapping so
+/// an unrelated random UUID can never become an invisible second child.
+public enum FamilySyncInitialProfilePolicy: Equatable, Sendable {
+    case seedLocalProfile
+    case discoverBeforeCreating
+}
+
 public enum FamilySyncAvailability: Equatable, Sendable {
     case available
     case deviceOnly
@@ -1157,6 +1168,8 @@ public struct FamilySyncRecordSetFingerprint: Hashable, Sendable {
 public protocol FamilySyncTransport: Sendable {
     var capability: FamilySyncCapability { get }
 
+    var initialProfilePolicy: FamilySyncInitialProfilePolicy { get }
+
     func availability() async -> FamilySyncAvailability
 
     func prepareProfileZone(_ profileID: ProfileID) async throws
@@ -1204,6 +1217,10 @@ public protocol FamilySyncTransport: Sendable {
 }
 
 extension FamilySyncTransport {
+    public var initialProfilePolicy: FamilySyncInitialProfilePolicy {
+        .seedLocalProfile
+    }
+
     public func confirmCurrentAccount() async throws -> FamilySyncAccountChange? {
         nil
     }
@@ -1304,6 +1321,11 @@ public protocol FamilySyncCoordinating: Sendable {
 
     func setEnabled(_ isEnabled: Bool) async throws -> FamilySyncStatus
 
+    /// Durably opts out and waits until any reconciliation that already
+    /// crossed its generation gate has finished touching local repositories.
+    /// First-run account-bound cache replacement relies on this quiescence.
+    func disableAndAwaitQuiescence() async throws -> FamilySyncStatus
+
     func synchronize() async -> FamilySyncStatus
 
     func status() async -> FamilySyncStatus
@@ -1319,6 +1341,10 @@ public protocol FamilySyncCoordinating: Sendable {
 }
 
 extension FamilySyncCoordinating {
+    public func disableAndAwaitQuiescence() async throws -> FamilySyncStatus {
+        try await setEnabled(false)
+    }
+
     public func profileErasureLifecycles() async throws
         -> [ProfileErasureLifecycle]
     {

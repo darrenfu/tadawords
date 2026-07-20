@@ -140,7 +140,62 @@ verify_preset_catalog() {
     assert_sha256 "$preset_catalog" "f5b0a273a816d97de265f82f8a16d56bc45cbc2be19d585dfda05449827e3fd0" "preset catalog"
 }
 
-for command in jq plutil shasum cmp; do
+verify_parent_notice_route() {
+    local guardian_model="$1"
+    local route_result
+    route_result="$(
+        awk '
+            function finish_case() {
+                if (case_has_notice && case_has_app_and_family) {
+                    route_found = 1
+                }
+                case_has_notice = 0
+                case_has_app_and_family = 0
+            }
+
+            /var parentSectionForBack: GuardianParentSection\?/ {
+                in_parent_mapping = 1
+                next
+            }
+
+            in_parent_mapping && /^        case / {
+                finish_case()
+            }
+
+            in_parent_mapping && index($0, ".thirdPartyNotices") {
+                case_has_notice = 1
+            }
+
+            in_parent_mapping && index($0, ".appAndFamily") {
+                case_has_app_and_family = 1
+            }
+
+            in_parent_mapping && /^    }$/ {
+                finish_case()
+                in_parent_mapping = 0
+            }
+
+            END {
+                if (route_found) {
+                    print "routed"
+                }
+            }
+        ' "$guardian_model"
+    )"
+    [[ "$route_result" == "routed" ]] \
+        || fail "Third-Party Notices is not routed back to App & Family"
+}
+
+if [[ "${1:-}" == "--verify-parent-notice-route" ]]; then
+    [[ "$#" -eq 2 ]] \
+        || fail "usage: $0 --verify-parent-notice-route GuardianDashboardViewModel.swift"
+    command -v awk >/dev/null || fail "awk is required"
+    verify_parent_notice_route "$2"
+    echo "Third-Party Notices route verified"
+    exit 0
+fi
+
+for command in jq plutil shasum cmp awk; do
     command -v "$command" >/dev/null || fail "$command is required"
 done
 
@@ -164,7 +219,7 @@ assert_equal "$(awk '/CURRENT_PROJECT_VERSION:/ { print $2; exit }' "$repo_root/
 verify_audio_pack "$repo_root/$audio_relative"
 verify_picture_pack "$repo_root/$picture_relative"
 verify_preset_catalog "$repo_root/$preset_relative"
-assert_sha256 "$repo_root/$compatibility_relative" "ac0bec0343e049e8ee12448386b21992a6de7f67be427f6bf3f61404fbe547f3" "persistence compatibility table"
+assert_sha256 "$repo_root/$compatibility_relative" "51f579dccf3d44c5b03176cbb6abc975e983b547f7be205867f1a65df8156676" "persistence compatibility table"
 
 guardian_notice="$repo_root/$guardian_notice_relative"
 guardian_today="$repo_root/Sources/TadaWordsGuardianFeatures/GuardianTodayView.swift"
@@ -193,8 +248,7 @@ grep -Fq 'case .thirdPartyNotices:' "$guardian_root" \
     || fail "Third-Party Notices destination is missing from GuardianRootView"
 grep -Fq 'GuardianThirdPartyNoticesView(' "$guardian_root" \
     || fail "Third-Party Notices destination does not render its view"
-grep -Fq 'case .familySync, .thirdPartyNotices:' "$guardian_model" \
-    || fail "Third-Party Notices is not routed back to App & Family"
+verify_parent_notice_route "$guardian_model"
 
 assert_sha256 "$repo_root/Apps/TadaWordsApp/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" "ce1782b295901de1a7cc82f6f61cfc5ffbebf9bc0745256a573058bd1281e637" "app icon"
 assert_sha256 "$repo_root/Apps/TadaWordsApp/Assets.xcassets/TadaWordsMark.imageset/TadaWordsAppIcon.svg" "e47bfb19efa22e38db1b2a796bb47bb87993fc35b5ae4e6ba6624a9ec5e7b816" "Tada Words mark"
@@ -265,7 +319,7 @@ verify_preset_catalog "$archive_preset"
 find "$app_path" -type f -name 'Assets.car' -print -quit | grep -q . || fail "compiled asset catalog missing from archive"
 archive_compatibility="$app_path/PersistenceSchemaCompatibility.json"
 assert_file "$archive_compatibility" "archive persistence compatibility table"
-assert_sha256 "$archive_compatibility" "ac0bec0343e049e8ee12448386b21992a6de7f67be427f6bf3f61404fbe547f3" "archive persistence compatibility table"
+assert_sha256 "$archive_compatibility" "51f579dccf3d44c5b03176cbb6abc975e983b547f7be205867f1a65df8156676" "archive persistence compatibility table"
 assert_equal "$(count_files "$app_path" '*.json')" "5" "archive JSON count"
 
 excluded_pattern='(^|/)(QAArtifacts|DesignAssets|Tests|Fixtures)(/|$)|speechocean|LICENSE_SOURCE|SHA256SUMS|\.(wav|ttf|otf)$'

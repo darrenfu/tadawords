@@ -3,6 +3,41 @@ import TadaWordsContent
 import XCTest
 
 final class FamilySyncPreferenceRepositoryTests: XCTestCase {
+    func testFutureSchemaCannotBeOverwrittenByOptOut() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let snapshotURL = directory.appendingPathComponent("family-sync.json")
+        let future = FamilySyncPreferenceSnapshot(
+            schemaVersion:
+                FamilySyncPreferenceSnapshot.currentSchemaVersion + 1,
+            isEnabled: true,
+            disclosureVersion:
+                FamilySyncPreferenceSnapshot.currentDisclosureVersion,
+            consentedAt: Date(timeIntervalSince1970: 1_735_689_600),
+            updatedAt: Date(timeIntervalSince1970: 1_735_689_600)
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        let original = try encoder.encode(future)
+        try original.write(to: snapshotURL)
+        let repository = LocalJSONFamilySyncPreferenceRepository(
+            snapshotURL: snapshotURL
+        )
+
+        do {
+            try await repository.setEnabled(
+                false,
+                updatedAt: Date(timeIntervalSince1970: 1_735_689_700)
+            )
+            XCTFail("A future Family Sync preference must not be overwritten.")
+        } catch let error as LocalFamilySyncPreferenceRepositoryError {
+            guard case .unsupportedSchemaVersion = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertEqual(try Data(contentsOf: snapshotURL), original)
+    }
+
     func testMissingPreferenceDefaultsToOptOut() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

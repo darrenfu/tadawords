@@ -35,10 +35,23 @@
                 return nil
             }
             do {
+                let systemDirectory = try FileManager.default.url(
+                    for: .applicationSupportDirectory,
+                    in: .userDomainMask,
+                    appropriateFor: nil,
+                    create: true
+                )
                 return try FamilySyncSimulatorTestTransport(
                     scenario: configuration.scenario,
                     profileID: profileID,
-                    deletionDelaySeconds: configuration.deletionDelaySeconds
+                    deletionDelaySeconds: configuration.deletionDelaySeconds,
+                    cursorMarkerURL: suiteRoot(
+                        systemDirectory: systemDirectory,
+                        configuration: configuration
+                    ).appendingPathComponent(
+                        "fixture-server-cursor",
+                        isDirectory: false
+                    )
                 )
             } catch {
                 preconditionFailure(
@@ -55,17 +68,19 @@
             guard let configuration = configuration(arguments: arguments) else {
                 return nil
             }
-            let root =
-                systemDirectory
-                .appendingPathComponent(
-                    "TadaWordsFamilySyncUITests",
-                    isDirectory: true
-                )
-                .appendingPathComponent(configuration.suite, isDirectory: true)
+            let root = suiteRoot(
+                systemDirectory: systemDirectory,
+                configuration: configuration
+            )
             if configuration.resetsStorage,
                 FileManager.default.fileExists(atPath: root.path)
             {
                 try FileManager.default.removeItem(at: root)
+            }
+            if configuration.scenario == .secondDeviceAdoption {
+                // This fixture must be a genuinely clean second device: no
+                // Profile, onboarding marker, or pre-enabled sync preference.
+                return root
             }
             let dataDirectory = root.appendingPathComponent(
                 "TadaWords",
@@ -139,6 +154,18 @@
             }
         }
 
+        private static func suiteRoot(
+            systemDirectory: URL,
+            configuration: Configuration
+        ) -> URL {
+            systemDirectory
+                .appendingPathComponent(
+                    "TadaWordsFamilySyncUITests",
+                    isDirectory: true
+                )
+                .appendingPathComponent(configuration.suite, isDirectory: true)
+        }
+
         private static func seedCompletedFirstRun(
             at url: URL,
             profileID: ProfileID
@@ -186,6 +213,7 @@
             case signedOut = "signed-out"
             case restricted
             case delayedDeletion = "delayed-deletion"
+            case secondDeviceAdoption = "second-device-adoption"
         }
 
         private struct Configuration: Sendable {
@@ -213,12 +241,18 @@
 
     private actor FamilySyncSimulatorTestTransport: FamilySyncTransport {
         nonisolated let capability = FamilySyncCapability.iCloud
+        nonisolated var initialProfilePolicy: FamilySyncInitialProfilePolicy {
+            scenario == .secondDeviceAdoption
+                ? .discoverBeforeCreating
+                : .seedLocalProfile
+        }
 
-        private let scenario: FamilySyncSimulatorTestSupport.Scenario
+        private nonisolated let scenario: FamilySyncSimulatorTestSupport.Scenario
         private let profileID: ProfileID
         private let remoteBundle: [FamilySyncRecord]
         private let deletionRecord: FamilySyncRecord
         private let deletionDelaySeconds: Int
+        private let cursorMarkerURL: URL
         private var deliveredRemoteBundle = false
         private var deliveredDeletion = false
         private var quarantined = false
@@ -226,13 +260,23 @@
         init(
             scenario: FamilySyncSimulatorTestSupport.Scenario,
             profileID: ProfileID,
-            deletionDelaySeconds: Int
+            deletionDelaySeconds: Int,
+            cursorMarkerURL: URL
         ) throws {
+            let resolvedProfileID =
+                scenario == .secondDeviceAdoption
+                ? ProfileID(
+                    rawValue: Self.fixedUUID(
+                        "A4E3A3AF-11BE-44F2-9E35-9F563808452A"
+                    )
+                )
+                : profileID
             self.scenario = scenario
-            self.profileID = profileID
+            self.profileID = resolvedProfileID
             self.deletionDelaySeconds = deletionDelaySeconds
-            remoteBundle = try Self.makeRemoteBundle(profileID: profileID)
-            deletionRecord = try Self.makeDeletionRecord(profileID: profileID)
+            self.cursorMarkerURL = cursorMarkerURL
+            remoteBundle = try Self.makeRemoteBundle(profileID: resolvedProfileID)
+            deletionRecord = try Self.makeDeletionRecord(profileID: resolvedProfileID)
         }
 
         func availability() async -> FamilySyncAvailability {
@@ -243,7 +287,8 @@
                 .noAccount
             case .restricted:
                 .restricted
-            case .remoteBundle, .online, .quarantine, .delayedDeletion:
+            case .remoteBundle, .online, .quarantine, .delayedDeletion,
+                .secondDeviceAdoption:
                 .available
             }
         }
@@ -270,12 +315,30 @@
         func fetchChanges(
             for profileIDs: [ProfileID]
         ) async throws -> FamilySyncTransportResult {
-            guard profileIDs.contains(profileID) else {
+            guard
+                scenario == .secondDeviceAdoption
+                    || profileIDs.contains(profileID)
+            else {
                 return FamilySyncTransportResult()
             }
             switch scenario {
             case .remoteBundle:
                 guard !deliveredRemoteBundle else {
+                    return FamilySyncTransportResult()
+                }
+                deliveredRemoteBundle = true
+                return result(records: remoteBundle)
+            case .secondDeviceAdoption:
+                // The marker advances only from acknowledgement below, just as
+                // CKSyncEngine advances its durable cursor after a fetched
+                // batch is accepted. It is intentionally independent of local
+                // Profile presence.
+                guard
+                    !deliveredRemoteBundle,
+                    !FileManager.default.fileExists(
+                        atPath: cursorMarkerURL.path
+                    )
+                else {
                     return FamilySyncTransportResult()
                 }
                 deliveredRemoteBundle = true
@@ -315,7 +378,21 @@
         func acknowledgeFetchedChanges(
             receiptIDs: Set<UUID>
         ) async throws {
-            _ = receiptIDs
+            guard scenario == .secondDeviceAdoption else { return }
+            let remoteReceiptIDs = Set(
+                remoteBundle.enumerated().map { index, record in
+                    Self.receiptID(index: index, record: record)
+                }
+            )
+            guard !receiptIDs.isDisjoint(with: remoteReceiptIDs) else { return }
+            try FileManager.default.createDirectory(
+                at: cursorMarkerURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("acknowledged".utf8).write(
+                to: cursorMarkerURL,
+                options: .atomic
+            )
         }
 
         func quarantineFetchedChanges(
@@ -327,7 +404,19 @@
             quarantined = true
         }
 
-        func confirmCurrentAccount() async throws {}
+        func confirmCurrentAccount() async throws -> FamilySyncAccountChange? {
+            guard scenario == .secondDeviceAdoption else { return nil }
+
+            // Production CloudKit confirmation rebuilds its sync engines and
+            // clears their durable cursors. Mirror that full-fetch boundary so
+            // a discovered-but-not-yet-adopted Profile can be fetched again
+            // after the app purges the unadopted local candidate on relaunch.
+            deliveredRemoteBundle = false
+            if FileManager.default.fileExists(atPath: cursorMarkerURL.path) {
+                try FileManager.default.removeItem(at: cursorMarkerURL)
+            }
+            return nil
+        }
 
         func suspend() async {}
 

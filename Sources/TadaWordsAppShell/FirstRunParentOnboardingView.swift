@@ -9,18 +9,36 @@ enum FirstRunPrivacyDisclosure {
         case .deviceOnly:
             "Raw voice recordings are not saved. A voice template and learning data stay on this device. Deleting a profile removes its local learning data and cannot be undone."
         case .iCloud:
-            "Raw voice recordings are not saved. A voice template stays on this device. iCloud learning-data sync is off by default and can be enabled later by a parent. Deleting a profile may affect family devices and cannot be undone."
+            "Raw voice recordings are not saved. A voice template stays on this device. iCloud learning-data sync is off by default and turns on only when a parent chooses Find my kid or enables it later. Deleting a profile may affect family devices and cannot be undone."
         }
     }
 }
 
 @MainActor
 struct FirstRunParentOnboardingView: View {
+    private enum FullSetupRoute: Equatable {
+        case choose
+        case create
+        case discover
+    }
+
+    private enum DiscoveryState: Equatable {
+        case idle
+        case searching
+        case results
+        case failed(FirstRunProfileDiscoveryError)
+    }
+
     let purpose: FirstRunOnboardingPurpose
     let familySyncCapability: FamilySyncCapability
+    let onDiscoverProfiles: @MainActor () async throws -> [KidProfile]
     let onFinish: @MainActor (FirstRunOnboardingSubmission) async throws -> Void
     private let presentationProfile: KidProfile
 
+    @State private var fullSetupRoute: FullSetupRoute
+    @State private var discoveryState = DiscoveryState.idle
+    @State private var discoveredProfiles: [KidProfile] = []
+    @State private var selectedDiscoveredProfileID: ProfileID?
     @State private var displayName: String
     @State private var avatarAssetID: String
     @State private var schoolGrade: ProfileSchoolGrade
@@ -35,6 +53,7 @@ struct FirstRunParentOnboardingView: View {
         initialProfile: KidProfile?,
         purpose: FirstRunOnboardingPurpose,
         familySyncCapability: FamilySyncCapability,
+        onDiscoverProfiles: @escaping @MainActor () async throws -> [KidProfile],
         onFinish: @escaping @MainActor (FirstRunOnboardingSubmission) async throws -> Void
     ) {
         let presentationProfile =
@@ -49,7 +68,15 @@ struct FirstRunParentOnboardingView: View {
         self.presentationProfile = presentationProfile
         self.purpose = purpose
         self.familySyncCapability = familySyncCapability
+        self.onDiscoverProfiles = onDiscoverProfiles
         self.onFinish = onFinish
+        _fullSetupRoute = State(
+            initialValue: purpose == .fullSetup
+                && familySyncCapability == .iCloud
+                && initialProfile == nil
+                ? .choose
+                : .create
+        )
         _displayName = State(
             initialValue: presentationProfile.displayName == "My Kid"
                 ? ""
@@ -84,9 +111,9 @@ struct FirstRunParentOnboardingView: View {
         }
         .foregroundStyle(theme.ink)
         .preferredColorScheme(.light)
-        .disabled(isSaving)
+        .disabled(isSaving || discoveryState == .searching)
         .overlay {
-            if isSaving {
+            if isSaving || discoveryState == .searching {
                 savingOverlay
             }
         }
@@ -104,13 +131,17 @@ struct FirstRunParentOnboardingView: View {
             Text(errorMessage ?? "Please try again.")
         }
         .task {
-            guard purpose == .fullSetup else { return }
+            guard purpose == .fullSetup, fullSetupRoute == .create else { return }
             nicknameIsFocused = true
         }
     }
 
     private var theme: TadaWorldTheme {
-        switch selectedWorld {
+        let world =
+            discoveredProfiles.first(where: {
+                $0.id == selectedDiscoveredProfileID
+            })?.selectedWorld ?? selectedWorld
+        return switch world {
         case .moonpetalKingdom:
             .moonpetal
         case .buildItBay:
@@ -137,10 +168,18 @@ struct FirstRunParentOnboardingView: View {
     private var canFinish: Bool {
         guard hasAcceptedConsent else { return false }
         guard purpose == .fullSetup else { return true }
-        return !normalizedName.isEmpty
-            && normalizedName.count
-                <= FirstRunOnboardingCoordinator.maximumDisplayNameCharacterCount
-            && ageYears.map(ProfileAgePolicy.isSupported) == true
+        guard !discoveryResetMustRetry else { return false }
+        switch fullSetupRoute {
+        case .choose:
+            return false
+        case .discover:
+            return selectedDiscoveredProfileID != nil
+        case .create:
+            return !normalizedName.isEmpty
+                && normalizedName.count
+                    <= FirstRunOnboardingCoordinator.maximumDisplayNameCharacterCount
+                && ageYears.map(ProfileAgePolicy.isSupported) == true
+        }
     }
 
     private var header: some View {
@@ -149,7 +188,7 @@ struct FirstRunParentOnboardingView: View {
                 .font(.system(.title3, design: .rounded, weight: .black))
                 .foregroundStyle(theme.primary)
 
-            Text(purpose == .fullSetup ? "New kid" : "Privacy check")
+            Text(headerBadgeTitle)
                 .font(.system(.caption, design: .rounded, weight: .bold))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -169,9 +208,243 @@ struct FirstRunParentOnboardingView: View {
     private var content: some View {
         switch purpose {
         case .fullSetup:
-            profileCreationContent
+            switch fullSetupRoute {
+            case .choose:
+                setupChoiceContent
+            case .create:
+                profileCreationContent
+            case .discover:
+                profileDiscoveryContent
+            }
         case .consentRefresh:
             existingProfileContent
+        }
+    }
+
+    private var headerBadgeTitle: String {
+        guard purpose == .fullSetup else { return "Privacy check" }
+        return switch fullSetupRoute {
+        case .choose:
+            "Add this device"
+        case .create:
+            "New kid"
+        case .discover:
+            "Find my kid"
+        }
+    }
+
+    private var setupChoiceContent: some View {
+        VStack(alignment: .leading, spacing: TadaPrimitiveTokens.Spacing.medium) {
+            heading(
+                eyebrow: "Kid profile",
+                title: "Who is playing?",
+                message:
+                    "If your kid already plays Tada Words on another device, find that exact profile before creating a new one."
+            )
+
+            privacyConfirmation
+
+            if case .failed(let error) = discoveryState {
+                discoveryFailureCard(error)
+            }
+
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 330), spacing: 16)],
+                alignment: .leading,
+                spacing: 16
+            ) {
+                setupRouteButton(
+                    title: "Find my kid",
+                    message: "Use an existing profile from this family’s iCloud.",
+                    symbol: "icloud.and.arrow.down.fill",
+                    accessibilityID: "first-run.find-existing"
+                ) {
+                    discoverProfiles()
+                }
+                .disabled(!hasAcceptedConsent)
+
+                setupRouteButton(
+                    title: "Create a new kid",
+                    message:
+                        "Start a separate profile on this device, even when iCloud is offline.",
+                    symbol: "person.crop.circle.badge.plus",
+                    accessibilityID: "first-run.create-new"
+                ) {
+                    fullSetupRoute = .create
+                    nicknameIsFocused = true
+                }
+                .disabled(discoveryResetMustRetry)
+            }
+        }
+    }
+
+    private var profileDiscoveryContent: some View {
+        VStack(alignment: .leading, spacing: TadaPrimitiveTokens.Spacing.medium) {
+            heading(
+                eyebrow: "Found in iCloud",
+                title: discoveredProfiles.isEmpty
+                    ? "No kid profiles found"
+                    : "Choose the exact profile",
+                message: discoveredProfiles.isEmpty
+                    ? "Nothing was changed. Retry, or explicitly create a separate new profile."
+                    : "Profiles stay separate by their unique identity—even when two kids use the same nickname."
+            )
+
+            if discoveredProfiles.isEmpty {
+                onboardingCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("No profiles yet", systemImage: "icloud.slash")
+                            .font(.system(.headline, design: .rounded, weight: .bold))
+                        Text(
+                            "Make sure Family Sync finished on the other device, then try again."
+                        )
+                        .font(.system(.subheadline, design: .rounded, weight: .medium))
+                        .foregroundStyle(theme.ink.opacity(0.72))
+
+                        discoveryAlternativeButtons
+                    }
+                }
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(discoveredProfiles, id: \.id) { profile in
+                        discoveredProfileButton(profile)
+                    }
+                }
+                discoveryAlternativeButtons
+            }
+        }
+    }
+
+    private var discoveryAlternativeButtons: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 140), spacing: 12)],
+            spacing: 12
+        ) {
+            Button("Back") {
+                selectedDiscoveredProfileID = nil
+                fullSetupRoute = .choose
+            }
+            .buttonStyle(.bordered)
+
+            Button("Try Again") {
+                discoverProfiles()
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("first-run.discovery.retry")
+
+            Button("Create a New Kid") {
+                selectedDiscoveredProfileID = nil
+                fullSetupRoute = .create
+                nicknameIsFocused = true
+            }
+            .buttonStyle(.bordered)
+            .disabled(discoveryResetMustRetry)
+            .accessibilityIdentifier("first-run.discovery.create-new")
+        }
+        .font(.system(.subheadline, design: .rounded, weight: .bold))
+    }
+
+    private func setupRouteButton(
+        title: String,
+        message: String,
+        symbol: String,
+        accessibilityID: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            onboardingCard {
+                HStack(spacing: 14) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .frame(width: 58, height: 58)
+                        .background(theme.primary, in: Circle())
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.system(.title3, design: .rounded, weight: .black))
+                        Text(message)
+                            .font(.system(.subheadline, design: .rounded, weight: .medium))
+                            .foregroundStyle(theme.ink.opacity(0.72))
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(.headline, weight: .black))
+                        .foregroundStyle(theme.primary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(accessibilityID)
+    }
+
+    private func discoveredProfileButton(_ profile: KidProfile) -> some View {
+        let isSelected = selectedDiscoveredProfileID == profile.id
+        return Button {
+            selectedDiscoveredProfileID = profile.id
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: profile.avatar.onboardingSymbol)
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(isSelected ? Color.white : theme.primary)
+                    .frame(width: 60, height: 60)
+                    .background(
+                        isSelected ? theme.primary : theme.primary.opacity(0.10),
+                        in: Circle()
+                    )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(profile.displayName)
+                        .font(.system(.title3, design: .rounded, weight: .black))
+                    Text(profileDistinguishingLabel(profile))
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                        .foregroundStyle(theme.ink.opacity(0.68))
+                }
+                Spacer()
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 25, weight: .bold))
+                    .foregroundStyle(theme.primary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(
+                Color.white.opacity(isSelected ? 0.98 : 0.86),
+                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(
+                        theme.primary.opacity(isSelected ? 0.75 : 0.18),
+                        lineWidth: isSelected ? 3 : 1
+                    )
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("first-run.discovery.profile.\(profile.id)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func profileDistinguishingLabel(_ profile: KidProfile) -> String {
+        let profileCode = profile.id.description.suffix(4).uppercased()
+        return
+            "\(profile.schoolGrade.displayName) • \(profile.selectedWorld.displayName) • Profile \(profileCode)"
+    }
+
+    private func discoveryFailureCard(
+        _ error: FirstRunProfileDiscoveryError
+    ) -> some View {
+        onboardingCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Label(discoveryFailureTitle(error), systemImage: "exclamationmark.icloud.fill")
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                Text(discoveryFailureMessage(error))
+                    .font(.system(.subheadline, design: .rounded, weight: .medium))
+                    .foregroundStyle(theme.ink.opacity(0.72))
+                Button("Try Again") {
+                    discoverProfiles()
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("first-run.discovery.retry")
+            }
         }
     }
 
@@ -183,6 +456,24 @@ struct FirstRunParentOnboardingView: View {
                 message:
                     "Create a kid profile first. A parent can add this week’s Read and Write words later from Parents."
             )
+
+            if familySyncCapability == .iCloud && purpose == .fullSetup {
+                VStack(alignment: .leading, spacing: 6) {
+                    Button("Discard setup & find an existing profile") {
+                        nicknameIsFocused = false
+                        fullSetupRoute = .choose
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .accessibilityIdentifier("first-run.create.back-to-find")
+
+                    Text(
+                        "This unfinished profile will be removed from this device and won’t be added to iCloud."
+                    )
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(theme.ink.opacity(0.68))
+                }
+            }
 
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: 330), spacing: 16)],
@@ -313,6 +604,7 @@ struct FirstRunParentOnboardingView: View {
             in: RoundedRectangle(cornerRadius: 20, style: .continuous)
         )
         .accessibilityHint("Required before continuing")
+        .accessibilityIdentifier("first-run.privacy-consent")
     }
 
     private func heading(
@@ -398,65 +690,91 @@ struct FirstRunParentOnboardingView: View {
             }
     }
 
+    @ViewBuilder
     private var footer: some View {
-        HStack {
-            Text(
-                purpose == .fullSetup
-                    ? "Words come later in Parents."
-                    : "No profile data will be rewritten."
-            )
-            .font(.system(.caption, design: .rounded, weight: .semibold))
-            .foregroundStyle(theme.ink.opacity(0.68))
+        if purpose == .consentRefresh || fullSetupRoute != .choose {
+            HStack {
+                Text(footerNote)
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .foregroundStyle(theme.ink.opacity(0.68))
 
-            Spacer()
+                Spacer()
 
-            Button {
-                finishOnboarding()
-            } label: {
-                Label(
-                    purpose == .fullSetup ? "Create & Play" : "Accept & Continue",
-                    systemImage: "sparkles"
+                Button {
+                    finishOnboarding()
+                } label: {
+                    Label(footerButtonTitle, systemImage: "sparkles")
+                }
+                .buttonStyle(
+                    TadaPrimaryButtonStyle(fill: theme.primary, isCompact: true)
                 )
+                .disabled(!canFinish)
+                .accessibilityHint(finishAccessibilityHint)
+                .accessibilityIdentifier("first-run.finish")
             }
-            .buttonStyle(TadaPrimaryButtonStyle(fill: theme.primary, isCompact: true))
-            .disabled(!canFinish)
-            .accessibilityHint(
-                canFinish
-                    ? ""
-                    : purpose == .fullSetup && normalizedName.isEmpty
-                        ? "Enter a nickname and accept the privacy summary"
-                        : purpose == .fullSetup && ageYears == nil
-                            ? "Choose your child’s age and accept the privacy summary"
-                            : "Accept the privacy summary to continue"
-            )
+            .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
+            .padding(.vertical, 9)
+            .background(Color.white.opacity(0.86))
+            .overlay(alignment: .top) {
+                Divider().opacity(0.35)
+            }
         }
-        .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
-        .padding(.vertical, 9)
-        .background(Color.white.opacity(0.86))
-        .overlay(alignment: .top) {
-            Divider().opacity(0.35)
+    }
+
+    private var footerNote: String {
+        if purpose == .consentRefresh {
+            return "No profile data will be rewritten."
         }
+        if fullSetupRoute == .discover {
+            return "This keeps the exact profile and learning history."
+        }
+        return "Words come later in Parents."
+    }
+
+    private var footerButtonTitle: String {
+        if purpose == .consentRefresh { return "Accept & Continue" }
+        return fullSetupRoute == .discover ? "Use This Profile" : "Create & Play"
+    }
+
+    private var finishAccessibilityHint: String {
+        if canFinish { return "" }
+        if purpose == .consentRefresh {
+            return "Accept the privacy summary to continue"
+        }
+        if fullSetupRoute == .discover {
+            return "Choose a kid profile to continue"
+        }
+        if normalizedName.isEmpty {
+            return "Enter a nickname and accept the privacy summary"
+        }
+        if ageYears == nil {
+            return "Choose your child’s age and accept the privacy summary"
+        }
+        return "Accept the privacy summary to continue"
     }
 
     private var savingOverlay: some View {
         ZStack {
             Color.black.opacity(0.14).ignoresSafeArea()
-            ProgressView(
-                purpose == .consentRefresh
-                    ? "Saving your privacy choice…"
-                    : "Creating (normalizedName)’s profile…"
-            )
-            .font(.system(.headline, design: .rounded, weight: .bold))
-            .padding(22)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
-            .tint(theme.primary)
+            ProgressView(savingMessage)
+                .font(.system(.headline, design: .rounded, weight: .bold))
+                .padding(22)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 20))
+                .tint(theme.primary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.updatesFrequently)
     }
 
+    private var savingMessage: String {
+        if discoveryState == .searching { return "Looking for your kid in iCloud…" }
+        if purpose == .consentRefresh { return "Saving your privacy choice…" }
+        if fullSetupRoute == .discover { return "Opening the saved profile…" }
+        return "Creating \(normalizedName)’s profile…"
+    }
+
     private func finishOnboarding() {
-        guard canFinish else { return }
+        guard canFinish, let submissionAction else { return }
         isSaving = true
         Task { @MainActor in
             defer { isSaving = false }
@@ -470,21 +788,91 @@ struct FirstRunParentOnboardingView: View {
         }
     }
 
-    private var submissionAction: FirstRunOnboardingSubmission.Action {
+    private var submissionAction: FirstRunOnboardingSubmission.Action? {
         switch purpose {
         case .fullSetup:
-            .createProfile(
-                GuardianProfileDraft(
-                    displayName: normalizedName,
-                    avatar: .cartoonAnimal(assetID: avatarAssetID),
-                    selectedWorld: selectedWorld,
-                    schoolGrade: schoolGrade,
-                    ageYears: ageYears,
-                    guardianUnlockedWorlds: [selectedWorld]
+            switch fullSetupRoute {
+            case .choose:
+                nil
+            case .discover:
+                selectedDiscoveredProfileID.map {
+                    .adoptExistingProfile($0)
+                }
+            case .create:
+                .createProfile(
+                    GuardianProfileDraft(
+                        displayName: normalizedName,
+                        avatar: .cartoonAnimal(assetID: avatarAssetID),
+                        selectedWorld: selectedWorld,
+                        schoolGrade: schoolGrade,
+                        ageYears: ageYears,
+                        guardianUnlockedWorlds: [selectedWorld]
+                    )
                 )
-            )
+            }
         case .consentRefresh:
             .confirmExistingProfiles
+        }
+    }
+
+    private func discoverProfiles() {
+        guard hasAcceptedConsent else { return }
+        // A retry may confirm a different iCloud account. Never keep the
+        // previous account's candidates interactive while its cache is being
+        // fenced and replaced.
+        discoveredProfiles = []
+        selectedDiscoveredProfileID = nil
+        discoveryState = .searching
+        Task { @MainActor in
+            do {
+                let profiles = try await onDiscoverProfiles()
+                discoveredProfiles = profiles
+                selectedDiscoveredProfileID =
+                    profiles.count == 1
+                    ? profiles.first?.id
+                    : nil
+                discoveryState = .results
+                fullSetupRoute = .discover
+            } catch let error as FirstRunProfileDiscoveryError {
+                discoveryState = .failed(error)
+            } catch {
+                discoveryState = .failed(.failed)
+            }
+        }
+    }
+
+    private var discoveryResetMustRetry: Bool {
+        guard case .failed(let error) = discoveryState else { return false }
+        return error == .resetRequired
+    }
+
+    private func discoveryFailureTitle(
+        _ error: FirstRunProfileDiscoveryError
+    ) -> String {
+        switch error {
+        case .offline:
+            "Can’t reach iCloud yet"
+        case .iCloudUnavailable:
+            "iCloud isn’t available"
+        case .resetRequired:
+            "Finish checking this device"
+        case .failed:
+            "Couldn’t check iCloud"
+        }
+    }
+
+    private func discoveryFailureMessage(
+        _ error: FirstRunProfileDiscoveryError
+    ) -> String {
+        switch error {
+        case .offline:
+            "Your local data is safe. Check the connection and try again, or explicitly create a new kid."
+        case .iCloudUnavailable:
+            "Sign in to iCloud, then try again. You can still explicitly create a new kid offline."
+        case .resetRequired:
+            "Try Find again before creating or opening a profile. This keeps another iCloud account’s data separate."
+        case .failed:
+            "No new profile was created. Try again, or explicitly create a new kid."
         }
     }
 
@@ -496,6 +884,8 @@ struct FirstRunParentOnboardingView: View {
             "Use a nickname with \(maximum) characters or fewer."
         case FirstRunOnboardingError.invalidAge:
             "Choose your child’s age, then try again."
+        case FirstRunOnboardingRepositoryError.discoveryResetRequired:
+            "Tap Find my kid again before creating or opening a profile."
         default:
             "Your child’s setup is still here. Check that storage is available, then try again."
         }

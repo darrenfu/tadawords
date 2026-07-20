@@ -5,6 +5,28 @@ import XCTest
 @testable import TadaWordsContent
 
 final class RepositoryFamilySyncRecordStoreTests: XCTestCase {
+    func testPendingCreationIsExcludedFromEveryOutboundStoreEnumeration()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try await fixture.profiles.save(fixture.profile)
+        try await fixture.settings.save(.defaults(for: fixture.profile.id))
+        let excludedProfileID = fixture.profile.id
+        let store = fixture.makeStore(
+            tombstones: fixture.tombstones,
+            excludedProfileIDs: { [excludedProfileID] in [excludedProfileID] }
+        )
+
+        let profileIDs = try await store.profileIDsForSync()
+        let records = try await store.records(for: fixture.profile.id)
+        let exclusions = try await store.profileIDsExcludedFromSync()
+
+        XCTAssertTrue(profileIDs.isEmpty)
+        XCTAssertTrue(records.isEmpty)
+        XCTAssertEqual(exclusions, [fixture.profile.id])
+    }
+
     func testPracticeSettingsExportAsIndependentStableGroups() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -690,7 +712,10 @@ private struct Fixture {
         tombstones: any ProfileDeletionTombstoneRepository,
         applyTransactionRepository:
             (any FamilySyncApplyTransactionRepository)? = nil,
-        handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)? = nil
+        handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)? = nil,
+        excludedProfileIDs: @escaping @Sendable () async throws -> Set<ProfileID> = {
+            []
+        }
     ) -> RepositoryFamilySyncRecordStore {
         RepositoryFamilySyncRecordStore(
             profileRepository: profiles,
@@ -701,6 +726,7 @@ private struct Fixture {
             tombstoneRepository: tombstones,
             applyTransactionRepository: applyTransactionRepository,
             handwritingPreferenceRemover: handwritingPreferenceRemover,
+            excludedProfileIDs: excludedProfileIDs,
             deviceID: "device-a",
             clock: FixedSyncStoreClock(now: now)
         )
