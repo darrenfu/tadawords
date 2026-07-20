@@ -18,6 +18,28 @@ assert SPEC and SPEC.loader
 issue_agent = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(issue_agent)
 
+TEST_REPO = "owner/repo"
+
+
+def canonical_issue_refs(*numbers: int) -> list[str]:
+    return [f"{TEST_REPO}#{number}" for number in numbers]
+
+
+def closing_refs_digest(*numbers: int) -> str:
+    return issue_agent.closing_issue_references_digest(
+        canonical_issue_refs(*numbers)
+    )
+
+
+def qualified_pull_request_reference(number: int) -> dict:
+    return {
+        "number": number,
+        "repository": {
+            "owner": {"login": "owner"},
+            "name": "repo",
+        },
+    }
+
 
 def issue(number: int, labels: list[str] | None = None) -> dict:
     return {
@@ -304,6 +326,404 @@ class ReservationTests(unittest.TestCase):
 
 
 class ReleaseAndAcknowledgementTests(unittest.TestCase):
+    def test_open_auto_merge_event_is_durable_only_after_head_changes(self):
+        head = "a" * 40
+        base_oid = "0" * 40
+        event = {
+            "id": f"auto-merge:81:{head}",
+            "type": "automatic_merge_candidate",
+            "pr": 81,
+            "head": head,
+            "base": "main",
+            "base_oid": base_oid,
+            "body_digest": issue_agent.pr_body_digest("Closes #47\n"),
+            "closing_issue_refs": canonical_issue_refs(47),
+            "closing_refs_digest": closing_refs_digest(47),
+        }
+        open_pr = {
+            "number": 81,
+            "state": "OPEN",
+            "headRefOid": head,
+            "baseRefName": "main",
+            "baseRefOid": base_oid,
+            "body": "Closes #47\n",
+            "mergeCommit": None,
+            "labels": [{"name": "awaiting-human-review"}],
+            "url": "https://example.test/pull/81",
+        }
+
+        with (
+            mock.patch.object(issue_agent, "live_pull_request", return_value=open_pr),
+            mock.patch.object(issue_agent, "run", return_value=f"{base_oid}\n"),
+            mock.patch.object(
+                issue_agent,
+                "live_closing_issue_references",
+                return_value=canonical_issue_refs(47),
+            ),
+        ):
+            self.assertFalse(
+                issue_agent.event_has_durable_outcome(
+                    "owner/repo", event, Path("/control")
+                )
+            )
+
+        with (
+            mock.patch.object(
+                issue_agent,
+                "live_pull_request",
+                return_value={**open_pr, "headRefOid": "c" * 40},
+            ),
+            mock.patch.object(issue_agent, "run", return_value=f"{base_oid}\n"),
+            mock.patch.object(
+                issue_agent,
+                "live_closing_issue_references",
+                return_value=canonical_issue_refs(47),
+            ),
+        ):
+            self.assertTrue(
+                issue_agent.event_has_durable_outcome(
+                    "owner/repo", event, Path("/control")
+                )
+            )
+
+    def test_auto_merge_ack_requires_exact_head_main_tree_and_linked_issue_closure(self):
+        head = "a" * 40
+        merge_commit = "b" * 40
+        base_oid = "0" * 40
+        event = {
+            "id": f"auto-merge:81:{head}",
+            "type": "automatic_merge_candidate",
+            "pr": 81,
+            "head": head,
+            "base": "main",
+            "base_oid": base_oid,
+            "body_digest": issue_agent.pr_body_digest("Closes #47\n"),
+            "closing_issue_refs": canonical_issue_refs(47),
+            "closing_refs_digest": closing_refs_digest(47),
+        }
+        merged_pr = {
+            "number": 81,
+            "state": "MERGED",
+            "headRefOid": head,
+            "baseRefName": "main",
+            "body": "Closes #47\n",
+            "mergeCommit": {"oid": merge_commit},
+            "labels": [],
+            "url": "https://example.test/pull/81",
+        }
+        closed_issue = {
+            **issue(47),
+            "state": "CLOSED",
+            "closedByPullRequestsReferences": [
+                qualified_pull_request_reference(81)
+            ],
+        }
+
+        with (
+            mock.patch.object(issue_agent, "live_pull_request", return_value=merged_pr),
+            mock.patch.object(issue_agent, "git_is_ancestor", return_value=True),
+            mock.patch.object(issue_agent, "git_first_parent", return_value=base_oid),
+            mock.patch.object(issue_agent, "git_trees_match", return_value=True),
+            mock.patch.object(issue_agent, "live_issue", return_value=closed_issue),
+            mock.patch.object(
+                issue_agent,
+                "live_closing_issue_references",
+                return_value=canonical_issue_refs(47),
+            ),
+        ):
+            self.assertTrue(
+                issue_agent.event_has_durable_outcome(
+                    "owner/repo", event, Path("/control")
+                )
+            )
+
+    def test_auto_merge_ack_fails_when_post_merge_evidence_is_incomplete(self):
+        head = "a" * 40
+        merge_commit = "b" * 40
+        base_oid = "0" * 40
+        event = {
+            "id": f"auto-merge:81:{head}",
+            "type": "automatic_merge_candidate",
+            "pr": 81,
+            "head": head,
+            "base": "main",
+            "base_oid": base_oid,
+            "body_digest": issue_agent.pr_body_digest("Closes #47\n"),
+            "closing_issue_refs": canonical_issue_refs(47),
+            "closing_refs_digest": closing_refs_digest(47),
+        }
+        base_pr = {
+            "number": 81,
+            "state": "MERGED",
+            "headRefOid": head,
+            "baseRefName": "main",
+            "body": "Closes #47\n",
+            "mergeCommit": {"oid": merge_commit},
+            "labels": [],
+            "url": "https://example.test/pull/81",
+        }
+        closed_issue = {
+            **issue(47),
+            "state": "CLOSED",
+            "closedByPullRequestsReferences": [
+                qualified_pull_request_reference(81)
+            ],
+        }
+        cases = [
+            ({**base_pr, "headRefOid": "c" * 40}, True, True, closed_issue),
+            ({**base_pr, "baseRefName": "release"}, True, True, closed_issue),
+            (base_pr, False, True, closed_issue),
+            (base_pr, True, False, closed_issue),
+            (base_pr, True, True, issue(47)),
+        ]
+
+        for pull_request, ancestor, trees_match, linked_issue in cases:
+            with (
+                self.subTest(
+                    pull_request=pull_request,
+                    ancestor=ancestor,
+                    trees_match=trees_match,
+                    linked_issue=linked_issue,
+                ),
+                mock.patch.object(
+                    issue_agent, "live_pull_request", return_value=pull_request
+                ),
+                mock.patch.object(
+                    issue_agent, "git_is_ancestor", return_value=ancestor
+                ),
+                mock.patch.object(
+                    issue_agent, "git_trees_match", return_value=trees_match
+                ),
+                mock.patch.object(
+                    issue_agent, "git_first_parent", return_value=base_oid
+                ),
+                mock.patch.object(
+                    issue_agent, "live_issue", return_value=linked_issue
+                ),
+                mock.patch.object(
+                    issue_agent,
+                    "live_closing_issue_references",
+                    return_value=canonical_issue_refs(47),
+                ),
+            ):
+                self.assertFalse(
+                    issue_agent.event_has_durable_outcome(
+                        "owner/repo", event, Path("/control")
+                    )
+                )
+
+    def test_merge_ack_accepts_an_unchanged_refs_only_body(self):
+        head = "a" * 40
+        merge_commit = "b" * 40
+        body = "Refs #47\n"
+        base_oid = "0" * 40
+        event = {
+            "id": f"auto-merge:81:{head}",
+            "type": "automatic_merge_candidate",
+            "pr": 81,
+            "head": head,
+            "base": "main",
+            "base_oid": base_oid,
+            "body_digest": issue_agent.pr_body_digest(body),
+            "closing_issue_refs": [],
+            "closing_refs_digest": closing_refs_digest(),
+        }
+        merged_pr = {
+            "number": 81,
+            "state": "MERGED",
+            "headRefOid": head,
+            "baseRefName": "main",
+            "body": body,
+            "mergeCommit": {"oid": merge_commit},
+            "labels": [],
+            "url": "https://example.test/pull/81",
+        }
+
+        with (
+            mock.patch.object(issue_agent, "live_pull_request", return_value=merged_pr),
+            mock.patch.object(issue_agent, "git_is_ancestor", return_value=True),
+            mock.patch.object(issue_agent, "git_first_parent", return_value=base_oid),
+            mock.patch.object(issue_agent, "git_trees_match", return_value=True),
+            mock.patch.object(
+                issue_agent, "live_closing_issue_references", return_value=[]
+            ),
+        ):
+            self.assertTrue(
+                issue_agent.event_has_durable_outcome(
+                    "owner/repo", event, Path("/control")
+                )
+            )
+
+    def test_merge_ack_rejects_changed_closing_issue_set_at_same_head(self):
+        head = "a" * 40
+        merge_commit = "b" * 40
+        base_oid = "0" * 40
+        event = {
+            "id": f"auto-merge:81:{head}",
+            "type": "automatic_merge_candidate",
+            "pr": 81,
+            "head": head,
+            "base": "main",
+            "base_oid": base_oid,
+            "body_digest": issue_agent.pr_body_digest("Closes #47\n"),
+            "closing_issue_refs": canonical_issue_refs(47),
+            "closing_refs_digest": closing_refs_digest(47),
+        }
+        base_pr = {
+            "number": 81,
+            "state": "MERGED",
+            "headRefOid": head,
+            "baseRefName": "main",
+            "mergeCommit": {"oid": merge_commit},
+            "labels": [],
+            "url": "https://example.test/pull/81",
+        }
+
+        for body, live_refs in (
+            ("Closes #47\n", canonical_issue_refs(99)),
+            ("Closes #47\nCloses #99\n", canonical_issue_refs(47)),
+            ("Related to #47\n", canonical_issue_refs(47)),
+            ("Closes #47\n\nEdited prose.\n", canonical_issue_refs(47)),
+        ):
+            with (
+                self.subTest(body=body, live_refs=live_refs),
+                mock.patch.object(
+                    issue_agent,
+                    "live_pull_request",
+                    return_value={**base_pr, "body": body},
+                ),
+                mock.patch.object(issue_agent, "git_is_ancestor", return_value=True),
+                mock.patch.object(
+                    issue_agent, "git_first_parent", return_value=base_oid
+                ),
+                mock.patch.object(issue_agent, "git_trees_match", return_value=True),
+                mock.patch.object(
+                    issue_agent,
+                    "live_closing_issue_references",
+                    return_value=live_refs,
+                ),
+            ):
+                self.assertFalse(
+                    issue_agent.event_has_durable_outcome(
+                        "owner/repo", event, Path("/control")
+                    )
+                )
+
+    def test_merge_ack_rejects_base_change_at_same_head(self):
+        head = "a" * 40
+        base_oid = "0" * 40
+        event = {
+            "id": f"auto-merge:81:{head}",
+            "type": "automatic_merge_candidate",
+            "pr": 81,
+            "head": head,
+            "base": "main",
+            "base_oid": base_oid,
+            "body_digest": issue_agent.pr_body_digest("Closes #47\n"),
+            "closing_issue_refs": canonical_issue_refs(47),
+            "closing_refs_digest": closing_refs_digest(47),
+        }
+        merged_pr = {
+            "number": 81,
+            "state": "MERGED",
+            "headRefOid": head,
+            "baseRefName": "feature/stacked-base",
+            "body": "Closes #47\n",
+            "mergeCommit": {"oid": "b" * 40},
+            "labels": [],
+            "url": "https://example.test/pull/81",
+        }
+
+        with (
+            mock.patch.object(
+                issue_agent, "live_pull_request", return_value=merged_pr
+            ),
+            mock.patch.object(
+                issue_agent,
+                "live_closing_issue_references",
+                return_value=canonical_issue_refs(47),
+            ),
+        ):
+            self.assertFalse(
+                issue_agent.event_has_durable_outcome(
+                    "owner/repo", event, Path("/control")
+                )
+            )
+
+    def test_merge_ack_rejects_squash_commit_with_wrong_first_parent(self):
+        head = "a" * 40
+        base_oid = "0" * 40
+        event = {
+            "id": f"auto-merge:81:{head}",
+            "type": "automatic_merge_candidate",
+            "pr": 81,
+            "head": head,
+            "base": "main",
+            "base_oid": base_oid,
+            "body_digest": issue_agent.pr_body_digest("Refs #47\n"),
+            "closing_issue_refs": [],
+            "closing_refs_digest": closing_refs_digest(),
+        }
+        merged_pr = {
+            "number": 81,
+            "state": "MERGED",
+            "headRefOid": head,
+            "baseRefName": "main",
+            "body": "Refs #47\n",
+            "mergeCommit": {"oid": "b" * 40},
+            "labels": [],
+            "url": "https://example.test/pull/81",
+        }
+        with (
+            mock.patch.object(issue_agent, "live_pull_request", return_value=merged_pr),
+            mock.patch.object(issue_agent, "git_is_ancestor", return_value=True),
+            mock.patch.object(
+                issue_agent, "git_first_parent", return_value="f" * 40
+            ),
+            mock.patch.object(issue_agent, "git_trees_match", return_value=True),
+            mock.patch.object(
+                issue_agent, "live_closing_issue_references", return_value=[]
+            ),
+        ):
+            self.assertFalse(
+                issue_agent.event_has_durable_outcome(
+                    "owner/repo", event, Path("/control")
+                )
+            )
+
+    def test_closed_unmerged_pr_is_not_a_durable_merge_outcome(self):
+        head = "a" * 40
+        event = {
+            "id": f"auto-merge:81:{head}",
+            "type": "automatic_merge_candidate",
+            "pr": 81,
+            "head": head,
+            "base": "main",
+            "base_oid": "0" * 40,
+            "body_digest": issue_agent.pr_body_digest("Closes #47\n"),
+            "closing_issue_refs": canonical_issue_refs(47),
+            "closing_refs_digest": closing_refs_digest(47),
+        }
+        closed_pr = {
+            "number": 81,
+            "state": "CLOSED",
+            "headRefOid": head,
+            "baseRefName": "main",
+            "body": "Closes #47\n",
+            "mergeCommit": None,
+            "labels": [],
+            "url": "https://example.test/pull/81",
+        }
+
+        with mock.patch.object(
+            issue_agent, "live_pull_request", return_value=closed_pr
+        ):
+            self.assertFalse(
+                issue_agent.event_has_durable_outcome(
+                    "owner/repo", event, Path("/control")
+                )
+            )
+
     def test_reconcile_reports_and_releases_preexisting_blocked_claim(self):
         snapshot = {
             "reconciliation_actions": [

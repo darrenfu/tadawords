@@ -25,6 +25,10 @@ IMPLEMENTATION_PR_LABEL = "implementation-in-pr"
 CLAIMED_LABELS = {CLAIMED_LABEL, RECLAIMED_LABEL}
 BLOCKING_LABELS = {"needs-human-clarification", "agent-blocked"}
 AGENT_PR_LABELS = {"awaiting-human-review", "human-approved"}
+AUTOMATIC_MERGE_READY_LABEL = "awaiting-human-review"
+MERGE_EVENT_TYPES = {"automatic_merge_candidate", "merge_authorized"}
+EXACT_HEAD_STATUS_CONTEXT = "tadawords/exact-head-gates"
+MERGE_CRITICAL_LEASE_REF = "refs/heads/agent-leases/merge-critical"
 DEFAULT_MAX_ACTIVE_BATCHES = 1
 MAX_CLAIMS_PER_POLL = 1
 VERSION_RE = re.compile(r"(?<![0-9])v?(\d+)\.(\d+)\.(\d+)(?![0-9])")
@@ -459,10 +463,230 @@ def sha_matches(requested: str, current: str) -> bool:
     return len(requested) >= 7 and current.casefold().startswith(requested.casefold())
 
 
+def pr_body_digest(body: str) -> str:
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def qualified_github_reference(reference: dict[str, Any]) -> str:
+    repository = reference.get("repository") or {}
+    owner = repository.get("owner") or {}
+    owner_login = str(owner.get("login") or "").strip().casefold()
+    repository_name = str(repository.get("name") or "").strip().casefold()
+    number = reference.get("number")
+    if not owner_login or not repository_name or not isinstance(number, int):
+        raise CommandError("GitHub returned an incomplete repository reference")
+    return f"{owner_login}/{repository_name}#{number}"
+
+
+def live_closing_issue_references(repo: str, number: int) -> list[str]:
+    owner, separator, name = repo.partition("/")
+    if not separator or not owner or not name:
+        raise ValueError("repo must use owner/name form")
+    query = """
+query($owner: String!, $name: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      closingIssuesReferences(first: 100, after: $after) {
+        nodes { number repository { nameWithOwner } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}
+""".strip()
+    expected_repo = repo.casefold()
+    references: set[str] = set()
+    after = ""
+    seen_cursors: set[str] = set()
+    while True:
+        command = [
+            "gh",
+            "api",
+            "graphql",
+            "-f",
+            f"query={query}",
+            "-f",
+            f"owner={owner}",
+            "-f",
+            f"name={name}",
+            "-F",
+            f"number={number}",
+        ]
+        if after:
+            command.extend(["-f", f"after={after}"])
+        response = run_json(command)
+        if not isinstance(response, dict):
+            raise CommandError("GitHub returned a malformed closing-issue response")
+        if response.get("errors"):
+            raise CommandError("GitHub returned partial closing-issue data")
+        data = response.get("data")
+        if not isinstance(data, dict):
+            raise CommandError("GitHub omitted closing-issue query data")
+        repository = data.get("repository")
+        if not isinstance(repository, dict):
+            raise CommandError("GitHub omitted the closing-issue repository")
+        pull_request = repository.get("pullRequest")
+        if not isinstance(pull_request, dict):
+            raise CommandError("GitHub omitted the closing-issue pull request")
+        connection = pull_request.get("closingIssuesReferences")
+        if not isinstance(connection, dict):
+            raise CommandError("GitHub omitted canonical closing-issue metadata")
+        nodes = connection.get("nodes")
+        if not isinstance(nodes, list):
+            raise CommandError("GitHub returned malformed closing-issue nodes")
+        for node in nodes:
+            if not isinstance(node, dict):
+                raise CommandError("GitHub returned a malformed closing issue")
+            issue_repo = str(
+                ((node.get("repository") or {}).get("nameWithOwner") or "")
+            ).casefold()
+            issue_number = node.get("number")
+            if issue_repo != expected_repo:
+                raise CommandError(
+                    "cross-repository closing issues are outside the worker scope"
+                )
+            if not isinstance(issue_number, int):
+                raise CommandError("GitHub returned an incomplete closing issue")
+            references.add(f"{issue_repo}#{issue_number}")
+        page_info = connection.get("pageInfo")
+        if not isinstance(page_info, dict) or not isinstance(
+            page_info.get("hasNextPage"), bool
+        ):
+            raise CommandError("GitHub returned malformed closing-issue pagination")
+        if page_info["hasNextPage"] is not True:
+            break
+        cursor = str(page_info.get("endCursor") or "")
+        if not cursor or cursor in seen_cursors:
+            raise CommandError("GitHub closing-issue pagination did not advance")
+        seen_cursors.add(cursor)
+        after = cursor
+    return sorted(references)
+
+
+def closing_issue_references_digest(references: Iterable[str]) -> str:
+    encoded = json.dumps(sorted(set(references)), separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def split_qualified_github_reference(reference: str) -> tuple[str, int]:
+    repository, separator, number_text = reference.rpartition("#")
+    if (
+        not separator
+        or repository.count("/") != 1
+        or not number_text.isdigit()
+        or int(number_text) <= 0
+    ):
+        raise CommandError("stored closing-issue reference is malformed")
+    return repository.casefold(), int(number_text)
+
+
+def branch_protection_contract(protection: dict[str, Any]) -> str:
+    status_checks = protection.get("required_status_checks") or {}
+    legacy_contexts = sorted(
+        {str(value) for value in status_checks.get("contexts") or []}
+    )
+    checks = sorted(
+        {
+            (
+                str(check.get("context") or ""),
+                str(
+                    check.get("app_id")
+                    if check.get("app_id") is not None
+                    else "any"
+                ),
+            )
+            for check in status_checks.get("checks") or []
+            if check.get("context")
+        }
+    )
+    contexts = set(legacy_contexts)
+    contexts.update(context for context, _ in checks)
+    enforce_admins = protection.get("enforce_admins") or {}
+    force_pushes = protection.get("allow_force_pushes") or {}
+    deletions = protection.get("allow_deletions") or {}
+    linear_history = protection.get("required_linear_history") or {}
+    conversations = protection.get("required_conversation_resolution") or {}
+    pull_requests = protection.get("required_pull_request_reviews")
+    if status_checks.get("strict") is not True:
+        raise CommandError("main protection must require strict up-to-date checks")
+    if EXACT_HEAD_STATUS_CONTEXT not in contexts:
+        raise CommandError(
+            f"main protection must require {EXACT_HEAD_STATUS_CONTEXT}"
+        )
+    if enforce_admins.get("enabled") is not True:
+        raise CommandError("main protection must apply to administrators")
+    if force_pushes.get("enabled") is True or deletions.get("enabled") is True:
+        raise CommandError("main protection must reject force pushes and deletion")
+    if linear_history.get("enabled") is not True:
+        raise CommandError("main protection must require linear history")
+    if conversations.get("enabled") is not True:
+        raise CommandError("main protection must require resolved conversations")
+    if pull_requests is None:
+        raise CommandError("main protection must require pull requests")
+    bypass = pull_requests.get("bypass_pull_request_allowances") or {}
+    if any(bypass.get(kind) for kind in ("users", "teams", "apps")):
+        raise CommandError("main protection must not allow pull-request bypass actors")
+    contract = {
+        "checks": [list(check) for check in checks],
+        "contexts": legacy_contexts,
+        "enforce_admins": True,
+        "pull_request_reviews": {
+            "dismiss_stale_reviews": bool(
+                pull_requests.get("dismiss_stale_reviews")
+            ),
+            "require_code_owner_reviews": bool(
+                pull_requests.get("require_code_owner_reviews")
+            ),
+            "require_last_push_approval": bool(
+                pull_requests.get("require_last_push_approval")
+            ),
+            "required_approving_review_count": int(
+                pull_requests.get("required_approving_review_count") or 0
+            ),
+        },
+        "required_conversation_resolution": True,
+        "required_linear_history": True,
+        "required_pull_requests": True,
+        "strict": True,
+    }
+    encoded = json.dumps(contract, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def live_branch_protection(repo: str) -> dict[str, Any]:
+    return run_json(["gh", "api", f"repos/{repo}/branches/main/protection"])
+
+
+def current_head_changes_requested_review_ids(
+    reviews: Iterable[dict[str, Any]], head: str
+) -> set[str]:
+    latest_by_reviewer: dict[str, dict[str, Any]] = {}
+    ordered = sorted(
+        reviews,
+        key=lambda review: (
+            str(review.get("submitted_at") or ""),
+            int(review.get("id") or 0),
+        ),
+    )
+    for review in ordered:
+        if str(review.get("commit_id") or "") != head:
+            continue
+        user = review.get("user") or {}
+        reviewer = str(user.get("login") or review.get("user_id") or review.get("id"))
+        latest_by_reviewer[reviewer] = review
+    return {
+        str(review.get("id"))
+        for review in latest_by_reviewer.values()
+        if str(review.get("state") or "") == "CHANGES_REQUESTED"
+    }
+
+
 def pull_request_events(
     repo: str,
     prs: list[dict[str, Any]],
     acknowledged: set[str],
+    main_oid: str,
+    protection_digest: str,
 ) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     owner = owner_login(repo)
@@ -474,25 +698,32 @@ def pull_request_events(
 
         number = int(pr["number"])
         head = str(pr.get("headRefOid") or "")
+        base = str(pr.get("baseRefName") or "")
+        base_oid = str(pr.get("baseRefOid") or "")
+        body = str(pr.get("body") or "")
+        body_digest = pr_body_digest(body)
+        closing_issue_refs = live_closing_issue_references(repo, number)
+        closing_refs_digest = closing_issue_references_digest(closing_issue_refs)
         reviews = run_json(
             ["gh", "api", f"repos/{repo}/pulls/{number}/reviews", "--paginate"]
         )
+        active_changes_requested_ids = current_head_changes_requested_review_ids(
+            reviews, head
+        )
+        current_changes_requested = bool(active_changes_requested_ids)
         for review in reviews:
             event_id = f"review:{review.get('id')}"
-            if (
-                event_id not in acknowledged
-                and review.get("state") == "CHANGES_REQUESTED"
-                and review.get("commit_id") == head
-            ):
-                events.append(
-                    {
-                        "id": event_id,
-                        "type": "changes_requested",
-                        "pr": number,
-                        "head": head,
-                        "url": pr.get("url"),
-                    }
-                )
+            if str(review.get("id")) in active_changes_requested_ids:
+                if event_id not in acknowledged:
+                    events.append(
+                        {
+                            "id": event_id,
+                            "type": "changes_requested",
+                            "pr": number,
+                            "head": head,
+                            "url": pr.get("url"),
+                        }
+                    )
 
         comments = run_json(
             ["gh", "api", f"repos/{repo}/issues/{number}/comments", "--paginate"]
@@ -506,13 +737,26 @@ def pull_request_events(
             event_id = f"comment:{comment.get('id')}"
             if event_id in acknowledged:
                 continue
-            if merge_match and sha_matches(merge_match.group(1), head):
+            if (
+                merge_match
+                and sha_matches(merge_match.group(1), head)
+                and base == "main"
+                and len(base_oid) == 40
+                and base_oid == main_oid
+                and len(protection_digest) == 64
+            ):
                 events.append(
                     {
                         "id": event_id,
                         "type": "merge_authorized",
                         "pr": number,
                         "head": head,
+                        "base": base,
+                        "base_oid": base_oid,
+                        "body_digest": body_digest,
+                        "closing_issue_refs": closing_issue_refs,
+                        "closing_refs_digest": closing_refs_digest,
+                        "protection_digest": protection_digest,
                         "url": pr.get("url"),
                     }
                 )
@@ -529,6 +773,39 @@ def pull_request_events(
                         "url": pr.get("url"),
                     }
                 )
+
+        auto_merge_event_id = (
+            f"auto-merge:{number}:{head}:{base_oid}:{body_digest}:"
+            f"{closing_refs_digest}:{protection_digest}"
+        )
+        if (
+            auto_merge_event_id not in acknowledged
+            and len(head) == 40
+            and len(base_oid) == 40
+            and base_oid == main_oid
+            and len(protection_digest) == 64
+            and base == "main"
+            and AUTOMATIC_MERGE_READY_LABEL in labels
+            and not bool(pr.get("isDraft"))
+            and not labels.intersection(BLOCKING_LABELS)
+            and str(pr.get("reviewDecision") or "") != "CHANGES_REQUESTED"
+            and not current_changes_requested
+        ):
+            events.append(
+                {
+                    "id": auto_merge_event_id,
+                    "type": "automatic_merge_candidate",
+                    "pr": number,
+                    "head": head,
+                    "base": base,
+                    "base_oid": base_oid,
+                    "body_digest": body_digest,
+                    "closing_issue_refs": closing_issue_refs,
+                    "closing_refs_digest": closing_refs_digest,
+                    "protection_digest": protection_digest,
+                    "url": pr.get("url"),
+                }
+            )
     return events
 
 
@@ -581,6 +858,16 @@ def git_is_ancestor(control_repo: Path, ancestor: str, descendant: str) -> bool:
         stderr=subprocess.DEVNULL,
     )
     return completed.returncode == 0
+
+
+def git_trees_match(control_repo: Path, left: str, right: str) -> bool:
+    left_tree = run(["git", "rev-parse", f"{left}^{{tree}}"], cwd=control_repo).strip()
+    right_tree = run(["git", "rev-parse", f"{right}^{{tree}}"], cwd=control_repo).strip()
+    return bool(left_tree) and left_tree == right_tree
+
+
+def git_first_parent(control_repo: Path, commit: str) -> str:
+    return run(["git", "rev-parse", f"{commit}^1"], cwd=control_repo).strip()
 
 
 def issue_comments(repo: str, number: int) -> list[dict[str, Any]]:
@@ -911,19 +1198,33 @@ def stale_claim_events(
 def read_state(state_dir: Path) -> dict[str, Any]:
     state_file = state_dir / "state.json"
     if not state_file.exists():
-        return {"acknowledged_event_ids": []}
+        return {
+            "acknowledged_event_ids": [],
+            "pending_merge_events": [],
+            "pending_lease_cleanups": [],
+        }
     with state_file.open(encoding="utf-8") as handle:
         return json.load(handle)
 
 
-def write_state(state_dir: Path, state: dict[str, Any]) -> None:
-    state_dir.mkdir(parents=True, exist_ok=True)
-    target = state_dir / "state.json"
-    temporary = state_dir / "state.json.tmp"
+def atomic_write_json(target: Path, value: dict[str, Any]) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(f"{target.suffix}.tmp")
     with temporary.open("w", encoding="utf-8") as handle:
-        json.dump(state, handle, indent=2, sort_keys=True)
+        json.dump(value, handle, indent=2, sort_keys=True)
         handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
     os.replace(temporary, target)
+    directory_fd = os.open(target.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def write_state(state_dir: Path, state: dict[str, Any]) -> None:
+    atomic_write_json(state_dir / "state.json", state)
 
 
 def inspect(args: argparse.Namespace) -> dict[str, Any]:
@@ -932,6 +1233,10 @@ def inspect(args: argparse.Namespace) -> dict[str, Any]:
     release_policy_path = Path(args.release_policy).resolve()
     release_policy = load_release_policy(release_policy_path)
     state = read_state(state_dir)
+    if state.get("pending_lease_cleanups"):
+        raise CommandError(
+            "pending merge-lease cleanup must finish before repository inspection"
+        )
     acknowledged = set(state.get("acknowledged_event_ids") or [])
 
     run(
@@ -944,6 +1249,17 @@ def inspect(args: argparse.Namespace) -> dict[str, Any]:
         ],
         cwd=control_repo,
     )
+    base_oid = run(["git", "rev-parse", "origin/main"], cwd=control_repo).strip()
+    if len(base_oid) != 40:
+        raise CommandError("origin/main did not resolve to a full commit SHA")
+    protection_digest = ""
+    protection_error = ""
+    try:
+        protection_digest = branch_protection_contract(
+            live_branch_protection(args.repo)
+        )
+    except CommandError as error:
+        protection_error = str(error)
     issues = run_json(
         [
             "gh",
@@ -971,7 +1287,8 @@ def inspect(args: argparse.Namespace) -> dict[str, Any]:
             "--limit",
             "100",
             "--json",
-            "number,title,body,headRefName,headRefOid,labels,reviewDecision,isDraft,updatedAt,url",
+            "number,title,body,headRefName,headRefOid,baseRefName,baseRefOid,labels,"
+            "reviewDecision,isDraft,updatedAt,url",
         ]
     )
 
@@ -1021,7 +1338,9 @@ def inspect(args: argparse.Namespace) -> dict[str, Any]:
         if is_ready(issue) and int(issue["number"]) not in covered_issue_numbers
     ]
     agent_prs = [pr for pr in prs if is_agent_pull_request(pr)]
-    events = pull_request_events(args.repo, prs, acknowledged)
+    events = pull_request_events(
+        args.repo, prs, acknowledged, base_oid, protection_digest
+    )
     events.extend(issue_resume_events(args.repo, issues, acknowledged))
     now = dt.datetime.now(dt.timezone.utc)
     events.extend(
@@ -1033,6 +1352,12 @@ def inspect(args: argparse.Namespace) -> dict[str, Any]:
             protected_issue_numbers=covered_issue_numbers,
         )
     )
+    event_ids = {str(event.get("id") or "") for event in events}
+    for pending in state.get("pending_merge_events") or []:
+        pending_id = str(pending.get("id") or "")
+        if pending_id and pending_id not in acknowledged and pending_id not in event_ids:
+            events.append(dict(pending))
+            event_ids.add(pending_id)
 
     current_version_text, current_build = main_plist_values(control_repo)
     current_version = parse_version(current_version_text)
@@ -1072,6 +1397,12 @@ def inspect(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "schema_version": 2,
         "generated_at": now.isoformat(),
+        "base_oid": base_oid,
+        "merge_protection": {
+            "digest": protection_digest or None,
+            "ready": bool(protection_digest),
+            "error": protection_error or None,
+        },
         "repo": args.repo,
         "control_repo": str(control_repo),
         "worktree_root": str(Path(args.worktree_root).resolve()),
@@ -1115,12 +1446,7 @@ def read_snapshot(path: str | Path) -> dict[str, Any]:
 
 
 def write_snapshot(path: str | Path, snapshot: dict[str, Any]) -> None:
-    target = Path(path)
-    temporary = target.with_suffix(f"{target.suffix}.tmp")
-    with temporary.open("w", encoding="utf-8") as handle:
-        json.dump(snapshot, handle, indent=2, sort_keys=True)
-        handle.write("\n")
-    os.replace(temporary, target)
+    atomic_write_json(Path(path), snapshot)
 
 
 def live_issue(repo: str, number: int) -> dict[str, Any]:
@@ -1508,9 +1834,544 @@ def live_pull_request(repo: str, number: int) -> dict[str, Any]:
             "--repo",
             repo,
             "--json",
-            "number,state,headRefOid,labels,url",
+            "number,state,headRefOid,baseRefName,baseRefOid,body,mergeCommit,mergedAt,labels,"
+            "isDraft,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,url",
         ]
     )
+
+
+def live_pull_request_reviews(repo: str, number: int) -> list[dict[str, Any]]:
+    value = run_json(
+        ["gh", "api", f"repos/{repo}/pulls/{number}/reviews", "--paginate"]
+    )
+    if not isinstance(value, list):
+        raise CommandError("pull-request reviews response is not a list")
+    return value
+
+
+def status_check_name(check: dict[str, Any]) -> str:
+    return str(check.get("context") or check.get("name") or "")
+
+
+def status_check_succeeded(check: dict[str, Any], *, exact_gate: bool) -> bool:
+    state = str(check.get("state") or "").upper()
+    status = str(check.get("status") or "").upper()
+    conclusion = str(check.get("conclusion") or "").upper()
+    if exact_gate:
+        return state == "SUCCESS" or (
+            status == "COMPLETED" and conclusion == "SUCCESS"
+        )
+    if state:
+        return state in {"SUCCESS", "NEUTRAL", "SKIPPED"}
+    return status == "COMPLETED" and conclusion in {
+        "SUCCESS",
+        "NEUTRAL",
+        "SKIPPED",
+    }
+
+
+def pull_request_checks_pass(
+    pull_request: dict[str, Any], *, require_exact_gate: bool
+) -> bool:
+    exact_gate_seen = False
+    for check in pull_request.get("statusCheckRollup") or []:
+        is_exact_gate = status_check_name(check) == EXACT_HEAD_STATUS_CONTEXT
+        if is_exact_gate and not require_exact_gate:
+            continue
+        if is_exact_gate:
+            exact_gate_seen = True
+        if not status_check_succeeded(check, exact_gate=is_exact_gate):
+            return False
+    return exact_gate_seen if require_exact_gate else True
+
+
+def validate_live_merge_candidate(
+    event: dict[str, Any],
+    pull_request: dict[str, Any],
+    reviews: list[dict[str, Any]],
+    live_closing_issue_refs: list[str],
+    protection_digest: str,
+    current_main_oid: str,
+    control_repo: Path,
+    *,
+    require_exact_gate: bool,
+) -> None:
+    expected_head = str(event.get("head") or "")
+    expected_base = str(event.get("base") or "")
+    expected_base_oid = str(event.get("base_oid") or "")
+    expected_body_digest = str(event.get("body_digest") or "")
+    expected_protection_digest = str(event.get("protection_digest") or "")
+    expected_closing = sorted(
+        {str(reference) for reference in event.get("closing_issue_refs") or []}
+    )
+    expected_closing_digest = str(event.get("closing_refs_digest") or "")
+    live_body = str(pull_request.get("body") or "")
+    live_head = str(pull_request.get("headRefOid") or "")
+    live_base_oid = str(pull_request.get("baseRefOid") or "")
+    live_labels = label_names(pull_request)
+    if str(pull_request.get("state") or "") != "OPEN":
+        raise CommandError("pull request is not open")
+    if not expected_head or live_head != expected_head:
+        raise CommandError("pull-request HEAD changed")
+    if expected_base != "main" or pull_request.get("baseRefName") != "main":
+        raise CommandError("pull request no longer targets main")
+    if (
+        len(expected_base_oid) != 40
+        or live_base_oid != expected_base_oid
+        or current_main_oid != expected_base_oid
+    ):
+        raise CommandError("pull-request base commit changed")
+    if not git_is_ancestor(control_repo, expected_base_oid, expected_head):
+        raise CommandError("tested HEAD does not contain the expected main base")
+    if not expected_body_digest or pr_body_digest(live_body) != expected_body_digest:
+        raise CommandError("pull-request body changed")
+    if (
+        len(expected_closing_digest) != 64
+        or closing_issue_references_digest(expected_closing)
+        != expected_closing_digest
+        or live_closing_issue_refs != expected_closing
+    ):
+        raise CommandError("pull-request canonical closing references changed")
+    if (
+        not expected_protection_digest
+        or protection_digest != expected_protection_digest
+    ):
+        raise CommandError("main protection contract changed")
+    if bool(pull_request.get("isDraft")):
+        raise CommandError("pull request is still a draft")
+    if live_labels.intersection(BLOCKING_LABELS):
+        raise CommandError("pull request has a blocking label")
+    if (
+        event.get("type") == "automatic_merge_candidate"
+        and AUTOMATIC_MERGE_READY_LABEL not in live_labels
+    ):
+        raise CommandError("automatic merge readiness label is missing")
+    if str(pull_request.get("reviewDecision") or "") == "CHANGES_REQUESTED":
+        raise CommandError("pull request has requested changes")
+    if current_head_changes_requested_review_ids(reviews, expected_head):
+        raise CommandError("current HEAD has an active changes-requested review")
+    if str(pull_request.get("mergeable") or "") != "MERGEABLE":
+        raise CommandError("pull request is not currently mergeable")
+    if require_exact_gate and str(pull_request.get("mergeStateStatus") or "") != "CLEAN":
+        raise CommandError("protected pull request is not clean after exact gate")
+    if not pull_request_checks_pass(
+        pull_request, require_exact_gate=require_exact_gate
+    ):
+        raise CommandError("pull-request checks are not all successful")
+
+
+def pending_merge_record(
+    event: dict[str, Any],
+    *,
+    state_name: str,
+    attempts: int,
+    merge_commit: str = "",
+    lease_commit: str = "",
+) -> dict[str, Any]:
+    record = {
+        key: event.get(key)
+        for key in (
+            "id",
+            "type",
+            "pr",
+            "head",
+            "base",
+            "base_oid",
+            "body_digest",
+            "closing_issue_refs",
+            "closing_refs_digest",
+            "protection_digest",
+            "url",
+        )
+    }
+    record.update(
+        {
+            "attempts": attempts,
+            "state": state_name,
+            "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        }
+    )
+    if merge_commit:
+        record["merge_commit"] = merge_commit
+    if lease_commit:
+        record["lease_commit"] = lease_commit
+    return record
+
+
+def persist_pending_merge(
+    state_dir: Path,
+    event: dict[str, Any],
+    *,
+    state_name: str,
+    increment_attempt: bool,
+    merge_commit: str = "",
+    lease_commit: str = "",
+) -> dict[str, Any]:
+    state = read_state(state_dir)
+    pending = [
+        dict(value) for value in state.get("pending_merge_events") or []
+    ]
+    event_id = str(event.get("id") or "")
+    existing = next(
+        (value for value in pending if str(value.get("id") or "") == event_id),
+        None,
+    )
+    attempts = int((existing or {}).get("attempts") or 0)
+    if increment_attempt:
+        attempts += 1
+    record = pending_merge_record(
+        event,
+        state_name=state_name,
+        attempts=attempts,
+        merge_commit=merge_commit or str((existing or {}).get("merge_commit") or ""),
+        lease_commit=lease_commit or str((existing or {}).get("lease_commit") or ""),
+    )
+    pending = [
+        value for value in pending if str(value.get("id") or "") != event_id
+    ]
+    pending.append(record)
+    state["pending_merge_events"] = pending
+    write_state(state_dir, state)
+    return record
+
+
+def snapshot_merge_event(snapshot: dict[str, Any], event_id: str) -> dict[str, Any]:
+    matches = [
+        event
+        for event in snapshot.get("events") or []
+        if str(event.get("id") or "") == event_id
+        and str(event.get("type") or "") in MERGE_EVENT_TYPES
+    ]
+    if len(matches) != 1:
+        raise CommandError("snapshot does not contain exactly one requested merge event")
+    return dict(matches[0])
+
+
+def fetch_origin(control_repo: Path) -> str:
+    run(
+        [
+            "git",
+            "fetch",
+            "origin",
+            "--prune",
+            "+refs/heads/*:refs/remotes/origin/*",
+        ],
+        cwd=control_repo,
+    )
+    value = run(["git", "rev-parse", "origin/main"], cwd=control_repo).strip()
+    if len(value) != 40:
+        raise CommandError("origin/main did not resolve to a full commit SHA")
+    return value
+
+
+def remote_ref_oid(control_repo: Path, ref: str) -> str:
+    output = run(["git", "ls-remote", "--refs", "origin", ref], cwd=control_repo)
+    rows = [line.split() for line in output.splitlines() if line.strip()]
+    if not rows:
+        return ""
+    if len(rows) != 1 or len(rows[0]) != 2 or rows[0][1] != ref:
+        raise CommandError(f"remote ref {ref} did not resolve uniquely")
+    oid = rows[0][0]
+    if len(oid) != 40:
+        raise CommandError(f"remote ref {ref} did not resolve to a full commit SHA")
+    return oid
+
+
+def pending_merge_for_event(state_dir: Path, event_id: str) -> dict[str, Any] | None:
+    return next(
+        (
+            dict(value)
+            for value in read_state(state_dir).get("pending_merge_events") or []
+            if str(value.get("id") or "") == event_id
+        ),
+        None,
+    )
+
+
+def create_merge_lease_commit(
+    control_repo: Path, event: dict[str, Any]
+) -> str:
+    expected_head = str(event.get("head") or "")
+    tree = run(
+        ["git", "rev-parse", f"{expected_head}^{{tree}}"], cwd=control_repo
+    ).strip()
+    lease_commit = run(
+        [
+            "git",
+            "-c",
+            "user.name=Tada Words Issue Agent",
+            "-c",
+            "user.email=issue-agent@tadawords.invalid",
+            "commit-tree",
+            tree,
+            "-p",
+            expected_head,
+            "-m",
+            f"merge-critical lease {event.get('id')} {uuid.uuid4()}",
+        ],
+        cwd=control_repo,
+    ).strip()
+    if len(lease_commit) != 40:
+        raise CommandError("merge-critical lease commit was not created")
+    return lease_commit
+
+
+def acquire_merge_critical_lease(
+    control_repo: Path, state_dir: Path, event: dict[str, Any]
+) -> None:
+    # GitHub's merge endpoint CAS protects HEAD, not mutable PR metadata. This
+    # unique remote value serializes every repository-owned metadata writer.
+    event_id = str(event.get("id") or "")
+    pending = pending_merge_for_event(state_dir, event_id)
+    lease_commit = str((pending or {}).get("lease_commit") or "")
+    if len(lease_commit) != 40:
+        raise CommandError("merge-critical lease ownership was not persisted")
+    remote_oid = remote_ref_oid(control_repo, MERGE_CRITICAL_LEASE_REF)
+    if remote_oid:
+        if remote_oid == lease_commit:
+            return
+        raise CommandError(
+            f"repository merge-critical lease is already held at {remote_oid}"
+        )
+    zeros = "0" * 40
+    run(
+        [
+            "git",
+            "push",
+            f"--force-with-lease={MERGE_CRITICAL_LEASE_REF}:{zeros}",
+            "origin",
+            f"{lease_commit}:{MERGE_CRITICAL_LEASE_REF}",
+        ],
+        cwd=control_repo,
+    )
+    if remote_ref_oid(control_repo, MERGE_CRITICAL_LEASE_REF) != lease_commit:
+        raise CommandError("repository merge-critical lease was not acquired exactly")
+
+
+def release_merge_critical_lease(control_repo: Path, lease_commit: str) -> None:
+    remote_oid = remote_ref_oid(control_repo, MERGE_CRITICAL_LEASE_REF)
+    if not remote_oid:
+        return
+    if len(lease_commit) != 40 or remote_oid != lease_commit:
+        raise CommandError("refusing to release another merge-critical lease")
+    run(
+        [
+            "git",
+            "push",
+            f"--force-with-lease={MERGE_CRITICAL_LEASE_REF}:{lease_commit}",
+            "origin",
+            f":{MERGE_CRITICAL_LEASE_REF}",
+        ],
+        cwd=control_repo,
+    )
+
+
+def guarded_merge(args: argparse.Namespace) -> dict[str, Any]:
+    snapshot = read_snapshot(args.snapshot)
+    event = snapshot_merge_event(snapshot, args.event_id)
+    expected_head = str(event.get("head") or "")
+    if args.confirm_gates_head != expected_head or len(expected_head) != 40:
+        raise CommandError("applicable gates were not confirmed for the exact full HEAD")
+    if str(snapshot.get("repo") or "") != args.repo:
+        raise CommandError("snapshot repository does not match guarded-merge repository")
+
+    control_repo = Path(args.control_repo).resolve()
+    state_dir = Path(args.state_dir).resolve()
+    state = read_state(state_dir)
+    if state.get("pending_lease_cleanups"):
+        raise CommandError(
+            "pending merge-lease cleanup must finish before another merge action"
+        )
+    event_id = str(event.get("id") or "")
+    other_pending_event_ids = {
+        str(pending.get("id") or "")
+        for pending in state.get("pending_merge_events") or []
+        if str(pending.get("id") or "") != event_id
+    }
+    if other_pending_event_ids:
+        raise CommandError(
+            "another merge event is pending durable acknowledgement; "
+            "refusing to create a second pending merge"
+        )
+    current_main_oid = fetch_origin(control_repo)
+    pull_request_number = int(event["pr"])
+    pull_request = live_pull_request(args.repo, pull_request_number)
+    if str(pull_request.get("state") or "") == "MERGED":
+        if not event_has_durable_outcome(args.repo, event, control_repo):
+            raise CommandError("merged pull request has not passed durable verification")
+        merge_commit = str((pull_request.get("mergeCommit") or {}).get("oid") or "")
+        return persist_pending_merge(
+            state_dir,
+            event,
+            state_name="merged_unverified",
+            increment_attempt=False,
+            merge_commit=merge_commit,
+        )
+
+    pending = pending_merge_for_event(state_dir, event_id)
+    if pending is not None and (
+        pending.get("merge_commit")
+        or pending.get("state") == "request_sent_or_unknown"
+    ):
+        raise CommandError(
+            "a prior merge request has an unverified outcome; refusing a second request"
+        )
+
+    protection_digest = branch_protection_contract(
+        live_branch_protection(args.repo)
+    )
+    reviews = live_pull_request_reviews(args.repo, pull_request_number)
+    live_closing_refs = live_closing_issue_references(
+        args.repo, pull_request_number
+    )
+    validate_live_merge_candidate(
+        event,
+        pull_request,
+        reviews,
+        live_closing_refs,
+        protection_digest,
+        current_main_oid,
+        control_repo,
+        require_exact_gate=False,
+    )
+
+    lease_commit = str((pending or {}).get("lease_commit") or "")
+    if not lease_commit:
+        lease_commit = create_merge_lease_commit(control_repo, event)
+    persist_pending_merge(
+        state_dir,
+        event,
+        state_name="acquiring_merge_lease",
+        increment_attempt=False,
+        lease_commit=lease_commit,
+    )
+    acquire_merge_critical_lease(control_repo, state_dir, event)
+
+    current_main_oid = fetch_origin(control_repo)
+    pull_request = live_pull_request(args.repo, pull_request_number)
+    protection_digest = branch_protection_contract(
+        live_branch_protection(args.repo)
+    )
+    reviews = live_pull_request_reviews(args.repo, pull_request_number)
+    live_closing_refs = live_closing_issue_references(
+        args.repo, pull_request_number
+    )
+    validate_live_merge_candidate(
+        event,
+        pull_request,
+        reviews,
+        live_closing_refs,
+        protection_digest,
+        current_main_oid,
+        control_repo,
+        require_exact_gate=False,
+    )
+    persist_pending_merge(
+        state_dir,
+        event,
+        state_name="preparing",
+        increment_attempt=False,
+    )
+    run_json(
+        [
+            "gh",
+            "api",
+            "--method",
+            "POST",
+            f"repos/{args.repo}/statuses/{expected_head}",
+            "-f",
+            "state=success",
+            "-f",
+            f"context={EXACT_HEAD_STATUS_CONTEXT}",
+            "-f",
+            f"description=Exact HEAD gates passed for base {current_main_oid[:12]}",
+            "-f",
+            f"target_url={event.get('url') or ''}",
+        ]
+    )
+
+    current_main_oid = fetch_origin(control_repo)
+    pull_request = live_pull_request(args.repo, pull_request_number)
+    protection_digest = branch_protection_contract(
+        live_branch_protection(args.repo)
+    )
+    reviews = live_pull_request_reviews(args.repo, pull_request_number)
+    live_closing_refs = live_closing_issue_references(
+        args.repo, pull_request_number
+    )
+    validate_live_merge_candidate(
+        event,
+        pull_request,
+        reviews,
+        live_closing_refs,
+        protection_digest,
+        current_main_oid,
+        control_repo,
+        require_exact_gate=True,
+    )
+    acquire_merge_critical_lease(control_repo, state_dir, event)
+    intent = persist_pending_merge(
+        state_dir,
+        event,
+        state_name="request_sent_or_unknown",
+        increment_attempt=True,
+    )
+    response = run_json(
+        [
+            "gh",
+            "api",
+            "--method",
+            "PUT",
+            f"repos/{args.repo}/pulls/{pull_request_number}/merge",
+            "-f",
+            f"sha={expected_head}",
+            "-f",
+            "merge_method=squash",
+            "-f",
+            f"commit_title=Guarded squash merge of PR #{pull_request_number}",
+            "-f",
+            f"commit_message=Exact tested HEAD {expected_head}",
+        ]
+    )
+    if response.get("merged") is not True:
+        raise CommandError(
+            "GitHub refused the guarded squash merge: "
+            + str(response.get("message") or "unknown response")
+        )
+    merge_commit = str(response.get("sha") or "")
+    if len(merge_commit) != 40:
+        raise CommandError("GitHub merge response did not include a full merge commit")
+    result = persist_pending_merge(
+        state_dir,
+        event,
+        state_name="merged_unverified",
+        increment_attempt=False,
+        merge_commit=merge_commit,
+    )
+    result["previous_state"] = intent.get("state")
+    return result
+
+
+def linked_issues_closed_by_pull_request(
+    repo: str, issue_references: Iterable[str], pull_request_number: int
+) -> bool:
+    references = [str(reference) for reference in issue_references]
+    if not references:
+        return False
+    expected_pull_request = f"{repo.casefold()}#{pull_request_number}"
+    for reference in references:
+        issue_repo, issue_number = split_qualified_github_reference(reference)
+        issue = live_issue(issue_repo, issue_number)
+        closing_pull_requests = {
+            qualified_github_reference(closing_reference)
+            for closing_reference in issue.get("closedByPullRequestsReferences") or []
+        }
+        if (
+            issue.get("state") != "CLOSED"
+            or expected_pull_request not in closing_pull_requests
+        ):
+            return False
+    return True
 
 
 def issue_has_durable_outcome(
@@ -1540,10 +2401,77 @@ def event_has_durable_outcome(
 ) -> bool:
     event_type = str(event.get("type") or "")
     if event.get("pr") is not None:
-        pr = live_pull_request(repo, int(event["pr"]))
-        if pr.get("state") != "OPEN":
+        pull_request_number = int(event["pr"])
+        pr = live_pull_request(repo, pull_request_number)
+        state = str(pr.get("state") or "")
+        current_head = str(pr.get("headRefOid") or "")
+        expected_head = str(event.get("head") or "")
+        if state == "OPEN":
+            if event_type not in MERGE_EVENT_TYPES:
+                return current_head != expected_head
+            live_body = str(pr.get("body") or "")
+            expected_base_oid = str(event.get("base_oid") or "")
+            expected_closing = sorted(
+                {
+                    str(reference)
+                    for reference in event.get("closing_issue_refs") or []
+                }
+            )
+            expected_closing_digest = str(event.get("closing_refs_digest") or "")
+            current_main_oid = run(
+                ["git", "rev-parse", "origin/main"], cwd=control_repo
+            ).strip()
+            return (
+                current_head != expected_head
+                or pr.get("baseRefName") != event.get("base")
+                or str(pr.get("baseRefOid") or "") != expected_base_oid
+                or current_main_oid != expected_base_oid
+                or pr_body_digest(live_body) != event.get("body_digest")
+                or len(expected_closing_digest) != 64
+                or closing_issue_references_digest(expected_closing)
+                != expected_closing_digest
+                or live_closing_issue_references(repo, pull_request_number)
+                != expected_closing
+            )
+        if event_type not in MERGE_EVENT_TYPES:
             return True
-        return str(pr.get("headRefOid") or "") != str(event.get("head") or "")
+        if state == "CLOSED":
+            return False
+        if state != "MERGED":
+            return False
+        expected_base = str(event.get("base") or "")
+        expected_body_digest = str(event.get("body_digest") or "")
+        expected_base_oid = str(event.get("base_oid") or "")
+        live_body = str(pr.get("body") or "")
+        expected_closing_issues = sorted(
+            {str(reference) for reference in event.get("closing_issue_refs") or []}
+        )
+        expected_closing_digest = str(event.get("closing_refs_digest") or "")
+        live_closing_issues = live_closing_issue_references(
+            repo, pull_request_number
+        )
+        merge_commit = str((pr.get("mergeCommit") or {}).get("oid") or "")
+        if (
+            not expected_head
+            or current_head != expected_head
+            or expected_base != "main"
+            or pr.get("baseRefName") != expected_base
+            or not expected_body_digest
+            or len(expected_base_oid) != 40
+            or pr_body_digest(live_body) != expected_body_digest
+            or len(expected_closing_digest) != 64
+            or closing_issue_references_digest(expected_closing_issues)
+            != expected_closing_digest
+            or live_closing_issues != expected_closing_issues
+            or not merge_commit
+            or not git_is_ancestor(control_repo, merge_commit, "origin/main")
+            or git_first_parent(control_repo, merge_commit) != expected_base_oid
+            or not git_trees_match(control_repo, expected_head, merge_commit)
+        ):
+            return False
+        return not expected_closing_issues or linked_issues_closed_by_pull_request(
+            repo, expected_closing_issues, pull_request_number
+        )
     if event.get("issue") is not None:
         number = int(event["issue"])
         if event_type == "issue_resume_requested":
@@ -1691,6 +2619,40 @@ def release_has_durable_outcome(
     return not remote
 
 
+def cleanup_pending_merge_leases(args: argparse.Namespace) -> dict[str, Any]:
+    state_dir = Path(args.state_dir).resolve()
+    control_repo = Path(args.control_repo).resolve()
+    state = read_state(state_dir)
+    cleanups = [
+        dict(cleanup) for cleanup in state.get("pending_lease_cleanups") or []
+    ]
+    if len(cleanups) > 1:
+        raise CommandError("multiple cleanup records cannot own one merge lease")
+    for cleanup in cleanups:
+        event_id = str(cleanup.get("event_id") or "")
+        if event_id not in set(state.get("acknowledged_event_ids") or []) or any(
+            str(pending.get("id") or "") == event_id
+            for pending in state.get("pending_merge_events") or []
+        ):
+            raise CommandError("merge-lease cleanup lacks a durable acknowledgement")
+        release_merge_critical_lease(
+            control_repo, str(cleanup.get("lease_commit") or "")
+        )
+    if cleanups:
+        state = read_state(state_dir)
+        cleanup_ids = {
+            str(cleanup.get("event_id") or "") for cleanup in cleanups
+        }
+        state["pending_lease_cleanups"] = [
+            cleanup
+            for cleanup in state.get("pending_lease_cleanups") or []
+            if str(cleanup.get("event_id") or "") not in cleanup_ids
+        ]
+        state["last_successful_run"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        write_state(state_dir, state)
+    return {"cleaned": len(cleanups)}
+
+
 def acknowledge(args: argparse.Namespace) -> None:
     state_dir = Path(args.state_dir).resolve()
     snapshot = read_snapshot(args.snapshot)
@@ -1744,13 +2706,75 @@ def acknowledge(args: argparse.Namespace) -> None:
                     )
                 release_reservation_lease(reservation, control_repo)
     state = read_state(state_dir)
+    event_ids_to_acknowledge = {
+        str(event["id"])
+        for event in snapshot.get("events") or []
+        if event.get("id")
+    }
+    pending_to_release = [
+        event
+        for event in state.get("pending_merge_events") or []
+        if str(event.get("id") or "") in event_ids_to_acknowledge
+        and str(event.get("type") or "") in MERGE_EVENT_TYPES
+    ]
+    if pending_to_release and not args.require_durable_outcome:
+        raise CommandError(
+            "pending merge intents require durable verification before lease release"
+        )
+    if len(pending_to_release) > 1:
+        raise CommandError("multiple pending merge intents cannot share one lease")
+    cleanup_records: list[dict[str, Any]] = []
+    control_repo = Path(args.control_repo).resolve() if args.control_repo else None
+    for pending in pending_to_release:
+        lease_commit = str(pending.get("lease_commit") or "")
+        if len(lease_commit) != 40:
+            if control_repo and remote_ref_oid(
+                control_repo, MERGE_CRITICAL_LEASE_REF
+            ):
+                raise CommandError(
+                    "pending merge intent cannot prove ownership of the live lease"
+                )
+            continue
+        cleanup_records.append(
+            {
+                "event_id": str(pending.get("id") or ""),
+                "lease_commit": lease_commit,
+                "recorded_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            }
+        )
+    existing_cleanups = [
+        dict(cleanup) for cleanup in state.get("pending_lease_cleanups") or []
+    ]
+    if existing_cleanups:
+        raise CommandError("an earlier durable lease cleanup is still pending")
     acknowledged = set(state.get("acknowledged_event_ids") or [])
-    acknowledged.update(
-        str(event["id"]) for event in snapshot.get("events") or [] if event.get("id")
-    )
+    acknowledged.update(event_ids_to_acknowledge)
     state["acknowledged_event_ids"] = sorted(acknowledged)[-500:]
-    state["last_successful_run"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    state["pending_merge_events"] = [
+        event
+        for event in state.get("pending_merge_events") or []
+        if str(event.get("id") or "") not in acknowledged
+    ]
+    state["pending_lease_cleanups"] = cleanup_records
+    if not cleanup_records:
+        state["last_successful_run"] = dt.datetime.now(dt.timezone.utc).isoformat()
     write_state(state_dir, state)
+    if cleanup_records:
+        if control_repo is None:
+            raise ValueError("--control-repo is required for merge-lease cleanup")
+        for cleanup in cleanup_records:
+            release_merge_critical_lease(
+                control_repo, str(cleanup["lease_commit"])
+            )
+        state = read_state(state_dir)
+        cleanup_ids = {str(cleanup["event_id"]) for cleanup in cleanup_records}
+        state["pending_lease_cleanups"] = [
+            cleanup
+            for cleanup in state.get("pending_lease_cleanups") or []
+            if str(cleanup.get("event_id") or "") not in cleanup_ids
+        ]
+        state["last_successful_run"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        write_state(state_dir, state)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1794,6 +2818,18 @@ def parser() -> argparse.ArgumentParser:
     release_parser.add_argument("--issue", required=True, type=int)
     release_parser.add_argument("--reason-file", required=True)
 
+    merge_parser = commands.add_parser("guarded-merge")
+    merge_parser.add_argument("--snapshot", required=True)
+    merge_parser.add_argument("--state-dir", required=True)
+    merge_parser.add_argument("--repo", required=True)
+    merge_parser.add_argument("--control-repo", required=True)
+    merge_parser.add_argument("--event-id", required=True)
+    merge_parser.add_argument("--confirm-gates-head", required=True)
+
+    cleanup_parser = commands.add_parser("cleanup-leases")
+    cleanup_parser.add_argument("--state-dir", required=True)
+    cleanup_parser.add_argument("--control-repo", required=True)
+
     acknowledge_parser = commands.add_parser("acknowledge")
     acknowledge_parser.add_argument("--snapshot", required=True)
     acknowledge_parser.add_argument("--state-dir", required=True)
@@ -1820,6 +2856,17 @@ def main() -> int:
             sys.stdout.write("\n")
         elif args.command == "release":
             json.dump(release(args), sys.stdout, indent=2, sort_keys=True)
+            sys.stdout.write("\n")
+        elif args.command == "guarded-merge":
+            json.dump(guarded_merge(args), sys.stdout, indent=2, sort_keys=True)
+            sys.stdout.write("\n")
+        elif args.command == "cleanup-leases":
+            json.dump(
+                cleanup_pending_merge_leases(args),
+                sys.stdout,
+                indent=2,
+                sort_keys=True,
+            )
             sys.stdout.write("\n")
         else:
             acknowledge(args)

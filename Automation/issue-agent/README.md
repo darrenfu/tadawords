@@ -109,8 +109,74 @@ tail -50 '/Users/macmini-dofu/Library/Logs/TadaWordsIssueAgent/poll.log'
 ```
 
 To resume a human-resolved blocker, comment `/resume` on the blocked Issue or
-`/resume <current-head-sha>` on its PR. To authorize merge after reviewing the
-exact tested build, comment `/merge <current-head-sha>` on the PR.
+`/resume <current-head-sha>` on its PR.
+
+## Exact-HEAD automatic merge
+
+A ready, non-draft agent PR targeting `main` directly, carrying
+`awaiting-human-review`, and having no blocker or current changes-requested
+review produces a deterministic `automatic_merge_candidate` event keyed by its
+full HEAD SHA, the PR's live `baseRefOid`, PR-body SHA-256 digest, and verified
+canonical closing-reference digest, and verified branch-protection contract
+digest. The repository
+owner's standing authorization permits Codex to squash-merge that candidate
+without a separate GitHub comment, but only after a fresh exact-HEAD preflight
+confirms mergeable/clean state, required checks, applicable simulator and signed
+artifact/device evidence, dependencies, and every remaining product or risk
+gate. A new commit produces a new event ID and invalidates all prior evidence.
+Stacked and other non-`main` PRs never produce automatic candidates. A base edit
+or any PR-body edit invalidates the candidate even when the commit SHA is
+unchanged; the worker must re-fetch the full body digest and exact closing set
+immediately before merge. The closing set comes from the paginated GraphQL
+`closingIssuesReferences` connection, so Development-sidebar links and
+qualified same-repository syntax cannot be missed; cross-repository closing
+references, GraphQL partial errors, and malformed pagination fail closed. A PR
+with only `Refs #N` and no canonical closing
+reference remains eligible.
+
+Automatic merge is disabled unless GitHub itself protects `main` with strict
+up-to-date required checks, admin enforcement, pull-request entry, linear
+history, resolved conversations, no force push/deletion, and the required
+`tadawords/exact-head-gates` context. The canonical reversible configuration is
+[`main-branch-protection.json`](main-branch-protection.json). The worker never
+uses an admin bypass, update-branch, or automatic rebase.
+
+After all applicable local, simulator, signed-artifact, device, and product
+gates pass, the agent must call `issue_agent.py guarded-merge`; direct merge
+commands are forbidden. The core command re-fetches the complete candidate,
+durably records preparation, atomically acquires
+`refs/heads/agent-leases/merge-critical`, posts the exact-HEAD gate status,
+re-fetches again, records a sent-or-unknown intent immediately before the
+request, and sends a squash merge request with the full HEAD as the server-side
+compare-and-swap value. Its fixed commit title/message cannot introduce a new
+closing keyword. Strict branch protection rejects a base race. Pending intents
+are never capacity-truncated, survive process death, and are restored on later
+polls even after a PR disappears from the open-PR listing. Once a request is
+sent or its outcome is unknown, the worker only reconciles and never resends.
+Acknowledgement first fsyncs both the durable outcome and an outstanding lease
+cleanup record while the lease is still held. It then deletes that exact unique
+lease with compare-and-swap and fsyncs cleanup completion. Every poll recovers
+unfinished cleanup before inspection, so a crash cannot create an unowned
+metadata-write window.
+
+GitHub does not provide compare-and-swap for PR body, labels, or closing-link
+metadata. Every automated repository writer therefore treats the
+merge-critical remote ref as an exclusive lease and stops metadata mutations
+while it is owned. The repository currently has one direct writer. Owner edits
+during the critical section remain an explicit trusted-operator boundary, not
+a claimed GitHub-atomic guarantee.
+
+`/merge <current-head-sha>` remains an optional compatible command. It creates
+the legacy `merge_authorized` event but does not bypass the same preflight.
+
+After merging, the worker fetches `origin/main` and refuses durable
+acknowledgement until the PR still names the tested HEAD, its merge commit is
+reachable from `origin/main`, its tree matches the tested HEAD tree, its first
+parent matches the tested base OID, its body digest and paginated canonical
+closing set match the event, and every recorded closing reference is closed
+through that PR. An unchanged open PR and a PR
+closed without merge are not durable merge outcomes merely because Codex exited
+successfully.
 
 ## Recovery and rollback
 
@@ -122,6 +188,18 @@ until ownership has been reconciled; rollback must not erase audit evidence.
 After restoration, verify the loaded program, 900-second interval, selected
 model/effort, lock behavior, and one safe no-op poll before declaring recovery.
 Never acknowledge a partially handled event merely because the process exited.
+
+To restore the prior mandatory-comment merge gate, revert the Issue #85 policy
+commit, run the installer so the verified repository copy replaces the installed
+worker, and retain the existing backup, logs, state, worktrees, remote branches,
+and GitHub labels. After disabling the worker and confirming no pending merge
+intent, restore the recorded pre-change branch protection (it was absent before
+Issue #85) so the retired exact-head context cannot deadlock every PR. Verify the
+restored program, 900-second interval, lock, and one safe no-op poll before
+re-enabling work. The restored worker again waits for
+an exact owner `/merge <current-head-sha>` comment. If rollback cannot be
+completed atomically, disable the LaunchAgent or apply a blocker rather than
+running mixed policy versions.
 
 ## Uninstall
 

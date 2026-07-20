@@ -14,8 +14,10 @@ skip fresh checks. Re-fetch GitHub and Git state before every mutation.
 - Create or resume a dedicated worktree under `worktree_root`.
 - Never inspect passwords, tokens, Keychain contents, private child data, or
   unrelated files.
-- Never merge based only on an approval review. Merge requires a repository
-  owner PR comment `/merge <sha>` matching the current HEAD.
+- Never merge based only on an approval review or readiness label. The standing
+  owner authorization in `AGENTS.md` removes the mandatory comment, but every
+  exact-HEAD, evidence, blocker, product-decision, and target-environment gate
+  remains mandatory. `/merge <sha>` is optional and compatible.
 - Never perform destructive device, account, signing, or data operations.
 - If no snapshot event is still actionable, make no changes and exit.
 
@@ -27,11 +29,64 @@ skip fresh checks. Re-fetch GitHub and Git state before every mutation.
    an Issue only for an exact closing reference from a PR merged into the
    default branch whose merge commit is present in fresh `origin/main`. Never
    close from fuzzy keywords, title similarity, or inferred overlap.
-1. For `merge_authorized`, verify the command author is the repository owner,
-   its SHA still matches current HEAD, the PR is not draft, all required checks
-   pass, both current-HEAD device records exist, and no unresolved requested
-   changes remain. Only then squash-merge and close the batch. Otherwise explain
-   the unmet gate in the PR and do not merge.
+1. For `automatic_merge_candidate` or `merge_authorized`, re-fetch the PR and
+   its base immediately before any merge mutation. Require the event's full HEAD
+   to equal the current HEAD; require its recorded and current base to both be
+   `main` (never auto-merge a stacked PR); require the current PR body's complete
+   SHA-256 digest and exact `Closes #N` set to equal the event's recorded values
+   (an empty closing set is valid); require ready, non-draft, mergeable/clean
+   state;
+   require all repository checks and all applicable simulator, signed-artifact,
+   physical-device, regression, and product evidence on that exact HEAD; and
+   require no blocker/clarification label, unresolved requested change,
+   dependency, stale evidence, high-risk decision, or target-environment
+   mismatch. For `merge_authorized`, also verify the optional command came from
+   the repository owner and names that HEAD. If any gate is unmet, report exact
+   evidence, durably block/release the affected work, and do not merge.
+
+   Only after the preflight passes may you request a merge, and the only
+   permitted mutation path is the repository core command below. Do not call
+   `gh pr merge`, the pull-request merge API, `git push main`, `--admin`, update
+   branch, or rebase directly:
+
+   ```sh
+   python3 "$TADA_AGENT_CORE" guarded-merge \
+     --snapshot "$TADA_AGENT_SNAPSHOT" \
+     --state-dir "$TADA_AGENT_STATE_DIR" \
+     --repo "$TADA_AGENT_REPO" \
+     --control-repo "$TADA_AGENT_CONTROL_REPO" \
+     --event-id '<exact snapshot event id>' \
+     --confirm-gates-head '<full tested HEAD>'
+   ```
+
+   The command must fail closed unless the event pins the per-PR base OID and
+   the server enforces strict up-to-date status checks, admin enforcement,
+   linear history, pull-request entry, resolved conversations, and the
+   `tadawords/exact-head-gates` context. It paginates GitHub's canonical closing
+   references, rejects cross-repository closures, acquires the repository-wide
+   `refs/heads/agent-leases/merge-critical` ref, durably records preparation,
+   and records sent-or-unknown immediately before GitHub's exact-head merge
+   compare-and-swap. A pending intent from a prior run has priority. Never
+   resend a sent-or-unknown request, even if an eventually consistent read still
+   says OPEN.
+
+   All automated writers must stop PR-title/body, label, review, check,
+   closing-link, and merge mutations while another event owns that remote ref.
+   GitHub does not offer a CAS for PR metadata; repository-owner edits during
+   this short critical section are an explicit trusted-operator boundary.
+   Acknowledgement must first fsync the verified event plus pending lease
+   cleanup, then delete the exact unique lease by CAS, then fsync cleanup
+   completion. The runner recovers unfinished cleanup before inspection.
+
+   Then fetch
+   `origin/main` and verify the PR reports the same tested HEAD, the merge commit
+   is reachable from fresh `origin/main`, its first parent equals the recorded
+   base OID, the merged tree equals the tested HEAD tree, the merged PR body
+   retains the exact recorded digest and paginated canonical closing set,
+   and every recorded Issue closed through that PR. A
+   closed-but-unmerged PR is
+   not a durable merge outcome. Do not acknowledge the event or claim completion
+   until all post-merge checks pass.
 2. For `changes_requested`, reopen the existing batch worktree, implement only
    the requested in-scope changes, push a new HEAD, invalidate old device and
    approval evidence, rerun the affected full gates, and repeat device delivery.
@@ -172,5 +227,13 @@ If Developer Mode, trust, signing, provisioning, OTP, account state, or device
 availability blocks delivery, apply `agent-blocked`, comment exact evidence and
 safe recovery steps, leave the PR draft, and stop.
 
-Only after current-HEAD automated and device gates pass may you mark the PR ready
-and apply `awaiting-human-review`. Then stop for the human.
+Only after all applicable current-HEAD gates pass may you mark the PR ready and
+apply `awaiting-human-review`. Device rows may be `N/A` only when the diff
+cannot affect runtime/signing/persistence/package behavior and changes no app
+or LocalQA version/build metadata, source/generated Plist, `project.yml`,
+generated Xcode project, entitlement, resource, or package input. Otherwise
+run the exact signed simulator and one-iPhone-plus-one-iPad gates; never use a
+docs/automation label to bypass them. Do not stop solely to request another
+merge comment: re-fetch and execute the exact-HEAD automatic merge protocol in
+this run, or leave the deterministic candidate for the next poll if an
+external gate is still pending.
