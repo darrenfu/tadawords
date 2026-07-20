@@ -119,6 +119,19 @@ public protocol FamilySyncApplyTransactionRepository: Sendable {
     /// any new repository data. It changes only after a receipt is durable.
     func committedReceiptToken() async throws -> String
 
+    /// Drops replay/receipt state for Profiles fetched only for an unfinished
+    /// first-run selection. The caller must first hold a durable disabled-sync
+    /// fence and purge canonical Profile data. Terminal deletion transactions
+    /// remain durable and replayable.
+    func discardUnadoptedProfileState() async throws
+
+    /// Returns identities referenced by payload-bearing pending transactions
+    /// or non-deletion receipts. The caller snapshots these IDs before
+    /// discarding dedupe state so canonical child-only artifacts are erased.
+    func unadoptedProfileIDs() async throws -> Set<ProfileID>
+
+    func hasUnadoptedProfileState() async throws -> Bool
+
     func committedReceipts() async -> AsyncStream<FamilySyncCommittedApplyReceipt>
 }
 
@@ -285,6 +298,60 @@ public actor LocalJSONFamilySyncApplyTransactionRepository:
             throw FamilySyncApplyTransactionError.writeFailed
         }
         return FamilySyncRecord.checksum(for: bytes)
+    }
+
+    public func discardUnadoptedProfileState() throws {
+        let current = try loadedSnapshot()
+        let retainedPending: [FamilySyncPendingApplyTransaction] =
+            try current.pending.compactMap { transaction in
+                let deletionRecords = transaction.records.filter {
+                    $0.kind == .profileDeletion && $0.isDeleted
+                }
+                guard !deletionRecords.isEmpty else { return nil }
+                // A fetched batch can contain a deletion tombstone alongside old
+                // Profile/word payloads. Preserve only the terminal authority; no
+                // child payload may survive the first-run account boundary.
+                return try FamilySyncPendingApplyTransaction(
+                    id: transaction.id,
+                    profileID: transaction.profileID,
+                    records: deletionRecords,
+                    startedAt: transaction.startedAt
+                )
+            }
+        let retained = FamilySyncApplyTransactionSnapshot(
+            pending: retainedPending,
+            lastCommitted: current.lastCommitted.filter(\.deletedProfile)
+        )
+        try persist(retained)
+        snapshot = retained
+    }
+
+    public func unadoptedProfileIDs() async throws -> Set<ProfileID> {
+        let current = try loadedSnapshot()
+        var profileIDs = Set(
+            current.pending.compactMap { transaction in
+                transaction.records.contains {
+                    $0.kind != .profileDeletion || !$0.isDeleted
+                }
+                    ? transaction.profileID
+                    : nil
+            }
+        )
+        profileIDs.formUnion(
+            current.lastCommitted.compactMap { receipt in
+                receipt.deletedProfile ? nil : receipt.profileID
+            }
+        )
+        return profileIDs
+    }
+
+    public func hasUnadoptedProfileState() throws -> Bool {
+        let current = try loadedSnapshot()
+        return current.pending.contains { transaction in
+            transaction.records.contains {
+                $0.kind != .profileDeletion || !$0.isDeleted
+            }
+        } || current.lastCommitted.contains { !$0.deletedProfile }
     }
 
     public func committedReceipts() async

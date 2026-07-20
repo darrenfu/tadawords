@@ -2,11 +2,19 @@ import Foundation
 
 /// Shared mechanics only. Each repository maps raw file/codec failures to its
 /// own public, domain-specific error type.
-struct AtomicSnapshotFile {
-    let snapshotURL: URL
-    let fileManager: FileManager
+public struct AtomicSnapshotFile {
+    public let snapshotURL: URL
+    public let fileManager: FileManager
 
-    func readIfPresent() throws -> Data? {
+    public init(
+        snapshotURL: URL,
+        fileManager: FileManager = .default
+    ) {
+        self.snapshotURL = snapshotURL
+        self.fileManager = fileManager
+    }
+
+    public func readIfPresent() throws -> Data? {
         do {
             _ = try fileManager.attributesOfItem(atPath: snapshotURL.path)
         } catch {
@@ -23,7 +31,7 @@ struct AtomicSnapshotFile {
         return try Data(contentsOf: snapshotURL)
     }
 
-    func write(_ data: Data) throws {
+    public func write(_ data: Data) throws {
         let directoryURL = snapshotURL.deletingLastPathComponent()
         try fileManager.createDirectory(
             at: directoryURL,

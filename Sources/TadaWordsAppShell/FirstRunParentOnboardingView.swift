@@ -168,6 +168,7 @@ struct FirstRunParentOnboardingView: View {
     private var canFinish: Bool {
         guard hasAcceptedConsent else { return false }
         guard purpose == .fullSetup else { return true }
+        guard !discoveryResetMustRetry else { return false }
         switch fullSetupRoute {
         case .choose:
             return false
@@ -272,6 +273,7 @@ struct FirstRunParentOnboardingView: View {
                     fullSetupRoute = .create
                     nicknameIsFocused = true
                 }
+                .disabled(discoveryResetMustRetry)
             }
         }
     }
@@ -336,6 +338,7 @@ struct FirstRunParentOnboardingView: View {
                 nicknameIsFocused = true
             }
             .buttonStyle(.bordered)
+            .disabled(discoveryResetMustRetry)
             .accessibilityIdentifier("first-run.discovery.create-new")
         }
         .font(.system(.subheadline, design: .rounded, weight: .bold))
@@ -814,6 +817,11 @@ struct FirstRunParentOnboardingView: View {
 
     private func discoverProfiles() {
         guard hasAcceptedConsent else { return }
+        // A retry may confirm a different iCloud account. Never keep the
+        // previous account's candidates interactive while its cache is being
+        // fenced and replaced.
+        discoveredProfiles = []
+        selectedDiscoveredProfileID = nil
         discoveryState = .searching
         Task { @MainActor in
             do {
@@ -833,6 +841,11 @@ struct FirstRunParentOnboardingView: View {
         }
     }
 
+    private var discoveryResetMustRetry: Bool {
+        guard case .failed(let error) = discoveryState else { return false }
+        return error == .resetRequired
+    }
+
     private func discoveryFailureTitle(
         _ error: FirstRunProfileDiscoveryError
     ) -> String {
@@ -841,6 +854,8 @@ struct FirstRunParentOnboardingView: View {
             "Can’t reach iCloud yet"
         case .iCloudUnavailable:
             "iCloud isn’t available"
+        case .resetRequired:
+            "Finish checking this device"
         case .failed:
             "Couldn’t check iCloud"
         }
@@ -854,6 +869,8 @@ struct FirstRunParentOnboardingView: View {
             "Your local data is safe. Check the connection and try again, or explicitly create a new kid."
         case .iCloudUnavailable:
             "Sign in to iCloud, then try again. You can still explicitly create a new kid offline."
+        case .resetRequired:
+            "Try Find again before creating or opening a profile. This keeps another iCloud account’s data separate."
         case .failed:
             "No new profile was created. Try again, or explicitly create a new kid."
         }
@@ -867,6 +884,8 @@ struct FirstRunParentOnboardingView: View {
             "Use a nickname with \(maximum) characters or fewer."
         case FirstRunOnboardingError.invalidAge:
             "Choose your child’s age, then try again."
+        case FirstRunOnboardingRepositoryError.discoveryResetRequired:
+            "Tap Find my kid again before creating or opening a profile."
         default:
             "Your child’s setup is still here. Check that storage is available, then try again."
         }

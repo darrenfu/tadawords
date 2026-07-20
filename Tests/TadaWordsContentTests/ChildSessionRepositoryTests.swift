@@ -4,6 +4,37 @@ import TadaWordsDomain
 import XCTest
 
 final class ChildSessionRepositoryTests: XCTestCase {
+    func testFutureSchemaCannotBeRepairedByASelectionWrite() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let snapshotURL = directory.appendingPathComponent("child-session.json")
+        let original = try JSONEncoder().encode(
+            ChildSessionSnapshot(
+                schemaVersion: ChildSessionSnapshot.currentSchemaVersion + 1,
+                lastSelectedProfileID: ProfileID()
+            )
+        )
+        try original.write(to: snapshotURL)
+        let repository = LocalJSONChildSessionRepository(
+            snapshotURL: snapshotURL
+        )
+
+        do {
+            try await repository.saveLastSelectedProfileID(ProfileID())
+            XCTFail("A future child-session schema must not be overwritten.")
+        } catch let error as LocalChildSessionRepositoryError {
+            guard case .unsupportedSchemaVersion = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertEqual(try Data(contentsOf: snapshotURL), original)
+    }
+
     func testSelectionSurvivesRepositoryRestartAndCanBeCleared() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

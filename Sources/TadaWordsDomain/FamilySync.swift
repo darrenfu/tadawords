@@ -862,6 +862,11 @@ public protocol FamilySyncCoordinating: Sendable {
 
     func setEnabled(_ isEnabled: Bool) async throws -> FamilySyncStatus
 
+    /// Durably opts out and waits until any reconciliation that already
+    /// crossed its generation gate has finished touching local repositories.
+    /// First-run account-bound cache replacement relies on this quiescence.
+    func disableAndAwaitQuiescence() async throws -> FamilySyncStatus
+
     func synchronize() async -> FamilySyncStatus
 
     func status() async -> FamilySyncStatus
@@ -877,6 +882,10 @@ public protocol FamilySyncCoordinating: Sendable {
 }
 
 extension FamilySyncCoordinating {
+    public func disableAndAwaitQuiescence() async throws -> FamilySyncStatus {
+        try await setEnabled(false)
+    }
+
     public func profileErasureLifecycles() async throws
         -> [ProfileErasureLifecycle]
     {

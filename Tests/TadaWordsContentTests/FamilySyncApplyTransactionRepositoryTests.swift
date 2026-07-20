@@ -5,6 +5,124 @@ import XCTest
 @testable import TadaWordsContent
 
 final class FamilySyncApplyTransactionRepositoryTests: XCTestCase {
+    func testUnadoptedProfileIDsIncludeChildOnlyAndMixedPendingBatches()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let childOnlyID = ProfileID()
+        let mixedDeletionID = ProfileID()
+        let repository = LocalJSONFamilySyncApplyTransactionRepository(
+            snapshotURL: fixture.url
+        )
+        let childStart = try await repository.begin(
+            profileID: childOnlyID,
+            records: [fixture.record(profileID: childOnlyID, counter: 1)],
+            at: fixture.now
+        )
+        _ = try await repository.markCommitted(
+            transactionID: try XCTUnwrap(childStart.pendingValue).id,
+            at: fixture.now
+        )
+        _ = try await repository.begin(
+            profileID: mixedDeletionID,
+            records: [
+                fixture.record(profileID: mixedDeletionID, counter: 2),
+                try fixture.deletionRecord(profileID: mixedDeletionID),
+            ],
+            at: fixture.now
+        )
+
+        let profileIDs = try await repository.unadoptedProfileIDs()
+        XCTAssertEqual(profileIDs, [childOnlyID, mixedDeletionID])
+
+        try await repository.discardUnadoptedProfileState()
+        let hasUnadoptedState = try await repository.hasUnadoptedProfileState()
+        XCTAssertFalse(hasUnadoptedState)
+    }
+
+    func testFirstRunRediscoveryDiscardAllowsRefetchButRetainsDeletionReceipt()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let unadoptedProfileID = ProfileID()
+        let deletedProfileID = ProfileID()
+        let repository = LocalJSONFamilySyncApplyTransactionRepository(
+            snapshotURL: fixture.url
+        )
+        let unadoptedRecords = [
+            fixture.record(profileID: unadoptedProfileID, counter: 1)
+        ]
+        let unadoptedStart = try await repository.begin(
+            profileID: unadoptedProfileID,
+            records: unadoptedRecords,
+            at: fixture.now
+        )
+        _ = try await repository.markCommitted(
+            transactionID: try XCTUnwrap(unadoptedStart.pendingValue).id,
+            at: fixture.now
+        )
+        let deletionStart = try await repository.begin(
+            profileID: deletedProfileID,
+            records: [try fixture.deletionRecord(profileID: deletedProfileID)],
+            at: fixture.now
+        )
+        let deletionReceipt = try await repository.markCommitted(
+            transactionID: try XCTUnwrap(deletionStart.pendingValue).id,
+            at: fixture.now
+        )
+        try await repository.discardUnadoptedProfileState()
+
+        let persisted = try InspectableSnapshotJSONCodec.makeDecoder().decode(
+            FamilySyncApplyTransactionSnapshot.self,
+            from: Data(contentsOf: fixture.url)
+        )
+        XCTAssertTrue(persisted.pending.isEmpty)
+        XCTAssertEqual(persisted.lastCommitted, [deletionReceipt])
+        let refetched = try await repository.begin(
+            profileID: unadoptedProfileID,
+            records: unadoptedRecords,
+            at: fixture.now.addingTimeInterval(1)
+        )
+        XCTAssertNotNil(refetched.pendingValue)
+    }
+
+    func testFirstRunRediscoveryDiscardStripsPrivatePayloadFromPendingDeletion()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let deletedProfileID = ProfileID()
+        let privateRecord = fixture.record(
+            profileID: deletedProfileID,
+            counter: 2
+        )
+        let deletionRecord = try fixture.deletionRecord(
+            profileID: deletedProfileID
+        )
+        let repository = LocalJSONFamilySyncApplyTransactionRepository(
+            snapshotURL: fixture.url
+        )
+        let start = try await repository.begin(
+            profileID: deletedProfileID,
+            records: [privateRecord, deletionRecord],
+            at: fixture.now
+        )
+        let originalTransactionID = try XCTUnwrap(start.pendingValue).id
+
+        try await repository.discardUnadoptedProfileState()
+
+        let pending = try await repository.pendingTransactions()
+        let retained = try XCTUnwrap(pending.first)
+        let hasUnadoptedState =
+            try await repository
+            .hasUnadoptedProfileState()
+        XCTAssertEqual(retained.id, originalTransactionID)
+        XCTAssertEqual(retained.records, [deletionRecord])
+        XCTAssertFalse(hasUnadoptedState)
+    }
+
     func testPendingPayloadSurvivesRestartThenCommitLeavesOnlyMinimalReceipt()
         async throws
     {
@@ -213,6 +331,26 @@ private struct Fixture {
             deviceID: "remote",
             logicalRevision: FamilySyncLogicalRevision(
                 counter: counter,
+                deviceID: "remote"
+            )
+        )
+    }
+
+    func deletionRecord(profileID: ProfileID) throws -> FamilySyncRecord {
+        let tombstone = ProfileDeletionTombstone(
+            profileID: profileID,
+            deletedAt: now
+        )
+        return FamilySyncRecord(
+            recordName: "profile-\(profileID)",
+            profileID: profileID,
+            kind: .profileDeletion,
+            payload: try JSONEncoder().encode(tombstone),
+            updatedAt: now,
+            deviceID: "remote",
+            isDeleted: true,
+            logicalRevision: FamilySyncLogicalRevision(
+                counter: 1,
                 deviceID: "remote"
             )
         )

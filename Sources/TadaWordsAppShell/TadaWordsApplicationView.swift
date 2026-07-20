@@ -25,6 +25,21 @@ enum ApplicationOrientationPolicy {
     }
 }
 
+enum FirstRunOnboardingPresentationIdentity {
+    static func value(
+        purpose: FirstRunOnboardingPurpose,
+        onboardingProfileID: ProfileID?
+    ) -> String {
+        // A Create -> Find containment can replace the staged Profile with a
+        // remote receipt while the Find task is still returning. Profile IDs
+        // therefore must not participate in SwiftUI identity: recreating the
+        // view would discard its successful discovery state and require a
+        // second tap.
+        _ = onboardingProfileID
+        return "first-run-\(purpose.rawValue)"
+    }
+}
+
 enum FamilySyncBackgroundResultPolicy {
     static func result(
         status: FamilySyncStatus,
@@ -203,6 +218,7 @@ public struct TadaWordsApplicationView: View {
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             applyOrientation(for: currentOrientationRoute)
+            rearmPendingDiscoveryAfterForegroundAccountChange()
             synchronizeIfReady()
         }
     }
@@ -333,8 +349,10 @@ public struct TadaWordsApplicationView: View {
                     }
                 )
                 .id(
-                    "first-run-\(onboardingPurpose.rawValue)-"
-                        + (onboardingProfile?.id.description ?? "empty-family")
+                    FirstRunOnboardingPresentationIdentity.value(
+                        purpose: onboardingPurpose,
+                        onboardingProfileID: onboardingProfile?.id
+                    )
                 )
                 .onAppear {
                     applyOrientation(for: .firstRunParents)
@@ -406,7 +424,20 @@ public struct TadaWordsApplicationView: View {
             }
         }
         .task {
+            let foregroundGeneration =
+                environment.firstRunDiscoveryAdmissionGate
+                .closeForAccountRevalidation()
+            _ = await FirstRunDiscoveryAdmissionRevalidator.revalidate(
+                generation: foregroundGeneration,
+                gate: environment.firstRunDiscoveryAdmissionGate,
+                onboardingRepository:
+                    environment.firstRunOnboardingRepository,
+                familySyncCoordinator: environment.familySyncCoordinator
+            )
             await FamilySyncRemoteNotificationBridge.shared.register {
+                let onboardingIsPending =
+                    await Self.isFirstRunOnboardingPending(in: environment)
+                guard !onboardingIsPending else { return .noData }
                 let receiptTokenBefore =
                     try? await environment
                     .familySyncApplyTransactionRepository
@@ -429,6 +460,9 @@ public struct TadaWordsApplicationView: View {
                     .requestRegistration()
             }
             await FamilySyncConnectivityRecoveryBridge.shared.register {
+                let onboardingIsPending =
+                    await Self.isFirstRunOnboardingPending(in: environment)
+                guard !onboardingIsPending else { return }
                 _ = await environment.familySyncCoordinator.synchronize(
                     trigger: .connectivityRecovery
                 )
@@ -504,6 +538,8 @@ public struct TadaWordsApplicationView: View {
             childSessionRepository: environment.childSessionRepository,
             onboardingRepository: environment.firstRunOnboardingRepository,
             guardianStore: environment.guardianStore,
+            discoveryAdmissionGate:
+                environment.firstRunDiscoveryAdmissionGate,
             clock: environment.clock
         )
         let completion = try await coordinator.complete(
@@ -541,14 +577,28 @@ public struct TadaWordsApplicationView: View {
     private func discoverFirstRunProfiles(
         environment: ProductionApplicationEnvironment
     ) async throws -> [KidProfile] {
-        try await FirstRunProfileDiscoveryCoordinator(
+        let admissionGeneration =
+            environment.firstRunDiscoveryAdmissionGate.currentGeneration()
+        let profiles = try await FirstRunProfileDiscoveryCoordinator(
             familySyncCoordinator: environment.familySyncCoordinator,
             familySyncTransport: environment.familySyncTransport,
             profileRepository: environment.profileRepository,
             practiceSettingsRepository: environment.practiceSettingsRepository,
             childSessionRepository: environment.childSessionRepository,
-            onboardingRepository: environment.firstRunOnboardingRepository
+            onboardingRepository: environment.firstRunOnboardingRepository,
+            profileDataEraser: environment.profileDataEraser,
+            familySyncJournalRepository:
+                environment.familySyncJournalRepository,
+            familySyncApplyTransactionRepository:
+                environment.familySyncApplyTransactionRepository
         ).discoverProfiles()
+        // Only a successful, current-generation account confirmation/full
+        // fetch may make its candidates interactive. A foreground transition
+        // during Find advances the generation and keeps admission closed.
+        environment.firstRunDiscoveryAdmissionGate.reopen(
+            ifCurrent: admissionGeneration
+        )
+        return profiles
     }
 
     private func synchronizeIfReady() {
@@ -561,6 +611,31 @@ public struct TadaWordsApplicationView: View {
             _ = await environment.familySyncCoordinator.synchronize()
             await environment.notificationReconciler?.reconcileAll()
         }
+    }
+
+    private func rearmPendingDiscoveryAfterForegroundAccountChange() {
+        guard case .ready(let environment) = bootstrapModel.state else { return }
+        // Close synchronously before creating the task. Even if the durable
+        // write fails once, stale account-A candidates cannot be admitted.
+        let foregroundGeneration =
+            environment.firstRunDiscoveryAdmissionGate
+            .closeForAccountRevalidation()
+        Task {
+            _ = await FirstRunDiscoveryAdmissionRevalidator.revalidate(
+                generation: foregroundGeneration,
+                gate: environment.firstRunDiscoveryAdmissionGate,
+                onboardingRepository:
+                    environment.firstRunOnboardingRepository,
+                familySyncCoordinator: environment.familySyncCoordinator
+            )
+        }
+    }
+
+    private static func isFirstRunOnboardingPending(
+        in environment: ProductionApplicationEnvironment
+    ) async -> Bool {
+        let state = try? await environment.firstRunOnboardingRepository.state()
+        return state?.status == .pending
     }
 
     private func startImmediateLaunchPresentationIfNeeded() {

@@ -164,7 +164,7 @@ assert_equal "$(awk '/CURRENT_PROJECT_VERSION:/ { print $2; exit }' "$repo_root/
 verify_audio_pack "$repo_root/$audio_relative"
 verify_picture_pack "$repo_root/$picture_relative"
 verify_preset_catalog "$repo_root/$preset_relative"
-assert_sha256 "$repo_root/$compatibility_relative" "ac0bec0343e049e8ee12448386b21992a6de7f67be427f6bf3f61404fbe547f3" "persistence compatibility table"
+assert_sha256 "$repo_root/$compatibility_relative" "51f579dccf3d44c5b03176cbb6abc975e983b547f7be205867f1a65df8156676" "persistence compatibility table"
 
 guardian_notice="$repo_root/$guardian_notice_relative"
 guardian_today="$repo_root/Sources/TadaWordsGuardianFeatures/GuardianTodayView.swift"
@@ -265,7 +265,7 @@ verify_preset_catalog "$archive_preset"
 find "$app_path" -type f -name 'Assets.car' -print -quit | grep -q . || fail "compiled asset catalog missing from archive"
 archive_compatibility="$app_path/PersistenceSchemaCompatibility.json"
 assert_file "$archive_compatibility" "archive persistence compatibility table"
-assert_sha256 "$archive_compatibility" "ac0bec0343e049e8ee12448386b21992a6de7f67be427f6bf3f61404fbe547f3" "archive persistence compatibility table"
+assert_sha256 "$archive_compatibility" "51f579dccf3d44c5b03176cbb6abc975e983b547f7be205867f1a65df8156676" "archive persistence compatibility table"
 assert_equal "$(count_files "$app_path" '*.json')" "5" "archive JSON count"
 
 excluded_pattern='(^|/)(QAArtifacts|DesignAssets|Tests|Fixtures)(/|$)|speechocean|LICENSE_SOURCE|SHA256SUMS|\.(wav|ttf|otf)$'

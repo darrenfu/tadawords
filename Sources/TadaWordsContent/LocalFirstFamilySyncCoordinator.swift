@@ -172,6 +172,14 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
         return await synchronize(trigger: .parentSyncNow)
     }
 
+    public func disableAndAwaitQuiescence() async throws -> FamilySyncStatus {
+        let disabled = try await setEnabled(false)
+        while reconciliationInProgress {
+            await Task.yield()
+        }
+        return disabled
+    }
+
     public func synchronize() async -> FamilySyncStatus {
         await synchronize(trigger: .foregroundActivation)
     }

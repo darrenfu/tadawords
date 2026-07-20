@@ -4,6 +4,133 @@ import TadaWordsDomain
 import XCTest
 
 final class FamilySyncJournalRepositoryTests: XCTestCase {
+    func testUnadoptedProfileIDsClassifyEachJournalEntryIndependently()
+        async throws
+    {
+        let fixture = try JournalFixture()
+        defer { fixture.remove() }
+        let repository = LocalJSONFamilySyncJournalRepository(
+            snapshotURL: fixture.url
+        )
+        let child = fixture.record(
+            "ACCOUNT_A_CHILD_BYTES",
+            suffix: "word",
+            profileID: fixture.profileID
+        )
+        let deletion = try fixture.profileDeletionRecord()
+        _ = try await repository.reconcileLocalRecords(
+            [child, deletion],
+            deviceID: "device-a",
+            now: fixture.now
+        )
+
+        let profileIDs = try await repository.unadoptedProfileIDs()
+        XCTAssertEqual(
+            profileIDs,
+            [fixture.profileID],
+            "A deletion must not hide a child entry for the same Profile."
+        )
+
+        try await repository.discardUnadoptedProfileState()
+        let retainedProfileIDs = try await repository.unadoptedProfileIDs()
+        XCTAssertTrue(retainedProfileIDs.isEmpty)
+    }
+
+    func testDeletionKeyDoesNotBlessStaleAcknowledgementOrOutboxMetadata()
+        async throws
+    {
+        let fixture = try JournalFixture()
+        defer { fixture.remove() }
+        let deletionRecord = try fixture.profileDeletionRecord().assigning(
+            revision: FamilySyncLogicalRevision(
+                counter: 2,
+                deviceID: "device-a"
+            )
+        )
+        let staleProfileRecord = fixture.record("STALE_PROFILE_BYTES").assigning(
+            revision: FamilySyncLogicalRevision(
+                counter: 1,
+                deviceID: "device-a"
+            )
+        )
+        let snapshot = FamilySyncJournalSnapshot(
+            localManifest: [FamilySyncManifestEntry(record: deletionRecord)],
+            acknowledgedManifest: [
+                FamilySyncManifestEntry(record: staleProfileRecord)
+            ],
+            outbox: [
+                FamilySyncOutboxEntry(
+                    key: FamilySyncChangeKey(
+                        profileID: fixture.profileID,
+                        recordName: deletionRecord.recordName
+                    ),
+                    operation: .delete,
+                    revision: staleProfileRecord.logicalRevision,
+                    firstQueuedAt: fixture.now,
+                    lastQueuedAt: fixture.now
+                )
+            ]
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        try encoder.encode(snapshot).write(to: fixture.url)
+        let repository = LocalJSONFamilySyncJournalRepository(
+            snapshotURL: fixture.url
+        )
+
+        let profileIDs = try await repository.unadoptedProfileIDs()
+        XCTAssertEqual(profileIDs, [fixture.profileID])
+
+        try await repository.discardUnadoptedProfileState()
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let persisted = try decoder.decode(
+            FamilySyncJournalSnapshot.self,
+            from: Data(contentsOf: fixture.url)
+        )
+        XCTAssertEqual(persisted.localManifest.map(\.kind), [.profileDeletion])
+        XCTAssertTrue(persisted.acknowledgedManifest.isEmpty)
+        XCTAssertTrue(persisted.outbox.isEmpty)
+    }
+
+    func testFirstRunRediscoveryDiscardRemovesNonterminalStateButRetainsDeletionAuthority()
+        async throws
+    {
+        let fixture = try JournalFixture()
+        defer { fixture.remove() }
+        let repository = LocalJSONFamilySyncJournalRepository(
+            snapshotURL: fixture.url
+        )
+        let unadopted = fixture.record(
+            "ACCOUNT_A_PROFILE_BYTES",
+            profileID: fixture.unrelatedProfileID
+        )
+        let deletion = try fixture.profileDeletionRecord()
+        _ = try await repository.reconcileLocalRecords(
+            [unadopted, deletion],
+            deviceID: "device-a",
+            now: fixture.now
+        )
+        try await repository.discardUnadoptedProfileState()
+
+        let persisted = try JSONDecoder().decode(
+            FamilySyncJournalSnapshot.self,
+            from: Data(contentsOf: fixture.url)
+        )
+        XCTAssertEqual(persisted.localManifest.map(\.kind), [.profileDeletion])
+        XCTAssertEqual(
+            persisted.localManifest.map(\.key.profileID),
+            [fixture.profileID]
+        )
+        XCTAssertEqual(persisted.outbox.map(\.key.profileID), [fixture.profileID])
+        XCTAssertEqual(persisted.status.pendingCount, 1)
+        XCTAssertFalse(
+            try Data(contentsOf: fixture.url).contains(
+                Data("ACCOUNT_A_PROFILE_BYTES".utf8)
+            )
+        )
+    }
+
     func testOutboxSurvivesRestartAndStaleAcknowledgementCannotClearNewerWrite()
         async throws
     {

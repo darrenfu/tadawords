@@ -853,6 +853,16 @@ final class ApplicationCompositionTests: XCTestCase {
                     DailyQuestSnapshot.currentSchemaVersion,
                     { $0.dailyQuestsSnapshot }
                 ),
+                (
+                    .childSession,
+                    ChildSessionSnapshot.currentSchemaVersion,
+                    { $0.childSessionSnapshot }
+                ),
+                (
+                    .familySyncPreference,
+                    FamilySyncPreferenceSnapshot.currentSchemaVersion,
+                    { $0.familySyncPreferenceSnapshot }
+                ),
             ]
 
         for candidate in candidates {

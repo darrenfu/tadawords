@@ -9,9 +9,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
     private let dailyQuestRepository: any DailyQuestHistoryRepository
     private let tombstoneRepository: any ProfileDeletionTombstoneRepository
     private let applyTransactionRepository: (any FamilySyncApplyTransactionRepository)?
-    private let childSessionRepository: (any ChildSessionRepository)?
-    private let voiceprintRepository: (any DeviceVoiceprintRepository)?
-    private let handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)?
+    private let profileDataEraser: RepositoryProfileDataEraser
     private let mutationGate: ProfileScopedMutationGate?
     private let excludedProfileIDs: @Sendable () async throws -> Set<ProfileID>
     private let deviceID: String
@@ -45,9 +43,16 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         self.dailyQuestRepository = dailyQuestRepository
         self.tombstoneRepository = tombstoneRepository
         self.applyTransactionRepository = applyTransactionRepository
-        self.childSessionRepository = childSessionRepository
-        self.voiceprintRepository = voiceprintRepository
-        self.handwritingPreferenceRemover = handwritingPreferenceRemover
+        profileDataEraser = RepositoryProfileDataEraser(
+            profileRepository: profileRepository,
+            wordPoolRepository: wordPoolRepository,
+            practiceSettingsRepository: practiceSettingsRepository,
+            learningRecordRepository: learningRepository,
+            dailyQuestRepository: dailyQuestRepository,
+            childSessionRepository: childSessionRepository,
+            voiceprintRepository: voiceprintRepository,
+            handwritingPreferenceRemover: handwritingPreferenceRemover
+        )
         self.mutationGate = mutationGate
         self.excludedProfileIDs = excludedProfileIDs
         self.deviceID = deviceID
@@ -770,21 +775,10 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
     }
 
     private func deleteProfileData(_ profileID: ProfileID) async throws {
-        // The device-only voice template is the most sensitive Profile-scoped
-        // artifact. Attempt its throwing deletion before any JSON purge so a
-        // corrupt learning/word snapshot cannot postpone voiceprint erasure.
         // The durable tombstone has already sealed ordinary writes, and the
-        // caller does not mark the deletion committed until every step passes.
-        try await voiceprintRepository?.delete(for: profileID)
-        try await wordPoolRepository.deleteAll(for: profileID)
-        try await practiceSettingsRepository.delete(for: profileID)
-        try await learningRepository.deleteLearningRecords(for: profileID)
-        try await dailyQuestRepository.deleteHistory(for: profileID)
-        try await profileRepository.delete(id: profileID)
-        if try await childSessionRepository?.lastSelectedProfileID() == profileID {
-            try await childSessionRepository?.clearLastSelectedProfileID()
-        }
-        handwritingPreferenceRemover?.remove(for: profileID)
+        // caller does not mark the deletion committed until this shared,
+        // privacy-first repository boundary finishes every Profile artifact.
+        try await profileDataEraser.eraseProfileData(for: profileID)
     }
 
     private func record<Value: Encodable>(

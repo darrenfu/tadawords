@@ -8,6 +8,108 @@ public protocol HandwritingPreferenceRemoving: Sendable {
     func remove(for profileID: ProfileID)
 }
 
+/// One idempotent boundary for removing every durable or device-local artifact
+/// owned by a Profile identity. Callers decide whether a deletion tombstone is
+/// appropriate; unfinished first-run identities intentionally use this purge
+/// without publishing a remote child-deletion event.
+public protocol ProfileDataErasing: Sendable {
+    func eraseProfileData(for profileID: ProfileID) async throws
+
+    /// Purges a never-admitted first-run discovery candidate. Profile deletion
+    /// is the final durable completion marker so a crash before it leaves the
+    /// exact identity available for idempotent retry.
+    func eraseUnadoptedProfileData(for profileID: ProfileID) async throws
+}
+
+struct ProfileDataErasureOperations: Sendable {
+    let deleteVoiceprint: @Sendable (ProfileID) async throws -> Void
+    let deleteWordPool: @Sendable (ProfileID) async throws -> Void
+    let deletePracticeSettings: @Sendable (ProfileID) async throws -> Void
+    let deleteLearningRecords: @Sendable (ProfileID) async throws -> Void
+    let deleteDailyQuestHistory: @Sendable (ProfileID) async throws -> Void
+    let deleteProfile: @Sendable (ProfileID) async throws -> Void
+    let clearChildSession: @Sendable (ProfileID) async throws -> Void
+    let removeHandwritingPreference: @Sendable (ProfileID) async throws -> Void
+}
+
+public struct RepositoryProfileDataEraser: ProfileDataErasing, Sendable {
+    private let operations: ProfileDataErasureOperations
+
+    public init(
+        profileRepository: any KidProfileRepository,
+        wordPoolRepository: any WordPoolRepository,
+        practiceSettingsRepository: any PracticeSettingsRepository,
+        learningRecordRepository: any ProfileLearningRecordRepository,
+        dailyQuestRepository: any DailyQuestHistoryRepository,
+        childSessionRepository: (any ChildSessionRepository)? = nil,
+        voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
+        handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)? = nil
+    ) {
+        operations = ProfileDataErasureOperations(
+            deleteVoiceprint: { profileID in
+                try await voiceprintRepository?.delete(for: profileID)
+            },
+            deleteWordPool: { profileID in
+                try await wordPoolRepository.deleteAll(for: profileID)
+            },
+            deletePracticeSettings: { profileID in
+                try await practiceSettingsRepository.delete(for: profileID)
+            },
+            deleteLearningRecords: { profileID in
+                try await learningRecordRepository.deleteLearningRecords(
+                    for: profileID
+                )
+            },
+            deleteDailyQuestHistory: { profileID in
+                try await dailyQuestRepository.deleteHistory(for: profileID)
+            },
+            deleteProfile: { profileID in
+                try await profileRepository.delete(id: profileID)
+            },
+            clearChildSession: { profileID in
+                guard
+                    try await childSessionRepository?.lastSelectedProfileID()
+                        == profileID
+                else { return }
+                try await childSessionRepository?.clearLastSelectedProfileID()
+            },
+            removeHandwritingPreference: { profileID in
+                handwritingPreferenceRemover?.remove(for: profileID)
+            }
+        )
+    }
+
+    init(operations: ProfileDataErasureOperations) {
+        self.operations = operations
+    }
+
+    public func eraseProfileData(for profileID: ProfileID) async throws {
+        // Voice templates are the most sensitive device-local child artifact;
+        // fail before mutating JSON if their deletion cannot be confirmed.
+        try await operations.deleteVoiceprint(profileID)
+        try await operations.deleteWordPool(profileID)
+        try await operations.deletePracticeSettings(profileID)
+        try await operations.deleteLearningRecords(profileID)
+        try await operations.deleteDailyQuestHistory(profileID)
+        try await operations.deleteProfile(profileID)
+        try await operations.clearChildSession(profileID)
+        try await operations.removeHandwritingPreference(profileID)
+    }
+
+    public func eraseUnadoptedProfileData(
+        for profileID: ProfileID
+    ) async throws {
+        try await operations.deleteVoiceprint(profileID)
+        try await operations.deleteWordPool(profileID)
+        try await operations.deletePracticeSettings(profileID)
+        try await operations.deleteLearningRecords(profileID)
+        try await operations.deleteDailyQuestHistory(profileID)
+        try await operations.clearChildSession(profileID)
+        try await operations.removeHandwritingPreference(profileID)
+        try await operations.deleteProfile(profileID)
+    }
+}
+
 /// One-way bridge for settings written by builds that kept the selected pen
 /// in UserDefaults. Production bootstrap consumes the value into synchronized
 /// Profile interface settings, then removes the device-local residue.
