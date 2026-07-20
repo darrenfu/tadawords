@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import TadaWordsDomain
 import XCTest
@@ -7,14 +8,17 @@ import XCTest
 final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_735_689_600)
 
+    @MainActor
     func testSuccessfulCallbackRoutesWithoutAcceptingDeviceToken() async {
         let bridge = FamilySyncRemoteNotificationBridge(
             clock: AppleRemoteNotificationFixedClock(now: now)
         )
         let observer = AppleRemoteNotificationRegistrationObserver(bridge: bridge)
+        await bridge.configureRegistration(register: {}, unregister: {})
         await bridge.requestRegistration()
 
-        await observer.didRegister()
+        observer.enqueueDidRegister()
+        await observer.finishPendingCallbacks()
 
         let state = await bridge.registrationState()
         XCTAssertEqual(
@@ -23,14 +27,16 @@ final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testFailureCallbackRoutesOnlyCoarseCategory() async {
         let bridge = FamilySyncRemoteNotificationBridge(
             clock: AppleRemoteNotificationFixedClock(now: now)
         )
         let observer = AppleRemoteNotificationRegistrationObserver(bridge: bridge)
+        await bridge.configureRegistration(register: {}, unregister: {})
         await bridge.requestRegistration()
 
-        await observer.didFail(
+        observer.enqueueDidFail(
             error: NSError(
                 domain: NSCocoaErrorDomain,
                 code: 3_000,
@@ -40,6 +46,7 @@ final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
                 ]
             )
         )
+        await observer.finishPendingCallbacks()
 
         let state = await bridge.registrationState()
         XCTAssertEqual(
@@ -62,12 +69,54 @@ final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
         XCTAssertEqual(
             AppleRemoteNotificationRegistrationObserver.failureCategory(
                 for: NSError(
+                    domain: NSPOSIXErrorDomain,
+                    code: Int(ENETUNREACH),
+                    userInfo: nil
+                )
+            ),
+            .connectivity
+        )
+        for nonNetworkCode in [EACCES, EINVAL] {
+            XCTAssertEqual(
+                AppleRemoteNotificationRegistrationObserver.failureCategory(
+                    for: NSError(
+                        domain: NSPOSIXErrorDomain,
+                        code: Int(nonNetworkCode),
+                        userInfo: nil
+                    )
+                ),
+                .system
+            )
+        }
+        XCTAssertEqual(
+            AppleRemoteNotificationRegistrationObserver.failureCategory(
+                for: NSError(
                     domain: "private.example.error",
                     code: 42,
                     userInfo: [NSLocalizedDescriptionKey: "private details"]
                 )
             ),
             .system
+        )
+    }
+
+    @MainActor
+    func testCallbackIngressPreservesFirstTerminalResult() async {
+        let bridge = FamilySyncRemoteNotificationBridge(
+            clock: AppleRemoteNotificationFixedClock(now: now)
+        )
+        let observer = AppleRemoteNotificationRegistrationObserver(bridge: bridge)
+        await bridge.configureRegistration(register: {}, unregister: {})
+        await bridge.requestRegistration()
+
+        observer.enqueueDidFail(category: .connectivity)
+        observer.enqueueDidRegister()
+        await observer.finishPendingCallbacks()
+
+        let callbackState = await bridge.registrationState()
+        XCTAssertEqual(
+            callbackState,
+            .failed(category: .connectivity, at: now)
         )
     }
 
@@ -91,6 +140,16 @@ final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
         XCTAssertTrue(
             delegateSource.contains(
                 "didFailToRegisterForRemoteNotificationsWithError error: Error"
+            )
+        )
+        XCTAssertTrue(
+            delegateSource.contains(
+                "remoteNotificationRegistrationObserver.enqueueDidRegister()"
+            )
+        )
+        XCTAssertTrue(
+            delegateSource.contains(
+                "remoteNotificationRegistrationObserver.enqueueDidFail(category: category)"
             )
         )
         XCTAssertFalse(delegateSource.contains("deviceToken"))

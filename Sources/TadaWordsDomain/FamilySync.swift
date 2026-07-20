@@ -28,6 +28,10 @@ public enum FamilySyncRemoteNotificationRegistrationFailureCategory:
 public enum FamilySyncRemoteNotificationRegistrationState: Equatable, Sendable {
     case notRequested
     case pending(since: Date)
+    /// UIKit does not identify which registration request produced a callback.
+    /// After an in-flight request is cancelled and another starts in the same
+    /// process, reporting success or failure would invent attribution.
+    case unverified(at: Date)
     case registered(at: Date)
     case failed(
         category: FamilySyncRemoteNotificationRegistrationFailureCategory,
@@ -44,11 +48,40 @@ public actor FamilySyncRemoteNotificationBridge {
     public typealias Handler = @Sendable () async -> FamilySyncBackgroundFetchResult
     public typealias RegistrationHandler = @Sendable () async -> Void
 
+    private struct RegistrationAttempt {
+        let generation: UInt64
+        let acceptsUnattributedCallbacks: Bool
+        var didQueuePlatformRegistration = false
+        var didStartPlatformRegistration = false
+        var didReceiveTerminalCallback = false
+    }
+
+    private enum RegistrationCallbackOutcome {
+        case succeeded
+        case failed(FamilySyncRemoteNotificationRegistrationFailureCategory)
+    }
+
+    private enum RegistrationPipelineOperation {
+        case register(generation: UInt64, handler: RegistrationHandler)
+        case unregister(RegistrationHandler)
+        case callback(RegistrationCallbackOutcome)
+    }
+
+    private struct QueuedRegistrationPipelineOperation {
+        let operation: RegistrationPipelineOperation
+        let completion: CheckedContinuation<Void, Never>
+    }
+
     private var handler: Handler?
     private var handlerWaiters: [UUID: CheckedContinuation<Handler?, Never>] = [:]
     private var registerHandler: RegistrationHandler?
     private var unregisterHandler: RegistrationHandler?
     private var registrationRequested = false
+    private var nextRegistrationGeneration: UInt64 = 0
+    private var currentRegistrationAttempt: RegistrationAttempt?
+    private var hasUnattributedCallbackRisk = false
+    private var registrationPipelineQueue: [QueuedRegistrationPipelineOperation] = []
+    private var isRegistrationPipelineRunning = false
     private let clock: any AppClock
     private var currentRegistrationState: FamilySyncRemoteNotificationRegistrationState =
         .notRequested
@@ -69,23 +102,63 @@ public actor FamilySyncRemoteNotificationBridge {
     public func configureRegistration(
         register: @escaping RegistrationHandler,
         unregister: @escaping RegistrationHandler
-    ) {
+    ) async {
         registerHandler = register
         unregisterHandler = unregister
-        guard registrationRequested else { return }
-        Task { await register() }
+        guard let operation = beginCurrentPlatformRegistrationIfNeeded() else {
+            return
+        }
+        await enqueueRegistrationPipelineOperation(operation)
     }
 
     public func requestRegistration() async {
+        if registrationRequested,
+            let currentRegistrationAttempt,
+            !currentRegistrationAttempt.didReceiveTerminalCallback
+        {
+            return
+        }
+        if registrationRequested,
+            case .registered = currentRegistrationState
+        {
+            return
+        }
+
         registrationRequested = true
-        publishRegistrationState(.pending(since: clock.now))
-        await registerHandler?()
+        nextRegistrationGeneration &+= 1
+        let acceptsUnattributedCallbacks = !hasUnattributedCallbackRisk
+        currentRegistrationAttempt = RegistrationAttempt(
+            generation: nextRegistrationGeneration,
+            acceptsUnattributedCallbacks: acceptsUnattributedCallbacks
+        )
+        if acceptsUnattributedCallbacks {
+            publishRegistrationState(.pending(since: clock.now))
+        } else {
+            publishRegistrationState(.unverified(at: clock.now))
+        }
+        guard let operation = beginCurrentPlatformRegistrationIfNeeded() else {
+            return
+        }
+        await enqueueRegistrationPipelineOperation(operation)
     }
 
     public func requestUnregistration() async {
+        guard registrationRequested || currentRegistrationAttempt != nil else {
+            return
+        }
+        if let currentRegistrationAttempt,
+            currentRegistrationAttempt.didStartPlatformRegistration,
+            !currentRegistrationAttempt.didReceiveTerminalCallback
+        {
+            hasUnattributedCallbackRisk = true
+        }
         registrationRequested = false
+        currentRegistrationAttempt = nil
         publishRegistrationState(.notRequested)
-        await unregisterHandler?()
+        guard let unregisterHandler else { return }
+        await enqueueRegistrationPipelineOperation(
+            .unregister(unregisterHandler)
+        )
     }
 
     public func registrationState()
@@ -113,16 +186,18 @@ public actor FamilySyncRemoteNotificationBridge {
         return stream
     }
 
-    public func recordRegistrationSucceeded() {
-        guard registrationRequested else { return }
-        publishRegistrationState(.registered(at: clock.now))
+    public func recordRegistrationSucceeded() async {
+        await enqueueRegistrationPipelineOperation(
+            .callback(.succeeded)
+        )
     }
 
     public func recordRegistrationFailed(
         category: FamilySyncRemoteNotificationRegistrationFailureCategory
-    ) {
-        guard registrationRequested else { return }
-        publishRegistrationState(.failed(category: category, at: clock.now))
+    ) async {
+        await enqueueRegistrationPipelineOperation(
+            .callback(.failed(category))
+        )
     }
 
     public func handleNotification() async -> FamilySyncBackgroundFetchResult {
@@ -150,6 +225,99 @@ public actor FamilySyncRemoteNotificationBridge {
 
     private func timeoutWaiter(_ id: UUID) {
         handlerWaiters.removeValue(forKey: id)?.resume(returning: nil)
+    }
+
+    private func beginCurrentPlatformRegistrationIfNeeded()
+        -> RegistrationPipelineOperation?
+    {
+        guard registrationRequested,
+            var currentRegistrationAttempt,
+            !currentRegistrationAttempt.didQueuePlatformRegistration,
+            let registerHandler
+        else {
+            return nil
+        }
+        currentRegistrationAttempt.didQueuePlatformRegistration = true
+        self.currentRegistrationAttempt = currentRegistrationAttempt
+        return .register(
+            generation: currentRegistrationAttempt.generation,
+            handler: registerHandler
+        )
+    }
+
+    private func enqueueRegistrationPipelineOperation(
+        _ operation: RegistrationPipelineOperation
+    ) async {
+        guard isRegistrationPipelineRunning else {
+            isRegistrationPipelineRunning = true
+            await performRegistrationPipelineOperation(operation)
+            await drainRegistrationPipeline()
+            isRegistrationPipelineRunning = false
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            registrationPipelineQueue.append(
+                QueuedRegistrationPipelineOperation(
+                    operation: operation,
+                    completion: continuation
+                )
+            )
+        }
+    }
+
+    private func drainRegistrationPipeline() async {
+        while !registrationPipelineQueue.isEmpty {
+            let queued = registrationPipelineQueue.removeFirst()
+            await performRegistrationPipelineOperation(queued.operation)
+            queued.completion.resume()
+        }
+    }
+
+    private func performRegistrationPipelineOperation(
+        _ operation: RegistrationPipelineOperation
+    ) async {
+        switch operation {
+        case .register(let generation, let handler):
+            guard registrationRequested,
+                var currentRegistrationAttempt,
+                currentRegistrationAttempt.generation == generation
+            else {
+                return
+            }
+            currentRegistrationAttempt.didStartPlatformRegistration = true
+            self.currentRegistrationAttempt = currentRegistrationAttempt
+            await handler()
+        case .unregister(let handler):
+            await handler()
+        case .callback(let outcome):
+            applyRegistrationCallback(outcome: outcome)
+        }
+    }
+
+    private func applyRegistrationCallback(
+        outcome: RegistrationCallbackOutcome
+    ) {
+        guard registrationRequested,
+            var currentRegistrationAttempt,
+            currentRegistrationAttempt.didStartPlatformRegistration,
+            !currentRegistrationAttempt.didReceiveTerminalCallback
+        else {
+            return
+        }
+        guard currentRegistrationAttempt.acceptsUnattributedCallbacks else {
+            publishRegistrationState(.unverified(at: clock.now))
+            return
+        }
+
+        currentRegistrationAttempt.didReceiveTerminalCallback = true
+        self.currentRegistrationAttempt = currentRegistrationAttempt
+        switch outcome {
+        case .succeeded:
+            publishRegistrationState(.registered(at: clock.now))
+        case .failed(let category):
+            publishRegistrationState(.failed(category: category, at: clock.now))
+        }
     }
 
     private func publishRegistrationState(

@@ -83,9 +83,7 @@ final class TadaWordsAppDelegate: NSObject, UIApplicationDelegate {
         didRegisterForRemoteNotificationsWithDeviceToken _: Data
     ) {
         _ = application
-        Task {
-            await remoteNotificationRegistrationObserver.didRegister()
-        }
+        remoteNotificationRegistrationObserver.enqueueDidRegister()
     }
 
     func application(
@@ -96,9 +94,7 @@ final class TadaWordsAppDelegate: NSObject, UIApplicationDelegate {
         let category =
             AppleRemoteNotificationRegistrationObserver
             .failureCategory(for: error)
-        Task {
-            await remoteNotificationRegistrationObserver.didFail(category: category)
-        }
+        remoteNotificationRegistrationObserver.enqueueDidFail(category: category)
     }
 
     private func handlePathUpdate(isSatisfied: Bool) {
