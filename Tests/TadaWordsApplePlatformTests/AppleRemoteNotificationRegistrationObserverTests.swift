@@ -121,7 +121,9 @@ final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
     }
 
     @MainActor
-    func testLateCancelledCallbackCannotConsumeReplacementCallback() async {
+    func testCancelledStartedAttemptKeepsCallbacksUnverifiedAfterSuccessThenFailure()
+        async
+    {
         let bridge = FamilySyncRemoteNotificationBridge(
             clock: AppleRemoteNotificationFixedClock(now: now)
         )
@@ -139,7 +141,32 @@ final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
         let callbackState = await bridge.registrationState()
         XCTAssertEqual(
             callbackState,
-            .failed(category: .connectivity, at: now)
+            .unverified(at: now)
+        )
+    }
+
+    @MainActor
+    func testCancelledStartedAttemptKeepsCallbacksUnverifiedAfterFailureThenSuccess()
+        async
+    {
+        let bridge = FamilySyncRemoteNotificationBridge(
+            clock: AppleRemoteNotificationFixedClock(now: now)
+        )
+        let observer = AppleRemoteNotificationRegistrationObserver(bridge: bridge)
+        await configureRegistration(bridge: bridge, observer: observer)
+
+        await bridge.requestRegistration()
+        await bridge.requestUnregistration()
+        await bridge.requestRegistration()
+
+        observer.enqueueDidFail(category: .connectivity)
+        observer.enqueueDidRegister()
+        await observer.finishPendingCallbacks()
+
+        let callbackState = await bridge.registrationState()
+        XCTAssertEqual(
+            callbackState,
+            .unverified(at: now)
         )
     }
 

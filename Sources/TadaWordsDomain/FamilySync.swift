@@ -115,6 +115,10 @@ public actor FamilySyncRemoteNotificationBridge {
     private var nextRegistrationGeneration: UInt64 = 0
     private var currentRegistrationGeneration: UInt64?
     private var registrationAttempts: [UInt64: RegistrationAttempt] = [:]
+    /// UIApplicationDelegate registration callbacks carry no attempt ID. Once
+    /// a started attempt is cancelled, no callback in this process can be
+    /// safely attributed to that attempt or any replacement attempt.
+    private var hasAmbiguousPlatformRegistrationCallbackAttribution = false
     private var registrationPipelineQueue: [QueuedRegistrationPipelineOperation] = []
     private var isRegistrationPipelineRunning = false
     private let clock: any AppClock
@@ -181,7 +185,9 @@ public actor FamilySyncRemoteNotificationBridge {
             requestedAt: clock.now
         )
         currentRegistrationGeneration = generation
-        if hasUnresolvedCancelledCallback(before: generation) {
+        if hasAmbiguousPlatformRegistrationCallbackAttribution
+            || hasUnresolvedCancelledCallback(before: generation)
+        {
             publishRegistrationState(.unverified(at: clock.now))
         } else {
             publishRegistrationState(.pending(since: clock.now))
@@ -209,6 +215,11 @@ public actor FamilySyncRemoteNotificationBridge {
         {
             currentRegistrationAttempt.lease.invalidate()
             currentRegistrationAttempt.isCancelled = true
+            if currentRegistrationAttempt.didStartPlatformRegistration,
+                !currentRegistrationAttempt.didReceiveTerminalCallback
+            {
+                hasAmbiguousPlatformRegistrationCallbackAttribution = true
+            }
             if currentRegistrationAttempt.didReceiveTerminalCallback
                 || (!currentRegistrationAttempt.didStartPlatformRegistration
                     && !currentRegistrationAttempt
@@ -396,6 +407,12 @@ public actor FamilySyncRemoteNotificationBridge {
             completedAttempt.didStartPlatformRegistration =
                 didStartPlatformRegistration
             if completedAttempt.isCancelled,
+                didStartPlatformRegistration,
+                !completedAttempt.didReceiveTerminalCallback
+            {
+                hasAmbiguousPlatformRegistrationCallbackAttribution = true
+            }
+            if completedAttempt.isCancelled,
                 !didStartPlatformRegistration
             {
                 registrationAttempts.removeValue(forKey: generation)
@@ -417,6 +434,9 @@ public actor FamilySyncRemoteNotificationBridge {
         generation: UInt64?,
         outcome: RegistrationCallbackOutcome
     ) {
+        guard !hasAmbiguousPlatformRegistrationCallbackAttribution else {
+            return
+        }
         let resolvedGeneration =
             generation ?? oldestAttemptAwaitingCallbackGeneration()
         guard let resolvedGeneration,
@@ -483,6 +503,7 @@ public actor FamilySyncRemoteNotificationBridge {
     private func publishPendingIfCurrentAttemptBecameAttributable() {
         guard registrationRequested,
             case .unverified = currentRegistrationState,
+            !hasAmbiguousPlatformRegistrationCallbackAttribution,
             let currentRegistrationGeneration,
             let currentAttempt =
                 registrationAttempts[currentRegistrationGeneration],

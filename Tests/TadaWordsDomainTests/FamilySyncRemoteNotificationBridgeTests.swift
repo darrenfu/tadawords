@@ -273,7 +273,9 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
         )
     }
 
-    func testReplacementAttemptAcceptsItsCallbackAfterLateCancelledCallback() async {
+    func testCancelledStartedAttemptKeepsReplacementUnverifiedAfterSuccessThenFailure()
+        async
+    {
         let bridge = FamilySyncRemoteNotificationBridge(
             clock: RemoteNotificationFixedClock(now: now)
         )
@@ -286,22 +288,118 @@ final class FamilySyncRemoteNotificationBridgeTests: XCTestCase {
         await bridge.requestUnregistration()
         await bridge.requestRegistration()
 
-        // The first callback belongs to the cancelled attempt and must be
-        // consumed without changing the replacement attempt.
+        // UIKit does not identify which request produced either callback.
+        // Callback order therefore cannot restore attribution in this process.
         await bridge.recordRegistrationSucceeded()
-        let stateAfterCancelledCallback = await bridge.registrationState()
+        let stateAfterSuccess = await bridge.registrationState()
         XCTAssertEqual(
-            stateAfterCancelledCallback,
+            stateAfterSuccess,
             .unverified(at: now)
         )
 
-        // Once the stale generation is drained, the callback for the current
-        // generation must be allowed to complete registration.
-        await bridge.recordRegistrationSucceeded()
-        let stateAfterReplacementCallback = await bridge.registrationState()
+        await bridge.recordRegistrationFailed(category: .connectivity)
+        let stateAfterFailure = await bridge.registrationState()
         XCTAssertEqual(
-            stateAfterReplacementCallback,
-            .registered(at: now)
+            stateAfterFailure,
+            .unverified(at: now)
+        )
+    }
+
+    func testCancelledStartedAttemptKeepsReplacementUnverifiedAfterFailureThenSuccess()
+        async
+    {
+        let bridge = FamilySyncRemoteNotificationBridge(
+            clock: RemoteNotificationFixedClock(now: now)
+        )
+        await bridge.configureRegistration(
+            register: { _ in true },
+            unregister: {}
+        )
+
+        await bridge.requestRegistration()
+        await bridge.requestUnregistration()
+        await bridge.requestRegistration()
+
+        await bridge.recordRegistrationFailed(category: .connectivity)
+        let stateAfterFailure = await bridge.registrationState()
+        XCTAssertEqual(
+            stateAfterFailure,
+            .unverified(at: now)
+        )
+
+        await bridge.recordRegistrationSucceeded()
+        let stateAfterSuccess = await bridge.registrationState()
+        XCTAssertEqual(
+            stateAfterSuccess,
+            .unverified(at: now)
+        )
+    }
+
+    func testReplacementStillInvokesPlatformRegistrationWhenAttributionIsAmbiguous()
+        async
+    {
+        let bridge = FamilySyncRemoteNotificationBridge(
+            clock: RemoteNotificationFixedClock(now: now)
+        )
+        let recorder = RemoteNotificationRegistrationRecorder()
+        await bridge.configureRegistration(
+            register: { attempt in
+                guard attempt.isCurrent else { return false }
+                await recorder.recordRegistration()
+                return true
+            },
+            unregister: {}
+        )
+
+        await bridge.requestRegistration()
+        await bridge.requestUnregistration()
+        await bridge.requestRegistration()
+
+        let registrationCount = await recorder.registrationCount
+        XCTAssertEqual(registrationCount, 2)
+        let state = await bridge.registrationState()
+        XCTAssertEqual(state, .unverified(at: now))
+    }
+
+    func testFreshBridgeAcceptsTerminalCallbacksAfterEarlierBridgeBecameAmbiguous()
+        async
+    {
+        let ambiguousBridge = FamilySyncRemoteNotificationBridge(
+            clock: RemoteNotificationFixedClock(now: now)
+        )
+        await ambiguousBridge.configureRegistration(
+            register: { _ in true },
+            unregister: {}
+        )
+        await ambiguousBridge.requestRegistration()
+        await ambiguousBridge.requestUnregistration()
+        await ambiguousBridge.requestRegistration()
+
+        let successfulBridge = FamilySyncRemoteNotificationBridge(
+            clock: RemoteNotificationFixedClock(now: now)
+        )
+        await successfulBridge.configureRegistration(
+            register: { _ in true },
+            unregister: {}
+        )
+        await successfulBridge.requestRegistration()
+        await successfulBridge.recordRegistrationSucceeded()
+        let successfulState = await successfulBridge.registrationState()
+        XCTAssertEqual(successfulState, .registered(at: now))
+
+        let failedBridge = FamilySyncRemoteNotificationBridge(
+            clock: RemoteNotificationFixedClock(now: now)
+        )
+        await failedBridge.configureRegistration(
+            register: { _ in true },
+            unregister: {}
+        )
+        await failedBridge.requestRegistration()
+        await failedBridge.recordRegistrationFailed(category: .system)
+        let failedState = await failedBridge.registrationState()
+        XCTAssertEqual(
+            failedState,
+            .failed(category: .system, at: now)
         )
     }
 
