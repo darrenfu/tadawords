@@ -77,6 +77,7 @@ enum GuardianDestination {
     case pool(LearningMode)
     case reports
     case settings(GuardianSettingsSection)
+    case speechPermissions
     case familySync
     case thirdPartyNotices
     case voiceprint(KidProfile)
@@ -90,7 +91,7 @@ enum GuardianDestination {
             .progressAndPerformance
         case .settings(let section):
             section.parentSection
-        case .familySync, .thirdPartyNotices:
+        case .speechPermissions, .familySync, .thirdPartyNotices:
             .appAndFamily
         case .parentGate, .dashboard, .parentSection, .profiles, .profileEditor,
             .voiceprint:
@@ -124,6 +125,8 @@ final class GuardianDashboardViewModel: ObservableObject {
     @Published private(set) var hasConfirmedWordRemovalThisSession = false
     @Published private(set) var undoWordsByMode: [LearningMode: [WordPrompt]] = [:]
     @Published private(set) var isUpdatingWordPool = false
+    @Published private(set) var speechPermissionState: SpeechPermissionState = .unavailable
+    @Published private(set) var isRequestingSpeechPermissions = false
 
     private let store: any GuardianFamilyStore
     private let audioPromptService: any AudioPromptService
@@ -133,7 +136,8 @@ final class GuardianDashboardViewModel: ObservableObject {
     private let notificationScheduler: (any LearningNotificationScheduling)?
     private let voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)?
     private let voiceprintRepository: (any DeviceVoiceprintRepository)?
-    private let requestSpeechAuthorization: @Sendable () async -> Bool
+    private let currentSpeechPermissionState: @Sendable () async -> SpeechPermissionState
+    private let requestSpeechPermissions: @Sendable () async -> SpeechPermissionState
     private let sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing
     private let pictureHintProvider: any WordPictureHintProviding
     private var confirmedWordRemovalProfileIDs = Set<ProfileID>()
@@ -154,7 +158,10 @@ final class GuardianDashboardViewModel: ObservableObject {
         notificationScheduler: (any LearningNotificationScheduling)? = nil,
         voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)? = nil,
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
-        requestSpeechAuthorization: @escaping @Sendable () async -> Bool = { false },
+        currentSpeechPermissionState:
+            @escaping @Sendable () async -> SpeechPermissionState = { .unavailable },
+        requestSpeechPermissions:
+            @escaping @Sendable () async -> SpeechPermissionState = { .unavailable },
         pictureHintProvider: any WordPictureHintProviding =
             NoWordPictureHintProvider(),
         sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing =
@@ -168,7 +175,8 @@ final class GuardianDashboardViewModel: ObservableObject {
         self.notificationScheduler = notificationScheduler
         self.voiceprintEnrollmentService = voiceprintEnrollmentService
         self.voiceprintRepository = voiceprintRepository
-        self.requestSpeechAuthorization = requestSpeechAuthorization
+        self.currentSpeechPermissionState = currentSpeechPermissionState
+        self.requestSpeechPermissions = requestSpeechPermissions
         self.pictureHintProvider = pictureHintProvider
         self.sensitiveActionAuthorizer = sensitiveActionAuthorizer
     }
@@ -195,6 +203,8 @@ final class GuardianDashboardViewModel: ObservableObject {
             "reports-\(reportPeriod.rawValue)"
         case .settings(let section):
             "settings-\(section.rawValue)"
+        case .speechPermissions:
+            "speech-permissions"
         case .familySync:
             "family-sync"
         case .thirdPartyNotices:
@@ -232,6 +242,7 @@ final class GuardianDashboardViewModel: ObservableObject {
 
     func showAppAndFamily() {
         destination = .parentSection(.appAndFamily)
+        refreshSpeechPermissionState()
     }
 
     func returnToParentSection() {
@@ -291,6 +302,35 @@ final class GuardianDashboardViewModel: ObservableObject {
 
     func showSettings(_ section: GuardianSettingsSection) {
         destination = .settings(section)
+    }
+
+    func showSpeechPermissions() {
+        destination = .speechPermissions
+        refreshSpeechPermissionState()
+    }
+
+    func refreshSpeechPermissionState() {
+        Task {
+            await refreshSpeechPermissionStateAndWait()
+        }
+    }
+
+    func refreshSpeechPermissionStateAndWait() async {
+        speechPermissionState = await currentSpeechPermissionState()
+    }
+
+    func setUpSpeechPermissions() {
+        guard !isRequestingSpeechPermissions else { return }
+        Task {
+            await setUpSpeechPermissionsAndWait()
+        }
+    }
+
+    func setUpSpeechPermissionsAndWait() async {
+        guard !isRequestingSpeechPermissions else { return }
+        isRequestingSpeechPermissions = true
+        defer { isRequestingSpeechPermissions = false }
+        speechPermissionState = await requestSpeechPermissions()
     }
 
     func showReports() {
@@ -955,7 +995,7 @@ final class GuardianDashboardViewModel: ObservableObject {
         }
         Task {
             voiceprintGuidanceMessage = nil
-            guard await requestSpeechAuthorization() else {
+            guard (await requestSpeechPermissions()).isAuthorized else {
                 errorMessage = "Microphone and speech access are needed for voice setup."
                 return
             }

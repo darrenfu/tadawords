@@ -4,24 +4,32 @@ import XCTest
 @testable import TadaWordsFeatures
 
 final class QuestPresentationTests: XCTestCase {
-    func testReadPermissionTimingResetsForFirstPromptAndAfterDenial() {
+    func testReadPermissionCheckTimingResetsForFirstCheckAndAfterDenial() {
         XCTAssertTrue(
-            ReadPermissionTimingPolicy.shouldResetResponseClock(
-                hasRequestedPermission: false,
+            ReadPermissionCheckTimingPolicy.shouldResetResponseClock(
+                hasCheckedPermission: false,
                 wasPreviouslyDenied: false
             )
         )
         XCTAssertTrue(
-            ReadPermissionTimingPolicy.shouldResetResponseClock(
-                hasRequestedPermission: true,
+            ReadPermissionCheckTimingPolicy.shouldResetResponseClock(
+                hasCheckedPermission: true,
                 wasPreviouslyDenied: true
             )
         )
         XCTAssertFalse(
-            ReadPermissionTimingPolicy.shouldResetResponseClock(
-                hasRequestedPermission: true,
+            ReadPermissionCheckTimingPolicy.shouldResetResponseClock(
+                hasCheckedPermission: true,
                 wasPreviouslyDenied: false
             )
+        )
+    }
+
+    func testDeniedReadPermissionUsesAgeAppropriateParentRecoveryCopy() {
+        XCTAssertTrue(ChildSpeechPermissionCopy.blockedMessage.hasPrefix("Ask a Parent"))
+        XCTAssertTrue(ChildSpeechPermissionCopy.parentSetupHint.contains("Parents"))
+        XCTAssertTrue(
+            ChildSpeechPermissionCopy.parentSetupHint.contains("Speech & Microphone")
         )
     }
 

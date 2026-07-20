@@ -5,6 +5,7 @@ import TadaWordsDomain
 
 @MainActor
 public struct GuardianRootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model: GuardianDashboardViewModel
     @AccessibilityFocusState private var loadingOverlayIsFocused: Bool
     private let onExit: () -> Void
@@ -73,7 +74,10 @@ public struct GuardianRootView: View {
         notificationScheduler: (any LearningNotificationScheduling)? = nil,
         voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)? = nil,
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
-        requestSpeechAuthorization: @escaping @Sendable () async -> Bool = { false },
+        currentSpeechPermissionState:
+            @escaping @Sendable () async -> SpeechPermissionState = { .unavailable },
+        requestSpeechPermissions:
+            @escaping @Sendable () async -> SpeechPermissionState = { .unavailable },
         imageTextRecognitionService: any ImageTextRecognizing =
             NoImageTextRecognitionService(),
         pictureHintProvider: any WordPictureHintProviding =
@@ -98,7 +102,8 @@ public struct GuardianRootView: View {
                 notificationScheduler: notificationScheduler,
                 voiceprintEnrollmentService: voiceprintEnrollmentService,
                 voiceprintRepository: voiceprintRepository,
-                requestSpeechAuthorization: requestSpeechAuthorization,
+                currentSpeechPermissionState: currentSpeechPermissionState,
+                requestSpeechPermissions: requestSpeechPermissions,
                 pictureHintProvider: pictureHintProvider,
                 sensitiveActionAuthorizer: sensitiveActionAuthorizer
             )
@@ -134,6 +139,10 @@ public struct GuardianRootView: View {
             externalSyncRefreshTask = Task {
                 await model.refreshAfterExternalSyncAndWait()
             }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            model.refreshSpeechPermissionState()
         }
         .onDisappear {
             externalSyncRefreshTask?.cancel()
@@ -211,6 +220,8 @@ public struct GuardianRootView: View {
                         onOpenNotifications: {
                             model.showSettings(.notifications)
                         },
+                        speechPermissionState: model.speechPermissionState,
+                        onOpenSpeechPermissions: model.showSpeechPermissions,
                         onOpenFamilySync: model.showFamilySync,
                         onOpenThirdPartyNotices: model.showThirdPartyNotices
                     )
@@ -347,6 +358,14 @@ public struct GuardianRootView: View {
                 onManageAccess: model.manageFamilyAccess,
                 onAcceptShare: model.acceptFamilyShare,
                 onRetryProfileErasure: model.retryProfileErasure
+            )
+
+        case .speechPermissions:
+            GuardianSpeechPermissionSetupView(
+                state: model.speechPermissionState,
+                isRequesting: model.isRequestingSpeechPermissions,
+                onBack: model.returnToParentSection,
+                onRequest: model.setUpSpeechPermissions
             )
 
         case .thirdPartyNotices:

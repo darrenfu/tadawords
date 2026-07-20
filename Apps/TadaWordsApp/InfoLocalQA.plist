@@ -29,11 +29,11 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>Tada Words uses Face ID to protect sensitive parent actions such as sharing or deleting a profile.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Tada Words uses the microphone after a child taps Record to check a spoken practice word or capture a voice-setup sample. Raw audio is not saved or uploaded.</string>
+	<string>A parent enables microphone access for spoken Read Practice and voice setup. Tada Words analyzes short recordings on device; raw audio is not saved or uploaded.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Tada Words lets a parent choose a profile photo or a word-sheet photo for on-device text recognition.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Tada Words uses on-device speech recognition to compare the spoken practice word and give immediate feedback.</string>
+	<string>A parent enables on-device speech recognition so Tada Words can compare a spoken practice word and give immediate feedback.</string>
 	<key>TadaWordsGitCommit</key>
 	<string>$(TADA_GIT_COMMIT)</string>
 	<key>UILaunchScreen</key>

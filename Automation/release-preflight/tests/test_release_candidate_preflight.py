@@ -56,6 +56,7 @@ PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app.localqa;
 def valid_entitlements(team: str = "TEAM123") -> dict:
     return {
         "application-identifier": f"{team}.com.tadawords.app",
+        "aps-environment": "production",
         "com.apple.developer.icloud-container-environment": "Production",
         "com.apple.developer.icloud-container-identifiers": [
             "iCloud.com.tadawords.app"
@@ -68,36 +69,27 @@ def valid_entitlements(team: str = "TEAM123") -> dict:
     }
 
 
-def entitlement_policy() -> dict:
-    return {
-        "signed_entitlements": {
-            "required_exact": {
-                "application-identifier": "${TEAM_ID}.com.tadawords.app",
-                "com.apple.developer.icloud-container-environment": "Production",
-                "com.apple.developer.icloud-container-identifiers": [
-                    "iCloud.com.tadawords.app"
-                ],
-                "com.apple.developer.icloud-services": ["CloudKit"],
-                "com.apple.developer.team-identifier": "${TEAM_ID}",
-                "com.apple.developer.ubiquity-kvstore-identifier": "${TEAM_ID}.com.tadawords.app",
-                "keychain-access-groups": ["${TEAM_ID}.com.tadawords.app"],
-            },
-            "optional_exact": {"get-task-allow": False},
-            "artifact_allowed_values": {
-                "archive": {
-                    "com.apple.developer.icloud-container-environment": [
-                        "Development",
-                        "Production",
-                    ],
-                    "get-task-allow": [False, True],
-                }
-            },
-            "allowed_keys": list(valid_entitlements()),
-        }
-    }
+def canonical_policy() -> dict:
+    root = MODULE_PATH.parents[1]
+    return json.loads((root / "Config/release-candidate-policy.json").read_text())
 
 
 class ReleaseCandidatePreflightTests(unittest.TestCase):
+    def test_repository_source_entitlements_match_canonical_policy(self):
+        root = MODULE_PATH.parents[1]
+        policy = canonical_policy()
+        with (root / "Apps/TadaWordsApp/TadaWords.entitlements").open("rb") as stream:
+            source_entitlements = plistlib.load(stream)
+
+        self.assertEqual(source_entitlements, policy["source_entitlements"])
+        self.assertEqual(
+            source_entitlements["aps-environment"], "$(APS_ENVIRONMENT)"
+        )
+        self.assertEqual(
+            policy["source_entitlements"]["aps-environment"],
+            "$(APS_ENVIRONMENT)",
+        )
+
     def test_dirty_release_source_fails(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -149,7 +141,7 @@ class ReleaseCandidatePreflightTests(unittest.TestCase):
         entitlements = valid_entitlements(team="WRONG")
         with self.assertRaisesRegex(preflight.PreflightError, "application-identifier"):
             preflight.validate_signed_entitlements(
-                entitlements, entitlement_policy(), "TEAM123"
+                entitlements, canonical_policy(), "TEAM123"
             )
 
     def test_unexpected_entitlement_fails(self):
@@ -157,21 +149,55 @@ class ReleaseCandidatePreflightTests(unittest.TestCase):
         entitlements["com.apple.developer.healthkit"] = True
         with self.assertRaisesRegex(preflight.PreflightError, "unexpected signed entitlements"):
             preflight.validate_signed_entitlements(
-                entitlements, entitlement_policy(), "TEAM123"
+                entitlements, canonical_policy(), "TEAM123"
+            )
+
+    def test_valid_production_push_entitlement_passes_for_export(self):
+        preflight.validate_signed_entitlements(
+            valid_entitlements(), canonical_policy(), "TEAM123", "export"
+        )
+
+    def test_missing_production_push_entitlement_fails_for_export(self):
+        entitlements = valid_entitlements()
+        del entitlements["aps-environment"]
+        with self.assertRaisesRegex(preflight.PreflightError, "aps-environment"):
+            preflight.validate_signed_entitlements(
+                entitlements, canonical_policy(), "TEAM123", "export"
+            )
+
+    def test_development_push_entitlement_fails_for_export(self):
+        entitlements = valid_entitlements()
+        entitlements["aps-environment"] = "development"
+        with self.assertRaisesRegex(preflight.PreflightError, "aps-environment"):
+            preflight.validate_signed_entitlements(
+                entitlements, canonical_policy(), "TEAM123", "export"
+            )
+
+    def test_localqa_entitlements_cannot_be_export_evidence(self):
+        entitlements = {
+            "application-identifier": "TEAM123.com.tadawords.app.localqa",
+            "com.apple.developer.team-identifier": "TEAM123",
+            "get-task-allow": True,
+        }
+        with self.assertRaisesRegex(preflight.PreflightError, "application-identifier"):
+            preflight.validate_signed_entitlements(
+                entitlements, canonical_policy(), "TEAM123", "export"
             )
 
     def test_archive_may_be_development_signed_but_export_must_be_production(self):
         entitlements = valid_entitlements()
+        entitlements["aps-environment"] = "development"
         entitlements["com.apple.developer.icloud-container-environment"] = "Development"
         entitlements["get-task-allow"] = True
         preflight.validate_signed_entitlements(
-            entitlements, entitlement_policy(), "TEAM123", "archive"
+            entitlements, canonical_policy(), "TEAM123", "archive"
         )
+        entitlements["aps-environment"] = "production"
         with self.assertRaisesRegex(
             preflight.PreflightError, "icloud-container-environment"
         ):
             preflight.validate_signed_entitlements(
-                entitlements, entitlement_policy(), "TEAM123", "export"
+                entitlements, canonical_policy(), "TEAM123", "export"
             )
 
     def test_missing_privacy_manifest_fails(self):
