@@ -229,6 +229,10 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
                 nextRetryAt: Date(timeIntervalSince1970: 1_735_689_900)
             ),
             isEnabled: true,
+            remoteNotificationRegistration: .failed(
+                category: .connectivity,
+                at: Date(timeIntervalSince1970: 1_735_689_700)
+            ),
             generatedAt: Date(timeIntervalSince1970: 1_735_689_600)
         ).text
 
@@ -236,15 +240,50 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
         XCTAssertTrue(report.contains("Pending changes: 3"))
         XCTAssertTrue(report.contains("Retry count: 2"))
         XCTAssertTrue(report.contains("Next retry:"))
+        XCTAssertTrue(report.contains("Push registration: failed"))
+        XCTAssertTrue(report.contains("Push registration failure: connectivity"))
+        XCTAssertTrue(report.contains("Push registration updated:"))
         for childPayload in [
             "Mia",
             "dog",
             "profile-photo-",
             "voiceprint",
             "payloadChecksum",
+            "device token",
+            "private details",
         ] {
             XCTAssertFalse(report.contains(childPayload))
         }
+    }
+
+    func testDiagnosticExportDescribesEveryRegistrationStateWithoutInventingTime() {
+        let generatedAt = Date(timeIntervalSince1970: 1_735_689_600)
+
+        let notRequested = GuardianFamilySyncDiagnosticReport(
+            status: .idle,
+            isEnabled: false,
+            remoteNotificationRegistration: .notRequested,
+            generatedAt: generatedAt
+        ).text
+        XCTAssertTrue(notRequested.contains("Push registration: not_requested"))
+        XCTAssertFalse(notRequested.contains("Push registration updated:"))
+
+        let pending = GuardianFamilySyncDiagnosticReport(
+            status: .syncing(pendingCount: 0),
+            isEnabled: true,
+            remoteNotificationRegistration: .pending(since: generatedAt),
+            generatedAt: generatedAt
+        ).text
+        XCTAssertTrue(pending.contains("Push registration: pending"))
+
+        let registered = GuardianFamilySyncDiagnosticReport(
+            status: .synced(at: generatedAt),
+            isEnabled: true,
+            remoteNotificationRegistration: .registered(at: generatedAt),
+            generatedAt: generatedAt
+        ).text
+        XCTAssertTrue(registered.contains("Push registration: registered"))
+        XCTAssertFalse(registered.contains("Push registration failure:"))
     }
 
     func testProfileErasureAggregateUsesMostSevereStateAndCountsOnlyThatState() throws {

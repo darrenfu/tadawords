@@ -11,6 +11,8 @@ final class TadaWordsAppDelegate: NSObject, UIApplicationDelegate {
         label: "com.tadawords.family-sync.connectivity"
     )
     private var hasObservedUnsatisfiedPath = false
+    private let remoteNotificationRegistrationObserver =
+        AppleRemoteNotificationRegistrationObserver()
 
     func application(
         _ application: UIApplication,
@@ -73,6 +75,29 @@ final class TadaWordsAppDelegate: NSObject, UIApplicationDelegate {
             case .failed:
                 completionHandler(.failed)
             }
+        }
+    }
+
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken _: Data
+    ) {
+        _ = application
+        Task {
+            await remoteNotificationRegistrationObserver.didRegister()
+        }
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        _ = application
+        let category =
+            AppleRemoteNotificationRegistrationObserver
+            .failureCategory(for: error)
+        Task {
+            await remoteNotificationRegistrationObserver.didFail(category: category)
         }
     }
 

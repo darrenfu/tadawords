@@ -854,3 +854,41 @@ signed cross-device acceptance remain separate gates under #19, #22, and #23.
 - The pre-commit repository gate passes 998 Swift tests, 40 Issue Agent tests,
   and 11 release-preflight tests. Simulator and physical acceptance evidence
   will be recorded only after the exact committed HEAD passes.
+
+## v0.7.9 — 2026-07-19
+
+Target release: `v0.7.9`
+
+Branch: `codex/apns-registration-observability-v0.7.9`
+
+Build: `2026071909`
+
+Overall state: source implementation and the repository gate are complete for
+the privacy-safe APNs registration observability tracked by #64. Exact signed
+iPhone/iPad registration evidence and real background convergence remain
+separate gates under #60 and #62.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V079-SYNC-001 | P0 observability | Family Sync push registration | Distinguish not-requested, pending, registered, and failed APNs registration without retaining or exporting the opaque device token. | Source complete; live acceptance open | 1009/1009 Swift, 40/40 Issue Agent, and 11/11 release-preflight tests pass. Still required: exact signed iPhone and iPad callbacks under #60; real background convergence under #62. |
+
+### 2026-07-19 v0.7.9 notes
+
+- Reserved version `0.7.9` and build `2026071909` for the reclaimed #64 batch.
+- Added the UIKit success and failure delegate callbacks. The success callback
+  has no local token identifier, and no device-token bytes enter the Domain,
+  Parent UI, diagnostics, logs, persistence, hashing, or export paths.
+- Kept only one process-local state value and one unread stream value per live
+  observer. Relaunch begins at not-requested and retries return to pending.
+- Mapped Apple failures into configuration, connectivity, or system categories
+  without exporting the original domain, code, description, device identity,
+  Apple Account detail, Profile content, or child data.
+- Added Parent-visible registration state and schema-2 Family Sync diagnostics
+  with the coarse state, optional category, and update timestamp.
+- Late callbacks after opt-out cannot replace not-requested state. Registration
+  failure never blocks local practice or claims a CloudKit convergence failure.
+- Notification-presentation authorization is not used as evidence for silent
+  CloudKit push registration.
+- Focused Domain, Apple adapter, Parent diagnostics, and version contract tests
+  pass 8/8, 4/4, 20/20, and 3/3 respectively. The complete gate passes 1009
+  Swift tests, 40 Issue Agent tests, and 11 release-preflight tests.

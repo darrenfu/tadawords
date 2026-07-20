@@ -13,6 +13,28 @@ public enum FamilySyncBackgroundFetchResult: Sendable {
     case failed
 }
 
+/// Coarse enough for Parent and release diagnostics without retaining Apple's
+/// error domain, code, description, account details, or device identifiers.
+public enum FamilySyncRemoteNotificationRegistrationFailureCategory:
+    String, Equatable, Sendable
+{
+    case configuration
+    case connectivity
+    case system
+}
+
+/// A bounded, process-only registration summary. The APNs device token is
+/// intentionally absent from every case and never enters the domain layer.
+public enum FamilySyncRemoteNotificationRegistrationState: Equatable, Sendable {
+    case notRequested
+    case pending(since: Date)
+    case registered(at: Date)
+    case failed(
+        category: FamilySyncRemoteNotificationRegistrationFailureCategory,
+        at: Date
+    )
+}
+
 /// Process-wide handoff from UIApplicationDelegate to the bootstrapped
 /// coordinator. A push received before SwiftUI composition is ready is latched
 /// and replayed after registration instead of being silently lost.
@@ -27,8 +49,15 @@ public actor FamilySyncRemoteNotificationBridge {
     private var registerHandler: RegistrationHandler?
     private var unregisterHandler: RegistrationHandler?
     private var registrationRequested = false
+    private let clock: any AppClock
+    private var currentRegistrationState: FamilySyncRemoteNotificationRegistrationState =
+        .notRequested
+    private var registrationStateContinuations:
+        [UUID: AsyncStream<FamilySyncRemoteNotificationRegistrationState>.Continuation] = [:]
 
-    public init() {}
+    public init(clock: any AppClock = SystemAppClock()) {
+        self.clock = clock
+    }
 
     public func register(handler: @escaping Handler) {
         self.handler = handler
@@ -49,12 +78,51 @@ public actor FamilySyncRemoteNotificationBridge {
 
     public func requestRegistration() async {
         registrationRequested = true
+        publishRegistrationState(.pending(since: clock.now))
         await registerHandler?()
     }
 
     public func requestUnregistration() async {
         registrationRequested = false
+        publishRegistrationState(.notRequested)
         await unregisterHandler?()
+    }
+
+    public func registrationState()
+        -> FamilySyncRemoteNotificationRegistrationState
+    {
+        currentRegistrationState
+    }
+
+    /// Replays the latest state and keeps only one unread update per observer.
+    /// Terminated observers are removed so the process-wide bridge remains
+    /// bounded as Parent views appear and disappear.
+    public func registrationStates()
+        -> AsyncStream<FamilySyncRemoteNotificationRegistrationState>
+    {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: FamilySyncRemoteNotificationRegistrationState.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeRegistrationStateContinuation(id) }
+        }
+        registrationStateContinuations[id] = continuation
+        continuation.yield(currentRegistrationState)
+        return stream
+    }
+
+    public func recordRegistrationSucceeded() {
+        guard registrationRequested else { return }
+        publishRegistrationState(.registered(at: clock.now))
+    }
+
+    public func recordRegistrationFailed(
+        category: FamilySyncRemoteNotificationRegistrationFailureCategory
+    ) {
+        guard registrationRequested else { return }
+        publishRegistrationState(.failed(category: category, at: clock.now))
     }
 
     public func handleNotification() async -> FamilySyncBackgroundFetchResult {
@@ -82,6 +150,19 @@ public actor FamilySyncRemoteNotificationBridge {
 
     private func timeoutWaiter(_ id: UUID) {
         handlerWaiters.removeValue(forKey: id)?.resume(returning: nil)
+    }
+
+    private func publishRegistrationState(
+        _ state: FamilySyncRemoteNotificationRegistrationState
+    ) {
+        currentRegistrationState = state
+        for continuation in registrationStateContinuations.values {
+            continuation.yield(state)
+        }
+    }
+
+    private func removeRegistrationStateContinuation(_ id: UUID) {
+        registrationStateContinuations.removeValue(forKey: id)
     }
 }
 
