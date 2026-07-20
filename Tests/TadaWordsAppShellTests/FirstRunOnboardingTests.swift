@@ -12,11 +12,11 @@ final class FirstRunOnboardingTests: XCTestCase {
         let first = gate.closeForAccountRevalidation()
         let second = gate.closeForAccountRevalidation()
 
-        gate.reopen(ifCurrent: first)
+        XCTAssertFalse(gate.reopen(ifCurrent: first))
         XCTAssertTrue(gate.admissionIsClosed())
         XCTAssertThrowsError(try gate.requireAdmissionAllowed())
 
-        gate.reopen(ifCurrent: second)
+        XCTAssertTrue(gate.reopen(ifCurrent: second))
         XCTAssertFalse(gate.admissionIsClosed())
         XCTAssertNoThrow(try gate.requireAdmissionAllowed())
     }

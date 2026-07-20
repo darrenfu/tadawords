@@ -330,11 +330,13 @@ final class FirstRunDiscoveryAdmissionGate: @unchecked Sendable {
         return Generation(value: generation)
     }
 
-    func reopen(ifCurrent candidate: Generation) {
+    @discardableResult
+    func reopen(ifCurrent candidate: Generation) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard candidate.value == generation else { return }
+        guard candidate.value == generation else { return false }
         isClosed = false
+        return true
     }
 
     func acquireAdmissionLease() throws -> Generation {
@@ -400,8 +402,7 @@ enum FirstRunDiscoveryAdmissionRevalidator {
             if discoveryIsPending {
                 _ = try await familySyncCoordinator.disableAndAwaitQuiescence()
             }
-            gate.reopen(ifCurrent: generation)
-            return true
+            return gate.reopen(ifCurrent: generation)
         } catch {
             return false
         }

@@ -603,9 +603,17 @@ public struct TadaWordsApplicationView: View {
         // Only a successful, current-generation account confirmation/full
         // fetch may make its candidates interactive. A foreground transition
         // during Find advances the generation and keeps admission closed.
-        environment.firstRunDiscoveryAdmissionGate.reopen(
-            ifCurrent: admissionGeneration
-        )
+        guard
+            environment.firstRunDiscoveryAdmissionGate.reopen(
+                ifCurrent: admissionGeneration
+            )
+        else {
+            // Close the check-to-reopen race at one lock-protected
+            // linearization point. This call persists the reset and opts out
+            // sync for the generation that invalidated this result.
+            try await coordinator.requireCurrentDiscoveryGeneration()
+            throw FirstRunProfileDiscoveryError.resetRequired
+        }
         return profiles
     }
 
