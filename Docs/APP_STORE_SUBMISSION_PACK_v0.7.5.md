@@ -18,7 +18,7 @@
 | Reserved build | `2026071905` |
 | Runtime source baseline | `ce479db21eba64bd6abcd0aba739c222dfabb6a9` (`origin/main` after the merged privacy inventory) |
 | Behavior delta in this draft | None; metadata, release identity, documentation, and contract tests only |
-| Bundle ID expected for the eventual store build | `com.tadawords.app` |
+| Bundle ID expected for the eventual store build | `app.tadawords.app` on PawGoo LLC Team `7R78Q4HP86` |
 | Primary localization drafted here | English (U.S.) |
 | Merged evidence inputs | [`APP_STORE_PRIVACY_v0.7.4.md`](APP_STORE_PRIVACY_v0.7.4.md) and [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md) |
 | Public-site audit | Live Pawgoo routes rechecked July 19, 2026; content mismatches remain documented below |

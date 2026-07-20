@@ -8,7 +8,7 @@ not build, sign, install, launch, upload, submit, merge, or release anything.
 - a clean dedicated release worktree at the exact candidate HEAD;
 - an existing signed `.xcarchive` produced from that HEAD;
 - the existing exported signed `.app` or `.ipa` produced from that archive;
-- the expected Apple Developer Team ID.
+- PawGoo Apple Developer Team `7R78Q4HP86`.
 
 Keep the archive and export outside tracked source. The default manifest path,
 `.build/release-candidate-manifest.json`, is ignored by Git.
@@ -17,8 +17,35 @@ Keep the archive and export outside tracked source. The default manifest path,
 make release-preflight \
   ARCHIVE='/absolute/path/TadaWords.xcarchive' \
   EXPORTED_APP='/absolute/path/TadaWords.ipa' \
-  TEAM_ID='EXPECTED_TEAM_ID'
+  TEAM_ID='7R78Q4HP86'
 ```
+
+The normal Development artifact has a separate, read-only verifier. It does
+not install or launch the app:
+
+```sh
+./Scripts/verify-pawgoo-development-app.py \
+  '/absolute/path/Tada Words.app' \
+  'EXPECTED_VERSION' \
+  'EXPECTED_BUILD' \
+  'EXACT_40_CHARACTER_COMMIT' \
+  --device-udid 'APPROVED_IPHONE_HARDWARE_UDID' \
+  --device-udid 'APPROVED_IPAD_HARDWARE_UDID'
+```
+
+That verifier rejects policy overrides, non-PawGoo identities, a CMS not
+signed by the pinned Apple provisioning signer, a code-signing leaf not listed
+in the embedded profile, expired or unexpected device coverage, and app
+entitlements not authorized by the profile. The sealed app is held to a
+least-privilege entitlement contract even though the Apple profile contains a
+broader authorization envelope. It snapshots the `.app`, rejects mutation
+during verification, checks an iPhoneOS-only arm64 executable, and prints the
+verified tree SHA-256 for the serialized handoff to the install lane.
+
+`TadaWordsGitCommit` is signed metadata, not cryptographic proof of source
+provenance by itself. Exact-source evidence additionally requires the clean,
+exact-HEAD build log that produced the app. The handoff consumer must recheck
+the printed tree SHA-256 before any separately authorized installation.
 
 The command fails closed when it finds dirty source, stale generated project
 files, version/build/bundle/team/commit drift, an invalid signature, a missing

@@ -72,6 +72,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "ce479db21eba64bd6abcd0aba739c222dfabb6a9",
             "Metadata-pack version | `0.7.5`",
             "Reserved build | `2026071905`",
+            "app.tadawords.app",
+            "7R78Q4HP86",
             "APP_STORE_PRIVACY_v0.7.4.md",
             "APP_STORE_CONTENT_RIGHTS.md",
             "PROFILES FOR EACH LEARNER",
@@ -125,16 +127,16 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.11</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072011</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.12</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072012</string>"))
         }
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.11"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072011"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.12"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072012"))
     }
 
     private var repositoryRoot: URL {

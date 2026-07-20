@@ -1,7 +1,7 @@
 name: TadaWords
 
 options:
-  bundleIdPrefix: com.tadawords
+  bundleIdPrefix: app.tadawords
   deploymentTarget:
     iOS: "18.0"
   groupSortPosition: top
@@ -41,20 +41,23 @@ targets:
         product: TadaWordsContent
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app
+        PRODUCT_BUNDLE_IDENTIFIER: app.tadawords.app
         PRODUCT_NAME: Tada Words
-        MARKETING_VERSION: 0.7.11
-        CURRENT_PROJECT_VERSION: 2026072011
+        MARKETING_VERSION: 0.7.12
+        CURRENT_PROJECT_VERSION: 2026072012
         TADA_GIT_COMMIT: unknown
         CODE_SIGN_STYLE: Automatic
-        APS_ENVIRONMENT: development
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: false
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_ENTITLEMENTS: Apps/TadaWordsApp/TadaWords.entitlements
       configs:
+        Debug:
+          DEVELOPMENT_TEAM: 7R78Q4HP86
+          APS_ENVIRONMENT: development
         Release:
+          DEVELOPMENT_TEAM: 7R78Q4HP86
           APS_ENVIRONMENT: production
         LocalQA:
           PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app.localqa
@@ -66,8 +69,8 @@ targets:
       path: Apps/TadaWordsApp/Info.plist
       properties:
         CFBundleDisplayName: Tada Words
-        CFBundleShortVersionString: "0.7.11"
-        CFBundleVersion: "2026072011"
+        CFBundleShortVersionString: "0.7.12"
+        CFBundleVersion: "2026072012"
         TadaWordsGitCommit: "$(TADA_GIT_COMMIT)"
         CKSharingSupported: true
         ITSAppUsesNonExemptEncryption: false
@@ -127,6 +130,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app.uitests
         GENERATE_INFOPLIST_FILE: true
         TEST_TARGET_NAME: TadaWords
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: app.tadawords.app.uitests
+          DEVELOPMENT_TEAM: 7R78Q4HP86
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: app.tadawords.app.uitests
+          DEVELOPMENT_TEAM: 7R78Q4HP86
 
 schemes:
   TadaWords:

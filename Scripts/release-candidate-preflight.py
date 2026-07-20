@@ -25,6 +25,19 @@ class PreflightError(RuntimeError):
     pass
 
 
+CANONICAL_RELEASE_IDENTITY = {
+    "team_id": "7R78Q4HP86",
+    "application_identifier_prefix": "7R78Q4HP86",
+    "bundle_id": "app.tadawords.app",
+    "localqa_bundle_id": "com.tadawords.app.localqa",
+    "ui_test_bundle_id": "app.tadawords.app.uitests",
+    "localqa_ui_test_bundle_id": "com.tadawords.app.uitests",
+    "device_tests_bundle_id": "com.tadawords.app.devicetests",
+    "icloud_container": "iCloud.com.tadawords.app",
+    "voiceprint_service": "com.tadawords.device-voiceprints",
+}
+
+
 def run(command: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[bytes]:
     result = subprocess.run(command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode:
@@ -91,6 +104,26 @@ def extract_pbx_values(text: str, key: str) -> set[str]:
     return values
 
 
+def validate_release_policy_identity(policy: dict[str, Any]) -> None:
+    for key, expected in CANONICAL_RELEASE_IDENTITY.items():
+        actual = policy.get(key)
+        if actual != expected:
+            raise PreflightError(
+                f"release policy identity mismatch for {key}; "
+                f"expected={expected!r} actual={actual!r}"
+            )
+
+
+def validate_expected_team(expected_team: str, policy: dict[str, Any]) -> None:
+    validate_release_policy_identity(policy)
+    policy_team = str(policy.get("team_id", ""))
+    if expected_team != policy_team:
+        raise PreflightError(
+            "release signing team mismatch; "
+            f"policy requires PawGoo team {policy_team}, got {expected_team or '<empty>'}"
+        )
+
+
 def validate_source_identity(root: Path, policy: dict[str, Any]) -> tuple[str, str, str]:
     info = read_plist(root / "Apps/TadaWordsApp/Info.plist")
     local_info = read_plist(root / "Apps/TadaWordsApp/InfoLocalQA.plist")
@@ -112,9 +145,20 @@ def validate_source_identity(root: Path, policy: dict[str, Any]) -> tuple[str, s
         raise PreflightError("project.yml marketing version is missing or mismatched")
     if extract_yaml_scalar(project_text, "CURRENT_PROJECT_VERSION") != {build}:
         raise PreflightError("project.yml build number is missing or mismatched")
+    expected_bundles = {
+        bundle_id,
+        str(policy["localqa_bundle_id"]),
+        str(policy["ui_test_bundle_id"]),
+        str(policy["localqa_ui_test_bundle_id"]),
+        str(policy["device_tests_bundle_id"]),
+    }
     declared_bundles = extract_yaml_scalar(project_text, "PRODUCT_BUNDLE_IDENTIFIER")
-    if bundle_id not in declared_bundles or f"{bundle_id}.localqa" not in declared_bundles:
-        raise PreflightError("project.yml does not contain the expected production/LocalQA bundles")
+    missing_bundles = sorted(expected_bundles - declared_bundles)
+    if missing_bundles:
+        raise PreflightError(
+            "project.yml does not contain the expected explicit bundles; "
+            f"missing={missing_bundles}"
+        )
 
     pbx_text = (root / "TadaWords.xcodeproj/project.pbxproj").read_text()
     if extract_pbx_values(pbx_text, "MARKETING_VERSION") != {version}:
@@ -122,8 +166,12 @@ def validate_source_identity(root: Path, policy: dict[str, Any]) -> tuple[str, s
     if extract_pbx_values(pbx_text, "CURRENT_PROJECT_VERSION") != {build}:
         raise PreflightError("generated project build number is stale or mismatched")
     pbx_bundles = extract_pbx_values(pbx_text, "PRODUCT_BUNDLE_IDENTIFIER")
-    if bundle_id not in pbx_bundles or f"{bundle_id}.localqa" not in pbx_bundles:
-        raise PreflightError("generated project has the wrong app bundle identity")
+    missing_generated_bundles = sorted(expected_bundles - pbx_bundles)
+    if missing_generated_bundles:
+        raise PreflightError(
+            "generated project has the wrong explicit bundle identities; "
+            f"missing={missing_generated_bundles}"
+        )
     return version, build, bundle_id
 
 
@@ -257,13 +305,18 @@ def verify_signed_identity(
         raise PreflightError(f"signed app identity verification failed: {detail}")
 
 
-def expand_tokens(value: Any, team_id: str) -> Any:
+def expand_tokens(value: Any, team_id: str, app_identifier_prefix: str) -> Any:
     if isinstance(value, str):
-        return value.replace("${TEAM_ID}", team_id)
+        return value.replace("${TEAM_ID}", team_id).replace(
+            "${APP_IDENTIFIER_PREFIX}", app_identifier_prefix
+        )
     if isinstance(value, list):
-        return [expand_tokens(item, team_id) for item in value]
+        return [expand_tokens(item, team_id, app_identifier_prefix) for item in value]
     if isinstance(value, dict):
-        return {key: expand_tokens(item, team_id) for key, item in value.items()}
+        return {
+            key: expand_tokens(item, team_id, app_identifier_prefix)
+            for key, item in value.items()
+        }
     return value
 
 
@@ -284,6 +337,10 @@ def validate_signed_entitlements(
     team_id: str,
     artifact_kind: str = "export",
 ) -> None:
+    validate_expected_team(team_id, policy)
+    app_identifier_prefix = str(policy.get("application_identifier_prefix", ""))
+    if not app_identifier_prefix:
+        raise PreflightError("release policy has no fixed application identifier prefix")
     signed_policy = policy["signed_entitlements"]
     allowed = set(signed_policy["allowed_keys"])
     unexpected = sorted(set(entitlements) - allowed)
@@ -292,8 +349,11 @@ def validate_signed_entitlements(
     allowed_values = expand_tokens(
         signed_policy.get("artifact_allowed_values", {}).get(artifact_kind, {}),
         team_id,
+        app_identifier_prefix,
     )
-    required = expand_tokens(signed_policy["required_exact"], team_id)
+    required = expand_tokens(
+        signed_policy["required_exact"], team_id, app_identifier_prefix
+    )
     for key, expected in required.items():
         if key in allowed_values:
             if entitlements.get(key) not in allowed_values[key]:
@@ -307,7 +367,9 @@ def validate_signed_entitlements(
                 f"signed entitlement mismatch for {key}; "
                 f"expected={expected!r} actual={entitlements.get(key)!r}"
             )
-    optional = expand_tokens(signed_policy.get("optional_exact", {}), team_id)
+    optional = expand_tokens(
+        signed_policy.get("optional_exact", {}), team_id, app_identifier_prefix
+    )
     for key, expected in optional.items():
         if key in allowed_values:
             if key in entitlements and entitlements[key] not in allowed_values[key]:
@@ -411,6 +473,7 @@ def main() -> int:
         ensure_ignored_output(root, manifest_path)
         commit = assert_clean_repository(root)
         policy = json.loads((root / "Config/release-candidate-policy.json").read_text())
+        validate_expected_team(arguments.expected_team, policy)
         version, build, bundle_id = validate_source_identity(root, policy)
         source_privacy_hash = validate_source_files(root, policy)
         validate_generated_project(root)
@@ -450,6 +513,9 @@ def main() -> int:
                     "build": build,
                     "bundle_id": bundle_id,
                     "team_id": arguments.expected_team,
+                    "application_identifier_prefix": policy[
+                        "application_identifier_prefix"
+                    ],
                     "source_privacy_manifest_sha256": source_privacy_hash,
                 },
                 "archive": {

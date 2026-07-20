@@ -196,7 +196,7 @@ process exists. The release owner must attest that boundary.
 | Photo Library | Parent-selected Profile photo or word-sheet OCR | Matches source with the same CloudKit qualification |
 | Face ID | Protects sensitive Parent sharing/deletion actions | Matches source; app receives no biometric data |
 | Notifications/background mode | Local family reminders plus CloudKit remote-notification reconciliation | Source matches. OS authorization/request IDs and APNs token remain local; remote payload content is ignored by the app delegate |
-| Production entitlements | APNs, CloudKit, `iCloud.com.tadawords.app`, and a key-value-store identifier | APNs/CloudKit match production Family Sync. No `NSUbiquitousKeyValueStore` use exists in audited source; recheck the final entitlement/runtime scan |
+| Production entitlements | APNs and CloudKit through `iCloud.com.tadawords.app`; no KVS entitlement | APNs/CloudKit match production Family Sync. No `NSUbiquitousKeyValueStore` use exists in audited source; the unused KVS entitlement was removed in v0.7.12 |
 | LocalQA entitlements | Empty; sharing false; no background mode | Matches device-only QA composition |
 | Parent resources | Protected Privacy and Support links plus local Profile-deletion and iOS-permission instructions | Present and regression-covered. External pages require a network connection |
 | Third-Party Notices | Offline exact Twemoji attribution plus parent-triggered source/license links | Matches the bundled assets and content-rights inventory; no child-facing or automatic request |
