@@ -706,6 +706,18 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
             )
         }
 
+        guard
+            await eventBuffer.retryStagedUnboundRecords(
+                generation: recoveryGeneration
+            )
+        else {
+            return result(
+                await eventBuffer.drain(),
+                reachedServerHead: false,
+                replayedDurableInbox: false
+            )
+        }
+
         var recoveredStagedRemoval = false
         for marker
             in try metadataStore

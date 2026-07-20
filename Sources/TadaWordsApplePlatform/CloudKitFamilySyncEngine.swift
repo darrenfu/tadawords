@@ -170,6 +170,7 @@ enum CloudKitFamilyEngineEvent: Sendable {
     case accountChange(CloudKitFamilyAccountEngineEvent)
     case fetchedRecords([CKRecord])
     case fetchedDeletions([CKRecord.ID])
+    case finishedFetchingZone(CKRecordZone.ID, succeeded: Bool)
     case deletedZones([CKRecordZone.ID])
     case sentRecords(saved: [CKRecord], failed: [(CKRecord, CKError)])
     case sentDeletions(saved: [CKRecord.ID], failed: [(CKRecord.ID, CKError)])
@@ -199,6 +200,32 @@ struct CloudKitLiveAccountVerifier: @unchecked Sendable {
 }
 
 actor CloudKitFamilySyncEventBuffer {
+    private struct UnboundRoute: Hashable {
+        let scope: CloudKitFamilyDatabaseScope
+        let zoneName: String
+        let ownerName: String
+
+        init(
+            scope: CloudKitFamilyDatabaseScope,
+            zoneID: CKRecordZone.ID
+        ) {
+            self.scope = scope
+            zoneName = zoneID.zoneName
+            ownerName = zoneID.ownerName
+        }
+    }
+
+    private struct StagedUnboundRecord {
+        let cloudRecord: CKRecord
+        let record: FamilySyncRecord
+        let receivedAt: Date
+    }
+
+    private struct DeferredEngineState {
+        let serialization: CKSyncEngine.State.Serialization
+        let stateStore: CloudKitFamilySyncStateStore
+    }
+
     private var activeGeneration: UInt64 = 1
     private var outgoing: [String: CloudKitFamilyOutgoingChange] = [:]
     private var incoming: [FamilySyncChangeKey: FamilySyncRecord] = [:]
@@ -210,17 +237,30 @@ actor CloudKitFamilySyncEventBuffer {
     private var receiptIDs: Set<UUID> = []
     private var receipts: [UUID: FamilySyncFetchedReceipt] = [:]
     private var durabilityFailure = false
+    private var durabilityFailureEpoch: UInt64 = 0
+    private var retryableStagedResolutionFailureEpoch: UInt64?
     private var requiresFetchPass = false
     private var ownerLedgerRecoveryProfileIDs = Set<ProfileID>()
+    /// A newly installed device can receive child records before the Profile
+    /// root that authorizes their zone. Keep those bytes process-local and
+    /// withhold the CKSyncEngine cursor until the matching root either promotes
+    /// them into the durable inbox or a successful per-zone fetch proves that
+    /// no root exists and the records are durably quarantined.
+    private var stagedUnboundRecords: [UnboundRoute: [StagedUnboundRecord]] = [:]
+    private var rootlessRoutesReadyForQuarantine = Set<UnboundRoute>()
+    private var deferredEngineStates: [CloudKitFamilyDatabaseScope: DeferredEngineState] = [:]
     private let metadataStore: CloudKitFamilyMetadataStore
     private let liveAccountVerifier: CloudKitLiveAccountVerifier
+    private let beforePromotingStagedRecord: @Sendable (Int) -> Void
 
     init(
         metadataStore: CloudKitFamilyMetadataStore,
-        liveAccountVerifier: CloudKitLiveAccountVerifier = .noOp
+        liveAccountVerifier: CloudKitLiveAccountVerifier = .noOp,
+        beforePromotingStagedRecord: @escaping @Sendable (Int) -> Void = { _ in }
     ) {
         self.metadataStore = metadataStore
         self.liveAccountVerifier = liveAccountVerifier
+        self.beforePromotingStagedRecord = beforePromotingStagedRecord
     }
 
     func nextGeneration() -> UInt64 {
@@ -236,8 +276,13 @@ actor CloudKitFamilySyncEventBuffer {
         receiptIDs.removeAll()
         receipts.removeAll()
         durabilityFailure = false
+        durabilityFailureEpoch = 0
+        retryableStagedResolutionFailureEpoch = nil
         requiresFetchPass = false
         ownerLedgerRecoveryProfileIDs.removeAll()
+        stagedUnboundRecords.removeAll()
+        rootlessRoutesReadyForQuarantine.removeAll()
+        deferredEngineStates.removeAll()
         return activeGeneration
     }
 
@@ -247,6 +292,7 @@ actor CloudKitFamilySyncEventBuffer {
 
     func canPersistEngineState(_ generation: UInt64) -> Bool {
         generation == activeGeneration && !durabilityFailure
+            && stagedUnboundRecords.isEmpty
     }
 
     func persistEngineState(
@@ -259,13 +305,80 @@ actor CloudKitFamilySyncEventBuffer {
             !durabilityFailure,
             accountChange == nil
         else { return }
-        guard stateStore.save(serialization, scope: scope) else {
-            durabilityFailure = true
-            failures.append(
-                FamilySyncTransportFailure(key: nil, category: .corruptState)
+        guard !hasStagedUnboundRecords(in: scope) else {
+            deferredEngineStates[scope] = DeferredEngineState(
+                serialization: serialization,
+                stateStore: stateStore
             )
             return
         }
+        deferredEngineStates.removeValue(forKey: scope)
+        persistEngineStateNow(
+            serialization,
+            scope: scope,
+            stateStore: stateStore
+        )
+    }
+
+    /// Retries only the exact failed and not-yet-resolved suffix retained in
+    /// memory after an inbox or quarantine write failed. This gives a live
+    /// transport a recovery path even though CKSyncEngine's in-memory cursor
+    /// has already consumed the callback. The durable engine token remains old
+    /// until every retained candidate is durably accepted or quarantined.
+    func retryStagedUnboundRecords(generation: UInt64) -> Bool {
+        guard generation == activeGeneration, accountChange == nil else {
+            return false
+        }
+        let routes = stagedUnboundRecords.keys.sorted {
+            if $0.scope != $1.scope { return $0.scope.rawValue < $1.scope.rawValue }
+            if $0.ownerName != $1.ownerName { return $0.ownerName < $1.ownerName }
+            return $0.zoneName < $1.zoneName
+        }
+        guard let failureEpoch = retryableStagedResolutionFailureEpoch else {
+            let hasReadyStagedResolution = routes.contains { route in
+                if rootlessRoutesReadyForQuarantine.contains(route) {
+                    return true
+                }
+                let zoneID = CKRecordZone.ID(
+                    zoneName: route.zoneName,
+                    ownerName: route.ownerName
+                )
+                return metadataStore.binding(for: zoneID) != nil
+            }
+            if durabilityFailure, hasReadyStagedResolution {
+                failures.append(
+                    FamilySyncTransportFailure(key: nil, category: .corruptState)
+                )
+                return false
+            }
+            return true
+        }
+        guard durabilityFailure, failureEpoch == durabilityFailureEpoch else {
+            failures.append(
+                FamilySyncTransportFailure(key: nil, category: .corruptState)
+            )
+            return false
+        }
+
+        durabilityFailure = false
+        retryableStagedResolutionFailureEpoch = nil
+        for route in routes {
+            let zoneID = CKRecordZone.ID(
+                zoneName: route.zoneName,
+                ownerName: route.ownerName
+            )
+            if rootlessRoutesReadyForQuarantine.contains(route) {
+                quarantineStagedRecords(
+                    for: zoneID,
+                    scope: route.scope,
+                    now: Date()
+                )
+            } else if metadataStore.binding(for: zoneID) != nil {
+                promoteStagedRecords(for: zoneID, scope: route.scope)
+            }
+            if durabilityFailure { return false }
+        }
+        return true
     }
 
     func replay(
@@ -304,7 +417,7 @@ actor CloudKitFamilySyncEventBuffer {
                             incoming.removeValue(forKey: key)
                             quarantinedRecordCount += conflictingIDs.count
                         } catch {
-                            durabilityFailure = true
+                            markDurabilityFailure()
                             failures.append(
                                 FamilySyncTransportFailure(
                                     key: key,
@@ -429,7 +542,7 @@ actor CloudKitFamilySyncEventBuffer {
                 // Account metadata is a privacy boundary. Fail closed and stop
                 // state-token persistence if that boundary cannot be written.
                 sealBufferedStateForAccountBoundary()
-                durabilityFailure = true
+                markDurabilityFailure()
                 accountChange = .switchedAccounts
                 failures.append(
                     FamilySyncTransportFailure(
@@ -526,7 +639,7 @@ actor CloudKitFamilySyncEventBuffer {
                     } catch CloudKitFamilyPersistenceError.bindingConflict {
                         latchAccountBoundary()
                     } catch {
-                        durabilityFailure = true
+                        markDurabilityFailure()
                         failures.append(
                             FamilySyncTransportFailure(
                                 key: nil,
@@ -537,14 +650,14 @@ actor CloudKitFamilySyncEventBuffer {
                     continue
                 }
                 if cloudRecord.recordType == CloudKitFamilyRecordCodec.Schema.rootRecordType {
-                    handleRootRecord(cloudRecord, scope: scope)
+                    handleRootRecord(cloudRecord, scope: scope, now: now)
                     continue
                 }
                 if cloudRecord.recordType == CKRecord.SystemType.share {
                     do {
                         try metadataStore.saveSystemFields(for: cloudRecord, scope: scope)
                     } catch {
-                        durabilityFailure = true
+                        markDurabilityFailure()
                         failures.append(
                             FamilySyncTransportFailure(key: nil, category: .corruptState)
                         )
@@ -553,13 +666,29 @@ actor CloudKitFamilySyncEventBuffer {
                 }
                 switch CloudKitFamilyRecordCodec.decode(cloudRecord) {
                 case .record(let record):
-                    guard
-                        validatesCloudIdentity(
+                    if validatesCloudIdentity(
+                        cloudRecord,
+                        decoded: record,
+                        scope: scope
+                    ) {
+                        acceptFetchedRecord(
                             cloudRecord,
                             decoded: record,
-                            scope: scope
+                            scope: scope,
+                            now: now
                         )
-                    else {
+                    } else if canStageUntilRoot(
+                        cloudRecord,
+                        decoded: record,
+                        scope: scope
+                    ) {
+                        stageUntilRoot(
+                            cloudRecord,
+                            decoded: record,
+                            scope: scope,
+                            now: now
+                        )
+                    } else {
                         quarantine(
                             cloudRecord,
                             scope: scope,
@@ -569,78 +698,7 @@ actor CloudKitFamilySyncEventBuffer {
                             ] as? Data,
                             now: now
                         )
-                        continue
                     }
-                    let key = FamilySyncChangeKey(
-                        profileID: record.profileID,
-                        recordName: record.recordName
-                    )
-                    if let existing = incoming[key] {
-                        if Self.isInvariantConflict(existing, record) {
-                            let existingReceiptIDs = Set(
-                                receipts.values.filter { $0.key == key }.map(\.id)
-                            )
-                            do {
-                                try metadataStore.quarantineInbox(
-                                    receiptIDs: existingReceiptIDs,
-                                    category: .conflict,
-                                    at: now
-                                )
-                                receiptIDs.subtract(existingReceiptIDs)
-                                for id in existingReceiptIDs {
-                                    receipts.removeValue(forKey: id)
-                                }
-                                incoming.removeValue(forKey: key)
-                                quarantinedRecordCount += existingReceiptIDs.count
-                            } catch {
-                                durabilityFailure = true
-                                failures.append(
-                                    FamilySyncTransportFailure(
-                                        key: key,
-                                        category: .corruptState
-                                    )
-                                )
-                            }
-                            quarantine(
-                                cloudRecord,
-                                scope: scope,
-                                category: .conflict,
-                                envelopeData: cloudRecord[
-                                    CloudKitFamilyRecordCodec.Schema.envelope
-                                ] as? Data,
-                                now: now
-                            )
-                            continue
-                        }
-                    }
-                    do {
-                        try metadataStore.saveSystemFields(for: cloudRecord, scope: scope)
-                        let receiptID =
-                            try metadataStore
-                            .appendInboxReplacingQuarantine(
-                                record: record,
-                                recordID: cloudRecord.recordID,
-                                scope: scope,
-                                receivedAt: now
-                            )
-                        receiptIDs.insert(receiptID)
-                        receipts[receiptID] = FamilySyncFetchedReceipt(
-                            id: receiptID,
-                            key: key,
-                            operation: .save,
-                            revision: record.logicalRevision
-                        )
-                    } catch {
-                        durabilityFailure = true
-                        failures.append(
-                            FamilySyncTransportFailure(key: nil, category: .corruptState)
-                        )
-                        continue
-                    }
-                    incoming[key] = FamilySyncConflictResolver.resolved(
-                        local: incoming[key],
-                        remote: record
-                    )
                 case .quarantine(let category, let envelopeData):
                     quarantine(
                         cloudRecord,
@@ -651,6 +709,14 @@ actor CloudKitFamilySyncEventBuffer {
                     )
                 }
             }
+        case .finishedFetchingZone(let zoneID, let succeeded):
+            finishFetchingZone(
+                zoneID,
+                scope: scope,
+                succeeded: succeeded,
+                generation: generation,
+                now: now
+            )
         case .fetchedDeletions(let recordIDs):
             for recordID in recordIDs {
                 guard generation == activeGeneration,
@@ -695,7 +761,7 @@ actor CloudKitFamilySyncEventBuffer {
                     } catch CloudKitFamilyPersistenceError.bindingConflict {
                         quarantinedRecordCount += 1
                     } catch {
-                        durabilityFailure = true
+                        markDurabilityFailure()
                         failures.append(
                             FamilySyncTransportFailure(
                                 key: nil,
@@ -734,7 +800,7 @@ actor CloudKitFamilySyncEventBuffer {
                     )
                     deletions.insert(key)
                 } catch {
-                    durabilityFailure = true
+                    markDurabilityFailure()
                     failures.append(
                         FamilySyncTransportFailure(key: key, category: .corruptState)
                     )
@@ -774,7 +840,7 @@ actor CloudKitFamilySyncEventBuffer {
                 } catch CloudKitFamilyPersistenceError.bindingConflict {
                     quarantinedRecordCount += 1
                 } catch {
-                    durabilityFailure = true
+                    markDurabilityFailure()
                     failures.append(
                         FamilySyncTransportFailure(key: nil, category: .corruptState)
                     )
@@ -900,19 +966,20 @@ actor CloudKitFamilySyncEventBuffer {
 
     func noteStatePersistenceFailure(_ generation: UInt64) {
         guard generation == activeGeneration else { return }
-        durabilityFailure = true
+        markDurabilityFailure()
         failures.append(
             FamilySyncTransportFailure(key: nil, category: .corruptState)
         )
     }
 
+    @discardableResult
     private func quarantine(
         _ record: CKRecord,
         scope: CloudKitFamilyDatabaseScope,
         category: FamilySyncPrivacySafeErrorCategory,
         envelopeData: Data?,
         now: Date
-    ) {
+    ) -> Bool {
         quarantinedRecordCount += 1
         do {
             try metadataStore.quarantine(
@@ -927,9 +994,11 @@ actor CloudKitFamilySyncEventBuffer {
                     quarantinedAt: now
                 )
             )
+            return true
         } catch {
-            durabilityFailure = true
+            markDurabilityFailure()
             failures.append(FamilySyncTransportFailure(key: nil, category: .corruptState))
+            return false
         }
     }
 
@@ -1035,26 +1104,186 @@ actor CloudKitFamilySyncEventBuffer {
         try CloudKitRemoteProfileRemovalRecordFactory.record(for: profileID)
     }
 
+    private func canStageUntilRoot(
+        _ cloudRecord: CKRecord,
+        decoded record: FamilySyncRecord,
+        scope: CloudKitFamilyDatabaseScope
+    ) -> Bool {
+        guard cloudRecord.recordType == CloudKitFamilyRecordCodec.Schema.itemRecordType,
+            cloudRecord.recordID.recordName == record.recordName,
+            cloudRecord[CloudKitFamilyRecordCodec.Schema.profileID] as? String
+                == record.profileID.rawValue.uuidString,
+            cloudRecord[CloudKitFamilyRecordCodec.Schema.kind] as? String
+                == record.kind.rawValue,
+            let parentRecordID = cloudRecord.parent?.recordID,
+            parentRecordID.zoneID == cloudRecord.recordID.zoneID,
+            CloudKitDeterministicProfileRoute.matches(
+                profileID: record.profileID,
+                zoneName: cloudRecord.recordID.zoneID.zoneName,
+                rootRecordName: parentRecordID.recordName
+            ),
+            metadataStore.binding(for: record.profileID).state == .unbound,
+            !metadataStore.hasPersistedBinding(for: record.profileID),
+            metadataStore.binding(for: cloudRecord.recordID.zoneID) == nil
+        else { return false }
+        if scope == .privateDatabase,
+            cloudRecord.recordID.zoneID.ownerName != CKCurrentUserDefaultName
+        {
+            return false
+        }
+        if let schema = cloudRecord[
+            CloudKitFamilyRecordCodec.Schema.schemaVersion
+        ] as? NSNumber,
+            schema.intValue != record.schemaVersion
+        {
+            return false
+        }
+        return true
+    }
+
+    private func stageUntilRoot(
+        _ cloudRecord: CKRecord,
+        decoded record: FamilySyncRecord,
+        scope: CloudKitFamilyDatabaseScope,
+        now: Date
+    ) {
+        let route = UnboundRoute(
+            scope: scope,
+            zoneID: cloudRecord.recordID.zoneID
+        )
+        if stagedUnboundRecords[route, default: []].contains(where: {
+            $0.cloudRecord.recordID == cloudRecord.recordID
+                && $0.record == record
+        }) {
+            return
+        }
+        stagedUnboundRecords[route, default: []].append(
+            StagedUnboundRecord(
+                cloudRecord: cloudRecord,
+                record: record,
+                receivedAt: now
+            )
+        )
+    }
+
+    @discardableResult
+    private func acceptFetchedRecord(
+        _ cloudRecord: CKRecord,
+        decoded record: FamilySyncRecord,
+        scope: CloudKitFamilyDatabaseScope,
+        now: Date
+    ) -> Bool {
+        let key = FamilySyncChangeKey(
+            profileID: record.profileID,
+            recordName: record.recordName
+        )
+        if let existing = incoming[key],
+            Self.isInvariantConflict(existing, record)
+        {
+            let existingReceiptIDs = Set(
+                receipts.values.filter { $0.key == key }.map(\.id)
+            )
+            do {
+                try metadataStore.quarantineInbox(
+                    receiptIDs: existingReceiptIDs,
+                    category: .conflict,
+                    at: now
+                )
+                receiptIDs.subtract(existingReceiptIDs)
+                for id in existingReceiptIDs {
+                    receipts.removeValue(forKey: id)
+                }
+                incoming.removeValue(forKey: key)
+                quarantinedRecordCount += existingReceiptIDs.count
+            } catch {
+                markDurabilityFailure()
+                failures.append(
+                    FamilySyncTransportFailure(
+                        key: key,
+                        category: .corruptState
+                    )
+                )
+                return false
+            }
+            return quarantine(
+                cloudRecord,
+                scope: scope,
+                category: .conflict,
+                envelopeData: cloudRecord[
+                    CloudKitFamilyRecordCodec.Schema.envelope
+                ] as? Data,
+                now: now
+            )
+        }
+        do {
+            try metadataStore.saveSystemFields(for: cloudRecord, scope: scope)
+            let receiptID = try metadataStore.appendInboxReplacingQuarantine(
+                record: record,
+                recordID: cloudRecord.recordID,
+                scope: scope,
+                receivedAt: now
+            )
+            receiptIDs.insert(receiptID)
+            receipts[receiptID] = FamilySyncFetchedReceipt(
+                id: receiptID,
+                key: key,
+                operation: .save,
+                revision: record.logicalRevision
+            )
+        } catch {
+            markDurabilityFailure()
+            failures.append(
+                FamilySyncTransportFailure(key: nil, category: .corruptState)
+            )
+            return false
+        }
+        incoming[key] = FamilySyncConflictResolver.resolved(
+            local: incoming[key],
+            remote: record
+        )
+        return true
+    }
+
     private func handleRootRecord(
         _ record: CKRecord,
-        scope: CloudKitFamilyDatabaseScope
+        scope: CloudKitFamilyDatabaseScope,
+        now: Date
     ) {
         guard
             let profileString = record[
                 CloudKitFamilyRecordCodec.Schema.profileID
             ] as? String,
-            let profileUUID = UUID(uuidString: profileString)
+            let profileUUID = UUID(uuidString: profileString),
+            record.parent == nil
         else {
             quarantine(
                 record,
                 scope: scope,
                 category: .compatibility,
                 envelopeData: nil,
-                now: Date()
+                now: now
             )
             return
         }
         let profileID = ProfileID(rawValue: profileUUID)
+        guard
+            CloudKitDeterministicProfileRoute.matches(
+                profileID: profileID,
+                zoneName: record.recordID.zoneID.zoneName,
+                rootRecordName: record.recordID.recordName
+            ),
+            scope != .privateDatabase
+                || record.recordID.zoneID.ownerName == CKCurrentUserDefaultName
+        else {
+            quarantine(
+                record,
+                scope: scope,
+                category: .compatibility,
+                envelopeData: nil,
+                now: now
+            )
+            return
+        }
         let existing = metadataStore.binding(for: profileID)
         let expectedState: ProfileCloudBindingState =
             scope == .sharedDatabase
@@ -1069,7 +1298,7 @@ actor CloudKitFamilySyncEventBuffer {
                 scope: scope,
                 category: .conflict,
                 envelopeData: nil,
-                now: Date()
+                now: now
             )
             return
         }
@@ -1084,6 +1313,10 @@ actor CloudKitFamilySyncEventBuffer {
                 )
             )
             try metadataStore.saveSystemFields(for: record, scope: scope)
+            promoteStagedRecords(
+                for: record.recordID.zoneID,
+                scope: scope
+            )
         } catch CloudKitFamilyPersistenceError.accountBindingMismatch {
             // A root fetched under a replacement Apple Account cannot claim a
             // Profile whose durable route belongs to the origin account.
@@ -1096,12 +1329,142 @@ actor CloudKitFamilySyncEventBuffer {
                 scope: scope,
                 category: .conflict,
                 envelopeData: nil,
-                now: Date()
+                now: now
             )
         } catch {
-            durabilityFailure = true
+            markDurabilityFailure()
             failures.append(FamilySyncTransportFailure(key: nil, category: .corruptState))
         }
+    }
+
+    private func promoteStagedRecords(
+        for zoneID: CKRecordZone.ID,
+        scope: CloudKitFamilyDatabaseScope
+    ) {
+        let route = UnboundRoute(scope: scope, zoneID: zoneID)
+        guard !durabilityFailure else { return }
+        guard let staged = stagedUnboundRecords[route] else {
+            flushDeferredEngineStateIfUnblocked(for: scope)
+            return
+        }
+        rootlessRoutesReadyForQuarantine.remove(route)
+        for (index, candidate) in staged.enumerated() {
+            beforePromotingStagedRecord(index)
+            let resolved: Bool
+            guard
+                validatesCloudIdentity(
+                    candidate.cloudRecord,
+                    decoded: candidate.record,
+                    scope: scope
+                )
+            else {
+                resolved = quarantine(
+                    candidate.cloudRecord,
+                    scope: scope,
+                    category: .compatibility,
+                    envelopeData: candidate.cloudRecord[
+                        CloudKitFamilyRecordCodec.Schema.envelope
+                    ] as? Data,
+                    now: candidate.receivedAt
+                )
+                if !resolved {
+                    retainFailedStagedSuffix(
+                        staged,
+                        from: index,
+                        route: route
+                    )
+                    return
+                }
+                continue
+            }
+            resolved = acceptFetchedRecord(
+                candidate.cloudRecord,
+                decoded: candidate.record,
+                scope: scope,
+                now: candidate.receivedAt
+            )
+            if !resolved {
+                retainFailedStagedSuffix(
+                    staged,
+                    from: index,
+                    route: route
+                )
+                return
+            }
+        }
+        stagedUnboundRecords.removeValue(forKey: route)
+        flushDeferredEngineStateIfUnblocked(for: scope)
+    }
+
+    private func finishFetchingZone(
+        _ zoneID: CKRecordZone.ID,
+        scope: CloudKitFamilyDatabaseScope,
+        succeeded: Bool,
+        generation: UInt64,
+        now: Date
+    ) {
+        guard generation == activeGeneration, accountChange == nil else { return }
+        let route = UnboundRoute(scope: scope, zoneID: zoneID)
+        guard succeeded else {
+            // A failed zone fetch is retryable. Keep the process-local candidate
+            // and the old durable token until CKSyncEngine retries this zone.
+            return
+        }
+        if metadataStore.binding(for: zoneID) != nil {
+            promoteStagedRecords(for: zoneID, scope: scope)
+            return
+        }
+        rootlessRoutesReadyForQuarantine.insert(route)
+        quarantineStagedRecords(for: zoneID, scope: scope, now: now)
+    }
+
+    private func quarantineStagedRecords(
+        for zoneID: CKRecordZone.ID,
+        scope: CloudKitFamilyDatabaseScope,
+        now: Date
+    ) {
+        let route = UnboundRoute(scope: scope, zoneID: zoneID)
+        guard !durabilityFailure else { return }
+        guard let unresolved = stagedUnboundRecords[route] else {
+            rootlessRoutesReadyForQuarantine.remove(route)
+            flushDeferredEngineStateIfUnblocked(for: scope)
+            return
+        }
+        for (index, candidate) in unresolved.enumerated() {
+            guard
+                quarantine(
+                    candidate.cloudRecord,
+                    scope: scope,
+                    category: .compatibility,
+                    envelopeData: candidate.cloudRecord[
+                        CloudKitFamilyRecordCodec.Schema.envelope
+                    ] as? Data,
+                    now: now
+                )
+            else {
+                retainFailedStagedSuffix(
+                    unresolved,
+                    from: index,
+                    route: route
+                )
+                return
+            }
+        }
+        stagedUnboundRecords.removeValue(forKey: route)
+        rootlessRoutesReadyForQuarantine.remove(route)
+        // Only a successful per-zone boundary may classify a deterministic but
+        // rootless candidate as hostile. Quarantine is durable before the token
+        // that skips those bytes is allowed to advance.
+        flushDeferredEngineStateIfUnblocked(for: scope)
+    }
+
+    private func retainFailedStagedSuffix(
+        _ staged: [StagedUnboundRecord],
+        from failedIndex: Int,
+        route: UnboundRoute
+    ) {
+        stagedUnboundRecords[route] = Array(staged[failedIndex...])
+        retryableStagedResolutionFailureEpoch = durabilityFailureEpoch
     }
 
     private func validatesCloudIdentity(
@@ -1262,6 +1625,46 @@ actor CloudKitFamilySyncEventBuffer {
         }
     }
 
+    private func markDurabilityFailure() {
+        durabilityFailure = true
+        durabilityFailureEpoch &+= 1
+    }
+
+    private func hasStagedUnboundRecords(
+        in scope: CloudKitFamilyDatabaseScope
+    ) -> Bool {
+        stagedUnboundRecords.keys.contains { $0.scope == scope }
+    }
+
+    private func flushDeferredEngineStateIfUnblocked(
+        for scope: CloudKitFamilyDatabaseScope
+    ) {
+        guard !hasStagedUnboundRecords(in: scope),
+            !durabilityFailure,
+            accountChange == nil,
+            let deferred = deferredEngineStates.removeValue(forKey: scope)
+        else { return }
+        persistEngineStateNow(
+            deferred.serialization,
+            scope: scope,
+            stateStore: deferred.stateStore
+        )
+    }
+
+    private func persistEngineStateNow(
+        _ serialization: CKSyncEngine.State.Serialization,
+        scope: CloudKitFamilyDatabaseScope,
+        stateStore: CloudKitFamilySyncStateStore
+    ) {
+        guard stateStore.save(serialization, scope: scope) else {
+            markDurabilityFailure()
+            failures.append(
+                FamilySyncTransportFailure(key: nil, category: .corruptState)
+            )
+            return
+        }
+    }
+
     private static func key(
         _ recordID: CKRecord.ID,
         scope: CloudKitFamilyDatabaseScope
@@ -1306,6 +1709,10 @@ actor CloudKitFamilySyncEventBuffer {
         receipts.removeAll()
         requiresFetchPass = false
         ownerLedgerRecoveryProfileIDs.removeAll()
+        stagedUnboundRecords.removeAll()
+        rootlessRoutesReadyForQuarantine.removeAll()
+        retryableStagedResolutionFailureEpoch = nil
+        deferredEngineStates.removeAll()
         cleanupOutgoingSources()
         outgoing.removeAll()
     }
@@ -1457,6 +1864,14 @@ final class CloudKitFamilySyncEngineDelegate: CKSyncEngineDelegate,
                     generation: generation
                 )
             }
+            await buffer.handle(
+                .finishedFetchingZone(
+                    event.zoneID,
+                    succeeded: event.error == nil
+                ),
+                scope: scope,
+                generation: generation
+            )
         case .fetchedDatabaseChanges(let changes):
             await buffer.handle(
                 .deletedZones(changes.deletions.map(\.zoneID)),

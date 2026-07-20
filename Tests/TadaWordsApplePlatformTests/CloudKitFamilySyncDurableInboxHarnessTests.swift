@@ -487,6 +487,620 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         )
     }
 
+    func testItemBeforeRootAcrossCallbacksDefersThenPersistsPrivateCursor()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let record = fixture.record(payload: "cross-callback-private")
+        let item = try fixture.cloudRecord(for: record, store: store)
+        let root = fixture.rootCloudRecord()
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("private-after-item")
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([item]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+
+        XCTAssertNil(stateStore.load(.privateDatabase))
+        let canPersistBeforeRoot = await buffer.canPersistEngineState(1)
+        XCTAssertFalse(canPersistBeforeRoot)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+        let beforeRoot = await buffer.drain()
+        XCTAssertTrue(beforeRoot.records.isEmpty)
+        XCTAssertEqual(beforeRoot.quarantinedRecordCount, 0)
+
+        await buffer.handle(
+            .fetchedRecords([root]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await buffer.handle(
+            .finishedFetchingZone(fixture.zoneID, succeeded: true),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let result = await buffer.drain()
+
+        XCTAssertEqual(result.records, [record])
+        XCTAssertEqual(store.inboxEntries().map(\.record), [record])
+        XCTAssertEqual(store.binding(for: fixture.profileID).state, .privateOwner)
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced)
+        )
+    }
+
+    func testProcessRestartReplaysItemBecausePreRootCursorWasNotPersisted()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let record = fixture.record(payload: "restart-replay")
+        let item = try fixture.cloudRecord(for: record, store: store)
+        let root = fixture.rootCloudRecord()
+        let stateStore = fixture.stateStore()
+        let unsafe = try fixture.serialization("must-not-survive-crash")
+
+        let firstProcess = CloudKitFamilySyncEventBuffer(metadataStore: store)
+        await firstProcess.handle(
+            .fetchedRecords([item]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await firstProcess.persistEngineState(
+            unsafe,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        XCTAssertNil(stateStore.load(.privateDatabase))
+
+        // A new buffer represents a process relaunch from the still-old token.
+        let restarted = CloudKitFamilySyncEventBuffer(metadataStore: store)
+        await restarted.handle(
+            .fetchedRecords([item]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await restarted.handle(
+            .fetchedRecords([root]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let replayed = await restarted.drain()
+
+        XCTAssertEqual(replayed.records, [record])
+        XCTAssertEqual(store.inboxEntries().map(\.record), [record])
+    }
+
+    func testSharedAndPrivatePreRootStagingAndCursorsRemainScopeIsolated()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let privateRecord = fixture.record(payload: "private")
+        let privateItem = try fixture.cloudRecord(for: privateRecord, store: store)
+        let sharedProfileID = ProfileID()
+        let shared = try fixture.discoveryRecords(
+            profileID: sharedProfileID,
+            payload: "shared",
+            ownerName: "shared-owner",
+            scope: .sharedDatabase,
+            store: store
+        )
+        let stateStore = fixture.stateStore()
+        let privateState = try fixture.serialization("private-deferred")
+        let sharedState = try fixture.serialization("shared-deferred")
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([privateItem]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.handle(
+            .fetchedRecords([shared.item]),
+            scope: .sharedDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            privateState,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await buffer.persistEngineState(
+            sharedState,
+            scope: .sharedDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+
+        await buffer.handle(
+            .fetchedRecords([shared.root]),
+            scope: .sharedDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+
+        XCTAssertNil(stateStore.load(.privateDatabase))
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.sharedDatabase)),
+            try fixture.encoded(sharedState)
+        )
+        XCTAssertEqual(store.binding(for: sharedProfileID).state, .sharedParticipant)
+        XCTAssertEqual(store.binding(for: fixture.profileID).state, .unbound)
+
+        await buffer.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let result = await buffer.drain()
+
+        XCTAssertEqual(Set(result.records), [privateRecord, shared.record])
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(privateState)
+        )
+    }
+
+    func testSuccessfulZoneBoundaryQuarantinesRootlessItemBeforeAdvancingCursor()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let record = fixture.record(payload: "root-never-arrives")
+        let item = try fixture.cloudRecord(for: record, store: store)
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("rootless-quarantined")
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([item]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        XCTAssertNil(stateStore.load(.privateDatabase))
+
+        await buffer.handle(
+            .finishedFetchingZone(fixture.zoneID, succeeded: true),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        let result = await buffer.drain()
+
+        XCTAssertTrue(result.records.isEmpty)
+        XCTAssertEqual(result.quarantinedRecordCount, 1)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+        XCTAssertEqual(store.binding(for: fixture.profileID).state, .unbound)
+        XCTAssertTrue(
+            store.isQuarantined(
+                recordID: item.recordID,
+                scope: .privateDatabase
+            )
+        )
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced)
+        )
+    }
+
+    func testRootlessQuarantineWriteFailureRetriesBeforeAdvancingCursor()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let item = try fixture.cloudRecord(
+            for: fixture.record(payload: "rootless-retry"),
+            store: store
+        )
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("rootless-retry")
+        let writablePermissions = 0o755
+        let readOnlyPermissions = 0o555
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: writablePermissions],
+                ofItemAtPath: fixture.directory.path
+            )
+        }
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([item]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: readOnlyPermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        await buffer.handle(
+            .finishedFetchingZone(fixture.zoneID, succeeded: true),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        let failed = await buffer.drain()
+
+        XCTAssertEqual(failed.failures.map(\.category), [.corruptState])
+        XCTAssertNil(stateStore.load(.privateDatabase))
+        XCTAssertFalse(
+            store.isQuarantined(
+                recordID: item.recordID,
+                scope: .privateDatabase
+            )
+        )
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: writablePermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        let recovered = await buffer.retryStagedUnboundRecords(generation: 1)
+        let retry = await buffer.drain()
+
+        XCTAssertTrue(recovered)
+        XCTAssertTrue(retry.failures.isEmpty)
+        XCTAssertEqual(retry.quarantinedRecordCount, 1)
+        XCTAssertTrue(
+            store.isQuarantined(
+                recordID: item.recordID,
+                scope: .privateDatabase
+            )
+        )
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced)
+        )
+    }
+
+    func testFailedZoneBoundaryKeepsRootlessItemRetryableUntilRootArrives()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let record = fixture.record(payload: "retryable-root")
+        let item = try fixture.cloudRecord(for: record, store: store)
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("retryable-deferred")
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([item]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await buffer.handle(
+            .finishedFetchingZone(fixture.zoneID, succeeded: false),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+
+        XCTAssertNil(stateStore.load(.privateDatabase))
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+
+        await buffer.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let result = await buffer.drain()
+
+        XCTAssertEqual(result.records, [record])
+        XCTAssertEqual(result.quarantinedRecordCount, 0)
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced)
+        )
+    }
+
+    func testPartialPromotionWriteFailureRetriesRemainingInSameProcess()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let firstRecord = fixture.record(
+            name: "first-same-process",
+            payload: "first"
+        )
+        let secondRecord = fixture.record(
+            name: "second-same-process",
+            payload: "second"
+        )
+        let firstItem = try fixture.cloudRecord(for: firstRecord, store: store)
+        let secondItem = try fixture.cloudRecord(for: secondRecord, store: store)
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("same-process-promotion")
+        let writablePermissions = 0o755
+        let readOnlyPermissions = 0o555
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: writablePermissions],
+                ofItemAtPath: fixture.directory.path
+            )
+        }
+        let buffer = CloudKitFamilySyncEventBuffer(
+            metadataStore: store,
+            beforePromotingStagedRecord: { index in
+                guard index == 1 else { return }
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: readOnlyPermissions],
+                    ofItemAtPath: fixture.directory.path
+                )
+            }
+        )
+
+        await buffer.handle(
+            .fetchedRecords([firstItem, secondItem]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await buffer.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await buffer.handle(
+            .finishedFetchingZone(fixture.zoneID, succeeded: true),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let partial = await buffer.drain()
+
+        XCTAssertEqual(partial.records, [firstRecord])
+        XCTAssertEqual(partial.failures.map(\.category), [.corruptState])
+        XCTAssertEqual(partial.quarantinedRecordCount, 0)
+        XCTAssertNil(stateStore.load(.privateDatabase))
+        XCTAssertEqual(store.inboxEntries().map(\.record), [firstRecord])
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: writablePermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        let recovered = await buffer.retryStagedUnboundRecords(generation: 1)
+        let retry = await buffer.drain()
+
+        XCTAssertTrue(recovered)
+        XCTAssertEqual(retry.records, [secondRecord])
+        XCTAssertTrue(retry.failures.isEmpty)
+        XCTAssertEqual(
+            Set(store.inboxEntries().compactMap(\.record)),
+            [firstRecord, secondRecord]
+        )
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced)
+        )
+    }
+
+    func testPartialPromotionWriteFailureReplaysIdempotentlyFromOldCursor()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let firstRecord = fixture.record(
+            name: "first-after-root",
+            payload: "first"
+        )
+        let secondRecord = fixture.record(
+            name: "second-after-root",
+            payload: "second"
+        )
+        let firstItem = try fixture.cloudRecord(for: firstRecord, store: store)
+        let secondItem = try fixture.cloudRecord(for: secondRecord, store: store)
+        let stateStore = fixture.stateStore()
+        let unsafe = try fixture.serialization("partial-promotion")
+        let writablePermissions = 0o755
+        let readOnlyPermissions = 0o555
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: writablePermissions],
+                ofItemAtPath: fixture.directory.path
+            )
+        }
+        let buffer = CloudKitFamilySyncEventBuffer(
+            metadataStore: store,
+            beforePromotingStagedRecord: { index in
+                guard index == 1 else { return }
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: readOnlyPermissions],
+                    ofItemAtPath: fixture.directory.path
+                )
+            }
+        )
+
+        await buffer.handle(
+            .fetchedRecords([firstItem, secondItem]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            unsafe,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await buffer.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await buffer.handle(
+            .finishedFetchingZone(fixture.zoneID, succeeded: true),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let partial = await buffer.drain()
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: writablePermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        XCTAssertEqual(partial.records, [firstRecord])
+        XCTAssertEqual(partial.failures.map(\.category), [.corruptState])
+        XCTAssertEqual(partial.quarantinedRecordCount, 0)
+        XCTAssertNil(stateStore.load(.privateDatabase))
+        XCTAssertEqual(store.inboxEntries().map(\.record), [firstRecord])
+
+        let restartedStore = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        let restarted = CloudKitFamilySyncEventBuffer(
+            metadataStore: restartedStore
+        )
+        await restarted.handle(
+            .fetchedRecords([firstItem, secondItem]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        let replayed = await restarted.drain()
+
+        XCTAssertEqual(Set(replayed.records), [firstRecord, secondRecord])
+        XCTAssertEqual(
+            Set(restartedStore.inboxEntries().compactMap(\.record)),
+            [firstRecord, secondRecord]
+        )
+    }
+
+    func testMalformedRouteCannotStageOrForgeBindingAndAccountBoundaryDropsStaging()
+        async throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let record = fixture.record(payload: "hostile-route")
+        let hostileItem = try fixture.cloudRecord(for: record, store: store)
+        hostileItem.parent = CKRecord.Reference(
+            recordID: CKRecord.ID(
+                recordName: "not-the-deterministic-root",
+                zoneID: fixture.zoneID
+            ),
+            action: .none
+        )
+        let hostileRoot = CKRecord(
+            recordType: CloudKitFamilyRecordCodec.Schema.rootRecordType,
+            recordID: CKRecord.ID(
+                recordName: "not-the-deterministic-root",
+                zoneID: fixture.zoneID
+            )
+        )
+        hostileRoot[CloudKitFamilyRecordCodec.Schema.profileID] =
+            fixture.profileID.rawValue.uuidString as NSString
+        let buffer = CloudKitFamilySyncEventBuffer(metadataStore: store)
+
+        await buffer.handle(
+            .fetchedRecords([hostileItem, hostileRoot]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        let hostile = await buffer.drain()
+
+        XCTAssertTrue(hostile.records.isEmpty)
+        XCTAssertEqual(hostile.quarantinedRecordCount, 2)
+        XCTAssertEqual(store.binding(for: fixture.profileID).state, .unbound)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+
+        let validItem = try fixture.cloudRecord(for: record, store: store)
+        let stateStore = fixture.stateStore()
+        let unsafe = try fixture.serialization("old-account-staged")
+        await buffer.handle(
+            .fetchedRecords([validItem]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        await buffer.persistEngineState(
+            unsafe,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await buffer.handle(
+            .accountChange(.switchedAccounts),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        await buffer.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(3)
+        )
+        let sealed = await buffer.drain()
+
+        XCTAssertEqual(sealed.accountChange, .switchedAccounts)
+        XCTAssertTrue(sealed.records.isEmpty)
+        XCTAssertTrue(store.inboxEntries().isEmpty)
+        XCTAssertNil(stateStore.load(.privateDatabase))
+    }
+
     func testAccountSwitchDropsOldBytesButPreservesFailClosedBindingProvenance()
         async throws
     {
@@ -1559,6 +2173,12 @@ private struct LegacyCloudMetadataSnapshot: Encodable {
 }
 
 private struct CloudInboxHarnessFixture {
+    struct DiscoveryRecords {
+        let record: FamilySyncRecord
+        let item: CKRecord
+        let root: CKRecord
+    }
+
     let directory: URL
     let metadataURL: URL
     let profileID = ProfileID()
@@ -1577,11 +2197,15 @@ private struct CloudInboxHarnessFixture {
         )
         metadataURL = directory.appendingPathComponent("metadata.json")
         zoneID = CKRecordZone.ID(
-            zoneName: "TadaCloudInboxHarnessZone",
+            zoneName: CloudKitDeterministicProfileRoute.zoneName(
+                for: profileID
+            ),
             ownerName: CKCurrentUserDefaultName
         )
         rootRecordID = CKRecord.ID(
-            recordName: "profile-root",
+            recordName: CloudKitDeterministicProfileRoute.rootRecordName(
+                for: profileID
+            ),
             zoneID: zoneID
         )
     }
@@ -1603,6 +2227,97 @@ private struct CloudInboxHarnessFixture {
             )
         )
         return store
+    }
+
+    func unboundStore(
+        accountRecordName: String = "account-a"
+    ) throws -> CloudKitFamilyMetadataStore {
+        let store = CloudKitFamilyMetadataStore(snapshotURL: metadataURL)
+        try store.confirm(accountRecordName: accountRecordName)
+        return store
+    }
+
+    func rootCloudRecord() -> CKRecord {
+        let root = CKRecord(
+            recordType: CloudKitFamilyRecordCodec.Schema.rootRecordType,
+            recordID: rootRecordID
+        )
+        root[CloudKitFamilyRecordCodec.Schema.profileID] =
+            profileID.rawValue.uuidString as NSString
+        return root
+    }
+
+    func discoveryRecords(
+        profileID: ProfileID,
+        payload: String,
+        ownerName: String,
+        scope: CloudKitFamilyDatabaseScope,
+        store: CloudKitFamilyMetadataStore
+    ) throws -> DiscoveryRecords {
+        let zoneID = CKRecordZone.ID(
+            zoneName: CloudKitDeterministicProfileRoute.zoneName(for: profileID),
+            ownerName: ownerName
+        )
+        let rootID = CKRecord.ID(
+            recordName: CloudKitDeterministicProfileRoute.rootRecordName(
+                for: profileID
+            ),
+            zoneID: zoneID
+        )
+        let record = FamilySyncRecord(
+            recordName: "profile-\(profileID)",
+            profileID: profileID,
+            kind: .wordPoolEntry,
+            payload: Data(payload.utf8),
+            updatedAt: now,
+            deviceID: "remote",
+            logicalRevision: FamilySyncLogicalRevision(
+                counter: 1,
+                deviceID: "remote"
+            )
+        )
+        let item = try CloudKitFamilyRecordCodec.cloudRecord(
+            for: record,
+            recordID: CKRecord.ID(
+                recordName: record.recordName,
+                zoneID: zoneID
+            ),
+            rootRecordID: rootID,
+            scope: scope,
+            metadataStore: store
+        )
+        let root = CKRecord(
+            recordType: CloudKitFamilyRecordCodec.Schema.rootRecordType,
+            recordID: rootID
+        )
+        root[CloudKitFamilyRecordCodec.Schema.profileID] =
+            profileID.rawValue.uuidString as NSString
+        return DiscoveryRecords(record: record, item: item, root: root)
+    }
+
+    func stateStore() -> CloudKitFamilySyncStateStore {
+        CloudKitFamilySyncStateStore(
+            directory: directory.appendingPathComponent(
+                "deferred-engine-state",
+                isDirectory: true
+            )
+        )
+    }
+
+    func serialization(
+        _ marker: String
+    ) throws -> CKSyncEngine.State.Serialization {
+        let data = Data(marker.utf8).base64EncodedString()
+        return try JSONDecoder().decode(
+            CKSyncEngine.State.Serialization.self,
+            from: Data(#"{"data":"\#(data)"}"#.utf8)
+        )
+    }
+
+    func encoded(
+        _ serialization: CKSyncEngine.State.Serialization?
+    ) throws -> Data? {
+        try serialization.map { try JSONEncoder().encode($0) }
     }
 
     func record(
