@@ -1,20 +1,26 @@
 import TadaWordsDomain
 
 public struct SpeechPermissionActions: Sendable {
-    private let authorizationRequest: @Sendable () async -> Bool
+    private let authorizationCheck: @Sendable () async -> Bool
 
     public init(
-        requestAuthorization: @escaping @Sendable () async -> Bool
+        checkAuthorization: @escaping @Sendable () async -> Bool
     ) {
-        self.authorizationRequest = requestAuthorization
+        authorizationCheck = checkAuthorization
     }
 
-    public func requestAuthorization() async -> Bool {
-        await authorizationRequest()
+    /// Child features can inspect existing authorization, but deliberately
+    /// have no capability that can display an iOS permission prompt.
+    public func isAuthorized() async -> Bool {
+        await authorizationCheck()
     }
 
     public static let unavailable = SpeechPermissionActions {
         false
+    }
+
+    static let demoAuthorized = SpeechPermissionActions {
+        true
     }
 }
 

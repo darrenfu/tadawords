@@ -111,7 +111,8 @@ struct TadaWordsApp: App {
                     handwritingRecognitionService: handwritingRecognitionService,
                     imageTextRecognitionService: imageTextRecognitionService,
                     pictureHintProvider: pictureHintProvider,
-                    requestSpeechAuthorization: requestSpeechAuthorization,
+                    currentSpeechPermissionState: currentSpeechPermissionState,
+                    requestSpeechPermissions: requestSpeechPermissions,
                     audioExperienceService: audioExperienceService,
                     familySyncTransport: familySyncTransport,
                     familySyncAccessManagement: familySyncAccessManagement,
@@ -221,10 +222,17 @@ struct TadaWordsApp: App {
         return FirstAvailableTeacherWordAudioProvider(providers: providers)
     }
 
-    private var requestSpeechAuthorization: @Sendable () async -> Bool {
+    private var currentSpeechPermissionState: @Sendable () async -> SpeechPermissionState {
         let controller = speechPermissionController
         return {
-            await controller.requestPermissions().isAuthorized
+            controller.currentState()
+        }
+    }
+
+    private var requestSpeechPermissions: @Sendable () async -> SpeechPermissionState {
+        let controller = speechPermissionController
+        return {
+            await controller.requestPermissions()
         }
     }
 }

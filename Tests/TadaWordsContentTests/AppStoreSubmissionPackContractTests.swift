@@ -89,7 +89,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "#55",
             "Provisional",
             "BLOCKED BY ISSUE #55",
-            "Parents-gated permission setup",
+            "SYSTEM_PERMISSION_INVENTORY_v0.7.8.md",
+            "Child Read has no request capability",
             "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/",
         ]
         for claim in requiredClaims {
@@ -124,16 +125,16 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.7</string>"))
-            XCTAssertTrue(plist.contains("<string>2026071907</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.8</string>"))
+            XCTAssertTrue(plist.contains("<string>2026071908</string>"))
         }
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.7"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026071907"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.8"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026071908"))
     }
 
     private var repositoryRoot: URL {
