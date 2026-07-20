@@ -455,13 +455,21 @@ struct FirstRunParentOnboardingView: View {
             )
 
             if familySyncCapability == .iCloud && purpose == .fullSetup {
-                Button("Use an existing profile instead") {
-                    nicknameIsFocused = false
-                    fullSetupRoute = .choose
+                VStack(alignment: .leading, spacing: 6) {
+                    Button("Discard setup & find an existing profile") {
+                        nicknameIsFocused = false
+                        fullSetupRoute = .choose
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .accessibilityIdentifier("first-run.create.back-to-find")
+
+                    Text(
+                        "This unfinished profile will be removed from this device and won’t be added to iCloud."
+                    )
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(theme.ink.opacity(0.68))
                 }
-                .buttonStyle(.bordered)
-                .font(.system(.subheadline, design: .rounded, weight: .bold))
-                .accessibilityIdentifier("first-run.create.back-to-find")
             }
 
             LazyVGrid(

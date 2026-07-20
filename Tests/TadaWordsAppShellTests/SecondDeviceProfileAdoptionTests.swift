@@ -7,6 +7,183 @@ import XCTest
 @testable import TadaWordsAppShell
 
 final class SecondDeviceProfileAdoptionTests: XCTestCase {
+    func testRelaunchAfterProfileIdentityReservationResumesExactID()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transport = DiscoveryTransport(
+            availability: [.temporarilyUnavailable],
+            remoteProfiles: []
+        )
+        let first = try await bootstrap(
+            in: directory,
+            defaultProfile: profile(id: UUID(), name: "Unused Seed"),
+            transport: transport
+        )
+        let reservedID = try await first.firstRunOnboardingRepository
+            .beginProfileCreation(
+                proposedProfileID: nil,
+                startedAt: referenceDate
+            )
+
+        let restarted = try await bootstrap(
+            in: directory,
+            defaultProfile: profile(id: UUID(), name: "Another Seed"),
+            transport: transport
+        )
+        let restartedState = try await restarted.firstRunOnboardingRepository
+            .state()
+        XCTAssertEqual(restartedState?.pendingCreatedProfileID, reservedID)
+        XCTAssertTrue(restarted.profiles.isEmpty)
+
+        let completion = try await onboarding(in: restarted).complete(
+            profileID: nil,
+            submission: newKidSubmission
+        )
+        XCTAssertEqual(completion.selectedProfileID, reservedID)
+        XCTAssertEqual(completion.profiles.map(\.id), [reservedID])
+    }
+
+    func testRelaunchAfterDefaultSettingsWriteBeforeProfileWriteResumesExactID()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transport = DiscoveryTransport(
+            availability: [.temporarilyUnavailable],
+            remoteProfiles: []
+        )
+        let first = try await bootstrap(
+            in: directory,
+            defaultProfile: profile(id: UUID(), name: "Unused Seed"),
+            transport: transport
+        )
+        let reservedID = try await first.firstRunOnboardingRepository
+            .beginProfileCreation(
+                proposedProfileID: nil,
+                startedAt: referenceDate
+            )
+        try await first.practiceSettingsRepository.save(
+            .defaults(for: reservedID)
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: first.dataPaths.profilesSnapshot.path
+            )
+        )
+
+        let restarted = try await bootstrap(
+            in: directory,
+            defaultProfile: profile(id: UUID(), name: "Another Seed"),
+            transport: transport
+        )
+        let restartedState = try await restarted.firstRunOnboardingRepository
+            .state()
+        XCTAssertEqual(restartedState?.pendingCreatedProfileID, reservedID)
+        XCTAssertTrue(restarted.profiles.isEmpty)
+        let restartedSettings = try await restarted.practiceSettingsRepository
+            .settings(for: reservedID)
+        XCTAssertEqual(restartedSettings, .defaults(for: reservedID))
+
+        let completion = try await onboarding(in: restarted).complete(
+            profileID: nil,
+            submission: newKidSubmission
+        )
+        XCTAssertEqual(completion.selectedProfileID, reservedID)
+        XCTAssertEqual(completion.profiles.map(\.id), [reservedID])
+    }
+
+    func testRelaunchRejectsNonDefaultOrphanSettingsDespitePendingCreation()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transport = DiscoveryTransport(
+            availability: [.temporarilyUnavailable],
+            remoteProfiles: []
+        )
+        let first = try await bootstrap(
+            in: directory,
+            defaultProfile: profile(id: UUID(), name: "Unused Seed"),
+            transport: transport
+        )
+        let reservedID = try await first.firstRunOnboardingRepository
+            .beginProfileCreation(
+                proposedProfileID: nil,
+                startedAt: referenceDate
+            )
+        try await first.practiceSettingsRepository.save(
+            ProfilePracticeSettings(
+                profileID: reservedID,
+                read: LearningRouteSettings(
+                    newWordLimit: 9,
+                    reviewWordLimit: 5,
+                    contentOrder: .newThenReview,
+                    emergencyAfterSeconds: 180
+                )
+            )
+        )
+
+        do {
+            _ = try await bootstrap(
+                in: directory,
+                defaultProfile: profile(id: UUID(), name: "Another Seed"),
+                transport: transport
+            )
+            XCTFail("Only exact first-run defaults may resume without a Profile.")
+        } catch let error as ApplicationBootstrapError {
+            XCTAssertEqual(error, .profileSnapshotMissingWithDependentData)
+        }
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: first.dataPaths.profilesSnapshot.path
+            )
+        )
+    }
+
+    func testDiscoveryContainmentFenceResumesExactIDAcrossRelaunch()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let snapshotURL = directory.appendingPathComponent("onboarding.json")
+        let first = LocalFirstRunOnboardingRepository(snapshotURL: snapshotURL)
+        try await first.markPending(
+            startedAt: referenceDate,
+            purpose: .fullSetup
+        )
+        let reservedID = try await first.beginProfileCreation(
+            proposedProfileID: nil,
+            startedAt: referenceDate
+        )
+
+        let fencedID = try await first.prepareForProfileDiscovery()
+        XCTAssertEqual(fencedID, reservedID)
+        let restarted = LocalFirstRunOnboardingRepository(
+            snapshotURL: snapshotURL
+        )
+        let resumedID = try await restarted.prepareForProfileDiscovery()
+        let fencedState = try await restarted.state()
+        XCTAssertEqual(resumedID, reservedID)
+        XCTAssertEqual(fencedState?.profileIntent, .discoverExisting)
+        XCTAssertEqual(fencedState?.pendingCreatedProfileID, reservedID)
+
+        try await restarted.finishPendingProfileContainment(
+            profileID: reservedID
+        )
+        let committedRestart = LocalFirstRunOnboardingRepository(
+            snapshotURL: snapshotURL
+        )
+        let committedPendingID =
+            try await committedRestart
+            .prepareForProfileDiscovery()
+        XCTAssertNil(committedPendingID)
+        let committedState = try await committedRestart.state()
+        XCTAssertEqual(committedState?.profileIntent, .discoverExisting)
+        XCTAssertNil(committedState?.pendingCreatedProfileID)
+    }
+
     func testDiscoveryFirstBootstrapNeverPersistsRandomDefaultAcrossRelaunch()
         async throws
     {
@@ -610,6 +787,196 @@ final class SecondDeviceProfileAdoptionTests: XCTestCase {
         XCTAssertEqual(savedRemote, remote)
     }
 
+    func testSessionFailureThenFindContainsPendingProfileBeforeSync()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let remote = profile(id: UUID(), name: "Mia")
+        let transport = DiscoveryTransport(
+            availability: [.available],
+            remoteProfiles: [remote]
+        )
+        let environment = try await bootstrap(
+            in: directory,
+            defaultProfile: profile(id: UUID(), name: "Unused Seed"),
+            transport: transport
+        )
+        let initiallyDiscovered = try await discovery(in: environment)
+            .discoverProfiles()
+        XCTAssertEqual(initiallyDiscovered.map(\.id), [remote.id])
+        let failingCoordinator = creationCoordinator(
+            profileRepository: environment.profileRepository,
+            settingsRepository: environment.practiceSettingsRepository,
+            childSessionRepository: FailingOnceChildSessionRepository(),
+            onboardingRepository: environment.firstRunOnboardingRepository,
+            existingProfiles: [remote]
+        )
+
+        await assertThrowsErrorAsync {
+            _ = try await failingCoordinator.complete(
+                profileID: remote.id,
+                submission: self.newKidSubmission
+            )
+        }
+        let failedState = try await environment.firstRunOnboardingRepository
+            .state()
+        let pendingID = try XCTUnwrap(failedState?.pendingCreatedProfileID)
+        let pendingProfileBeforeFind = try await environment.profileRepository
+            .profile(id: pendingID)
+        let pendingSettingsBeforeFind =
+            try await environment
+            .practiceSettingsRepository.settings(for: pendingID)
+        XCTAssertNotNil(pendingProfileBeforeFind)
+        XCTAssertEqual(
+            pendingSettingsBeforeFind,
+            .defaults(for: pendingID)
+        )
+        _ = await environment.familySyncCoordinator.synchronize(
+            trigger: .remoteNotification
+        )
+        let pushesBeforeFind = await transport.pushedProfileIDs()
+        let journalBeforeFind = try familySyncJournal(in: environment)
+        XCTAssertFalse(pushesBeforeFind.contains(pendingID))
+        XCTAssertFalse(
+            journalBeforeFind.localManifest.contains {
+                $0.key.profileID == pendingID
+            }
+        )
+        XCTAssertFalse(
+            journalBeforeFind.outbox.contains {
+                $0.key.profileID == pendingID
+            }
+        )
+
+        let rediscovered = try await discovery(in: environment)
+            .discoverProfiles()
+        let discoveryState = try await environment.firstRunOnboardingRepository
+            .state()
+        XCTAssertEqual(rediscovered.map(\.id), [remote.id])
+        XCTAssertEqual(discoveryState?.profileIntent, .discoverExisting)
+        XCTAssertNil(discoveryState?.pendingCreatedProfileID)
+        let completion = try await onboarding(in: environment).complete(
+            profileID: remote.id,
+            submission: FirstRunOnboardingSubmission(
+                action: .adoptExistingProfile(remote.id)
+            )
+        )
+
+        XCTAssertEqual(completion.profiles.map(\.id), [remote.id])
+        let containedProfile = try await environment.profileRepository.profile(
+            id: pendingID
+        )
+        let containedSettings = try await environment.practiceSettingsRepository
+            .settings(for: pendingID)
+        let tombstones = try await environment.tombstoneRepository.tombstones()
+        let allPushes = await transport.pushedProfileIDs()
+        XCTAssertNil(containedProfile)
+        XCTAssertNil(containedSettings)
+        XCTAssertTrue(tombstones.isEmpty)
+        XCTAssertFalse(allPushes.contains(pendingID))
+    }
+
+    func testCompletionFailureThenFindContainsPendingProfileBeforeSync()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let remote = profile(id: UUID(), name: "Mia")
+        let transport = DiscoveryTransport(
+            availability: [.available],
+            remoteProfiles: [remote]
+        )
+        let environment = try await bootstrap(
+            in: directory,
+            defaultProfile: profile(id: UUID(), name: "Unused Seed"),
+            transport: transport
+        )
+        let initiallyDiscovered = try await discovery(in: environment)
+            .discoverProfiles()
+        XCTAssertEqual(initiallyDiscovered.map(\.id), [remote.id])
+        let failingOnboarding = FailingOnceOnboardingRepository(
+            base: environment.firstRunOnboardingRepository,
+            failure: .completion
+        )
+        let failingCoordinator = creationCoordinator(
+            profileRepository: environment.profileRepository,
+            settingsRepository: environment.practiceSettingsRepository,
+            childSessionRepository: environment.childSessionRepository,
+            onboardingRepository: failingOnboarding,
+            existingProfiles: [remote]
+        )
+
+        await assertThrowsErrorAsync {
+            _ = try await failingCoordinator.complete(
+                profileID: remote.id,
+                submission: self.newKidSubmission
+            )
+        }
+        let failedState = try await environment.firstRunOnboardingRepository
+            .state()
+        let pendingID = try XCTUnwrap(failedState?.pendingCreatedProfileID)
+        let pendingProfileBeforeFind = try await environment.profileRepository
+            .profile(id: pendingID)
+        let pendingSettingsBeforeFind =
+            try await environment
+            .practiceSettingsRepository.settings(for: pendingID)
+        let selectedAfterFailure = try await environment.childSessionRepository
+            .lastSelectedProfileID()
+        XCTAssertNotNil(pendingProfileBeforeFind)
+        XCTAssertEqual(
+            pendingSettingsBeforeFind,
+            .defaults(for: pendingID)
+        )
+        XCTAssertEqual(selectedAfterFailure, pendingID)
+        _ = await environment.familySyncCoordinator.synchronize(
+            trigger: .connectivityRecovery
+        )
+        let pushesBeforeFind = await transport.pushedProfileIDs()
+        let journalBeforeFind = try familySyncJournal(in: environment)
+        XCTAssertFalse(pushesBeforeFind.contains(pendingID))
+        XCTAssertFalse(
+            journalBeforeFind.localManifest.contains {
+                $0.key.profileID == pendingID
+            }
+        )
+        XCTAssertFalse(
+            journalBeforeFind.outbox.contains {
+                $0.key.profileID == pendingID
+            }
+        )
+
+        let rediscovered = try await discovery(in: environment)
+            .discoverProfiles()
+        let discoveryState = try await environment.firstRunOnboardingRepository
+            .state()
+        XCTAssertEqual(rediscovered.map(\.id), [remote.id])
+        XCTAssertEqual(discoveryState?.profileIntent, .discoverExisting)
+        XCTAssertNil(discoveryState?.pendingCreatedProfileID)
+        let completion = try await onboarding(in: environment).complete(
+            profileID: remote.id,
+            submission: FirstRunOnboardingSubmission(
+                action: .adoptExistingProfile(remote.id)
+            )
+        )
+
+        XCTAssertEqual(completion.profiles.map(\.id), [remote.id])
+        let selectedAfterAdoption = try await environment.childSessionRepository
+            .lastSelectedProfileID()
+        let containedProfile = try await environment.profileRepository.profile(
+            id: pendingID
+        )
+        let containedSettings = try await environment.practiceSettingsRepository
+            .settings(for: pendingID)
+        let tombstones = try await environment.tombstoneRepository.tombstones()
+        let allPushes = await transport.pushedProfileIDs()
+        XCTAssertEqual(selectedAfterAdoption, remote.id)
+        XCTAssertNil(containedProfile)
+        XCTAssertNil(containedSettings)
+        XCTAssertTrue(tombstones.isEmpty)
+        XCTAssertFalse(allPushes.contains(pendingID))
+    }
+
     private var newKidSubmission: FirstRunOnboardingSubmission {
         FirstRunOnboardingSubmission(
             action: .createProfile(
@@ -669,6 +1036,8 @@ final class SecondDeviceProfileAdoptionTests: XCTestCase {
             familySyncCoordinator: environment.familySyncCoordinator,
             familySyncTransport: environment.familySyncTransport,
             profileRepository: environment.profileRepository,
+            practiceSettingsRepository: environment.practiceSettingsRepository,
+            childSessionRepository: environment.childSessionRepository,
             onboardingRepository: environment.firstRunOnboardingRepository
         )
     }
@@ -714,6 +1083,19 @@ final class SecondDeviceProfileAdoptionTests: XCTestCase {
             ageYears: 4,
             createdAt: referenceDate.addingTimeInterval(-86_400),
             updatedAt: referenceDate
+        )
+    }
+
+    private func familySyncJournal(
+        in environment: ProductionApplicationEnvironment
+    ) throws -> FamilySyncJournalSnapshot {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        return try decoder.decode(
+            FamilySyncJournalSnapshot.self,
+            from: Data(
+                contentsOf: environment.dataPaths.familySyncJournalSnapshot
+            )
         )
     }
 
@@ -839,6 +1221,16 @@ private actor FailingOnceOnboardingRepository: FirstRunOnboardingPersisting {
         try await base.markDiscoveryIntent()
     }
 
+    func prepareForProfileDiscovery() async throws -> ProfileID? {
+        try await base.prepareForProfileDiscovery()
+    }
+
+    func finishPendingProfileContainment(
+        profileID: ProfileID
+    ) async throws {
+        try await base.finishPendingProfileContainment(profileID: profileID)
+    }
+
     func beginProfileCreation(
         proposedProfileID: ProfileID?,
         startedAt: Date
@@ -890,6 +1282,7 @@ private actor DiscoveryTransport: FamilySyncTransport {
     private let server: DiscoveryRemoteServer
     private var confirmationFailuresRemaining: Int
     private var confirmationCalls = 0
+    private var pushedProfiles: [ProfileID] = []
 
     init(
         availability: [FamilySyncAvailability],
@@ -943,7 +1336,7 @@ private actor DiscoveryTransport: FamilySyncTransport {
         for profileID: ProfileID
     ) async throws {
         _ = records
-        _ = profileID
+        pushedProfiles.append(profileID)
     }
 
     func acknowledgeFetchedChanges(receiptIDs: Set<UUID>) async throws {
@@ -959,6 +1352,10 @@ private actor DiscoveryTransport: FamilySyncTransport {
 
     func confirmationCallCount() -> Int {
         confirmationCalls
+    }
+
+    func pushedProfileIDs() -> [ProfileID] {
+        pushedProfiles
     }
 
     func createShare(for profileID: ProfileID) async throws -> URL {

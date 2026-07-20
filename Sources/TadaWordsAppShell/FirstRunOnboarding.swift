@@ -103,7 +103,32 @@ struct FirstRunOnboardingState: Codable, Equatable, Sendable {
             consentedAt: consentedAt,
             purpose: purpose,
             profileIntent: .discoverExisting,
-            pendingCreatedProfileID: nil
+            // A Create -> Find transition is a durable containment
+            // transaction. Keep the exact reserved identity until its local
+            // Profile/defaults/session pointer are verified absent; a crash
+            // can then resume cleanup without guessing or touching another
+            // child.
+            pendingCreatedProfileID: pendingCreatedProfileID
+        )
+    }
+
+    func resolvingPendingProfileCreationForDiscovery(
+        profileID: ProfileID
+    ) -> FirstRunOnboardingState {
+        FirstRunOnboardingState(
+            schemaVersion: Self.currentSchemaVersion,
+            status: status,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            profileID: self.profileID,
+            consentVersion: consentVersion,
+            consentedAt: consentedAt,
+            purpose: purpose,
+            profileIntent: .discoverExisting,
+            pendingCreatedProfileID:
+                pendingCreatedProfileID == profileID
+                ? nil
+                : pendingCreatedProfileID
         )
     }
 
@@ -144,10 +169,22 @@ struct FirstRunOnboardingState: Codable, Equatable, Sendable {
 
 enum FirstRunOnboardingRepositoryError: Error, Equatable, Sendable {
     case onboardingAlreadyCompleted
+    case pendingProfileCreationChanged
 }
 
 protocol FirstRunOnboardingPersisting: Sendable {
     func markDiscoveryIntent() async throws
+
+    /// Durably fences an unfinished local creation from discovery/sync and
+    /// returns the one exact identity whose local staging must be contained.
+    func prepareForProfileDiscovery() async throws -> ProfileID?
+
+    /// Clears the durable fence only after every local staged byte for this
+    /// exact identity has been verified absent. Repeating after a crash is
+    /// safe; a different identity always fails closed.
+    func finishPendingProfileContainment(
+        profileID: ProfileID
+    ) async throws
 
     func beginProfileCreation(
         proposedProfileID: ProfileID?,
@@ -210,11 +247,43 @@ actor LocalFirstRunOnboardingRepository: FirstRunOnboardingPersisting {
     }
 
     func markDiscoveryIntent() throws {
+        _ = try prepareForProfileDiscovery()
+    }
+
+    func prepareForProfileDiscovery() throws -> ProfileID? {
         guard let current = try state(), current.status == .pending else {
-            return
+            return nil
         }
-        guard current.profileIntent != .discoverExisting else { return }
-        try persist(current.recordingDiscoveryIntent())
+        if current.profileIntent != .discoverExisting {
+            try persist(current.recordingDiscoveryIntent())
+        }
+        return current.pendingCreatedProfileID
+    }
+
+    func finishPendingProfileContainment(
+        profileID: ProfileID
+    ) throws {
+        guard let current = try state(), current.status == .pending else {
+            throw FirstRunOnboardingRepositoryError
+                .pendingProfileCreationChanged
+        }
+        guard current.profileIntent == .discoverExisting else {
+            throw FirstRunOnboardingRepositoryError
+                .pendingProfileCreationChanged
+        }
+        guard let pendingCreatedProfileID = current.pendingCreatedProfileID else {
+            throw FirstRunOnboardingRepositoryError
+                .pendingProfileCreationChanged
+        }
+        guard pendingCreatedProfileID == profileID else {
+            throw FirstRunOnboardingRepositoryError
+                .pendingProfileCreationChanged
+        }
+        try persist(
+            current.resolvingPendingProfileCreationForDiscovery(
+                profileID: profileID
+            )
+        )
     }
 
     /// Reserves one exact identity before settings, Profile, session, or
@@ -297,23 +366,35 @@ actor FirstRunProfileDiscoveryCoordinator {
     private let familySyncCoordinator: any FamilySyncCoordinating
     private let familySyncTransport: any FamilySyncTransport
     private let profileRepository: any KidProfileRepository
+    private let practiceSettingsRepository: any PracticeSettingsRepository
+    private let childSessionRepository: any ChildSessionRepository
     private let onboardingRepository: any FirstRunOnboardingPersisting
 
     init(
         familySyncCoordinator: any FamilySyncCoordinating,
         familySyncTransport: any FamilySyncTransport,
         profileRepository: any KidProfileRepository,
+        practiceSettingsRepository: any PracticeSettingsRepository,
+        childSessionRepository: any ChildSessionRepository,
         onboardingRepository: any FirstRunOnboardingPersisting
     ) {
         self.familySyncCoordinator = familySyncCoordinator
         self.familySyncTransport = familySyncTransport
         self.profileRepository = profileRepository
+        self.practiceSettingsRepository = practiceSettingsRepository
+        self.childSessionRepository = childSessionRepository
         self.onboardingRepository = onboardingRepository
     }
 
     func discoverProfiles() async throws -> [KidProfile] {
         do {
-            try await onboardingRepository.markDiscoveryIntent()
+            if let pendingProfileID =
+                try await onboardingRepository.prepareForProfileDiscovery()
+            {
+                try await containPendingProfileCreation(
+                    profileID: pendingProfileID
+                )
+            }
         } catch {
             throw FirstRunProfileDiscoveryError.failed
         }
@@ -366,6 +447,37 @@ actor FirstRunProfileDiscoveryCoordinator {
             return comparison == .orderedAscending
         }
         return lhs.id.description < rhs.id.description
+    }
+
+    private func containPendingProfileCreation(
+        profileID: ProfileID
+    ) async throws {
+        // First-run has not opened child play yet, so the only allowed
+        // settings payload is the exact default row staged by createProfile.
+        // Any other shape could be real child data and must fail closed.
+        if let settings = try await practiceSettingsRepository.settings(
+            for: profileID
+        ) {
+            guard settings == .defaults(for: profileID) else {
+                throw FirstRunProfileDiscoveryError.failed
+            }
+        }
+
+        if try await childSessionRepository.lastSelectedProfileID() == profileID {
+            try await childSessionRepository.clearLastSelectedProfileID()
+        }
+        try await practiceSettingsRepository.delete(for: profileID)
+        try await profileRepository.delete(id: profileID)
+
+        guard try await profileRepository.profile(id: profileID) == nil,
+            try await practiceSettingsRepository.settings(for: profileID) == nil,
+            try await childSessionRepository.lastSelectedProfileID() != profileID
+        else {
+            throw FirstRunProfileDiscoveryError.failed
+        }
+        try await onboardingRepository.finishPendingProfileContainment(
+            profileID: profileID
+        )
     }
 }
 

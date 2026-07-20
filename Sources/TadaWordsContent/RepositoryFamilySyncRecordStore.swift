@@ -13,6 +13,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
     private let voiceprintRepository: (any DeviceVoiceprintRepository)?
     private let handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)?
     private let mutationGate: ProfileScopedMutationGate?
+    private let excludedProfileIDs: @Sendable () async throws -> Set<ProfileID>
     private let deviceID: String
     private let clock: any AppClock
     private let encoder: JSONEncoder
@@ -31,6 +32,9 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
         handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)? = nil,
         mutationGate: ProfileScopedMutationGate? = nil,
+        excludedProfileIDs: @escaping @Sendable () async throws -> Set<ProfileID> = {
+            []
+        },
         deviceID: String,
         clock: any AppClock = SystemAppClock()
     ) {
@@ -45,6 +49,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         self.voiceprintRepository = voiceprintRepository
         self.handwritingPreferenceRemover = handwritingPreferenceRemover
         self.mutationGate = mutationGate
+        self.excludedProfileIDs = excludedProfileIDs
         self.deviceID = deviceID
         self.clock = clock
         encoder = InspectableSnapshotJSONCodec.makeEncoder()
@@ -55,10 +60,25 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         try await requireNoPendingLocalDeletion()
         async let profiles = profileRepository.profiles()
         async let tombstones = tombstoneRepository.tombstones()
+        async let exclusions = profileIDsExcludedFromSync()
+        let profileIDs = Set(try await profiles.map(\.id))
+            .subtracting(try await exclusions)
         return Array(
-            Set(try await profiles.map(\.id))
+            profileIDs
                 .union(try await tombstones.map(\.profileID))
         ).sorted { $0.description < $1.description }
+    }
+
+    public func profileIDsExcludedFromSync() async throws -> Set<ProfileID> {
+        let requestedExclusions = try await excludedProfileIDs()
+        guard !requestedExclusions.isEmpty else { return [] }
+        // Privacy terminal records always win over a transient creation
+        // fence. In normal first-run flow these sets cannot overlap, but a
+        // corrupted state must never suppress a required deletion ledger.
+        let deletedProfileIDs = Set(
+            try await tombstoneRepository.tombstones().map(\.profileID)
+        )
+        return requestedExclusions.subtracting(deletedProfileIDs)
     }
 
     public func isProfileDeleted(_ profileID: ProfileID) async throws -> Bool {
@@ -153,6 +173,11 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
                     isDeleted: true
                 )
             ]
+        }
+        guard
+            !(try await profileIDsExcludedFromSync()).contains(profileID)
+        else {
+            return records
         }
         guard let profile = try await profileRepository.profile(id: profileID) else {
             return records

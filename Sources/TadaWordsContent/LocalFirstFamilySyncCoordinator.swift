@@ -4,6 +4,11 @@ import TadaWordsDomain
 public protocol FamilySyncRecordStore: Sendable {
     func profileIDsForSync() async throws -> [ProfileID]
 
+    /// Returns local identities that are still inside a durable creation or
+    /// containment transaction and therefore must not appear in any outbound
+    /// enumeration yet.
+    func profileIDsExcludedFromSync() async throws -> Set<ProfileID>
+
     func records(for profileID: ProfileID) async throws -> [FamilySyncRecord]
 
     func apply(_ records: [FamilySyncRecord], for profileID: ProfileID) async throws
@@ -26,6 +31,10 @@ public protocol FamilySyncRecordStore: Sendable {
 }
 
 extension FamilySyncRecordStore {
+    public func profileIDsExcludedFromSync() async throws -> Set<ProfileID> {
+        []
+    }
+
     public func isProfileDeleted(_ profileID: ProfileID) async throws -> Bool {
         _ = profileID
         return false
@@ -278,9 +287,11 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
         let profileIDs: [ProfileID]
         let versionedRecords: [FamilySyncRecord]
         do {
+            let excludedProfileIDs = try await store.profileIDsExcludedFromSync()
             profileIDs = Array(
                 Set(try await store.profileIDsForSync())
                     .union(explicitlyRequestedProfileIDs)
+                    .subtracting(excludedProfileIDs)
             ).sorted { $0.description < $1.description }
             var rawRecords: [FamilySyncRecord] = []
             for profileID in profileIDs {
@@ -473,10 +484,15 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                 profileIDs: postFetchProfileIDs,
                 now: now
             )
+            let outboundExcludedProfileIDs =
+                try await store.profileIDsExcludedFromSync()
             dueChanges = try await journalRepository.pendingChanges(
                 using: postFetchRecords,
                 now: now
-            ).filter { !sanitized.quarantinedKeys.contains($0.key) }
+            ).filter {
+                !sanitized.quarantinedKeys.contains($0.key)
+                    && !outboundExcludedProfileIDs.contains($0.key.profileID)
+            }
             let sent: FamilySyncTransportResult
             if dueChanges.isEmpty {
                 sent = FamilySyncTransportResult()

@@ -545,6 +545,8 @@ public struct TadaWordsApplicationView: View {
             familySyncCoordinator: environment.familySyncCoordinator,
             familySyncTransport: environment.familySyncTransport,
             profileRepository: environment.profileRepository,
+            practiceSettingsRepository: environment.practiceSettingsRepository,
+            childSessionRepository: environment.childSessionRepository,
             onboardingRepository: environment.firstRunOnboardingRepository
         ).discoverProfiles()
     }

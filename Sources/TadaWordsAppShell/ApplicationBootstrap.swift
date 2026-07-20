@@ -239,6 +239,16 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             voiceprintRepository: voiceprintRepository,
             handwritingPreferenceRemover: handwritingPreferenceRemover,
             mutationGate: profileMutationGate,
+            excludedProfileIDs: {
+                guard
+                    let state = try await firstRunOnboardingRepository.state(),
+                    state.status == .pending,
+                    let pendingProfileID = state.pendingCreatedProfileID
+                else {
+                    return []
+                }
+                return [pendingProfileID]
+            },
             deviceID: deviceID,
             clock: clock
         )
@@ -317,7 +327,8 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         )
         try validateDefaultProfileSeeding(
             existingProfiles: existingProfiles,
-            dataPaths: dataPaths
+            dataPaths: dataPaths,
+            firstRunState: firstRunState
         )
         let profiles = try await loadOrCreateProfiles(
             existingProfiles: existingProfiles,
@@ -813,7 +824,8 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
 
     private func validateDefaultProfileSeeding(
         existingProfiles: [KidProfile],
-        dataPaths: ApplicationDataPaths
+        dataPaths: ApplicationDataPaths,
+        firstRunState: FirstRunOnboardingState?
     ) throws {
         guard existingProfiles.isEmpty else { return }
         guard
@@ -834,9 +846,54 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
                 FileManager.default.fileExists(atPath: $0.path)
             })
         else {
+            if try isRecoverablePendingProfileCreation(
+                state: firstRunState,
+                dataPaths: dataPaths
+            ) {
+                return
+            }
             throw ApplicationBootstrapError
                 .profileSnapshotMissingWithDependentData
         }
+    }
+
+    private func isRecoverablePendingProfileCreation(
+        state: FirstRunOnboardingState?,
+        dataPaths: ApplicationDataPaths
+    ) throws -> Bool {
+        guard state?.status == .pending,
+            state?.profileIntent == .createNew,
+            let pendingProfileID = state?.pendingCreatedProfileID
+        else {
+            return false
+        }
+        // Only the one write boundary produced by first-run createProfile is
+        // recoverable: exact default settings for the durably reserved UUID,
+        // with no word, learning, or quest bytes. Every broader orphan shape
+        // remains a saved-data error rather than being guessed or erased.
+        guard
+            !FileManager.default.fileExists(
+                atPath: dataPaths.wordPoolSnapshot.path
+            ),
+            !FileManager.default.fileExists(
+                atPath: dataPaths.learningRecordsSnapshot.path
+            ),
+            !FileManager.default.fileExists(
+                atPath: dataPaths.dailyQuestsSnapshot.path
+            ),
+            FileManager.default.fileExists(
+                atPath: dataPaths.practiceSettingsSnapshot.path
+            )
+        else {
+            return false
+        }
+        let snapshot = try JSONDecoder().decode(
+            PracticeSettingsSnapshot.self,
+            from: Data(contentsOf: dataPaths.practiceSettingsSnapshot)
+        )
+        return snapshot.schemaVersion
+            == PracticeSettingsSnapshot.currentSchemaVersion
+            && snapshot.settings == [.defaults(for: pendingProfileID)]
     }
 }
 
