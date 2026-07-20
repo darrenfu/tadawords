@@ -25,11 +25,11 @@ final class TadaWordsAppDelegate: NSObject, UIApplicationDelegate {
             await FamilySyncRemoteNotificationBridge.shared.configureRegistration(
                 register: { attempt in
                     await MainActor.run {
-                        guard attempt.isCurrent else { return false }
                         remoteNotificationRegistrationObserver
-                            .registrationDidStart(attempt)
-                        UIApplication.shared.registerForRemoteNotifications()
-                        return true
+                            .beginPlatformRegistration(attempt) {
+                                UIApplication.shared
+                                    .registerForRemoteNotifications()
+                            }
                     }
                 },
                 unregister: {

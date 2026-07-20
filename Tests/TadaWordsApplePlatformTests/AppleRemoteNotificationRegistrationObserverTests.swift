@@ -121,6 +121,49 @@ final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
     }
 
     @MainActor
+    func testInvalidationBetweenValidationAndPlatformCallPreventsStaleRegistration()
+        async
+    {
+        let bridge = FamilySyncRemoteNotificationBridge(
+            clock: AppleRemoteNotificationFixedClock(now: now)
+        )
+        let attemptRecorder = RemoteNotificationAttemptRecorder()
+        await bridge.configureRegistration(
+            register: { attempt in
+                await attemptRecorder.capture(attempt)
+                return false
+            },
+            unregister: {}
+        )
+        await bridge.requestRegistration()
+        guard let attempt = await attemptRecorder.attempt else {
+            return XCTFail("Expected the bridge to issue a registration attempt.")
+        }
+
+        XCTAssertTrue(
+            attempt.isCurrent,
+            "This is the validation that used to happen before the UIKit hop."
+        )
+        await bridge.requestUnregistration()
+
+        var platformRegistrationCount = 0
+        let observer = AppleRemoteNotificationRegistrationObserver(bridge: bridge)
+        let didStart = observer.beginPlatformRegistration(attempt) {
+            platformRegistrationCount += 1
+        }
+
+        XCTAssertFalse(didStart)
+        XCTAssertEqual(platformRegistrationCount, 0)
+
+        await configureRegistration(bridge: bridge, observer: observer)
+        await bridge.requestRegistration()
+        observer.enqueueDidRegister()
+        await observer.finishPendingCallbacks()
+        let replacementState = await bridge.registrationState()
+        XCTAssertEqual(replacementState, .registered(at: now))
+    }
+
+    @MainActor
     func testCancelledStartedAttemptKeepsCallbacksUnverifiedAfterSuccessThenFailure()
         async
     {
@@ -202,9 +245,19 @@ final class AppleRemoteNotificationRegistrationObserverTests: XCTestCase {
                 "remoteNotificationRegistrationObserver.enqueueDidFail(category: category)"
             )
         )
+        XCTAssertTrue(delegateSource.contains(".beginPlatformRegistration(attempt)"))
+        XCTAssertFalse(delegateSource.contains("guard attempt.isCurrent"))
         XCTAssertFalse(delegateSource.contains("deviceToken"))
         XCTAssertFalse(delegateSource.contains("token.map"))
         XCTAssertFalse(delegateSource.contains("token.base64EncodedString"))
+    }
+}
+
+private actor RemoteNotificationAttemptRecorder {
+    private(set) var attempt: FamilySyncRemoteNotificationRegistrationAttempt?
+
+    func capture(_ attempt: FamilySyncRemoteNotificationRegistrationAttempt) {
+        self.attempt = attempt
     }
 }
 
@@ -216,9 +269,7 @@ private func configureRegistration(
     await bridge.configureRegistration(
         register: { attempt in
             await MainActor.run {
-                guard attempt.isCurrent else { return false }
-                observer.registrationDidStart(attempt)
-                return true
+                observer.beginPlatformRegistration(attempt, register: {})
             }
         },
         unregister: {}

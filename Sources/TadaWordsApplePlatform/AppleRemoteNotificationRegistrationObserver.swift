@@ -50,13 +50,17 @@ public final class AppleRemoteNotificationRegistrationObserver {
         callbackConsumer.cancel()
     }
 
-    /// Called immediately before UIKit registration on the main actor. The
-    /// observer keeps only attempt leases, never device-token bytes.
-    public func registrationDidStart(
-        _ attempt: FamilySyncRemoteNotificationRegistrationAttempt
-    ) {
-        guard attempt.isCurrent else { return }
-        attemptsAwaitingCallback.append(attempt)
+    /// Atomically enrolls the callback route and invokes UIKit against consent
+    /// invalidation. The observer keeps only attempt leases, never token bytes.
+    @discardableResult
+    public func beginPlatformRegistration(
+        _ attempt: FamilySyncRemoteNotificationRegistrationAttempt,
+        register: () -> Void
+    ) -> Bool {
+        attempt.performIfCurrent {
+            attemptsAwaitingCallback.append(attempt)
+            register()
+        }
     }
 
     public func enqueueDidRegister() {

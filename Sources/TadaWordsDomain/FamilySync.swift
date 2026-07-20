@@ -40,8 +40,8 @@ public enum FamilySyncRemoteNotificationRegistrationState: Equatable, Sendable {
 }
 
 /// A process-only lease for one platform registration attempt. The lease lets
-/// the platform adapter perform its final validity check immediately before it
-/// calls UIKit, without exposing or retaining an APNs device token.
+/// the platform adapter make callback enrollment and its UIKit call atomic
+/// with consent invalidation, without exposing or retaining an APNs token.
 public final class FamilySyncRemoteNotificationRegistrationAttempt:
     @unchecked Sendable
 {
@@ -53,9 +53,22 @@ public final class FamilySyncRemoteNotificationRegistrationAttempt:
         self.generation = generation
     }
 
-    /// `false` means Family Sync withdrew consent or superseded this attempt.
+    /// A point-in-time diagnostic snapshot. Do not use this value to authorize
+    /// a later platform side effect; use `performIfCurrent(_:)` instead.
     public var isCurrent: Bool {
         validityLock.withLock { current }
+    }
+
+    /// Runs a short synchronous platform operation only while the lease is
+    /// current. The lock establishes one order between the whole operation and
+    /// opt-out invalidation, closing any check-then-call race.
+    @discardableResult
+    public func performIfCurrent(_ operation: () -> Void) -> Bool {
+        validityLock.withLock {
+            guard current else { return false }
+            operation()
+            return true
+        }
     }
 
     fileprivate func invalidate() {
@@ -73,7 +86,8 @@ public actor FamilySyncRemoteNotificationBridge {
 
     public typealias Handler = @Sendable () async -> FamilySyncBackgroundFetchResult
     /// Returns whether the adapter actually invoked the platform registration
-    /// API. Adapters must check `attempt.isCurrent` at the UIKit call boundary.
+    /// API. Adapters must lease-protect callback enrollment and the UIKit call
+    /// together with `attempt.performIfCurrent(_:)`.
     public typealias RegistrationHandler =
         @Sendable (FamilySyncRemoteNotificationRegistrationAttempt) async -> Bool
     public typealias UnregistrationHandler = @Sendable () async -> Void
