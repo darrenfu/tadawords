@@ -30,8 +30,16 @@ struct TadaWordsApp: App {
     init() {
         let experience = AppleAudioExperienceService()
         let mutationGate = ProfileScopedMutationGate()
+        let baseVoiceprints: any DeviceVoiceprintRepository
+        #if DEBUG && targetEnvironment(simulator) && !LOCAL_DEVICE_QA
+            baseVoiceprints =
+                FamilySyncSimulatorTestSupport.voiceprintRepository()
+                ?? KeychainDeviceVoiceprintRepository()
+        #else
+            baseVoiceprints = KeychainDeviceVoiceprintRepository()
+        #endif
         let voiceprints = ProfileMutationGatedDeviceVoiceprintRepository(
-            base: KeychainDeviceVoiceprintRepository(),
+            base: baseVoiceprints,
             mutationGate: mutationGate
         )
         let teacherAudioCacheDirectory =

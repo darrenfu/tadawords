@@ -27,6 +27,17 @@
             return TimeZone(secondsFromGMT: 0)
         }
 
+        /// The unsigned simulator test app cannot reliably access Keychain.
+        /// Keep this substitute behind both the compile-time simulator fence
+        /// and the explicit Family Sync E2E arguments so production, LocalQA,
+        /// and ordinary simulator launches retain the real device repository.
+        static func voiceprintRepository(
+            arguments: [String] = ProcessInfo.processInfo.arguments
+        ) -> (any DeviceVoiceprintRepository)? {
+            guard configuration(arguments: arguments) != nil else { return nil }
+            return FamilySyncSimulatorDeviceVoiceprintRepository()
+        }
+
         static func transport(
             profileID: ProfileID,
             arguments: [String] = ProcessInfo.processInfo.arguments
@@ -237,6 +248,31 @@
 
     private struct FamilySyncSimulatorClock: AppClock {
         let now: Date
+    }
+
+    private actor FamilySyncSimulatorDeviceVoiceprintRepository:
+        DeviceVoiceprintRepository,
+        FreshInstallationVoiceprintResetting
+    {
+        private var templates: [ProfileID: DeviceVoiceprintTemplate] = [:]
+
+        func template(
+            for profileID: ProfileID
+        ) -> DeviceVoiceprintTemplate? {
+            templates[profileID]
+        }
+
+        func save(_ template: DeviceVoiceprintTemplate) {
+            templates[template.profileID] = template
+        }
+
+        func delete(for profileID: ProfileID) {
+            templates[profileID] = nil
+        }
+
+        func resetVoiceprintsForFreshInstallation() {
+            templates.removeAll(keepingCapacity: false)
+        }
     }
 
     private actor FamilySyncSimulatorTestTransport: FamilySyncTransport {
