@@ -854,3 +854,41 @@ signed cross-device acceptance remain separate gates under #19, #22, and #23.
 - The pre-commit repository gate passes 998 Swift tests, 40 Issue Agent tests,
   and 11 release-preflight tests. Simulator and physical acceptance evidence
   will be recorded only after the exact committed HEAD passes.
+
+## v0.7.7 — 2026-07-19
+
+Target release: `v0.7.7`
+
+Branch: `codex/apns-release-preflight-v0.7.7`
+
+Build: `2026071907`
+
+Overall state: issue #56 is implemented at the source/tooling layer. The
+canonical release policy now accepts a Development- or Production-signed
+archive only as intermediate evidence and requires the exact exported app or
+IPA to carry Production APNs and CloudKit entitlements. No Apple resource,
+certificate, provisioning profile, archive, export, CloudKit schema, or App
+Store Connect record is created or changed by this batch.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V077-REL-001 | P0 release | APNs preflight | Bind push entitlement evidence to the exact signed archive and export without accepting LocalQA, source settings, screenshots, or an archive alone as Production proof. | Source/tooling complete; signed export open | Focused preflight: 16/16. Still required: full exact-HEAD repository and simulator gates, signed LocalQA identity/install/launch on iPhone and iPad, and an eventual PawGoo Production archive/export manifest. |
+
+### 2026-07-19 v0.7.7 notes
+
+- Reserved version `0.7.7` and build `2026071907` for reclaimed issue #56.
+- Added the literal source contract
+  `aps-environment = $(APS_ENVIRONMENT)` to the canonical policy.
+- Added `aps-environment=production` as a required exported-app entitlement.
+  Missing, Development, or any other exported value fails closed.
+- Kept an archive-specific override for lowercase `development` or
+  `production`; this never relaxes the exported app or IPA requirement.
+- Added canonical-policy tests for the exact source expression, valid
+  Production export, missing value, Development export, Development archive,
+  LocalQA rejection, and unexpected extra entitlements.
+- Documented that the manifest preserves archive and export paths, hashes, and
+  entitlement dictionaries separately. Only the exact export is Production
+  push evidence.
+- The focused release-preflight suite passes 16/16. A real signed archive and
+  exported app do not yet exist, so this batch makes no Production-readiness
+  claim beyond the source/tooling gate.
