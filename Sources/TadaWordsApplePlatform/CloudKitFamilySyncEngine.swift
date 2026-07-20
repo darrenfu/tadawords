@@ -226,6 +226,13 @@ actor CloudKitFamilySyncEventBuffer {
         let stateStore: CloudKitFamilySyncStateStore
     }
 
+    private struct PendingConflictDisposition {
+        let key: FamilySyncChangeKey
+        let receiptIDs: Set<UUID>
+        let candidate: CloudKitFamilyQuarantineEntry
+        let quarantinedRecordCount: Int
+    }
+
     private var activeGeneration: UInt64 = 1
     private var outgoing: [String: CloudKitFamilyOutgoingChange] = [:]
     private var incoming: [FamilySyncChangeKey: FamilySyncRecord] = [:]
@@ -239,6 +246,7 @@ actor CloudKitFamilySyncEventBuffer {
     private var durabilityFailure = false
     private var durabilityFailureEpoch: UInt64 = 0
     private var retryableStagedResolutionFailureEpoch: UInt64?
+    private var pendingConflictDispositions: [FamilySyncChangeKey: PendingConflictDisposition] = [:]
     private var requiresFetchPass = false
     private var ownerLedgerRecoveryProfileIDs = Set<ProfileID>()
     /// A newly installed device can receive child records before the Profile
@@ -278,6 +286,7 @@ actor CloudKitFamilySyncEventBuffer {
         durabilityFailure = false
         durabilityFailureEpoch = 0
         retryableStagedResolutionFailureEpoch = nil
+        pendingConflictDispositions.removeAll()
         requiresFetchPass = false
         ownerLedgerRecoveryProfileIDs.removeAll()
         stagedUnboundRecords.removeAll()
@@ -292,6 +301,7 @@ actor CloudKitFamilySyncEventBuffer {
 
     func canPersistEngineState(_ generation: UInt64) -> Bool {
         generation == activeGeneration && !durabilityFailure
+            && pendingConflictDispositions.isEmpty
             && stagedUnboundRecords.isEmpty
     }
 
@@ -303,6 +313,7 @@ actor CloudKitFamilySyncEventBuffer {
     ) {
         guard generation == activeGeneration,
             !durabilityFailure,
+            pendingConflictDispositions.isEmpty,
             accountChange == nil
         else { return }
         guard !hasStagedUnboundRecords(in: scope) else {
@@ -335,16 +346,18 @@ actor CloudKitFamilySyncEventBuffer {
             return $0.zoneName < $1.zoneName
         }
         guard let failureEpoch = retryableStagedResolutionFailureEpoch else {
-            let hasReadyStagedResolution = routes.contains { route in
-                if rootlessRoutesReadyForQuarantine.contains(route) {
-                    return true
+            let hasReadyStagedResolution =
+                !pendingConflictDispositions.isEmpty
+                || routes.contains { route in
+                    if rootlessRoutesReadyForQuarantine.contains(route) {
+                        return true
+                    }
+                    let zoneID = CKRecordZone.ID(
+                        zoneName: route.zoneName,
+                        ownerName: route.ownerName
+                    )
+                    return metadataStore.binding(for: zoneID) != nil
                 }
-                let zoneID = CKRecordZone.ID(
-                    zoneName: route.zoneName,
-                    ownerName: route.ownerName
-                )
-                return metadataStore.binding(for: zoneID) != nil
-            }
             if durabilityFailure, hasReadyStagedResolution {
                 failures.append(
                     FamilySyncTransportFailure(key: nil, category: .corruptState)
@@ -378,6 +391,15 @@ actor CloudKitFamilySyncEventBuffer {
             }
             if durabilityFailure { return false }
         }
+        for pending in pendingConflictDispositions.values.sorted(by: {
+            if $0.key.profileID != $1.key.profileID {
+                return $0.key.profileID.description < $1.key.profileID.description
+            }
+            return $0.key.recordName < $1.key.recordName
+        }) {
+            guard pendingConflictDispositions[pending.key] != nil else { continue }
+            if !persistConflictDisposition(pending) { return false }
+        }
         return true
     }
 
@@ -406,25 +428,24 @@ actor CloudKitFamilySyncEventBuffer {
                         let conflictingIDs = Set(
                             receipts.values.filter { $0.key == key }.map(\.id)
                         )
-                        do {
-                            try metadataStore.quarantineInbox(
-                                receiptIDs: conflictingIDs,
-                                category: .conflict,
-                                at: Date()
-                            )
-                            receiptIDs.subtract(conflictingIDs)
-                            for id in conflictingIDs { receipts.removeValue(forKey: id) }
-                            incoming.removeValue(forKey: key)
-                            quarantinedRecordCount += conflictingIDs.count
-                        } catch {
-                            markDurabilityFailure()
-                            failures.append(
-                                FamilySyncTransportFailure(
-                                    key: key,
-                                    category: .corruptState
-                                )
-                            )
-                        }
+                        let candidate = CloudKitFamilyQuarantineEntry(
+                            id: UUID(),
+                            scope: entry.scope,
+                            recordName: record.recordName,
+                            zoneName: entry.zoneName,
+                            ownerName: entry.ownerName,
+                            reason: .conflict,
+                            envelopeData: try? JSONEncoder().encode(
+                                FamilySyncEnvelope(record: record)
+                            ),
+                            quarantinedAt: Date()
+                        )
+                        _ = beginConflictDisposition(
+                            key: key,
+                            receiptIDs: conflictingIDs,
+                            candidate: candidate,
+                            quarantinedRecordCount: conflictingIDs.count
+                        )
                         continue
                     } else {
                         incoming[key] = FamilySyncConflictResolver.resolved(
@@ -917,20 +938,33 @@ actor CloudKitFamilySyncEventBuffer {
     }
 
     func drain() -> FamilySyncTransportResult {
+        let blockedConflictKeys = Set(pendingConflictDispositions.keys)
+        let blockedConflictReceiptIDs = pendingConflictDispositions.values.reduce(
+            into: Set<UUID>()
+        ) { partial, pending in
+            partial.formUnion(pending.receiptIDs)
+        }
         let result = FamilySyncTransportResult(
-            records: incoming.values.sorted { lhs, rhs in
+            records: incoming.filter {
+                !blockedConflictKeys.contains($0.key)
+            }.map(\.value).sorted { lhs, rhs in
                 if lhs.profileID != rhs.profileID {
                     return lhs.profileID.description < rhs.profileID.description
                 }
                 return lhs.recordName < rhs.recordName
             },
-            deletions: deletions.map(FamilySyncRemoteDeletion.init),
+            deletions: deletions.filter {
+                !blockedConflictKeys.contains($0)
+            }.map(FamilySyncRemoteDeletion.init),
             acknowledged: acknowledgements,
             failures: failures,
             accountChange: accountChange,
             quarantinedRecordCount: quarantinedRecordCount,
-            receiptIDs: receiptIDs,
-            receipts: receipts.values.sorted {
+            receiptIDs: receiptIDs.subtracting(blockedConflictReceiptIDs),
+            receipts: receipts.values.filter {
+                !blockedConflictReceiptIDs.contains($0.id)
+                    && !blockedConflictKeys.contains($0.key)
+            }.sorted {
                 $0.id.uuidString < $1.id.uuidString
             },
             requiresFetchPass: requiresFetchPass
@@ -1167,6 +1201,57 @@ actor CloudKitFamilySyncEventBuffer {
     }
 
     @discardableResult
+    private func beginConflictDisposition(
+        key: FamilySyncChangeKey,
+        receiptIDs: Set<UUID>,
+        candidate: CloudKitFamilyQuarantineEntry,
+        quarantinedRecordCount: Int
+    ) -> Bool {
+        let pending = PendingConflictDisposition(
+            key: key,
+            receiptIDs: receiptIDs,
+            candidate: candidate,
+            quarantinedRecordCount: quarantinedRecordCount
+        )
+        pendingConflictDispositions[key] = pending
+        return persistConflictDisposition(pending)
+    }
+
+    private func persistConflictDisposition(
+        _ pending: PendingConflictDisposition
+    ) -> Bool {
+        do {
+            try metadataStore.quarantineConflict(
+                receiptIDs: pending.receiptIDs,
+                candidate: pending.candidate
+            )
+        } catch {
+            markDurabilityFailure()
+            retryableStagedResolutionFailureEpoch = durabilityFailureEpoch
+            failures.append(
+                FamilySyncTransportFailure(
+                    key: pending.key,
+                    category: .corruptState
+                )
+            )
+            return false
+        }
+
+        // Only the atomic metadata commit authorizes removal from the
+        // process-visible batch. Before that point drain() filters this key but
+        // retains the exact receipt/candidate context above for retry.
+        pendingConflictDispositions.removeValue(forKey: pending.key)
+        incoming.removeValue(forKey: pending.key)
+        deletions.remove(pending.key)
+        receiptIDs.subtract(pending.receiptIDs)
+        for id in pending.receiptIDs {
+            receipts.removeValue(forKey: id)
+        }
+        quarantinedRecordCount += pending.quarantinedRecordCount
+        return true
+    }
+
+    @discardableResult
     private func acceptFetchedRecord(
         _ cloudRecord: CKRecord,
         decoded record: FamilySyncRecord,
@@ -1177,42 +1262,43 @@ actor CloudKitFamilySyncEventBuffer {
             profileID: record.profileID,
             recordName: record.recordName
         )
+        if let pending = pendingConflictDispositions[key] {
+            guard !durabilityFailure else { return false }
+            return persistConflictDisposition(pending)
+        }
+        if metadataStore.isConflictQuarantined(
+            recordID: cloudRecord.recordID,
+            scope: scope
+        ) {
+            // The record ID already has a durable invariant-conflict
+            // disposition. Every replayed or later variant is covered by that
+            // same fail-closed lock and must never re-enter the inbox.
+            quarantinedRecordCount += 1
+            return true
+        }
         if let existing = incoming[key],
             Self.isInvariantConflict(existing, record)
         {
             let existingReceiptIDs = Set(
                 receipts.values.filter { $0.key == key }.map(\.id)
             )
-            do {
-                try metadataStore.quarantineInbox(
-                    receiptIDs: existingReceiptIDs,
-                    category: .conflict,
-                    at: now
-                )
-                receiptIDs.subtract(existingReceiptIDs)
-                for id in existingReceiptIDs {
-                    receipts.removeValue(forKey: id)
-                }
-                incoming.removeValue(forKey: key)
-                quarantinedRecordCount += existingReceiptIDs.count
-            } catch {
-                markDurabilityFailure()
-                failures.append(
-                    FamilySyncTransportFailure(
-                        key: key,
-                        category: .corruptState
-                    )
-                )
-                return false
-            }
-            return quarantine(
-                cloudRecord,
+            let candidate = CloudKitFamilyQuarantineEntry(
+                id: UUID(),
                 scope: scope,
-                category: .conflict,
+                recordName: cloudRecord.recordID.recordName,
+                zoneName: cloudRecord.recordID.zoneID.zoneName,
+                ownerName: cloudRecord.recordID.zoneID.ownerName,
+                reason: .conflict,
                 envelopeData: cloudRecord[
                     CloudKitFamilyRecordCodec.Schema.envelope
                 ] as? Data,
-                now: now
+                quarantinedAt: now
+            )
+            return beginConflictDisposition(
+                key: key,
+                receiptIDs: existingReceiptIDs,
+                candidate: candidate,
+                quarantinedRecordCount: existingReceiptIDs.count + 1
             )
         }
         do {
@@ -1712,6 +1798,7 @@ actor CloudKitFamilySyncEventBuffer {
         stagedUnboundRecords.removeAll()
         rootlessRoutesReadyForQuarantine.removeAll()
         retryableStagedResolutionFailureEpoch = nil
+        pendingConflictDispositions.removeAll()
         deferredEngineStates.removeAll()
         cleanupOutgoingSources()
         outgoing.removeAll()

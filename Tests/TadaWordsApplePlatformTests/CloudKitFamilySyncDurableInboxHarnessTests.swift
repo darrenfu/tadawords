@@ -162,6 +162,62 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         )
     }
 
+    func testAppendInboxCannotClearDurableConflictProtection() throws {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore()
+        let record = fixture.record(
+            name: "conflict-protected-record",
+            payload: "must-stay-blocked"
+        )
+        let recordID = fixture.recordID(name: record.recordName)
+        try store.quarantine(
+            CloudKitFamilyQuarantineEntry(
+                id: UUID(),
+                scope: .privateDatabase,
+                recordName: recordID.recordName,
+                zoneName: recordID.zoneID.zoneName,
+                ownerName: recordID.zoneID.ownerName,
+                reason: .conflict,
+                envelopeData: Data("conflicting-envelope".utf8),
+                quarantinedAt: fixture.now
+            )
+        )
+        let quarantineCount = store.quarantinedCount()
+
+        XCTAssertThrowsError(
+            try store.appendInboxReplacingQuarantine(
+                record: record,
+                recordID: recordID,
+                scope: .privateDatabase,
+                receivedAt: fixture.now.addingTimeInterval(1)
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .conflictProtectedRecord
+            )
+        }
+
+        let restarted = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        XCTAssertTrue(restarted.inboxEntries().isEmpty)
+        XCTAssertEqual(restarted.quarantinedCount(), quarantineCount)
+        XCTAssertTrue(
+            restarted.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            )
+        )
+        XCTAssertTrue(
+            restarted.isQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            )
+        )
+    }
+
     func testInboxSaveAndDeletionReplayAcrossRestartUntilEachReceiptIsAcknowledged()
         async throws
     {
@@ -259,6 +315,26 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
     {
         try await assertSameRevisionConflict(first: "alpha", second: "beta")
         try await assertSameRevisionConflict(first: "beta", second: "alpha")
+    }
+
+    func testAtomicConflictWriteFailureRetriesFailClosedInSameProcess()
+        async throws
+    {
+        for kind in StagedConflictKind.allCases {
+            try await assertAtomicConflictWriteFailureRetriesInSameProcess(
+                kind: kind
+            )
+        }
+    }
+
+    func testAtomicConflictWriteFailureReplaysFailClosedFromOldCursorAfterRelaunch()
+        async throws
+    {
+        for kind in StagedConflictKind.allCases {
+            try await assertAtomicConflictWriteFailureReplaysAfterRelaunch(
+                kind: kind
+            )
+        }
     }
 
     func testGoodRecordAppliesWhileWrongProfileAndMalformedEnvelopeAreQuarantined()
@@ -1862,6 +1938,324 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         )
         try await assertImmutableVariantSetIsFullyQuarantined(
             payloads: ["delta", "gamma", "beta", "alpha"]
+        )
+    }
+
+    private enum StagedConflictKind: CaseIterable {
+        case sameRevision
+        case immutable
+    }
+
+    private func assertAtomicConflictWriteFailureRetriesInSameProcess(
+        kind: StagedConflictKind,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let variants = stagedConflictVariants(kind: kind, fixture: fixture)
+        let firstCloud = try fixture.cloudRecord(for: variants.first, store: store)
+        let secondCloud = try fixture.cloudRecord(for: variants.second, store: store)
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("conflict-same-process-\(kind)")
+        let writablePermissions = 0o755
+        let readOnlyPermissions = 0o555
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: writablePermissions],
+                ofItemAtPath: fixture.directory.path
+            )
+        }
+        let buffer = CloudKitFamilySyncEventBuffer(
+            metadataStore: store,
+            beforePromotingStagedRecord: { index in
+                guard index == 1 else { return }
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: readOnlyPermissions],
+                    ofItemAtPath: fixture.directory.path
+                )
+            }
+        )
+
+        await buffer.handle(
+            .fetchedRecords([firstCloud, secondCloud]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await buffer.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await buffer.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        let failed = await buffer.drain()
+
+        XCTAssertTrue(failed.records.isEmpty, file: file, line: line)
+        XCTAssertTrue(failed.receiptIDs.isEmpty, file: file, line: line)
+        XCTAssertTrue(failed.receipts.isEmpty, file: file, line: line)
+        XCTAssertEqual(
+            failed.failures.map(\.category),
+            [.corruptState],
+            file: file,
+            line: line
+        )
+        XCTAssertNil(stateStore.load(.privateDatabase), file: file, line: line)
+        XCTAssertEqual(store.inboxEntries().map(\.record), [variants.first])
+        XCTAssertFalse(
+            store.isConflictQuarantined(
+                recordID: firstCloud.recordID,
+                scope: .privateDatabase
+            ),
+            file: file,
+            line: line
+        )
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: writablePermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        let recovered = await buffer.retryStagedUnboundRecords(generation: 1)
+        let retried = await buffer.drain()
+
+        XCTAssertTrue(recovered, file: file, line: line)
+        assertConflictRemainsFailClosed(
+            result: retried,
+            store: store,
+            recordID: firstCloud.recordID,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced),
+            "The deferred cursor may advance only after the atomic conflict write succeeds",
+            file: file,
+            line: line
+        )
+
+        XCTAssertThrowsError(
+            try store.appendInboxReplacingQuarantine(
+                record: variants.second,
+                recordID: secondCloud.recordID,
+                scope: .privateDatabase,
+                receivedAt: fixture.now.addingTimeInterval(2)
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .conflictProtectedRecord,
+                file: file,
+                line: line
+            )
+        }
+        XCTAssertTrue(store.inboxEntries().isEmpty, file: file, line: line)
+        XCTAssertTrue(
+            store.isConflictQuarantined(
+                recordID: secondCloud.recordID,
+                scope: .privateDatabase
+            ),
+            file: file,
+            line: line
+        )
+    }
+
+    private func assertAtomicConflictWriteFailureReplaysAfterRelaunch(
+        kind: StagedConflictKind,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.unboundStore()
+        let variants = stagedConflictVariants(kind: kind, fixture: fixture)
+        let firstCloud = try fixture.cloudRecord(for: variants.first, store: store)
+        let secondCloud = try fixture.cloudRecord(for: variants.second, store: store)
+        let stateStore = fixture.stateStore()
+        let advanced = try fixture.serialization("conflict-relaunch-\(kind)")
+        let writablePermissions = 0o755
+        let readOnlyPermissions = 0o555
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: writablePermissions],
+                ofItemAtPath: fixture.directory.path
+            )
+        }
+        let firstProcess = CloudKitFamilySyncEventBuffer(
+            metadataStore: store,
+            beforePromotingStagedRecord: { index in
+                guard index == 1 else { return }
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: readOnlyPermissions],
+                    ofItemAtPath: fixture.directory.path
+                )
+            }
+        )
+
+        await firstProcess.handle(
+            .fetchedRecords([firstCloud, secondCloud]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now
+        )
+        await firstProcess.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        await firstProcess.handle(
+            .fetchedRecords([fixture.rootCloudRecord()]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(1)
+        )
+        let failed = await firstProcess.drain()
+
+        XCTAssertTrue(failed.records.isEmpty, file: file, line: line)
+        XCTAssertTrue(failed.receiptIDs.isEmpty, file: file, line: line)
+        XCTAssertEqual(
+            failed.failures.map(\.category),
+            [.corruptState],
+            file: file,
+            line: line
+        )
+        XCTAssertNil(stateStore.load(.privateDatabase), file: file, line: line)
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: writablePermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        let restartedStore = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        let restarted = CloudKitFamilySyncEventBuffer(
+            metadataStore: restartedStore
+        )
+        await restarted.replay(
+            restartedStore.replayableInboxEntries(),
+            generation: 1
+        )
+        await restarted.handle(
+            .fetchedRecords([firstCloud, secondCloud]),
+            scope: .privateDatabase,
+            generation: 1,
+            now: fixture.now.addingTimeInterval(2)
+        )
+        await restarted.persistEngineState(
+            advanced,
+            scope: .privateDatabase,
+            generation: 1,
+            stateStore: stateStore
+        )
+        let replayed = await restarted.drain()
+
+        assertConflictRemainsFailClosed(
+            result: replayed,
+            store: restartedStore,
+            recordID: firstCloud.recordID,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            try fixture.encoded(stateStore.load(.privateDatabase)),
+            try fixture.encoded(advanced),
+            "Relaunch must replay from the old cursor before persisting its replacement",
+            file: file,
+            line: line
+        )
+    }
+
+    private func stagedConflictVariants(
+        kind: StagedConflictKind,
+        fixture: CloudInboxHarnessFixture
+    ) -> (first: FamilySyncRecord, second: FamilySyncRecord) {
+        let recordName = "staged-conflict-\(kind)"
+        switch kind {
+        case .sameRevision:
+            let revision = FamilySyncLogicalRevision(
+                counter: 7,
+                deviceID: "same-revision-device"
+            )
+            return (
+                fixture.record(
+                    name: recordName,
+                    payload: "first-revision-payload",
+                    revision: revision
+                ),
+                fixture.record(
+                    name: recordName,
+                    payload: "second-revision-payload",
+                    revision: revision
+                )
+            )
+        case .immutable:
+            return (
+                FamilySyncRecord(
+                    recordName: recordName,
+                    profileID: fixture.profileID,
+                    kind: .attempt,
+                    payload: Data("first-immutable-payload".utf8),
+                    updatedAt: fixture.now,
+                    deviceID: "immutable-device-a",
+                    logicalRevision: FamilySyncLogicalRevision(
+                        counter: 1,
+                        deviceID: "immutable-device-a"
+                    )
+                ),
+                FamilySyncRecord(
+                    recordName: recordName,
+                    profileID: fixture.profileID,
+                    kind: .attempt,
+                    payload: Data("second-immutable-payload".utf8),
+                    updatedAt: fixture.now.addingTimeInterval(1),
+                    deviceID: "immutable-device-b",
+                    logicalRevision: FamilySyncLogicalRevision(
+                        counter: 2,
+                        deviceID: "immutable-device-b"
+                    )
+                )
+            )
+        }
+    }
+
+    private func assertConflictRemainsFailClosed(
+        result: FamilySyncTransportResult,
+        store: CloudKitFamilyMetadataStore,
+        recordID: CKRecord.ID,
+        file: StaticString,
+        line: UInt
+    ) {
+        XCTAssertTrue(result.records.isEmpty, file: file, line: line)
+        XCTAssertTrue(result.deletions.isEmpty, file: file, line: line)
+        XCTAssertTrue(result.receiptIDs.isEmpty, file: file, line: line)
+        XCTAssertTrue(result.receipts.isEmpty, file: file, line: line)
+        XCTAssertTrue(result.acknowledged.isEmpty, file: file, line: line)
+        XCTAssertTrue(result.failures.isEmpty, file: file, line: line)
+        XCTAssertTrue(store.inboxEntries().isEmpty, file: file, line: line)
+        XCTAssertEqual(store.quarantinedCount(), 1, file: file, line: line)
+        XCTAssertTrue(
+            store.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            ),
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            store.isQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            ),
+            file: file,
+            line: line
         )
     }
 

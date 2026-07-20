@@ -1300,7 +1300,7 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
                 throw CloudKitFamilyPersistenceError.bindingConflict
             }
 
-            let appendResult = appendInboxEntry(
+            let appendResult = try appendInboxEntry(
                 record: record,
                 recordID: recordID,
                 scope: .privateDatabase,
@@ -1663,6 +1663,24 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
         }
     }
 
+    /// An invariant conflict is a durable disposition, not a decode failure
+    /// that a later callback may silently repair. Keep it distinct from
+    /// compatibility quarantine so a newly supported schema can still replace
+    /// an older unreadable envelope while conflicting immutable/revision bytes
+    /// remain fail closed across retries and process relaunches.
+    func isConflictQuarantined(
+        recordID: CKRecord.ID,
+        scope: CloudKitFamilyDatabaseScope
+    ) -> Bool {
+        withLock {
+            isConflictQuarantined(
+                recordID: recordID,
+                scope: scope,
+                snapshot: loadLocked()
+            )
+        }
+    }
+
     func appendInbox(
         record: FamilySyncRecord,
         recordID: CKRecord.ID,
@@ -1672,7 +1690,7 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
     ) throws -> UUID {
         try withLock {
             var snapshot = loadLocked()
-            let result = appendInboxEntry(
+            let result = try appendInboxEntry(
                 record: record,
                 recordID: recordID,
                 scope: scope,
@@ -1735,7 +1753,7 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
             else {
                 throw CloudKitFamilyPersistenceError.bindingConflict
             }
-            let appendResult = appendInboxEntry(
+            let appendResult = try appendInboxEntry(
                 record: record,
                 recordID: recordID,
                 scope: scope,
@@ -1797,7 +1815,7 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
             else {
                 throw CloudKitFamilyPersistenceError.bindingConflict
             }
-            let appendResult = appendInboxEntry(
+            let appendResult = try appendInboxEntry(
                 record: record,
                 recordID: recordID,
                 scope: scope,
@@ -1913,7 +1931,7 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
                 return nil
             }
 
-            let appendResult = appendInboxEntry(
+            let appendResult = try appendInboxEntry(
                 record: record,
                 recordID: recordID,
                 scope: scope,
@@ -2191,7 +2209,7 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
                 throw CloudKitFamilyPersistenceError.bindingConflict
             }
 
-            let appendResult = appendInboxEntry(
+            let appendResult = try appendInboxEntry(
                 record: record,
                 recordID: stagedRecordID,
                 scope: marker.scope,
@@ -2408,7 +2426,7 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
             case .zoneDeletion:
                 evidence = .zoneDeletion
             }
-            let appendResult = appendInboxEntry(
+            let appendResult = try appendInboxEntry(
                 record: record,
                 recordID: marker.rootRecordID,
                 scope: marker.scope,
@@ -2814,6 +2832,63 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
         }
     }
 
+    /// Atomically converts every previously staged receipt for one record and
+    /// the newly observed conflicting candidate into one durable conflict
+    /// disposition. A failed snapshot write leaves the inbox and prior
+    /// quarantine byte-for-byte unchanged, so retry never observes the
+    /// half-converted state that could admit one variant as ordinary input.
+    func quarantineConflict(
+        receiptIDs: Set<UUID>,
+        candidate: CloudKitFamilyQuarantineEntry
+    ) throws {
+        guard !receiptIDs.isEmpty, candidate.reason == .conflict else {
+            throw CloudKitFamilyPersistenceError.missingInboxReceipt
+        }
+        try withLock {
+            var snapshot = loadLocked()
+            let selected = snapshot.inbox.filter {
+                receiptIDs.contains($0.receiptID)
+            }
+            guard selected.count == receiptIDs.count else {
+                throw CloudKitFamilyPersistenceError.missingInboxReceipt
+            }
+            guard !loadFailed, !snapshot.requiresAccountConfirmation,
+                snapshot.confirmedAccountRecordName != nil,
+                selected.allSatisfy({ entry in
+                    let recordName =
+                        entry.record?.recordName ?? entry.deletionKey?.recordName
+                    return isInboxEntryAuthorized(entry, in: snapshot)
+                        && entry.scope == candidate.scope
+                        && entry.zoneName == candidate.zoneName
+                        && entry.ownerName == candidate.ownerName
+                        && recordName == candidate.recordName
+                })
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+
+            snapshot.quarantined.removeAll {
+                $0.scope == candidate.scope
+                    && $0.recordName == candidate.recordName
+                    && $0.zoneName == candidate.zoneName
+                    && $0.ownerName == candidate.ownerName
+            }
+            snapshot.quarantined.append(candidate)
+            let protectedKey = CloudKitProtectedRecordKey(
+                scope: candidate.scope,
+                recordName: candidate.recordName,
+                zoneName: candidate.zoneName,
+                ownerName: candidate.ownerName
+            )
+            if !snapshot.protectedRecordKeys.contains(protectedKey) {
+                snapshot.protectedRecordKeys.append(protectedKey)
+            }
+            trimQuarantine(&snapshot)
+            snapshot.inbox.removeAll { receiptIDs.contains($0.receiptID) }
+            try persistLocked(snapshot)
+        }
+    }
+
     private func trimQuarantine(
         _ snapshot: inout CloudKitFamilyMetadataSnapshot
     ) {
@@ -2921,7 +2996,18 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
         receivedAt: Date,
         terminalEvidence: CloudKitFamilyTerminalEvidence? = nil,
         snapshot: inout CloudKitFamilyMetadataSnapshot
-    ) -> (receiptID: UUID, didMutate: Bool) {
+    ) throws -> (receiptID: UUID, didMutate: Bool) {
+        if terminalEvidence == nil,
+            isConflictQuarantined(
+                recordID: recordID,
+                scope: scope,
+                snapshot: snapshot
+            )
+        {
+            // A valid decode can repair compatibility quarantine, but it can
+            // never silently erase a previously proven invariant conflict.
+            throw CloudKitFamilyPersistenceError.conflictProtectedRecord
+        }
         if let existing = snapshot.inbox.first(where: {
             $0.operation == .save && $0.record == record
                 && $0.scope == scope
@@ -2954,6 +3040,20 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
             snapshot: &snapshot
         )
         return (entry.receiptID, true)
+    }
+
+    private func isConflictQuarantined(
+        recordID: CKRecord.ID,
+        scope: CloudKitFamilyDatabaseScope,
+        snapshot: CloudKitFamilyMetadataSnapshot
+    ) -> Bool {
+        snapshot.quarantined.contains {
+            $0.scope == scope
+                && $0.recordName == recordID.recordName
+                && $0.zoneName == recordID.zoneID.zoneName
+                && $0.ownerName == recordID.zoneID.ownerName
+                && $0.reason == .conflict
+        }
     }
 
     private func isAuthorized(
@@ -3330,6 +3430,7 @@ enum CloudKitFamilyPersistenceError: Error, Equatable {
     case corruptMetadata
     case accountBindingMismatch
     case bindingConflict
+    case conflictProtectedRecord
     case stateClearFailed
 }
 
