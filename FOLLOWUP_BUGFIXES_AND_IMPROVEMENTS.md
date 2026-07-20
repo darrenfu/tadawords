@@ -740,3 +740,59 @@ exact signed-build gates.
   Pawgoo CloudKit non-access, support-mail practices, and corrected public copy.
 - The complete pre-commit gate passes strict format, 834/834 Swift tests,
   40/40 Issue Agent tests, and 11/11 release-preflight tests.
+
+## v0.7.5 — 2026-07-19
+
+Target release: `v0.7.5`
+
+Branch: `codex/pr36-appstore-v075-refresh`
+
+Build: `2026071905`
+
+Overall state: the internal App Store submission pack now consumes the merged
+privacy and content-rights inventories and maps metadata claims to real source
+and test paths. It remains blocked from App Store Connect until the exact signed
+release, human decisions, production CloudKit, final-Profile/delete-all,
+Keychain lifecycle, public-copy, content-rights, and Parents-gated permission
+gates pass.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| APPSTORE-018 | Documentation | Submission metadata | Keep one versioned metadata, review-notes, screenshot, claim, and exact-RC preflight pack within Apple field limits and synchronized with the merged privacy/content-rights evidence. | v0.7.5 source candidate and automated contract coverage added | Recount final localized fields, validate exact signed iPhone/iPad screenshots and reviewer paths, then enter only the accepted values through the human-gated submission workflow |
+| APPSTORE-018-RIGHTS | Blocker | Copyright/content rights | Treat `2026 Pawgoo LLC` as provisional and do not make the App Store content-rights representation until the voice entitlement and Pawgoo rights chain are documented. | Merged inventory identifies every shipped content class; #32 and #33 remain open | Preserve the account/tier evidence and obtain an authorized Pawgoo authorship/rights-chain attestation for every selected storefront |
+| APPSTORE-018-DATA | Blocker | Privacy/public claims | Keep core practice/no-Pawgoo-account separate from parent-opted-in Family Sync, which needs an available iCloud account. Do not claim complete deletion while the final Profile cannot be deleted or a full reset performed. | Source boundaries and caveats are in the metadata pack; #19, #28, and #54 remain open | Pass production destructive sync and final-Profile/delete-all acceptance, choose/test the Keychain lifecycle, and deploy/verify matching Pawgoo Privacy and Support copy |
+| APPSTORE-018-KIDS | Blocker | Permission requests | Do not direct an App Reviewer to grant Speech or Microphone authorization from the child-facing Read screen. Apple Kids guidance expects permission requests behind a parental gate. | Current source can trigger both system prompts from Read; metadata and review steps are blocked by #55 | Move setup behind Parents, cover deny/retry/already-authorized states, and verify the exact signed flow on iPhone and iPad before replacing the reviewer placeholder |
+
+### 2026-07-19 v0.7.5 notes
+
+- Reserved version `0.7.5` and build `2026071905` across both source Plists,
+  `project.yml`, and the generated Xcode project.
+- Added `Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md` with exact English metadata,
+  review notes, fictional screenshot fixtures, real source/test links, and an
+  explicit exact-RC preflight. The file remains marked internal and is not an
+  authorization to upload or submit.
+- Removed misleading keyword claims for phonics and flashcards; the 93-byte
+  keyword field now describes sight-word, reading, spelling, handwriting, word-
+  list, and early-literacy practice.
+- Recorded that current teacher audio is bundled or uses offline Apple speech;
+  neither shipping plist configures a runtime teacher-audio endpoint.
+- Replaced shared-device marketing language with Profile-specific learner
+  wording. Core practice needs no Pawgoo account, while Family Sync separately
+  requires parent opt-in and an available iCloud account.
+- Kept Parent Profile controls qualified: the sole remaining Profile cannot be
+  deleted and no complete Delete All App Data path exists. Issue #19 remains the
+  behavior and destructive-proof gate.
+- Integrated the merged privacy and content-rights inventories. Issue #54 owns
+  the live Pawgoo copy; #32 and #33 own voice entitlement and Pawgoo ownership
+  evidence; the displayed Pawgoo copyright remains provisional.
+- Blocked current Read permission instructions under #55 because the
+  child-facing action can trigger Speech and Microphone system authorization.
+  The final reviewer path must begin behind the Parent Gate and pass exact-
+  device verification before paste.
+- This batch does not upload to App Store Connect, change the Pawgoo website,
+  mutate CloudKit, or claim simulator/device/human acceptance.
+- The complete pre-commit gate passes strict format, 837/837 Swift tests,
+  40/40 Issue Agent tests, and 11/11 release-preflight tests. The focused
+  metadata limits/local-link/stale-claim contract passes 3/3, and the source
+  content inventory independently verifies the current version, build, audio,
+  picture, JSON, font, attribution, and absent-endpoint boundaries.
