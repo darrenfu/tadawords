@@ -2,6 +2,7 @@
   "schema_version": 1,
   "bundle_id": "com.tadawords.app",
   "source_entitlements": {
+    "aps-environment": "$(APS_ENVIRONMENT)",
     "com.apple.developer.icloud-container-identifiers": [
       "iCloud.com.tadawords.app"
     ],
@@ -13,6 +14,7 @@
   "signed_entitlements": {
     "required_exact": {
       "application-identifier": "${TEAM_ID}.com.tadawords.app",
+      "aps-environment": "production",
       "com.apple.developer.icloud-container-environment": "Production",
       "com.apple.developer.icloud-container-identifiers": [
         "iCloud.com.tadawords.app"
@@ -31,6 +33,10 @@
     },
     "artifact_allowed_values": {
       "archive": {
+        "aps-environment": [
+          "development",
+          "production"
+        ],
         "com.apple.developer.icloud-container-environment": [
           "Development",
           "Production"
@@ -43,6 +49,7 @@
     },
     "allowed_keys": [
       "application-identifier",
+      "aps-environment",
       "beta-reports-active",
       "com.apple.developer.icloud-container-environment",
       "com.apple.developer.icloud-container-identifiers",
