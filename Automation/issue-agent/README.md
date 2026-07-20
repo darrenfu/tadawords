@@ -109,8 +109,35 @@ tail -50 '/Users/macmini-dofu/Library/Logs/TadaWordsIssueAgent/poll.log'
 ```
 
 To resume a human-resolved blocker, comment `/resume` on the blocked Issue or
-`/resume <current-head-sha>` on its PR. To authorize merge after reviewing the
-exact tested build, comment `/merge <current-head-sha>` on the PR.
+`/resume <current-head-sha>` on its PR.
+
+## Exact-HEAD automatic merge
+
+A ready, non-draft agent PR targeting `main` directly, carrying
+`awaiting-human-review`, and having no blocker or current changes-requested
+review produces a deterministic `automatic_merge_candidate` event keyed by its
+full HEAD SHA and PR-body SHA-256 digest. The repository
+owner's standing authorization permits Codex to squash-merge that candidate
+without a separate GitHub comment, but only after a fresh exact-HEAD preflight
+confirms mergeable/clean state, required checks, applicable simulator and signed
+artifact/device evidence, dependencies, and every remaining product or risk
+gate. A new commit produces a new event ID and invalidates all prior evidence.
+Stacked and other non-`main` PRs never produce automatic candidates. A base edit
+or any PR-body edit invalidates the candidate even when the commit SHA is
+unchanged; the worker must re-fetch the full body digest and exact closing set
+immediately before merge. A PR with only `Refs #N` and no closing reference
+remains eligible.
+
+`/merge <current-head-sha>` remains an optional compatible command. It creates
+the legacy `merge_authorized` event but does not bypass the same preflight.
+
+After merging, the worker fetches `origin/main` and refuses durable
+acknowledgement until the PR still names the tested HEAD, its merge commit is
+reachable from `origin/main`, its tree matches the tested HEAD tree, its full
+body digest and exact closing set match the event, and every exact `Closes #N`
+reference that exists is closed through that PR. An unchanged open PR and a PR
+closed without merge are not durable merge outcomes merely because Codex exited
+successfully.
 
 ## Recovery and rollback
 
@@ -122,6 +149,15 @@ until ownership has been reconciled; rollback must not erase audit evidence.
 After restoration, verify the loaded program, 900-second interval, selected
 model/effort, lock behavior, and one safe no-op poll before declaring recovery.
 Never acknowledge a partially handled event merely because the process exited.
+
+To restore the prior mandatory-comment merge gate, revert the Issue #85 policy
+commit, run the installer so the verified repository copy replaces the installed
+worker, and retain the existing backup, logs, state, worktrees, remote branches,
+and GitHub labels. Verify the restored program, 900-second interval, lock, and
+one safe no-op poll before re-enabling work. The restored worker again waits for
+an exact owner `/merge <current-head-sha>` comment. If rollback cannot be
+completed atomically, disable the LaunchAgent or apply a blocker rather than
+running mixed policy versions.
 
 ## Uninstall
 

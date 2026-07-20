@@ -25,6 +25,8 @@ IMPLEMENTATION_PR_LABEL = "implementation-in-pr"
 CLAIMED_LABELS = {CLAIMED_LABEL, RECLAIMED_LABEL}
 BLOCKING_LABELS = {"needs-human-clarification", "agent-blocked"}
 AGENT_PR_LABELS = {"awaiting-human-review", "human-approved"}
+AUTOMATIC_MERGE_READY_LABEL = "awaiting-human-review"
+MERGE_EVENT_TYPES = {"automatic_merge_candidate", "merge_authorized"}
 DEFAULT_MAX_ACTIVE_BATCHES = 1
 MAX_CLAIMS_PER_POLL = 1
 VERSION_RE = re.compile(r"(?<![0-9])v?(\d+)\.(\d+)\.(\d+)(?![0-9])")
@@ -459,6 +461,10 @@ def sha_matches(requested: str, current: str) -> bool:
     return len(requested) >= 7 and current.casefold().startswith(requested.casefold())
 
 
+def pr_body_digest(body: str) -> str:
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
 def pull_request_events(
     repo: str,
     prs: list[dict[str, Any]],
@@ -474,25 +480,31 @@ def pull_request_events(
 
         number = int(pr["number"])
         head = str(pr.get("headRefOid") or "")
+        base = str(pr.get("baseRefName") or "")
+        body = str(pr.get("body") or "")
+        body_digest = pr_body_digest(body)
+        closing_issues = sorted(exact_closing_issue_numbers(body))
         reviews = run_json(
             ["gh", "api", f"repos/{repo}/pulls/{number}/reviews", "--paginate"]
         )
+        current_changes_requested = False
         for review in reviews:
             event_id = f"review:{review.get('id')}"
             if (
-                event_id not in acknowledged
-                and review.get("state") == "CHANGES_REQUESTED"
+                review.get("state") == "CHANGES_REQUESTED"
                 and review.get("commit_id") == head
             ):
-                events.append(
-                    {
-                        "id": event_id,
-                        "type": "changes_requested",
-                        "pr": number,
-                        "head": head,
-                        "url": pr.get("url"),
-                    }
-                )
+                current_changes_requested = True
+                if event_id not in acknowledged:
+                    events.append(
+                        {
+                            "id": event_id,
+                            "type": "changes_requested",
+                            "pr": number,
+                            "head": head,
+                            "url": pr.get("url"),
+                        }
+                    )
 
         comments = run_json(
             ["gh", "api", f"repos/{repo}/issues/{number}/comments", "--paginate"]
@@ -506,13 +518,20 @@ def pull_request_events(
             event_id = f"comment:{comment.get('id')}"
             if event_id in acknowledged:
                 continue
-            if merge_match and sha_matches(merge_match.group(1), head):
+            if (
+                merge_match
+                and sha_matches(merge_match.group(1), head)
+                and base == "main"
+            ):
                 events.append(
                     {
                         "id": event_id,
                         "type": "merge_authorized",
                         "pr": number,
                         "head": head,
+                        "base": base,
+                        "body_digest": body_digest,
+                        "closing_issues": closing_issues,
                         "url": pr.get("url"),
                     }
                 )
@@ -529,6 +548,30 @@ def pull_request_events(
                         "url": pr.get("url"),
                     }
                 )
+
+        auto_merge_event_id = f"auto-merge:{number}:{head}:{body_digest}"
+        if (
+            auto_merge_event_id not in acknowledged
+            and len(head) == 40
+            and base == "main"
+            and AUTOMATIC_MERGE_READY_LABEL in labels
+            and not bool(pr.get("isDraft"))
+            and not labels.intersection(BLOCKING_LABELS)
+            and str(pr.get("reviewDecision") or "") != "CHANGES_REQUESTED"
+            and not current_changes_requested
+        ):
+            events.append(
+                {
+                    "id": auto_merge_event_id,
+                    "type": "automatic_merge_candidate",
+                    "pr": number,
+                    "head": head,
+                    "base": base,
+                    "body_digest": body_digest,
+                    "closing_issues": closing_issues,
+                    "url": pr.get("url"),
+                }
+            )
     return events
 
 
@@ -581,6 +624,12 @@ def git_is_ancestor(control_repo: Path, ancestor: str, descendant: str) -> bool:
         stderr=subprocess.DEVNULL,
     )
     return completed.returncode == 0
+
+
+def git_trees_match(control_repo: Path, left: str, right: str) -> bool:
+    left_tree = run(["git", "rev-parse", f"{left}^{{tree}}"], cwd=control_repo).strip()
+    right_tree = run(["git", "rev-parse", f"{right}^{{tree}}"], cwd=control_repo).strip()
+    return bool(left_tree) and left_tree == right_tree
 
 
 def issue_comments(repo: str, number: int) -> list[dict[str, Any]]:
@@ -971,7 +1020,7 @@ def inspect(args: argparse.Namespace) -> dict[str, Any]:
             "--limit",
             "100",
             "--json",
-            "number,title,body,headRefName,headRefOid,labels,reviewDecision,isDraft,updatedAt,url",
+            "number,title,body,headRefName,headRefOid,baseRefName,labels,reviewDecision,isDraft,updatedAt,url",
         ]
     )
 
@@ -1508,9 +1557,30 @@ def live_pull_request(repo: str, number: int) -> dict[str, Any]:
             "--repo",
             repo,
             "--json",
-            "number,state,headRefOid,labels,url",
+            "number,state,headRefOid,baseRefName,body,mergeCommit,mergedAt,labels,url",
         ]
     )
+
+
+def linked_issues_closed_by_pull_request(
+    repo: str, issue_numbers: Iterable[int], pull_request_number: int
+) -> bool:
+    numbers = [int(issue_number) for issue_number in issue_numbers]
+    if not numbers:
+        return False
+    for issue_number in numbers:
+        issue = live_issue(repo, int(issue_number))
+        closing_pull_requests = {
+            int(reference["number"])
+            for reference in issue.get("closedByPullRequestsReferences") or []
+            if reference.get("number") is not None
+        }
+        if (
+            issue.get("state") != "CLOSED"
+            or pull_request_number not in closing_pull_requests
+        ):
+            return False
+    return True
 
 
 def issue_has_durable_outcome(
@@ -1540,10 +1610,43 @@ def event_has_durable_outcome(
 ) -> bool:
     event_type = str(event.get("type") or "")
     if event.get("pr") is not None:
-        pr = live_pull_request(repo, int(event["pr"]))
-        if pr.get("state") != "OPEN":
+        pull_request_number = int(event["pr"])
+        pr = live_pull_request(repo, pull_request_number)
+        state = str(pr.get("state") or "")
+        current_head = str(pr.get("headRefOid") or "")
+        expected_head = str(event.get("head") or "")
+        if state == "OPEN":
+            return current_head != expected_head
+        if event_type not in MERGE_EVENT_TYPES:
             return True
-        return str(pr.get("headRefOid") or "") != str(event.get("head") or "")
+        if state == "CLOSED":
+            return False
+        if state != "MERGED":
+            return False
+        expected_base = str(event.get("base") or "")
+        expected_body_digest = str(event.get("body_digest") or "")
+        live_body = str(pr.get("body") or "")
+        expected_closing_issues = sorted(
+            {int(number) for number in event.get("closing_issues") or []}
+        )
+        live_closing_issues = sorted(exact_closing_issue_numbers(live_body))
+        merge_commit = str((pr.get("mergeCommit") or {}).get("oid") or "")
+        if (
+            not expected_head
+            or current_head != expected_head
+            or expected_base != "main"
+            or pr.get("baseRefName") != expected_base
+            or not expected_body_digest
+            or pr_body_digest(live_body) != expected_body_digest
+            or live_closing_issues != expected_closing_issues
+            or not merge_commit
+            or not git_is_ancestor(control_repo, merge_commit, "origin/main")
+            or not git_trees_match(control_repo, expected_head, merge_commit)
+        ):
+            return False
+        return not expected_closing_issues or linked_issues_closed_by_pull_request(
+            repo, expected_closing_issues, pull_request_number
+        )
     if event.get("issue") is not None:
         number = int(event["issue"])
         if event_type == "issue_resume_requested":

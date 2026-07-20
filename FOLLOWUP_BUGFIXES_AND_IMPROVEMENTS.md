@@ -1073,3 +1073,49 @@ does not install devices, mutate Apple portals, or merge itself.
   recovery serialization, and #80 owns a bounded fail-closed conflict index.
   These are P1 release gates and do not expand the normal single-coordinator
   iPhone-plus-iPad P0 family-play path.
+
+## v0.7.11 — 2026-07-20
+
+Target release: `v0.7.11`
+
+Branch: `codex/auto-merge-exact-head-v0.7.11`
+
+Build: `2026072011`
+
+Overall state: Issue #85 changes delivery policy and Issue Agent contracts; app
+runtime logic and persistent schemas are unchanged. PR #72 is merged and this
+batch is rebased directly onto the resulting `main`. Because the required
+release increment changes app/LocalQA version/build metadata and the generated
+Xcode project, exact-HEAD simulator and signed LocalQA iPhone/iPad gates still
+apply. Apple Portal state, signing assets, CloudKit, and child data remain out
+of scope.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0711-DELIVERY-001 | P1 automation | Delivery | Replace the mandatory owner `/merge` comment with standing exact-HEAD authorization while retaining every evidence, blocker, high-risk, and post-merge gate. Keep `/merge` optional and provide a verified rollback to the prior comment policy. | Source complete; packaged-artifact verification pending | Issue Agent focused/full tests, repository check, exact-HEAD iPhone/iPad simulator build, and signed LocalQA iPhone/M4 iPad identity/install/launch evidence |
+
+### 2026-07-20 v0.7.11 notes
+
+- Reserved version `0.7.11` and build `2026072011` for the reclaimed Issue #85
+  delivery-policy batch.
+- A ready, non-draft, unblocked agent PR now produces a deterministic automatic
+  merge candidate keyed by its full HEAD and PR-body SHA-256 digest without
+  requiring a GitHub comment; stacked/non-`main` PRs are excluded.
+- New commits produce a new candidate and invalidate previous checks, artifacts,
+  device evidence, reviews, and readiness.
+- A base change or any PR-body edit also invalidates the candidate at the same
+  commit; `Refs`-only PRs remain valid and linked-Issue closure is verified only
+  for exact closing references that are actually present.
+- The optional owner `/merge <sha>` command remains supported and is subject to
+  the same current-HEAD preflight.
+- Durable acknowledgement after merge now requires the exact tested HEAD, a
+  merge commit reachable from fresh `origin/main`, an identical merged tree,
+  and closure of every exact linked Issue through that PR.
+- Destructive data work, irreversible provider/account mutations, credentials,
+  authentication, ambiguous product choices, and mismatched target environments
+  remain explicit human gates.
+- Rollback reverts this policy batch and reinstalls the verified Issue Agent;
+  logs, state, worktrees, branches, labels, and audit evidence stay preserved.
+- App behavior is unchanged, but the version/build and generated package
+  metadata alter the built artifact. Exact-HEAD simulator validation and signed
+  LocalQA iPhone and iPad evidence is pending in the serialized device lane.

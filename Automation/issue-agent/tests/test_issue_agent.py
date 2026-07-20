@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 MODULE_PATH = Path(__file__).parents[1] / "issue_agent.py"
@@ -328,6 +329,209 @@ class IssueAgentTests(unittest.TestCase):
         self.assertTrue(issue_agent.sha_matches(match.group(1), current))
         self.assertIsNone(issue_agent.MERGE_RE.fullmatch("/merge"))
         self.assertFalse(issue_agent.sha_matches("1234567", current))
+
+    def test_standing_authorization_emits_exact_head_candidate_without_comment(self):
+        head = "a" * 40
+        body = "Closes #85\n"
+        candidate = {
+            "number": 85,
+            "headRefName": "codex/auto-merge-exact-head-v0.7.11",
+            "headRefOid": head,
+            "baseRefName": "main",
+            "labels": [{"name": "awaiting-human-review"}],
+            "reviewDecision": "APPROVED",
+            "isDraft": False,
+            "body": body,
+            "url": "https://example.test/pull/86",
+        }
+
+        with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
+            events = issue_agent.pull_request_events("owner/repo", [candidate], set())
+
+        self.assertEqual(
+            events,
+            [
+                {
+                    "id": f"auto-merge:85:{head}:{issue_agent.pr_body_digest(body)}",
+                    "type": "automatic_merge_candidate",
+                    "pr": 85,
+                    "head": head,
+                    "base": "main",
+                    "body_digest": issue_agent.pr_body_digest(body),
+                    "closing_issues": [85],
+                    "url": "https://example.test/pull/86",
+                }
+            ],
+        )
+
+    def test_standing_authorization_never_bypasses_draft_or_blocker(self):
+        base = {
+            "number": 85,
+            "headRefName": "agent/batch-automation-v0.7.11",
+            "headRefOid": "b" * 40,
+            "baseRefName": "main",
+            "labels": [{"name": "awaiting-human-review"}],
+            "reviewDecision": "APPROVED",
+            "isDraft": False,
+            "body": "Closes #85\n",
+            "url": "https://example.test/pull/85",
+        }
+        cases = [
+            {**base, "isDraft": True},
+            {
+                **base,
+                "labels": [
+                    {"name": "awaiting-human-review"},
+                    {"name": "agent-blocked"},
+                ],
+            },
+            {**base, "reviewDecision": "CHANGES_REQUESTED"},
+        ]
+
+        for candidate in cases:
+            with self.subTest(candidate=candidate), mock.patch.object(
+                issue_agent, "run_json", side_effect=[[], []]
+            ):
+                self.assertEqual(
+                    issue_agent.pull_request_events("owner/repo", [candidate], set()),
+                    [],
+                )
+
+    def test_standing_authorization_allows_a_refs_only_main_pr(self):
+        body = "Refs #85\n"
+        candidate = {
+            "number": 85,
+            "headRefName": "agent/batch-automation-v0.7.11",
+            "headRefOid": "f" * 40,
+            "baseRefName": "main",
+            "labels": [{"name": "awaiting-human-review"}],
+            "reviewDecision": "APPROVED",
+            "isDraft": False,
+            "body": body,
+            "url": "https://example.test/pull/85",
+        }
+
+        with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
+            events = issue_agent.pull_request_events("owner/repo", [candidate], set())
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["closing_issues"], [])
+        self.assertEqual(events[0]["body_digest"], issue_agent.pr_body_digest(body))
+
+    def test_new_head_invalidates_acknowledged_auto_merge_candidate(self):
+        old_head = "c" * 40
+        new_head = "d" * 40
+        body = "Closes #85\n"
+        candidate = {
+            "number": 85,
+            "headRefName": "agent/batch-automation-v0.7.11",
+            "headRefOid": new_head,
+            "baseRefName": "main",
+            "labels": [{"name": "awaiting-human-review"}],
+            "reviewDecision": "APPROVED",
+            "isDraft": False,
+            "body": body,
+            "url": "https://example.test/pull/85",
+        }
+
+        with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
+            events = issue_agent.pull_request_events(
+                "owner/repo",
+                [candidate],
+                {f"auto-merge:85:{old_head}:{issue_agent.pr_body_digest(body)}"},
+            )
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(
+            events[0]["id"],
+            f"auto-merge:85:{new_head}:{issue_agent.pr_body_digest(body)}",
+        )
+        self.assertEqual(events[0]["head"], new_head)
+
+    def test_owner_merge_command_remains_an_optional_compatible_event(self):
+        head = "e" * 40
+        body = "Refs #85\n"
+        candidate = {
+            "number": 85,
+            "headRefName": "agent/batch-automation-v0.7.11",
+            "headRefOid": head,
+            "baseRefName": "main",
+            "labels": [],
+            "reviewDecision": "APPROVED",
+            "isDraft": False,
+            "body": body,
+            "url": "https://example.test/pull/85",
+        }
+        comments = [
+            {
+                "id": 101,
+                "body": f"/merge {head}",
+                "user": {"login": "owner"},
+            }
+        ]
+
+        with mock.patch.object(issue_agent, "run_json", side_effect=[[], comments]):
+            events = issue_agent.pull_request_events("owner/repo", [candidate], set())
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["type"], "merge_authorized")
+        self.assertEqual(events[0]["head"], head)
+        self.assertEqual(events[0]["base"], "main")
+        self.assertEqual(events[0]["body_digest"], issue_agent.pr_body_digest(body))
+        self.assertEqual(events[0]["closing_issues"], [])
+
+    def test_body_edit_at_same_head_produces_a_new_auto_merge_event(self):
+        head = "a" * 40
+        candidate = {
+            "number": 85,
+            "headRefName": "agent/batch-automation-v0.7.11",
+            "headRefOid": head,
+            "baseRefName": "main",
+            "labels": [{"name": "awaiting-human-review"}],
+            "reviewDecision": "APPROVED",
+            "isDraft": False,
+            "body": "Refs #85\n",
+            "url": "https://example.test/pull/85",
+        }
+
+        with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
+            first = issue_agent.pull_request_events("owner/repo", [candidate], set())
+        updated = {**candidate, "body": "Refs #85\n\nUpdated evidence.\n"}
+        with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
+            second = issue_agent.pull_request_events(
+                "owner/repo", [updated], {first[0]["id"]}
+            )
+
+        self.assertEqual(len(second), 1)
+        self.assertEqual(second[0]["head"], head)
+        self.assertNotEqual(second[0]["id"], first[0]["id"])
+
+    def test_standing_authorization_rejects_non_main_base(self):
+        candidate = {
+            "number": 85,
+            "headRefName": "agent/batch-automation-v0.7.11",
+            "headRefOid": "f" * 40,
+            "baseRefName": "feature/stacked-base",
+            "labels": [{"name": "awaiting-human-review"}],
+            "reviewDecision": "APPROVED",
+            "isDraft": False,
+            "body": "Closes #85\n",
+            "url": "https://example.test/pull/85",
+        }
+
+        with mock.patch.object(issue_agent, "run_json", side_effect=[[], []]):
+            self.assertEqual(
+                issue_agent.pull_request_events("owner/repo", [candidate], set()),
+                [],
+            )
+
+    def test_live_pull_request_refetches_body_and_base_for_merge_contract(self):
+        with mock.patch.object(issue_agent, "run_json", return_value={}) as run_json:
+            issue_agent.live_pull_request("owner/repo", 85)
+
+        fields = run_json.call_args.args[0][-1]
+        self.assertIn("body", fields)
+        self.assertIn("baseRefName", fields)
 
 
 if __name__ == "__main__":

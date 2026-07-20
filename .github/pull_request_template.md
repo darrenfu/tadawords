@@ -32,6 +32,12 @@ List exact commands, totals, failures, artifact paths, and the tested HEAD SHA.
 
 ## Physical-device evidence
 
+Mark each device row `N/A` only when the diff cannot affect app runtime,
+signing, persistence, or packaged content and changes no app/LocalQA
+version/build metadata, source/generated Plist, `project.yml`, generated Xcode
+project, entitlement, resource, or package input. Otherwise provide exact-HEAD
+signed evidence for one iPhone and one iPad.
+
 ### iPhone
 
 - Device / OS / identifier:
@@ -58,15 +64,26 @@ List exact commands, totals, failures, artifact paths, and the tested HEAD SHA.
 - Rollback:
 - Known limitations:
 
-## Human acceptance
+## Exact-HEAD merge readiness
 
-- [ ] Product behavior reviewed on iPhone
-- [ ] Product behavior reviewed on iPad
-- [ ] Copy and visual behavior accepted
-- [ ] Current HEAD confirmed
+- [ ] Current full HEAD SHA re-fetched and unchanged
+- [ ] PR is ready, mergeable, clean, and targets `main` directly
+- [ ] Current PR-body SHA-256 and complete `Closes #N` set match the candidate
+- [ ] Required checks and all applicable artifact/device evidence pass on this HEAD
+- [ ] No blocker, unresolved requested change, stale evidence, dependency, or high-risk decision remains
+- [ ] Product behavior/copy/visual acceptance is complete, or is `N/A` with rationale
 
-To authorize squash merge, the repository owner must comment:
+The repository owner's standing authorization permits Codex to squash-merge
+only after every row above is reverified. The owner may optionally comment:
 
 `/merge <current HEAD SHA>`
 
-Any new commit invalidates previous device evidence and authorization.
+The command is compatible but is not required and never substitutes for a
+gate. Any new commit invalidates previous evidence and merge readiness.
+
+## Post-merge verification
+
+- [ ] Fetched `origin/main` after merge
+- [ ] PR merged the same tested HEAD and its merge commit is reachable from `origin/main`
+- [ ] Merged tree equals the tested HEAD tree
+- [ ] Merged PR body retains the recorded SHA-256/closing set and every exact closing reference closed through this PR
