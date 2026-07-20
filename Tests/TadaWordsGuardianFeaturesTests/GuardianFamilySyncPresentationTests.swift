@@ -286,6 +286,30 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
         XCTAssertFalse(registered.contains("Push registration failure:"))
     }
 
+    func testRegisteredPushPresentationDoesNotClaimCloudKitDelivery() {
+        let presentation = GuardianRemoteNotificationRegistrationPresentation(
+            state: .registered(at: Date(timeIntervalSince1970: 1_735_689_600))
+        )
+
+        XCTAssertEqual(
+            presentation.title,
+            "Background notifications registered"
+        )
+        XCTAssertEqual(
+            presentation.message,
+            "Apple registered background notifications for this app. "
+                + "CloudKit delivery is checked separately."
+        )
+        XCTAssertFalse(
+            presentation.message.localizedCaseInsensitiveContains("can receive")
+        )
+        XCTAssertFalse(
+            presentation.message.localizedCaseInsensitiveContains(
+                "iCloud change notices"
+            )
+        )
+    }
+
     func testProfileErasureAggregateUsesMostSevereStateAndCountsOnlyThatState() throws {
         let presentation = try XCTUnwrap(
             GuardianProfileErasurePresentation.make(

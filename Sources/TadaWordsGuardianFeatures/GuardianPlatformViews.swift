@@ -181,7 +181,7 @@ struct GuardianFamilySyncPresentation: Equatable {
     }
 }
 
-private struct GuardianRemoteNotificationRegistrationPresentation {
+struct GuardianRemoteNotificationRegistrationPresentation {
     let title: String
     let message: String
     let symbol: String
@@ -197,8 +197,10 @@ private struct GuardianRemoteNotificationRegistrationPresentation {
             message = "Waiting for Apple to finish this device’s registration."
             symbol = "hourglass"
         case .registered:
-            title = "Background updates registered"
-            message = "This device can receive silent iCloud change notices."
+            title = "Background notifications registered"
+            message =
+                "Apple registered background notifications for this app. "
+                + "CloudKit delivery is checked separately."
             symbol = "checkmark.circle.fill"
         case .failed(let category, _):
             title = "Background registration needs attention"
