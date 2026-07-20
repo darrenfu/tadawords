@@ -76,7 +76,7 @@ class DeliveryPolicyContractTests(unittest.TestCase):
         self.assertIn("fsync", documents.casefold())
         self.assertIn("never uses an admin bypass", " ".join(readme.split()))
         self.assertTrue(protection["required_status_checks"]["strict"])
-        self.assertEqual(protection["required_status_checks"]["contexts"], [])
+        self.assertNotIn("contexts", protection["required_status_checks"])
         self.assertTrue(protection["enforce_admins"])
         self.assertEqual(
             protection["required_status_checks"]["checks"][0]["context"],
