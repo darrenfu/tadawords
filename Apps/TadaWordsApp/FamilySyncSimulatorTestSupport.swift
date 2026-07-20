@@ -404,7 +404,19 @@
             quarantined = true
         }
 
-        func confirmCurrentAccount() async throws {}
+        func confirmCurrentAccount() async throws -> FamilySyncAccountChange? {
+            guard scenario == .secondDeviceAdoption else { return nil }
+
+            // Production CloudKit confirmation rebuilds its sync engines and
+            // clears their durable cursors. Mirror that full-fetch boundary so
+            // a discovered-but-not-yet-adopted Profile can be fetched again
+            // after the app purges the unadopted local candidate on relaunch.
+            deliveredRemoteBundle = false
+            if FileManager.default.fileExists(atPath: cursorMarkerURL.path) {
+                try FileManager.default.removeItem(at: cursorMarkerURL)
+            }
+            return nil
+        }
 
         func suspend() async {}
 
