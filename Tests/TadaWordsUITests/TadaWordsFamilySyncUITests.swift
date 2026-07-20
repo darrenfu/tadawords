@@ -76,11 +76,12 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         launch(scenario: "remote-bundle", reset: true)
 
         let remoteProfile = app.buttons["Remote Mia"]
-        XCTAssertTrue(
-            remoteProfile.waitForExistence(timeout: 18),
-            "A committed remote Profile receipt should refresh the Kid chooser."
+        tapCenterWhenHittable(
+            remoteProfile,
+            timeout: 18,
+            failureMessage:
+                "A committed remote Profile receipt should refresh the Kid chooser."
         )
-        remoteProfile.tap()
 
         let badge = app.buttons["child-lobby.badge"]
         XCTAssertTrue(badge.waitForExistence(timeout: 8))
@@ -236,8 +237,11 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
     private func seedRemoteProfileAndRememberSelection() {
         launch(scenario: "remote-bundle", reset: true)
         let remoteProfile = app.buttons["Remote Mia"]
-        XCTAssertTrue(remoteProfile.waitForExistence(timeout: 18))
-        remoteProfile.tap()
+        tapCenterWhenHittable(
+            remoteProfile,
+            timeout: 18,
+            failureMessage: "The seeded remote Profile should become interactive."
+        )
         XCTAssertTrue(app.buttons["child-lobby.kids"].waitForExistence(timeout: 8))
     }
 
@@ -248,7 +252,11 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
                 app.buttons["My Kid"].exists,
                 "The random simulator seed must never become a second child."
             )
-            remoteProfile.tap()
+            tapCenterWhenHittable(
+                remoteProfile,
+                timeout: 12,
+                failureMessage: "The adopted remote Profile should become interactive."
+            )
             XCTAssertTrue(
                 app.buttons["child-lobby.kids"].waitForExistence(timeout: 8)
             )
@@ -280,8 +288,12 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
 
     private func openRememberedRemoteProfile() {
         let remoteProfile = app.buttons["Remote Mia"]
-        XCTAssertTrue(remoteProfile.waitForExistence(timeout: 8))
-        remoteProfile.tap()
+        tapCenterWhenHittable(
+            remoteProfile,
+            timeout: 12,
+            failureMessage:
+                "The remembered remote Profile should become interactive after relaunch."
+        )
     }
 
     private func launch(
@@ -355,6 +367,24 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
             waitUntil(timeout: timeout) { status.label == expected },
             "Expected sync status '\(expected)', got '\(status.label)'."
         )
+    }
+
+    private func tapCenterWhenHittable(
+        _ element: XCUIElement,
+        timeout: TimeInterval,
+        failureMessage: String
+    ) {
+        let becameHittable = waitUntil(timeout: timeout) {
+            element.exists && element.isHittable
+        }
+        guard becameHittable else {
+            XCTFail(failureMessage)
+            return
+        }
+
+        element.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+        ).tap()
     }
 
     @discardableResult
