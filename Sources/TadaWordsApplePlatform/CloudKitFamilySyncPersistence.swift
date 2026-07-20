@@ -1622,25 +1622,46 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
     func quarantine(_ entry: CloudKitFamilyQuarantineEntry) throws {
         try withLock {
             var snapshot = loadLocked()
-            snapshot.quarantined.removeAll {
-                $0.scope == entry.scope
-                    && $0.recordName == entry.recordName
-                    && $0.zoneName == entry.zoneName
-                    && $0.ownerName == entry.ownerName
-            }
-            snapshot.quarantined.append(entry)
-            let protectedKey = CloudKitProtectedRecordKey(
-                scope: entry.scope,
-                recordName: entry.recordName,
-                zoneName: entry.zoneName,
-                ownerName: entry.ownerName
-            )
-            if !snapshot.protectedRecordKeys.contains(protectedKey) {
-                snapshot.protectedRecordKeys.append(protectedKey)
-            }
+            guard stageQuarantine(entry, in: &snapshot) else { return }
             trimQuarantine(&snapshot)
             try persistLocked(snapshot)
         }
+    }
+
+    /// Adds or replaces diagnostic bytes without ever weakening an invariant
+    /// conflict disposition. A hidden protected key means its capped conflict
+    /// envelope was evicted; compatibility callbacks must preserve that lock
+    /// just as they preserve a still-visible conflict entry.
+    @discardableResult
+    private func stageQuarantine(
+        _ entry: CloudKitFamilyQuarantineEntry,
+        in snapshot: inout CloudKitFamilyMetadataSnapshot
+    ) -> Bool {
+        let protectedKey = Self.protectedRecordKey(for: entry)
+        let existingEntries = snapshot.quarantined.filter {
+            $0.scope == entry.scope
+                && $0.recordName == entry.recordName
+                && $0.zoneName == entry.zoneName
+                && $0.ownerName == entry.ownerName
+        }
+        let hasDurableConflictDisposition =
+            existingEntries.contains { $0.reason == .conflict }
+            || (existingEntries.isEmpty
+                && snapshot.protectedRecordKeys.contains(protectedKey))
+        guard entry.reason == .conflict || !hasDurableConflictDisposition else {
+            return false
+        }
+        snapshot.quarantined.removeAll {
+            $0.scope == entry.scope
+                && $0.recordName == entry.recordName
+                && $0.zoneName == entry.zoneName
+                && $0.ownerName == entry.ownerName
+        }
+        snapshot.quarantined.append(entry)
+        if !snapshot.protectedRecordKeys.contains(protectedKey) {
+            snapshot.protectedRecordKeys.append(protectedKey)
+        }
+        return true
     }
 
     func quarantinedCount() -> Int {
@@ -2809,22 +2830,7 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
                     envelopeData: envelopeData,
                     quarantinedAt: date
                 )
-                snapshot.quarantined.removeAll {
-                    $0.scope == quarantine.scope
-                        && $0.recordName == quarantine.recordName
-                        && $0.zoneName == quarantine.zoneName
-                        && $0.ownerName == quarantine.ownerName
-                }
-                snapshot.quarantined.append(quarantine)
-                let protectedKey = CloudKitProtectedRecordKey(
-                    scope: quarantine.scope,
-                    recordName: quarantine.recordName,
-                    zoneName: quarantine.zoneName,
-                    ownerName: quarantine.ownerName
-                )
-                if !snapshot.protectedRecordKeys.contains(protectedKey) {
-                    snapshot.protectedRecordKeys.append(protectedKey)
-                }
+                _ = stageQuarantine(quarantine, in: &snapshot)
             }
             trimQuarantine(&snapshot)
             snapshot.inbox.removeAll { receiptIDs.contains($0.receiptID) }
@@ -2867,22 +2873,7 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
                 throw CloudKitFamilyPersistenceError.accountBindingMismatch
             }
 
-            snapshot.quarantined.removeAll {
-                $0.scope == candidate.scope
-                    && $0.recordName == candidate.recordName
-                    && $0.zoneName == candidate.zoneName
-                    && $0.ownerName == candidate.ownerName
-            }
-            snapshot.quarantined.append(candidate)
-            let protectedKey = CloudKitProtectedRecordKey(
-                scope: candidate.scope,
-                recordName: candidate.recordName,
-                zoneName: candidate.zoneName,
-                ownerName: candidate.ownerName
-            )
-            if !snapshot.protectedRecordKeys.contains(protectedKey) {
-                snapshot.protectedRecordKeys.append(protectedKey)
-            }
+            _ = stageQuarantine(candidate, in: &snapshot)
             trimQuarantine(&snapshot)
             snapshot.inbox.removeAll { receiptIDs.contains($0.receiptID) }
             try persistLocked(snapshot)
@@ -2894,24 +2885,45 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
     ) {
         let maximumCount = 200
         guard snapshot.quarantined.count > maximumCount else { return }
+        let visibleKeysBeforeTrim = Set(
+            snapshot.quarantined.map(Self.protectedRecordKey(for:))
+        )
+        // A protected key without diagnostic bytes is deliberately compact
+        // conflict state retained by an earlier trim. Compatibility entries
+        // never survive invisibly.
+        let hiddenConflictKeys = Set(snapshot.protectedRecordKeys).subtracting(
+            visibleKeysBeforeTrim
+        )
+        let evictionCount = snapshot.quarantined.count - maximumCount
+        let evictedConflictKeys = Set(
+            snapshot.quarantined.prefix(evictionCount).compactMap { entry in
+                entry.reason == .conflict
+                    ? Self.protectedRecordKey(for: entry) : nil
+            }
+        )
         snapshot.quarantined.removeFirst(
-            snapshot.quarantined.count - maximumCount
+            evictionCount
         )
         let retainedKeys = Set(
-            snapshot.quarantined.map {
-                CloudKitProtectedRecordKey(
-                    scope: $0.scope,
-                    recordName: $0.recordName,
-                    zoneName: $0.zoneName,
-                    ownerName: $0.ownerName
-                )
-            })
-        // The protected-key index is a projection of quarantine. Evicting an
-        // old diagnostic envelope must not leave an invisible permanent lock
-        // that blocks that record forever.
+            snapshot.quarantined.map(Self.protectedRecordKey(for:))
+        )
+        let durableConflictKeys = hiddenConflictKeys.union(
+            evictedConflictKeys
+        )
         snapshot.protectedRecordKeys.removeAll {
-            !retainedKeys.contains($0)
+            !retainedKeys.contains($0) && !durableConflictKeys.contains($0)
         }
+    }
+
+    private static func protectedRecordKey(
+        for entry: CloudKitFamilyQuarantineEntry
+    ) -> CloudKitProtectedRecordKey {
+        CloudKitProtectedRecordKey(
+            scope: entry.scope,
+            recordName: entry.recordName,
+            zoneName: entry.zoneName,
+            ownerName: entry.ownerName
+        )
     }
 
     @discardableResult
@@ -3047,13 +3059,25 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
         scope: CloudKitFamilyDatabaseScope,
         snapshot: CloudKitFamilyMetadataSnapshot
     ) -> Bool {
-        snapshot.quarantined.contains {
+        let protectedKey = CloudKitProtectedRecordKey(
+            scope: scope,
+            recordName: recordID.recordName,
+            zoneName: recordID.zoneID.zoneName,
+            ownerName: recordID.zoneID.ownerName
+        )
+        let visibleEntries = snapshot.quarantined.filter {
             $0.scope == scope
                 && $0.recordName == recordID.recordName
                 && $0.zoneName == recordID.zoneID.zoneName
                 && $0.ownerName == recordID.zoneID.ownerName
-                && $0.reason == .conflict
         }
+        if !visibleEntries.isEmpty {
+            return visibleEntries.contains { $0.reason == .conflict }
+        }
+        // Under the current snapshot invariant only conflict keys can outlive
+        // their capped diagnostic envelope. Older snapshots never emitted
+        // hidden keys, so this interpretation is backwards compatible.
+        return snapshot.protectedRecordKeys.contains(protectedKey)
     }
 
     private func isAuthorized(

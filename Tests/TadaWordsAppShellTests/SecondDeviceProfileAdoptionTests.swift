@@ -270,6 +270,52 @@ final class SecondDeviceProfileAdoptionTests: XCTestCase {
         XCTAssertEqual(restarted.lastSelectedProfileID, remote.id)
     }
 
+    func testAdoptionFinalProfileReadFailureLeavesCompletionPendingForRetry()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let remote = profile(id: UUID(), name: "Mia")
+        let baseProfiles = InMemoryKidProfileRepository()
+        try await baseProfiles.save(remote)
+        let profiles = FailingOnceProfilesReadKidProfileRepository(
+            base: baseProfiles
+        )
+        let session = InMemoryChildSessionRepository()
+        let onboarding = try await pendingDiscoveryRepository(in: directory)
+        let coordinator = creationCoordinator(
+            profileRepository: profiles,
+            settingsRepository: InMemoryPracticeSettingsRepository(),
+            childSessionRepository: session,
+            onboardingRepository: onboarding,
+            existingProfiles: [remote]
+        )
+        let submission = FirstRunOnboardingSubmission(
+            action: .adoptExistingProfile(remote.id)
+        )
+
+        await assertThrowsErrorAsync {
+            _ = try await coordinator.complete(
+                profileID: nil,
+                submission: submission
+            )
+        }
+
+        let pendingState = try await onboarding.state()
+        let selectedAfterFailure = try await session.lastSelectedProfileID()
+        XCTAssertEqual(pendingState?.status, .pending)
+        XCTAssertEqual(selectedAfterFailure, remote.id)
+
+        let completion = try await coordinator.complete(
+            profileID: nil,
+            submission: submission
+        )
+        XCTAssertEqual(completion.profiles.map(\.id), [remote.id])
+        XCTAssertEqual(completion.selectedProfileID, remote.id)
+        let completedState = try await onboarding.state()
+        XCTAssertEqual(completedState?.status, .completed)
+    }
+
     func testRelaunchAfterDiscoveryBeforeAdoptionKeepsRemoteProfilesReadOnly()
         async throws
     {
@@ -787,6 +833,57 @@ final class SecondDeviceProfileAdoptionTests: XCTestCase {
         XCTAssertEqual(savedRemote, remote)
     }
 
+    func testCreationFinalProfileReadFailureRetriesReservedIdentity()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let remote = profile(id: UUID(), name: "Mia")
+        let baseProfiles = InMemoryKidProfileRepository()
+        try await baseProfiles.save(remote)
+        let profiles = FailingOnceProfilesReadKidProfileRepository(
+            base: baseProfiles
+        )
+        let onboarding = try await pendingDiscoveryRepository(in: directory)
+        let coordinator = creationCoordinator(
+            profileRepository: profiles,
+            settingsRepository: InMemoryPracticeSettingsRepository(),
+            childSessionRepository: InMemoryChildSessionRepository(),
+            onboardingRepository: onboarding,
+            existingProfiles: [remote]
+        )
+
+        await assertThrowsErrorAsync {
+            _ = try await coordinator.complete(
+                profileID: remote.id,
+                submission: self.newKidSubmission
+            )
+        }
+
+        let pendingState = try await onboarding.state()
+        let pendingID = try XCTUnwrap(pendingState?.pendingCreatedProfileID)
+        let profileIDsAfterFailure = Set(
+            try await baseProfiles.profiles().map(\.id)
+        )
+        XCTAssertEqual(pendingState?.status, .pending)
+        XCTAssertNotEqual(pendingID, remote.id)
+        XCTAssertEqual(profileIDsAfterFailure, [remote.id, pendingID])
+
+        let completion = try await coordinator.complete(
+            profileID: remote.id,
+            submission: newKidSubmission
+        )
+        XCTAssertEqual(completion.selectedProfileID, pendingID)
+        XCTAssertEqual(
+            Set(completion.profiles.map(\.id)),
+            [remote.id, pendingID]
+        )
+        let finalProfileIDs = Set(try await baseProfiles.profiles().map(\.id))
+        let completedState = try await onboarding.state()
+        XCTAssertEqual(finalProfileIDs, [remote.id, pendingID])
+        XCTAssertEqual(completedState?.status, .completed)
+    }
+
     func testSessionFailureThenFindContainsPendingProfileBeforeSync()
         async throws
     {
@@ -1122,6 +1219,37 @@ private struct AdoptionClock: AppClock {
 
 private enum CreationInterruption: Error {
     case injected
+}
+
+private actor FailingOnceProfilesReadKidProfileRepository:
+    KidProfileRepository
+{
+    private let base: any KidProfileRepository
+    private var shouldFailProfilesRead = true
+
+    init(base: any KidProfileRepository) {
+        self.base = base
+    }
+
+    func profiles() async throws -> [KidProfile] {
+        if shouldFailProfilesRead {
+            shouldFailProfilesRead = false
+            throw CreationInterruption.injected
+        }
+        return try await base.profiles()
+    }
+
+    func profile(id: ProfileID) async throws -> KidProfile? {
+        try await base.profile(id: id)
+    }
+
+    func save(_ profile: KidProfile) async throws {
+        try await base.save(profile)
+    }
+
+    func delete(id: ProfileID) async throws {
+        try await base.delete(id: id)
+    }
 }
 
 private actor FailingOnceKidProfileRepository: KidProfileRepository {

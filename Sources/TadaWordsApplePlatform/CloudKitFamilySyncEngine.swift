@@ -305,6 +305,14 @@ actor CloudKitFamilySyncEventBuffer {
             && stagedUnboundRecords.isEmpty
     }
 
+    /// A CKSyncEngine callback can advance the engine's process-local cursor
+    /// before its corresponding metadata or inbox write reaches disk. When
+    /// that happens, the current engines must be discarded so the next fetch
+    /// starts again from the last state serialization that did reach disk.
+    func requiresEngineRebuild(generation: UInt64) -> Bool {
+        generation == activeGeneration && durabilityFailure
+    }
+
     func persistEngineState(
         _ serialization: CKSyncEngine.State.Serialization,
         scope: CloudKitFamilyDatabaseScope,
@@ -890,6 +898,7 @@ actor CloudKitFamilySyncEventBuffer {
                     )
                     outgoing.removeValue(forKey: key)
                 } catch {
+                    markDurabilityFailure()
                     failures.append(
                         FamilySyncTransportFailure(
                             key: change.acknowledgement.key,
@@ -921,6 +930,7 @@ actor CloudKitFamilySyncEventBuffer {
                     acknowledgements.insert(change.acknowledgement)
                     outgoing.removeValue(forKey: key)
                 } catch {
+                    markDurabilityFailure()
                     failures.append(
                         FamilySyncTransportFailure(
                             key: change.acknowledgement.key,
@@ -1615,6 +1625,7 @@ actor CloudKitFamilySyncEventBuffer {
                 outgoing.removeValue(forKey: Self.key(recordID, scope: scope))
                 return
             } catch {
+                markDurabilityFailure()
                 failures.append(
                     FamilySyncTransportFailure(
                         key: outgoingChange.acknowledgement.key,
@@ -1661,6 +1672,7 @@ actor CloudKitFamilySyncEventBuffer {
                     )
                     requiresFetchPass = true
                 } catch {
+                    markDurabilityFailure()
                     failures.append(
                         FamilySyncTransportFailure(
                             key: outgoingChange?.acknowledgement.key,

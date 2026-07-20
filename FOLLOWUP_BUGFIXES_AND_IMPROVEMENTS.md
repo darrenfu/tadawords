@@ -921,3 +921,30 @@ does not install devices, mutate Apple portals, or merge itself.
 - A generic iOS Simulator app build also succeeds. This is source and simulator
   evidence only; it is not a substitute for the exact signed Production build
   and one-iPhone plus clean-iPad CloudKit acceptance retained under #62.
+
+### 2026-07-20 v0.7.10 reliability follow-up
+
+- A CloudKit callback whose metadata, inbox, quarantine, or outgoing-system-
+  fields write fails now leaves a generation-scoped recovery fence. The next
+  fetch or direct send cancels the failed engines and reloads the last durable
+  private/shared cursor in the same process, so retry no longer requires a
+  force-quit. Late callbacks from the discarded generation remain ignored.
+- Immutable conflict disposition now survives the 200-entry diagnostic cap.
+  Direct quarantine, receipt quarantine, and atomic conflict conversion share
+  one fail-closed upsert rule, so a later compatibility callback cannot unlock
+  either a visible or compacted conflict after restart.
+- Adoption and explicit creation read the final Profile list before committing
+  the onboarding completion marker. A failed final read therefore keeps the
+  flow retryable and reuses the exact reserved Profile UUID instead of leaving
+  a completed marker with no usable result.
+- Added red-to-green coverage for generic durability recovery, visible and
+  compacted conflict-lock downgrade attempts, and final-read failures in both
+  adoption and creation. The exact working-tree gate passes strict formatting,
+  1037/1037 Swift tests, 40/40 Issue Agent tests, and 11/11 release-preflight
+  tests. New exact-HEAD signed simulator evidence is still required after this
+  follow-up commit.
+- App Store follow-through remains explicit: #78 owns versioned migration of
+  the new compact conflict semantics, #79 owns concurrent public transport
+  recovery serialization, and #80 owns a bounded fail-closed conflict index.
+  These are P1 release gates and do not expand the normal single-coordinator
+  iPhone-plus-iPad P0 family-play path.

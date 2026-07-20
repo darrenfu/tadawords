@@ -119,6 +119,184 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         )
     }
 
+    func testConflictProtectionSurvivesDiagnosticEvictionAndCompatibilityReplay()
+        throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore()
+        let record = fixture.record(
+            name: "evicted-conflict",
+            payload: "must-remain-blocked"
+        )
+        let recordID = fixture.recordID(name: record.recordName)
+        let receiptID = try store.appendInbox(
+            record: record,
+            recordID: recordID,
+            scope: .privateDatabase,
+            receivedAt: fixture.now
+        )
+        try store.quarantine(
+            CloudKitFamilyQuarantineEntry(
+                id: UUID(),
+                scope: .privateDatabase,
+                recordName: recordID.recordName,
+                zoneName: recordID.zoneID.zoneName,
+                ownerName: recordID.zoneID.ownerName,
+                reason: .conflict,
+                envelopeData: Data("immutable-conflict".utf8),
+                quarantinedAt: fixture.now
+            )
+        )
+        for index in 0..<200 {
+            try store.quarantine(
+                CloudKitFamilyQuarantineEntry(
+                    id: UUID(),
+                    scope: .privateDatabase,
+                    recordName: "compatibility-\(index)",
+                    zoneName: fixture.zoneID.zoneName,
+                    ownerName: fixture.zoneID.ownerName,
+                    reason: .compatibility,
+                    envelopeData: nil,
+                    quarantinedAt: fixture.now.addingTimeInterval(
+                        Double(index + 1)
+                    )
+                )
+            )
+        }
+
+        let restarted = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        XCTAssertEqual(restarted.quarantinedCount(), 200)
+        XCTAssertTrue(
+            restarted.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            ),
+            "Evicting diagnostic bytes must not erase a proven conflict disposition"
+        )
+        XCTAssertTrue(
+            restarted.isQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            )
+        )
+
+        try restarted.quarantineInbox(
+            receiptIDs: [receiptID],
+            category: .compatibility,
+            at: fixture.now.addingTimeInterval(299)
+        )
+        let afterInboxQuarantine = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        XCTAssertTrue(afterInboxQuarantine.inboxEntries().isEmpty)
+        XCTAssertTrue(
+            afterInboxQuarantine.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            ),
+            "Quarantining an older receipt cannot downgrade a later conflict disposition"
+        )
+
+        try afterInboxQuarantine.quarantine(
+            CloudKitFamilyQuarantineEntry(
+                id: UUID(),
+                scope: .privateDatabase,
+                recordName: recordID.recordName,
+                zoneName: recordID.zoneID.zoneName,
+                ownerName: recordID.zoneID.ownerName,
+                reason: .compatibility,
+                envelopeData: Data("later-compatibility-envelope".utf8),
+                quarantinedAt: fixture.now.addingTimeInterval(300)
+            )
+        )
+
+        let replayed = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        XCTAssertTrue(
+            replayed.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            ),
+            "A later compatibility callback cannot downgrade the durable conflict lock"
+        )
+        XCTAssertThrowsError(
+            try replayed.appendInboxReplacingQuarantine(
+                record: record,
+                recordID: recordID,
+                scope: .privateDatabase,
+                receivedAt: fixture.now.addingTimeInterval(301)
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .conflictProtectedRecord
+            )
+        }
+    }
+
+    func testReceiptQuarantineCannotDowngradeVisibleConflictDisposition() throws {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore()
+        let record = fixture.record(
+            name: "visible-conflict",
+            payload: "older-inbox-envelope"
+        )
+        let recordID = fixture.recordID(name: record.recordName)
+        let receiptID = try store.appendInbox(
+            record: record,
+            recordID: recordID,
+            scope: .privateDatabase,
+            receivedAt: fixture.now
+        )
+        try store.quarantine(
+            CloudKitFamilyQuarantineEntry(
+                id: UUID(),
+                scope: .privateDatabase,
+                recordName: recordID.recordName,
+                zoneName: recordID.zoneID.zoneName,
+                ownerName: recordID.zoneID.ownerName,
+                reason: .conflict,
+                envelopeData: Data("newer-conflicting-envelope".utf8),
+                quarantinedAt: fixture.now.addingTimeInterval(1)
+            )
+        )
+
+        try store.quarantineInbox(
+            receiptIDs: [receiptID],
+            category: .compatibility,
+            at: fixture.now.addingTimeInterval(2)
+        )
+
+        let restarted = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        XCTAssertTrue(restarted.inboxEntries().isEmpty)
+        XCTAssertTrue(
+            restarted.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            )
+        )
+        XCTAssertThrowsError(
+            try restarted.appendInboxReplacingQuarantine(
+                record: record,
+                recordID: recordID,
+                scope: .privateDatabase,
+                receivedAt: fixture.now.addingTimeInterval(3)
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? CloudKitFamilyPersistenceError,
+                .conflictProtectedRecord
+            )
+        }
+    }
+
     func testDurableValidReplacementAtomicallyClearsPriorQuarantine() throws {
         let fixture = try CloudInboxHarnessFixture()
         defer { fixture.remove() }

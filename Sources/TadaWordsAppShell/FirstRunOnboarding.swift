@@ -609,13 +609,14 @@ actor FirstRunOnboardingCoordinator {
             try await childSessionRepository.saveLastSelectedProfileID(
                 adoptedProfileID
             )
+            let profiles = try await profileRepository.profiles()
             try await onboardingRepository.markCompleted(
                 profileID: adoptedProfileID,
                 completedAt: clock.now,
                 consentVersion: submission.consentVersion
             )
             return FirstRunOnboardingCompletion(
-                profiles: try await profileRepository.profiles(),
+                profiles: profiles,
                 selectedProfileID: adoptedProfileID
             )
         case .confirmExistingProfiles:
@@ -727,17 +728,18 @@ actor FirstRunOnboardingCoordinator {
             profile = created.profile
         }
 
-        // The completion marker is committed last. If the app is interrupted,
-        // the flow reopens with the safely persisted profile instead of
-        // exposing a half-configured child home.
+        // The completion marker is the final throwing operation. If the app is
+        // interrupted, or even the final result read fails, the flow reopens
+        // with the safely persisted profile and its reserved identity.
         try await childSessionRepository.saveLastSelectedProfileID(profile.id)
+        let profiles = try await profileRepository.profiles()
         try await onboardingRepository.markCompleted(
             profileID: profile.id,
             completedAt: clock.now,
             consentVersion: consentVersion
         )
         return FirstRunOnboardingCompletion(
-            profiles: try await profileRepository.profiles(),
+            profiles: profiles,
             selectedProfileID: profile.id
         )
     }
