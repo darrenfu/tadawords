@@ -338,14 +338,22 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
 
         let cancel = app.buttons["Cancel"]
         XCTAssertTrue(
-            cancel.waitForExistence(timeout: 8),
-            "The system Photos picker should present a Cancel control."
+            waitUntil(timeout: 8) { cancel.exists && cancel.isHittable },
+            "The system Photos picker should present an interactive Cancel control."
         )
-        cancel.tap()
+        tapCenter(of: cancel)
+        XCTAssertTrue(
+            waitUntil(timeout: 8) { !cancel.exists },
+            "The Photos picker must finish dismissing before the app becomes interactive."
+        )
 
         let addedOrder = app.buttons["Sort words by Added order"]
         XCTAssertTrue(addedOrder.waitForExistence(timeout: 5))
-        addedOrder.tap()
+        XCTAssertTrue(
+            waitUntil(timeout: 8) { addedOrder.isHittable },
+            "The Word Pool sort control should be hittable after Photos picker dismissal."
+        )
+        tapCenter(of: addedOrder)
         XCTAssertTrue(app.buttons["Most practiced"].waitForExistence(timeout: 3))
         app.buttons["Most practiced"].tap()
         XCTAssertTrue(
