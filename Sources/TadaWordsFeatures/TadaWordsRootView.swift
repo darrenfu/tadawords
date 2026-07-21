@@ -442,7 +442,9 @@ public struct TadaWordsRootView: View {
                         model.refreshWorldProgress()
                         isCollectionPresented = true
                     },
-                    onStart: model.chooseQuest
+                    onStart: model.chooseQuest,
+                    onRecharge: model.rechargeQuest,
+                    rechargingModes: model.rechargingModes
                 )
             } else {
                 ProfileChooserView(

@@ -1,6 +1,14 @@
 import Foundation
 import TadaWordsDomain
 
+/// Local repositories can atomically replace one canonical day plan when a
+/// parent raises its limits. The stable plan ID keeps attempts, completion,
+/// and reward references intact.
+protocol DailyQuestPlanReconcilingRepository: DailyQuestRepository {
+    func reconcileExpandedPlan(_ plan: DailyQuestPlan) async throws
+        -> DailyQuestPlan
+}
+
 public enum DailyQuestRepositoryError: Error, Equatable, Sendable {
     case conflictingPlanID(QuestID)
     case conflictingCompletionID(DailyQuestCompletionID)
@@ -154,7 +162,8 @@ public enum LocalDailyQuestRepositoryError: Error, Equatable, Sendable {
 }
 
 public actor InMemoryDailyQuestRepository: DailyQuestHistoryRepository,
-    CausallyStagedDailyQuestHistoryRepository
+    CausallyStagedDailyQuestHistoryRepository,
+    DailyQuestPlanReconcilingRepository
 {
     private var storage = DailyQuestStorage()
 
@@ -168,6 +177,12 @@ public actor InMemoryDailyQuestRepository: DailyQuestHistoryRepository,
         _ plan: DailyQuestPlan
     ) async throws -> DailyQuestPlan {
         try storage.createPlanIfAbsent(plan).plan
+    }
+
+    func reconcileExpandedPlan(_ plan: DailyQuestPlan) async throws
+        -> DailyQuestPlan
+    {
+        try storage.reconcileExpandedPlan(plan).plan
     }
 
     public func completions(
@@ -249,7 +264,8 @@ public actor InMemoryDailyQuestRepository: DailyQuestHistoryRepository,
 /// Durable, local-only Daily Quest source of truth. One actor instance should
 /// be shared per snapshot URL so all read-modify-write operations are serialized.
 public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository,
-    CausallyStagedDailyQuestHistoryRepository
+    CausallyStagedDailyQuestHistoryRepository,
+    DailyQuestPlanReconcilingRepository
 {
     public nonisolated let snapshotURL: URL
 
@@ -279,6 +295,19 @@ public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository,
             var candidate = try loadedStorage()
             let result = try candidate.createPlanIfAbsent(plan)
             guard result.inserted else { return result.plan }
+            try persist(candidate)
+            storage = candidate
+            return result.plan
+        }
+    }
+
+    func reconcileExpandedPlan(_ plan: DailyQuestPlan) async throws
+        -> DailyQuestPlan
+    {
+        try await withMutationLeases(for: [plan.key.profileID]) {
+            var candidate = try loadedStorage()
+            let result = try candidate.reconcileExpandedPlan(plan)
+            guard result.didChange else { return result.plan }
             try persist(candidate)
             storage = candidate
             return result.plan

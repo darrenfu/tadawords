@@ -13,6 +13,10 @@ struct ChildWorldPickerView: View {
         GridItem(.adaptive(minimum: 230), spacing: TadaPrimitiveTokens.Spacing.medium)
     ]
 
+    private var theme: TadaWorldTheme {
+        TadaWorldTheme.from(profile.selectedWorld)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -33,13 +37,12 @@ struct ChildWorldPickerView: View {
             .background(TadaPrimitiveTokens.ColorValue.neutralSky.opacity(0.36))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(action: onClose) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(.title2, design: .rounded, weight: .bold))
-                            .frame(minWidth: 44, minHeight: 44)
-                    }
-                    .accessibilityLabel("Close")
-                    .accessibilityHint("Returns to the Kid Lobby")
+                    KidBackButton(
+                        theme: theme,
+                        destinationHint: "Returns to the Kid Lobby",
+                        accessibilityIdentifier: "child-worlds.back",
+                        action: onClose
+                    )
                 }
             }
         }
@@ -232,13 +235,12 @@ struct ChildCollectionView: View {
             )
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(action: onClose) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(.title2, design: .rounded, weight: .bold))
-                            .frame(minWidth: 44, minHeight: 44)
-                    }
-                    .accessibilityLabel("Close")
-                    .accessibilityHint("Returns to the Kid Lobby")
+                    KidBackButton(
+                        theme: theme,
+                        destinationHint: "Returns to the Kid Lobby",
+                        accessibilityIdentifier: "child-collection.back",
+                        action: onClose
+                    )
                 }
             }
         }

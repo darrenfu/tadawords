@@ -1180,3 +1180,69 @@ empty entitlements, installed data, and physical-device workflow.
   the profile authorization envelope, exact approved device coverage,
   iPhoneOS-only arm64 metadata, and a stable app-tree digest. Exact committed-
   HEAD simulator and signed-artifact evidence remains pending.
+
+## v0.7.17 — 2026-07-21
+
+Target release: `v0.7.17`
+
+Branch: `codex/family-sync-status-refresh-v0.7.17`
+
+Build: `2026072117`
+
+Overall state: Issue #101 fixes a physical-device Family Sync status race.
+CloudKit had converged on both approved devices, but the Parent UI retained a
+transient `.syncing` snapshot when it opened during an existing reconciliation.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0717-BUG-001 | P0 bug | Parent/Family Sync | Readers that arrive during an in-flight reconciliation must receive its final parent-visible status instead of a transient `.syncing` snapshot. | Source pass | Coordinator concurrency regressions, full source suite, exact-HEAD build, then one physical iPhone plus one physical iPad without reinstalling or resetting data |
+
+### 2026-07-21 v0.7.17 notes
+
+- Reserved version `0.7.17` and build `2026072117` for reclaimed Issue #101.
+- The actor now queues concurrent status and synchronization callers while a
+  reconciliation is active, then resumes all of them with the same settled
+  status after every required immediate pass completes.
+- No polling, profile mutation, preference change, uninstall, or data reset is
+  involved in the repair.
+- Physical evidence before the fix showed both devices at 278 acknowledged of
+  278 local manifests, zero outbox and pending records, an idle durable
+  condition, and no error while both screens still displayed “Syncing…”.
+- Focused concurrency tests and the complete 1129-test Swift suite pass.
+  Exact-HEAD build and signed-device acceptance remain pending.
+
+## v0.7.13 — 2026-07-20
+
+Target release: `v0.7.13`
+
+Branch: `codex/quest-session-regressions-v0.7.13`
+
+Build: `2026072013`
+
+Overall state: Issues #91, #92, and #93 repair three daily-practice regressions
+without deleting or replacing child learning history. Source regression tests
+pass; exact-HEAD simulator and physical-device acceptance remain separate.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0713-BUG-001 | P1 bug | Kid UI | Fit Spell chrome, prompt, slots, and the complete keyboard inside a constrained-height landscape iPhone while retaining 44-point controls and the regular iPad scale. | Automated pass | Layout-policy tests plus exact-HEAD landscape iPhone and iPad simulator captures; physical tap-through pending |
+| V0713-BUG-002 | P1 bug | Write session | An explicit Spell selection after a completed Handwriting item must override stale recovered input-mode evidence while preserving the completed prefix. | Automated pass | Model regression covering Handwriting completion, exit, explicit Spell selection, and item-two recovery; simulator flow pending |
+| V0713-BUG-003 | P1 bug | Parent/Persistence | Raising either New or Review cap must monotonically append eligible words to today’s canonical plan without changing its ID, completion, reward, or attempt history. Repeated refresh is idempotent and lower caps never delete history. | Automated pass | Local JSON completion/expansion/restart tests for both limits plus Parent-to-child simulator flow pending |
+
+### 2026-07-20 v0.7.13 notes
+
+- Reserved version `0.7.13` and build `2026072013` for reclaimed Issues #91,
+  #92, and #93.
+- Spell uses constrained-height metrics below 560 points: chrome, prompt,
+  response slots, keyboard spacing, and submission controls compact together;
+  every interactive control remains at least 44 points and regular-height iPad
+  values are unchanged.
+- The Write chooser now marks its selection as explicit. Persisted attempt
+  context remains authoritative for generic crash/relaunch recovery, but cannot
+  override a new child selection.
+- Daily plan reconciliation is a serialized, monotonic repository mutation.
+  It preserves the stable plan ID and appends only the delta allowed by a
+  raised cap. Existing completion and reward references survive unchanged;
+  lowering caps and repeated reconciliation are no-ops.
+- Focused model, content-repository, and layout suites pass. Full source,
+  automation, simulator, and signed-device gates are recorded separately.

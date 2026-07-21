@@ -89,6 +89,7 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
     private let clock: any AppClock
     private var currentStatus: FamilySyncStatus = .idle
     private var reconciliationInProgress = false
+    private var reconciliationWaiters: [CheckedContinuation<FamilySyncStatus, Never>] = []
     private var needsAnotherPass = false
     private var consentGeneration: UInt64 = 0
     /// Actor-local desired state closes the reentrancy window while the
@@ -188,7 +189,7 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
         _ = trigger
         guard !reconciliationInProgress else {
             needsAnotherPass = true
-            return currentStatus
+            return await settledStatusAfterCurrentReconciliation()
         }
         reconciliationInProgress = true
         var immediatePassCount = 0
@@ -208,10 +209,19 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
             }
         } while needsAnotherPass
         reconciliationInProgress = false
-        return currentStatus
+        let settledStatus = currentStatus
+        let waiters = reconciliationWaiters
+        reconciliationWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume(returning: settledStatus)
+        }
+        return settledStatus
     }
 
     public func status() async -> FamilySyncStatus {
+        if reconciliationInProgress {
+            return await settledStatusAfterCurrentReconciliation()
+        }
         guard transport.capability == .iCloud else {
             currentStatus = Self.deviceOnlyStatus
             return currentStatus
@@ -243,6 +253,14 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
             }
         }
         return currentStatus
+    }
+
+    private func settledStatusAfterCurrentReconciliation() async
+        -> FamilySyncStatus
+    {
+        await withCheckedContinuation { continuation in
+            reconciliationWaiters.append(continuation)
+        }
     }
 
     public func profileErasureLifecycles() async throws

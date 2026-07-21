@@ -4,6 +4,71 @@ import TadaWordsDomain
 import XCTest
 
 final class LocalFirstFamilySyncCoordinatorConcurrencyTests: XCTestCase {
+    func testStatusWaitsForInFlightReconciliationAndReturnsSettledStatus()
+        async
+    {
+        let profileID = ProfileID()
+        let fetchBarrier = AsyncFetchBarrier()
+        let coordinator = LocalFirstFamilySyncCoordinator(
+            store: ConcurrencySyncStore(profileID: profileID, records: []),
+            transport: SequencedSyncTransport(
+                fetchResults: [FamilySyncTransportResult()],
+                fetchBarrier: fetchBarrier
+            ),
+            preferenceRepository: InMemoryFamilySyncPreferenceRepository(
+                isEnabled: true
+            ),
+            clock: ConcurrencyFixedClock(now: Date(timeIntervalSince1970: 100))
+        )
+        let syncTask = Task { await coordinator.synchronize() }
+        await fetchBarrier.waitUntilEntered()
+        let completion = AsyncCompletionProbe()
+        let statusTask = Task {
+            let status = await coordinator.status()
+            await completion.markCompleted()
+            return status
+        }
+
+        await Task.yield()
+        let completedWhileFetchWasSuspended = await completion.isCompleted()
+        XCTAssertFalse(completedWhileFetchWasSuspended)
+
+        await fetchBarrier.resume()
+        let status = await statusTask.value
+        _ = await syncTask.value
+
+        XCTAssertEqual(status, .synced(at: Date(timeIntervalSince1970: 100)))
+    }
+
+    func testConcurrentSynchronizeWaitsForSettledStatus() async {
+        let profileID = ProfileID()
+        let fetchBarrier = AsyncFetchBarrier()
+        let coordinator = LocalFirstFamilySyncCoordinator(
+            store: ConcurrencySyncStore(profileID: profileID, records: []),
+            transport: SequencedSyncTransport(
+                fetchResults: [
+                    FamilySyncTransportResult(),
+                    FamilySyncTransportResult(),
+                ],
+                fetchBarrier: fetchBarrier
+            ),
+            preferenceRepository: InMemoryFamilySyncPreferenceRepository(
+                isEnabled: true
+            ),
+            clock: ConcurrencyFixedClock(now: Date(timeIntervalSince1970: 100))
+        )
+        let firstSync = Task { await coordinator.synchronize() }
+        await fetchBarrier.waitUntilEntered()
+        let secondSync = Task { await coordinator.synchronize() }
+
+        await fetchBarrier.resume()
+        let firstStatus = await firstSync.value
+        let secondStatus = await secondSync.value
+
+        XCTAssertEqual(firstStatus, .synced(at: Date(timeIntervalSince1970: 100)))
+        XCTAssertEqual(secondStatus, firstStatus)
+    }
+
     func testDurableInboxReplayFetchesServerHeadBeforeAnySend() async {
         let profileID = ProfileID()
         let local = makeRecord(
@@ -385,10 +450,12 @@ private actor SequencedSyncTransport: FamilySyncTransport {
 
 private actor AsyncFetchBarrier {
     private var entered = false
+    private var released = false
     private var entryWaiters: [CheckedContinuation<Void, Never>] = []
     private var resumeContinuation: CheckedContinuation<Void, Never>?
 
     func enterAndWait() async {
+        if released { return }
         await withCheckedContinuation { continuation in
             resumeContinuation = continuation
             entered = true
@@ -406,6 +473,7 @@ private actor AsyncFetchBarrier {
     }
 
     func resume() {
+        released = true
         resumeContinuation?.resume()
         resumeContinuation = nil
     }

@@ -15,16 +15,12 @@ struct QuestBlockedView: View {
                 ScrollView {
                     VStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
                         HStack {
-                            Button(action: onBack) {
-                                Label("Quests", systemImage: "chevron.left")
-                                    .font(.system(.subheadline, design: .rounded, weight: .bold))
-                            }
-                            .buttonStyle(
-                                TadaPrimaryButtonStyle(
-                                    fill: theme.surface,
-                                    foreground: theme.ink,
-                                    isCompact: true
-                                ))
+                            KidBackButton(
+                                theme: theme,
+                                destinationHint: "Returns to the Kid Lobby",
+                                accessibilityIdentifier: "quest-blocked.back",
+                                action: onBack
+                            )
                             Spacer()
                             TadaPill(
                                 symbol: mode == .read ? "book.pages.fill" : "pencil.line",

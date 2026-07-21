@@ -194,6 +194,30 @@ struct DailyQuestStorage: Sendable {
         return (plan, true)
     }
 
+    mutating func reconcileExpandedPlan(_ plan: DailyQuestPlan) throws
+        -> (plan: DailyQuestPlan, didChange: Bool)
+    {
+        guard let existingID = planIDByKey[plan.key],
+            let existing = plansByID[existingID]
+        else {
+            let inserted = try createPlanIfAbsent(plan)
+            return (inserted.plan, inserted.inserted)
+        }
+        guard existing.id == plan.id else {
+            throw DailyQuestRepositoryError.conflictingPlanID(plan.id)
+        }
+        guard plan.questPlan.newWordIDs.starts(with: existing.questPlan.newWordIDs),
+            plan.questPlan.reviewWordIDs.starts(
+                with: existing.questPlan.reviewWordIDs
+            )
+        else {
+            throw DailyQuestRepositoryError.conflictingCanonicalPlan(plan.key)
+        }
+        guard existing != plan else { return (existing, false) }
+        plansByID[existingID] = plan
+        return (plan, true)
+    }
+
     func completions(for key: DailyQuestKey) -> [DailyQuestCompletion] {
         completionsByID.values
             .filter { $0.key == key }
