@@ -1237,10 +1237,9 @@ and must explicitly keep it on before using iCloud profile discovery.
 - “Find my kid” remains an iCloud-only action and is unavailable when the
   parent has explicitly opted out; creating a local Profile remains available.
 - Focused first-run, notification-registration, Parent presentation, and the
-  complete 233-test Family Sync regression suite pass. New signed artifacts
-  cannot yet be created because the Mac login keychain rejects the PawGoo
-  development private-key operation (`errSecInternalComponent`); no device
-  data was reset, replaced, or uninstalled during this investigation.
+  complete 233-test Family Sync regression suite pass. Signed v0.7.18 app
+  artifacts are now installed in place on the approved iPhone and iPad;
+  neither device data container was reset, replaced, or uninstalled.
 
 ## v0.7.13 — 2026-07-20
 
