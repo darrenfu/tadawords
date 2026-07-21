@@ -42,6 +42,17 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         XCTAssertTrue(writeQuest.waitForExistence(timeout: 8))
         writeQuest.tap()
 
+        XCTAssertTrue(app.staticTexts["Spell Mode"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["How do you want to spell?"].exists)
+        XCTAssertTrue(app.buttons["Handwriting"].exists)
+        XCTAssertTrue(app.buttons["Typing"].exists)
+        let chooserBack = app.buttons["write-method.back"]
+        XCTAssertTrue(chooserBack.exists)
+        XCTAssertEqual(chooserBack.label, "Back")
+        chooserBack.tap()
+        XCTAssertTrue(writeQuest.waitForExistence(timeout: 5))
+        writeQuest.tap()
+
         let spellWithLetters = app.descendants(matching: .any)[
             "write-method.letterKeyboard"
         ]
@@ -55,7 +66,7 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
             "The in-app letter board must not present a native iOS keyboard."
         )
         assertContainedInVisibleWindow(
-            app.buttons["Back to quests"],
+            app.buttons["quest.back"],
             message: "The compact quest chrome must keep Back on screen."
         )
         assertContainedInVisibleWindow(

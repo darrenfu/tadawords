@@ -197,6 +197,156 @@ final class TadaWordsAppModelTests: XCTestCase {
         }
     }
 
+    func testSpellModeChooserUsesShortChildFacingCopy() {
+        XCTAssertEqual(WriteInputChooserPresentation.title, "Spell Mode")
+        XCTAssertEqual(WriteInputChooserPresentation.handwritingTitle, "Handwriting")
+        XCTAssertEqual(WriteInputChooserPresentation.typingTitle, "Typing")
+    }
+
+    func testRechargeUsesFreshPoolWordsWithoutReplacingTodayOrReward()
+        async throws
+    {
+        let profile = TestFixture.profile(name: "Mia", number: 730)
+        let todayPrompts = [
+            try TestFixture.prompt("cat", number: 731),
+            try TestFixture.prompt("dog", number: 732),
+        ]
+        let freestylePrompts = [
+            try TestFixture.prompt("fox", number: 733),
+            try TestFixture.prompt("hen", number: 734),
+        ]
+        let provider = FreestyleQuestContentProvider(
+            profile: profile,
+            todayPrompts: todayPrompts,
+            freestylePrompts: freestylePrompts
+        )
+        let records = InMemoryLearningRecordRepository()
+        let dailyRepository = InMemoryDailyQuestRepository()
+        let coordinator = DailyQuestCoordinator(
+            repository: dailyRepository,
+            timeZone: .gmt,
+            practiceOrder: { $0 }
+        )
+        let model = TadaWordsAppModel(
+            profiles: [profile],
+            contentProvider: provider,
+            attemptEventRepository: records,
+            wordProgressRepository: records,
+            dailyQuestCoordinator: coordinator,
+            clock: TestClock()
+        )
+        model.selectProfile(profile)
+
+        await model.prepareQuestAndWait(.read)
+        for expectedPrompt in todayPrompts {
+            let session = try questSession(from: model.destination)
+            XCTAssertEqual(session.prompt.id, expectedPrompt.id)
+            await model.finishItemAndWait(
+                session,
+                summary: try TestFixture.summary(decisions: [.matched])
+            )
+        }
+        let todayResult = try resultState(from: model.destination)
+        let todayRewardID = try XCTUnwrap(todayResult.rewardGrant?.id)
+        let completedTodayState = try await coordinator.state(
+            profileID: profile.id,
+            learningMode: .read,
+            on: TestFixture.now
+        )
+        let canonicalPlan = try XCTUnwrap(completedTodayState.plan?.questPlan)
+
+        model.showLobby()
+        await model.rechargeQuestAndWait(.read)
+        let firstFreestyleSession = try questSession(from: model.destination)
+        XCTAssertEqual(firstFreestyleSession.prompt.id, freestylePrompts[1].id)
+        let stableFreestyleQuestID = firstFreestyleSession.id
+        await model.rechargeQuestAndWait(.read)
+        XCTAssertEqual(
+            try questSession(from: model.destination).id,
+            stableFreestyleQuestID,
+            "A second recharge tap must not replace the in-flight session."
+        )
+
+        await model.finishItemAndWait(
+            firstFreestyleSession,
+            summary: try TestFixture.summary(decisions: [.matched])
+        )
+        let secondFreestyleSession = try questSession(from: model.destination)
+        XCTAssertEqual(secondFreestyleSession.prompt.id, freestylePrompts[0].id)
+        await model.finishItemAndWait(
+            secondFreestyleSession,
+            summary: try TestFixture.summary(decisions: [.matched])
+        )
+
+        let practiceResult = try resultState(from: model.destination)
+        XCTAssertEqual(practiceResult.runKind, .practiceAgain)
+        XCTAssertNil(practiceResult.rewardGrant)
+        XCTAssertFalse(model.rechargingModes.contains(.read))
+        let persistedState = try await coordinator.state(
+            profileID: profile.id,
+            learningMode: .read,
+            on: TestFixture.now
+        )
+        XCTAssertEqual(persistedState.plan?.questPlan, canonicalPlan)
+        XCTAssertEqual(persistedState.rewardGrant?.id, todayRewardID)
+        let completions = try await coordinator.completions(
+            profileID: profile.id,
+            learningMode: .read,
+            on: TestFixture.now
+        )
+        XCTAssertEqual(completions.count, 2)
+        XCTAssertEqual(Set(completions.map(\.runKind)), [.today, .practiceAgain])
+    }
+
+    func testWriteRechargeKeepsChooserAndHonorsTypingForFreestyle() async throws {
+        let profile = TestFixture.profile(name: "Mia", number: 735)
+        let todayPrompts = [try TestFixture.prompt("cat", number: 736, mode: .write)]
+        let freestylePrompts = [
+            try TestFixture.prompt("fox", number: 737, mode: .write),
+            try TestFixture.prompt("hen", number: 738, mode: .write),
+        ]
+        let provider = FreestyleQuestContentProvider(
+            profile: profile,
+            todayPrompts: todayPrompts,
+            freestylePrompts: freestylePrompts,
+            mode: .write
+        )
+        let records = InMemoryLearningRecordRepository()
+        let model = TadaWordsAppModel(
+            profiles: [profile],
+            contentProvider: provider,
+            attemptEventRepository: records,
+            wordProgressRepository: records,
+            dailyQuestCoordinator: DailyQuestCoordinator(
+                repository: InMemoryDailyQuestRepository(),
+                timeZone: .gmt,
+                practiceOrder: { $0 }
+            ),
+            clock: TestClock()
+        )
+        model.selectProfile(profile)
+
+        await model.prepareQuestAndWait(.write)
+        let todaySession = try questSession(from: model.destination)
+        await model.finishItemAndWait(
+            todaySession,
+            summary: try TestFixture.summary(decisions: [.matched])
+        )
+        XCTAssertEqual(try resultState(from: model.destination).runKind, .today)
+
+        model.showLobby()
+        model.rechargeQuest(.write)
+        guard case .writeInputChooser = model.destination else {
+            return XCTFail("Write recharge must keep the explicit Spell Mode chooser.")
+        }
+
+        await model.startWriteQuestAndWait(using: .letterKeyboard)
+        let freestyleSession = try questSession(from: model.destination)
+        XCTAssertEqual(freestyleSession.writeInputMethod, .letterKeyboard)
+        XCTAssertEqual(freestyleSession.prompt.id, freestylePrompts[1].id)
+        XCTAssertTrue(model.rechargingModes.contains(.write))
+    }
+
     func testLetterKeyboardChoiceReachesSessionAndPersistedPaceContext()
         async throws
     {
@@ -1209,6 +1359,95 @@ private struct StaticQuestContentProvider: QuestContentProviding {
             }
             return prompt
         }
+    }
+}
+
+private struct FreestyleQuestContentProvider: QuestContentProviding {
+    let profile: KidProfile
+    let todayPrompts: [WordPrompt]
+    let freestylePrompts: [WordPrompt]
+    let mode: LearningMode
+
+    init(
+        profile: KidProfile,
+        todayPrompts: [WordPrompt],
+        freestylePrompts: [WordPrompt],
+        mode: LearningMode = .read
+    ) {
+        self.profile = profile
+        self.todayPrompts = todayPrompts
+        self.freestylePrompts = freestylePrompts
+        self.mode = mode
+    }
+
+    func availability(
+        for mode: LearningMode,
+        profile: KidProfile
+    ) -> QuestAvailability {
+        mode == self.mode && profile.id == self.profile.id
+            ? .available : .blocked(.emptyPool)
+    }
+
+    func prepareQuest(
+        for mode: LearningMode,
+        profile: KidProfile
+    ) async throws -> PreparedQuest {
+        try prepared(prompts: todayPrompts, mode: mode, profile: profile)
+    }
+
+    func prepareFreestyleQuest(
+        for mode: LearningMode,
+        profile: KidProfile,
+        excluding wordIDs: Set<WordPromptID>
+    ) async throws -> PreparedQuest {
+        XCTAssertEqual(wordIDs, Set(todayPrompts.map(\.id)))
+        return try prepared(
+            prompts: freestylePrompts,
+            mode: mode,
+            profile: profile
+        ).asFreestyle(prompts: freestylePrompts)
+    }
+
+    func prompts(
+        for plan: QuestPlan,
+        profile: KidProfile
+    ) async throws -> [WordPrompt] {
+        guard profile.id == self.profile.id else {
+            throw TestFailure.injectedStorageFailure
+        }
+        let lookup = Dictionary(
+            uniqueKeysWithValues: (todayPrompts + freestylePrompts).map {
+                ($0.id, $0)
+            }
+        )
+        return try plan.orderedItems.map { item in
+            guard let prompt = lookup[item.wordPromptID] else {
+                throw TestFailure.injectedStorageFailure
+            }
+            return prompt
+        }
+    }
+
+    private func prepared(
+        prompts: [WordPrompt],
+        mode: LearningMode,
+        profile: KidProfile
+    ) throws -> PreparedQuest {
+        guard mode == self.mode, profile.id == self.profile.id else {
+            throw TestFailure.injectedStorageFailure
+        }
+        let plan = QuestPlan(
+            profileID: profile.id,
+            configuration: mode == .read ? .defaultRead : .defaultWrite,
+            reviewWordIDs: [],
+            newWordIDs: prompts.map(\.id),
+            createdAt: TestFixture.now
+        )
+        return PreparedQuest(
+            plan: plan,
+            orderedPrompts: prompts,
+            emergencyAfter: 91
+        )
     }
 }
 

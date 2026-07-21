@@ -14,6 +14,8 @@ struct ChildLobbyView: View {
     let onOpenWorlds: () -> Void
     let onOpenCollection: () -> Void
     let onStart: (LearningMode) -> Void
+    let onRecharge: (LearningMode) -> Void
+    let rechargingModes: Set<LearningMode>
 
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -63,7 +65,9 @@ struct ChildLobbyView: View {
             availability: readAvailability,
             status: readStatus,
             isCompact: isCompactHeight,
-            action: { onStart(.read) }
+            action: { onStart(.read) },
+            rechargeAction: { onRecharge(.read) },
+            isRecharging: rechargingModes.contains(.read)
         )
         QuestEntranceCard(
             mode: .write,
@@ -71,7 +75,9 @@ struct ChildLobbyView: View {
             availability: writeAvailability,
             status: writeStatus,
             isCompact: isCompactHeight,
-            action: { onStart(.write) }
+            action: { onStart(.write) },
+            rechargeAction: { onRecharge(.write) },
+            isRecharging: rechargingModes.contains(.write)
         )
     }
 
@@ -226,6 +232,8 @@ private struct QuestEntranceCard: View {
     let status: TodayQuestRouteStatus
     let isCompact: Bool
     let action: () -> Void
+    let rechargeAction: () -> Void
+    let isRecharging: Bool
 
     private var tokens: TadaQuestEntranceTokens {
         switch mode {
@@ -242,46 +250,76 @@ private struct QuestEntranceCard: View {
     }
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: isCompact ? 14 : TadaPrimitiveTokens.Spacing.large) {
-                entranceIcon
+        HStack(spacing: isCompact ? 10 : TadaPrimitiveTokens.Spacing.medium) {
+            Button(action: action) {
+                HStack(spacing: isCompact ? 14 : TadaPrimitiveTokens.Spacing.large) {
+                    entranceIcon
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(mode.title)
-                        .font(
-                            .system(
-                                size: isCompact ? 32 : 38,
-                                weight: .heavy,
-                                design: .rounded
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(mode.title)
+                            .font(
+                                .system(
+                                    size: isCompact ? 32 : 38,
+                                    weight: .heavy,
+                                    design: .rounded
+                                )
                             )
-                        )
-                        .foregroundStyle(theme.ink)
-                    if status.action == .practiceAgain, blockReason == nil {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrow.clockwise.circle.fill")
-                            Label(
-                                "\(status.completedPoints ?? 0) pts",
-                                systemImage: "sparkles"
-                            )
-                            Label(
-                                "\(status.completedStars?.count ?? 0) stars",
-                                systemImage: "star.fill"
-                            )
-                        }
-                        .font(.system(.caption, design: .rounded, weight: .bold))
-                        .foregroundStyle(tokens.accent)
-                    }
-
-                    if let blockReason {
-                        Label(blockReason.title, systemImage: "exclamationmark.circle.fill")
+                            .foregroundStyle(theme.ink)
+                        if status.action == .practiceAgain, blockReason == nil {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.clockwise.circle.fill")
+                                Label(
+                                    "\(status.completedPoints ?? 0) pts",
+                                    systemImage: "sparkles"
+                                )
+                                Label(
+                                    "\(status.completedStars?.count ?? 0) stars",
+                                    systemImage: "star.fill"
+                                )
+                            }
                             .font(.system(.caption, design: .rounded, weight: .bold))
-                            .foregroundStyle(TadaPrimitiveTokens.ColorValue.warning)
-                            .padding(.top, 3)
+                            .foregroundStyle(tokens.accent)
+                        }
+
+                        if let blockReason {
+                            Label(blockReason.title, systemImage: "exclamationmark.circle.fill")
+                                .font(.system(.caption, design: .rounded, weight: .bold))
+                                .foregroundStyle(TadaPrimitiveTokens.ColorValue.warning)
+                                .padding(.top, 3)
+                        }
                     }
+
+                    Spacer(minLength: 4)
                 }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityHint(
+                blockReason == nil ? "Starts a separate \(mode.title) quest" : "Opens help"
+            )
+            .accessibilityIdentifier("child-lobby.quest.\(mode.rawValue)")
 
-                Spacer(minLength: 4)
+            if status.action == .practiceAgain, blockReason == nil {
+                Button(action: rechargeAction) {
+                    Image(systemName: isRecharging ? "hourglass" : "arrow.triangle.2.circlepath")
+                        .font(.system(.headline, design: .rounded, weight: .heavy))
+                        .frame(
+                            width: TadaPrimitiveTokens.TouchTarget.minimum,
+                            height: TadaPrimitiveTokens.TouchTarget.minimum
+                        )
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(tokens.accent)
+                .background(tokens.accent.opacity(isRecharging ? 0.07 : 0.14), in: Circle())
+                .disabled(isRecharging)
+                .accessibilityLabel(isRecharging ? "New practice is loading" : "New practice words")
+                .accessibilityHint("Loads another reward-free \(mode.title) practice batch")
+                .accessibilityIdentifier("child-lobby.recharge.\(mode.rawValue)")
+            }
 
+            Button(action: action) {
                 ZStack {
                     Circle()
                         .fill(tokens.accent.opacity(0.13))
@@ -292,55 +330,54 @@ private struct QuestEntranceCard: View {
                 .frame(width: isCompact ? 34 : 40, height: isCompact ? 34 : 40)
                 .accessibilityHidden(true)
             }
-            .frame(maxWidth: .infinity, minHeight: isCompact ? 112 : 142)
-            .padding(.horizontal, isCompact ? 16 : TadaPrimitiveTokens.Spacing.large)
-            .background(
-                RoundedRectangle(
-                    cornerRadius: TadaPrimitiveTokens.Radius.large,
-                    style: .continuous
-                )
-                .fill(Color.white.opacity(0.94))
-                .overlay {
-                    RoundedRectangle(
-                        cornerRadius: TadaPrimitiveTokens.Radius.large,
-                        style: .continuous
-                    )
-                    .fill(
-                        LinearGradient(
-                            colors: [tokens.accent.opacity(0.03), tokens.accent.opacity(0.16)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                }
+            .buttonStyle(.plain)
+            .frame(
+                width: TadaPrimitiveTokens.TouchTarget.minimum,
+                height: TadaPrimitiveTokens.TouchTarget.minimum
             )
+            .accessibilityLabel("Open \(mode.title) quest")
+        }
+        .frame(maxWidth: .infinity, minHeight: isCompact ? 112 : 142)
+        .padding(.horizontal, isCompact ? 16 : TadaPrimitiveTokens.Spacing.large)
+        .background(
+            RoundedRectangle(
+                cornerRadius: TadaPrimitiveTokens.Radius.large,
+                style: .continuous
+            )
+            .fill(Color.white.opacity(0.94))
             .overlay {
                 RoundedRectangle(
                     cornerRadius: TadaPrimitiveTokens.Radius.large,
                     style: .continuous
                 )
-                .strokeBorder(Color.white.opacity(0.72), lineWidth: 2)
+                .fill(
+                    LinearGradient(
+                        colors: [tokens.accent.opacity(0.03), tokens.accent.opacity(0.16)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
             }
-            .overlay(alignment: .bottom) {
-                modePattern
-                    .padding(.horizontal, 24)
-                    .offset(y: TadaPrimitiveTokens.Depth.tactileLip * 0.35)
-            }
-            .shadow(
-                color: tokens.accent.opacity(0.24),
-                radius: TadaPrimitiveTokens.Depth.cardShadowRadius,
-                y: TadaPrimitiveTokens.Depth.cardShadowY
-            )
-            .opacity(blockReason == nil ? 1 : 0.78)
-        }
-        .buttonStyle(TadaTactileCardButtonStyle())
-        .frame(minWidth: isCompact ? 300 : 320, maxWidth: 448)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint(
-            blockReason == nil ? "Starts a separate \(mode.title) quest" : "Opens help"
         )
-        .accessibilityIdentifier("child-lobby.quest.\(mode.rawValue)")
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: TadaPrimitiveTokens.Radius.large,
+                style: .continuous
+            )
+            .strokeBorder(Color.white.opacity(0.72), lineWidth: 2)
+        }
+        .overlay(alignment: .bottom) {
+            modePattern
+                .padding(.horizontal, 24)
+                .offset(y: TadaPrimitiveTokens.Depth.tactileLip * 0.35)
+        }
+        .shadow(
+            color: tokens.accent.opacity(0.24),
+            radius: TadaPrimitiveTokens.Depth.cardShadowRadius,
+            y: TadaPrimitiveTokens.Depth.cardShadowY
+        )
+        .opacity(blockReason == nil ? 1 : 0.78)
+        .frame(minWidth: isCompact ? 300 : 320, maxWidth: 448)
     }
 
     @ViewBuilder

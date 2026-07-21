@@ -1,12 +1,12 @@
 # Critical UI smoke tests
 
 `TadaWordsCriticalFlowUITests` uses the app's existing Debug-only demo
-composition. It covers eleven device-level regressions without microphone,
+composition. It covers child and parent device-level regressions without microphone,
 handwriting-recognition, network, or persistent-data dependencies:
 
 - two consecutive Write words advance after the transient completion card;
-- the custom letter keyboard completes and advances a Write word without
-  presenting the system keyboard;
+- the simplified Spell Mode chooser exposes Handwriting, Typing, and the
+  shared circular Back control before the custom letter keyboard advances;
 - two consecutive Read words advance after the transient `You got it!` card;
 - Parent Home back navigation returns to Kid selection and restores the gate;
 - parent-only Privacy Policy, Support, profile deletion, and iOS permission

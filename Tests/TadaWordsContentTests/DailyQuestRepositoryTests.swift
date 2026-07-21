@@ -200,7 +200,8 @@ final class DailyQuestRepositoryTests: XCTestCase {
         let repository = InMemoryDailyQuestRepository()
         let coordinator = DailyQuestCoordinator(
             repository: repository,
-            timeZone: Self.timeZone
+            timeZone: Self.timeZone,
+            practiceOrder: { Array($0.reversed()) }
         )
         let candidate = plan(
             id: questID(20),
@@ -261,7 +262,23 @@ final class DailyQuestRepositoryTests: XCTestCase {
         XCTAssertEqual(practiceLaunch.questPlan.newWordIDs, [])
         XCTAssertEqual(
             practiceLaunch.questPlan.reviewWordIDs,
-            candidate.orderedItems.map(\.wordPromptID)
+            Array(candidate.orderedItems.map(\.wordPromptID).reversed())
+        )
+        let nextPracticeLaunch = try XCTUnwrap(
+            coordinator.practiceAgainLaunch(
+                from: completedState,
+                avoiding: practiceLaunch.questPlan.reviewWordIDs,
+                questID: questID(25),
+                startedAt: Self.today.addingTimeInterval(650)
+            )
+        )
+        XCTAssertNotEqual(
+            nextPracticeLaunch.questPlan.reviewWordIDs,
+            practiceLaunch.questPlan.reviewWordIDs
+        )
+        XCTAssertEqual(
+            Set(nextPracticeLaunch.questPlan.reviewWordIDs),
+            Set(practiceLaunch.questPlan.reviewWordIDs)
         )
         let focusedPracticeLaunch = try XCTUnwrap(
             coordinator.practiceAgainLaunch(
@@ -307,6 +324,28 @@ final class DailyQuestRepositoryTests: XCTestCase {
             on: Self.today
         )
         XCTAssertEqual(finalState.rewardGrant?.id, firstGrantID)
+
+        let freshCandidate = plan(
+            id: questID(23),
+            mode: .read,
+            reviewWordNumbers: [90, 91],
+            newWordNumbers: []
+        )
+        let freestyle = try XCTUnwrap(
+            coordinator.practiceAgainLaunch(
+                from: completedState,
+                freshCandidate: freshCandidate,
+                questID: questID(24),
+                startedAt: Self.today.addingTimeInterval(950)
+            )
+        )
+        XCTAssertEqual(freestyle.runKind, .practiceAgain)
+        XCTAssertEqual(
+            freestyle.questPlan.reviewWordIDs,
+            [wordID(91), wordID(90)]
+        )
+        XCTAssertEqual(completedState.plan?.questPlan, candidate)
+        XCTAssertEqual(completedState.rewardGrant?.id, firstGrantID)
 
         do {
             _ = try await coordinator.complete(

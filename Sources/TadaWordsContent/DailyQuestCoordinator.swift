@@ -17,15 +17,20 @@ public struct DailyQuestCoordinator: Sendable {
     private let repository: any DailyQuestRepository
     private let catalog: any RewardCatalogProviding
     private let timeZone: TimeZone
+    private let practiceOrder: @Sendable ([WordPromptID]) -> [WordPromptID]
 
     public init(
         repository: any DailyQuestRepository,
         catalog: any RewardCatalogProviding = ThemedRewardCatalog(),
-        timeZone: TimeZone
+        timeZone: TimeZone,
+        practiceOrder: @escaping @Sendable ([WordPromptID]) -> [WordPromptID] = {
+            $0.shuffled()
+        }
     ) {
         self.repository = repository
         self.catalog = catalog
         self.timeZone = timeZone
+        self.practiceOrder = practiceOrder
     }
 
     /// Persists the first candidate for Profile x Mode x Local Day. A later
@@ -180,6 +185,7 @@ public struct DailyQuestCoordinator: Sendable {
     /// words or mix its attempt evidence into the original Today run.
     public func practiceAgainLaunch(
         from state: DailyQuestState,
+        avoiding previousWordIDs: [WordPromptID]? = nil,
         questID: QuestID = QuestID(),
         startedAt: Date
     ) -> DailyQuestLaunch? {
@@ -187,7 +193,9 @@ public struct DailyQuestCoordinator: Sendable {
             from: state,
             replaying: nil,
             questID: questID,
-            startedAt: startedAt
+            startedAt: startedAt,
+            shufflesWords: true,
+            previousWordIDs: previousWordIDs
         )
     }
 
@@ -204,7 +212,38 @@ public struct DailyQuestCoordinator: Sendable {
             from: state,
             replaying: Set(requestedWordIDs),
             questID: questID,
-            startedAt: startedAt
+            startedAt: startedAt,
+            shufflesWords: false,
+            previousWordIDs: nil
+        )
+    }
+
+    /// Starts a reward-free run from a newly selected pool candidate without
+    /// replacing the canonical plan or its Today completion. The candidate is
+    /// treated entirely as Review so freestyle cannot consume more New words.
+    public func practiceAgainLaunch(
+        from state: DailyQuestState,
+        freshCandidate: QuestPlan,
+        avoiding previousWordIDs: [WordPromptID]? = nil,
+        questID: QuestID = QuestID(),
+        startedAt: Date
+    ) -> DailyQuestLaunch? {
+        guard let dailyPlan = state.plan, state.todayCompletion != nil else {
+            return nil
+        }
+        let original = dailyPlan.questPlan
+        guard freshCandidate.profileID == original.profileID,
+            freshCandidate.configuration.learningMode
+                == original.configuration.learningMode
+        else { return nil }
+        return makePracticeAgainLaunch(
+            dailyPlan: dailyPlan,
+            wordIDs: freshCandidate.orderedItems.map(\.wordPromptID),
+            configuration: original.configuration,
+            questID: questID,
+            startedAt: startedAt,
+            shufflesWords: true,
+            previousWordIDs: previousWordIDs
         )
     }
 
@@ -212,7 +251,9 @@ public struct DailyQuestCoordinator: Sendable {
         from state: DailyQuestState,
         replaying requestedWordIDs: Set<WordPromptID>?,
         questID: QuestID,
-        startedAt: Date
+        startedAt: Date,
+        shufflesWords: Bool,
+        previousWordIDs: [WordPromptID]?
     ) -> DailyQuestLaunch? {
         guard let dailyPlan = state.plan, state.todayCompletion != nil else {
             return nil
@@ -223,12 +264,35 @@ public struct DailyQuestCoordinator: Sendable {
             requestedWordIDs.map { requested in
                 persistedWordIDs.filter(requested.contains)
             } ?? persistedWordIDs
-        guard !practicedWordIDs.isEmpty else { return nil }
+        return makePracticeAgainLaunch(
+            dailyPlan: dailyPlan,
+            wordIDs: practicedWordIDs,
+            configuration: original.configuration,
+            questID: questID,
+            startedAt: startedAt,
+            shufflesWords: shufflesWords,
+            previousWordIDs: previousWordIDs
+        )
+    }
+
+    private func makePracticeAgainLaunch(
+        dailyPlan: DailyQuestPlan,
+        wordIDs: [WordPromptID],
+        configuration: QuestConfiguration,
+        questID: QuestID,
+        startedAt: Date,
+        shufflesWords: Bool,
+        previousWordIDs: [WordPromptID]?
+    ) -> DailyQuestLaunch? {
+        guard !wordIDs.isEmpty else { return nil }
+        let orderedWordIDs =
+            shufflesWords
+            ? reordered(wordIDs, avoiding: previousWordIDs) : wordIDs
         let practicePlan = QuestPlan(
             id: questID,
-            profileID: original.profileID,
-            configuration: original.configuration,
-            reviewWordIDs: practicedWordIDs,
+            profileID: dailyPlan.questPlan.profileID,
+            configuration: configuration,
+            reviewWordIDs: orderedWordIDs,
             newWordIDs: [],
             deferredReviewWordIDs: [],
             createdAt: startedAt
@@ -238,6 +302,28 @@ public struct DailyQuestCoordinator: Sendable {
             questPlan: practicePlan,
             runKind: .practiceAgain
         )
+    }
+
+    /// The injected seam makes ordering deterministic in tests. A malformed
+    /// result falls back to the input; an unchanged multi-word result rotates
+    /// once so a repeat never preserves the immediately previous order.
+    private func reordered(
+        _ wordIDs: [WordPromptID],
+        avoiding previousWordIDs: [WordPromptID]?
+    ) -> [WordPromptID] {
+        guard wordIDs.count > 1 else { return wordIDs }
+        let proposed = practiceOrder(wordIDs)
+        let isPermutation =
+            proposed.count == wordIDs.count
+            && Set(proposed) == Set(wordIDs)
+        let valid = isPermutation ? proposed : wordIDs
+        if let previousWordIDs, Set(previousWordIDs) == Set(wordIDs),
+            valid == previousWordIDs
+        {
+            return Array(previousWordIDs.dropFirst()) + [previousWordIDs[0]]
+        }
+        guard valid == wordIDs else { return valid }
+        return Array(wordIDs.dropFirst()) + [wordIDs[0]]
     }
 
     /// Callers should retain `completionID` until this write succeeds. Retrying

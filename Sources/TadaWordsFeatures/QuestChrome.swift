@@ -2,6 +2,51 @@ import SwiftUI
 import TadaWordsDesignSystem
 import TadaWordsDomain
 
+struct KidBackButton: View {
+    let theme: TadaWorldTheme
+    let destinationHint: String
+    var accessibilityIdentifier: String?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.left")
+                .font(.system(.title3, design: .rounded, weight: .bold))
+                .frame(
+                    width: TadaPrimitiveTokens.TouchTarget.minimum,
+                    height: TadaPrimitiveTokens.TouchTarget.minimum
+                )
+                .contentShape(Circle())
+        }
+        .buttonStyle(
+            KidCircularIconButtonStyle(
+                fill: theme.surface.opacity(0.78),
+                foreground: theme.ink.opacity(0.76)
+            )
+        )
+        .accessibilityLabel("Back")
+        .accessibilityHint(destinationHint)
+        .accessibilityIdentifier(accessibilityIdentifier ?? "child.back")
+    }
+}
+
+private struct KidCircularIconButtonStyle: ButtonStyle {
+    let fill: Color
+    let foreground: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(foreground)
+            .background(fill, in: Circle())
+            .overlay {
+                Circle().strokeBorder(Color.white.opacity(0.52), lineWidth: 1)
+            }
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .opacity(configuration.isPressed ? 0.76 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
 struct QuestChrome: View {
     let mode: LearningMode
     let currentItem: Int
@@ -88,18 +133,12 @@ struct QuestChrome: View {
     }
 
     private var backButton: some View {
-        Button(action: onBack) {
-            Image(systemName: "chevron.left")
-                .font(.system(.title3, design: .rounded, weight: .bold))
-                .frame(
-                    width: TadaPrimitiveTokens.TouchTarget.minimum,
-                    height: TadaPrimitiveTokens.TouchTarget.minimum
-                )
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(theme.ink.opacity(0.72))
-        .background(theme.surface.opacity(0.72), in: Circle())
-        .accessibilityLabel("Back to quests")
+        KidBackButton(
+            theme: theme,
+            destinationHint: "Returns to the Kid Lobby",
+            accessibilityIdentifier: "quest.back",
+            action: onBack
+        )
     }
 
     @ViewBuilder
