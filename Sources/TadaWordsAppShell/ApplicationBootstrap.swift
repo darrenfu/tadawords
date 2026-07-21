@@ -393,6 +393,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         )
         let guardianStore = RepositoryGuardianFamilyStore(
             profiles: profiles,
+            selectedProfileID: lastSelectedProfileID,
             profileRepository: profileRepository,
             wordPoolRepository: wordPoolRepository,
             practiceSettingsRepository: practiceSettingsRepository,

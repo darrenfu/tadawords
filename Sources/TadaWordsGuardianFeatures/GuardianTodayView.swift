@@ -101,7 +101,7 @@ struct GuardianTodayView: View {
     }
 
     private var selectedKidCard: some View {
-        Button(action: onOpenProfiles) {
+        VStack(alignment: .leading, spacing: TadaPrimitiveTokens.Spacing.small) {
             TadaPanel(theme: theme) {
                 HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
                     GuardianProfileAvatarBadge(
@@ -111,6 +111,9 @@ struct GuardianTodayView: View {
                     )
 
                     VStack(alignment: .leading, spacing: 4) {
+                        Text("Managing")
+                            .font(.system(.caption, design: .rounded, weight: .bold))
+                            .foregroundStyle(theme.primary)
                         Text(snapshot.profile.displayName)
                             .font(.system(.title2, design: .rounded, weight: .bold))
                         Text(snapshot.profile.schoolGrade.displayName)
@@ -118,19 +121,22 @@ struct GuardianTodayView: View {
                             .foregroundStyle(TadaSemanticColors.secondaryOnSurface(for: theme))
                     }
 
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                        .foregroundStyle(theme.primary)
-                        .accessibilityHidden(true)
                 }
             }
+
+            Button(action: onOpenProfiles) {
+                Label("Switch or manage child", systemImage: "person.2.fill")
+            }
+            .buttonStyle(
+                TadaPrimaryButtonStyle(
+                    fill: theme.primary,
+                    foreground: .white,
+                    isCompact: true
+                )
+            )
+            .accessibilityHint("Opens all child profiles")
+            .accessibilityIdentifier("guardian.home.switch-child")
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint("Opens Kid profile management")
-        .accessibilityIdentifier("guardian.home.selected-kid")
     }
 
     private var wordPoolSummary: String {
