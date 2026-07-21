@@ -1211,6 +1211,29 @@ transient `.syncing` snapshot when it opened during an existing reconciliation.
 - Focused concurrency tests and the complete 1129-test Swift suite pass.
   Exact-HEAD build and signed-device acceptance remain pending.
 
+## v0.7.19 — 2026-07-21
+
+Target release: `v0.7.19`
+
+Branch: `codex/profile-chooser-grid-v0.7.19`
+
+Overall state: the compact iPhone Profile chooser uses a bounded vertical grid
+instead of an unbounded horizontal strip. The first row contains at most three
+existing Profiles plus `New Kid`; every later row contains at most three
+Profiles and remains within the landscape safe area.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0719-UI-001 | P1 bug | Kid/Profile chooser | Keep more than three Profiles inside the iPhone landscape bounds while retaining `New Kid` in the first row. | Automated pass | Layout-policy coverage for 0 through 20 Profiles, focused Swift tests, and exact iPhone landscape visual/tap verification with four Profiles. |
+
+### 2026-07-21 v0.7.19 notes
+
+- Compact cards use a bounded width that fits three Profiles plus `New Kid`
+  inside the existing 760-point content envelope.
+- The fourth existing Profile starts a vertically scrollable second row;
+  subsequent rows never contain more than three Profiles.
+- Standard-height and iPad layouts keep their existing adaptive grid.
+
 ## v0.7.18 — 2026-07-21
 
 Target release: `v0.7.18`

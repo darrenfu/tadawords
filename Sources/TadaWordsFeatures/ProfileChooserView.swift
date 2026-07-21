@@ -117,52 +117,66 @@ struct ProfileChooserView: View {
                 guardianButton
             }
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 18) {
-                    compactProfileCards
-                    NewPlayerCard(isCompact: true) {
-                        presentNewPlayer()
+            ScrollView(.vertical) {
+                LazyVStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                    HStack(spacing: ProfileChooserCompactGridPolicy.itemSpacing) {
+                        ForEach(primaryProfiles, id: \.id) { profile in
+                            compactProfileCard(profile)
+                        }
+                        NewPlayerCard(isCompact: true) {
+                            presentNewPlayer()
+                        }
+                    }
+
+                    ForEach(overflowProfileRows.indices, id: \.self) { rowIndex in
+                        HStack(spacing: ProfileChooserCompactGridPolicy.itemSpacing) {
+                            ForEach(overflowProfileRows[rowIndex], id: \.id) { profile in
+                                compactProfileCard(profile)
+                            }
+                        }
                     }
                 }
                 .frame(maxWidth: 760)
-
-                VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
-                    ScrollView(.horizontal) {
-                        LazyHStack(spacing: 18) {
-                            compactProfileCards
-                            NewPlayerCard(isCompact: true) {
-                                presentNewPlayer()
-                            }
-                        }
-                        .padding(.horizontal, TadaPrimitiveTokens.Spacing.small)
-                    }
-                    .scrollIndicators(.visible)
-
-                    Image(systemName: "arrow.left.and.right")
-                        .font(.system(.caption, design: .rounded, weight: .bold))
-                        .foregroundStyle(TadaPrimitiveTokens.ColorValue.softInk)
-                        .accessibilityLabel("Swipe to see more kids")
-                }
+                .padding(.horizontal, TadaPrimitiveTokens.Spacing.small)
             }
+            .scrollIndicators(.visible)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
         .padding(.vertical, TadaPrimitiveTokens.Spacing.medium)
     }
 
-    @ViewBuilder
-    private var compactProfileCards: some View {
-        ForEach(profiles, id: \.id) { profile in
-            ProfileCard(
-                profile: profile,
-                density: .compact,
-                isLastPlayed: ProfileChooserPresentation.isLastPlayed(
-                    profile.id,
-                    rememberedProfileID: lastPlayedProfileID
-                )
-            ) {
-                onSelect(profile)
-            }
+    private var primaryProfiles: [KidProfile] {
+        Array(profiles.prefix(ProfileChooserCompactGridPolicy.maxProfilesPerRow))
+    }
+
+    private var overflowProfileRows: [[KidProfile]] {
+        let overflow = Array(
+            profiles.dropFirst(ProfileChooserCompactGridPolicy.maxProfilesPerRow)
+        )
+        return stride(
+            from: 0,
+            to: overflow.count,
+            by: ProfileChooserCompactGridPolicy.maxProfilesPerRow
+        ).map { startIndex in
+            let endIndex = min(
+                startIndex + ProfileChooserCompactGridPolicy.maxProfilesPerRow,
+                overflow.count
+            )
+            return Array(overflow[startIndex..<endIndex])
+        }
+    }
+
+    private func compactProfileCard(_ profile: KidProfile) -> some View {
+        ProfileCard(
+            profile: profile,
+            density: .compact,
+            isLastPlayed: ProfileChooserPresentation.isLastPlayed(
+                profile.id,
+                rememberedProfileID: lastPlayedProfileID
+            )
+        ) {
+            onSelect(profile)
         }
     }
 
@@ -232,6 +246,27 @@ enum ProfileChooserLayoutMode: Equatable {
 
     static func resolve(hasCompactHeight: Bool) -> ProfileChooserLayoutMode {
         hasCompactHeight ? .compactLandscape : .standard
+    }
+}
+
+enum ProfileChooserCompactGridPolicy {
+    static let maxProfilesPerRow = 3
+    static let itemSpacing: CGFloat = 14
+    static let cardContentWidth: CGFloat = 140
+    static let cardHorizontalPadding: CGFloat = 12
+
+    static func itemCounts(profileCount: Int) -> [Int] {
+        let safeProfileCount = max(0, profileCount)
+        let firstProfileCount = min(maxProfilesPerRow, safeProfileCount)
+        var counts = [firstProfileCount + 1]
+        var remaining = safeProfileCount - firstProfileCount
+
+        while remaining > 0 {
+            let rowCount = min(maxProfilesPerRow, remaining)
+            counts.append(rowCount)
+            remaining -= rowCount
+        }
+        return counts
     }
 }
 
@@ -307,10 +342,16 @@ private struct ProfileCard: View {
 
             }
             .frame(
-                minWidth: density == .compact ? 172 : nil,
-                maxWidth: density == .compact ? 220 : .infinity
+                minWidth: density == .compact
+                    ? ProfileChooserCompactGridPolicy.cardContentWidth : nil,
+                maxWidth: density == .compact
+                    ? ProfileChooserCompactGridPolicy.cardContentWidth : .infinity
             )
-            .padding(.horizontal, 16)
+            .padding(
+                .horizontal,
+                density == .compact
+                    ? ProfileChooserCompactGridPolicy.cardHorizontalPadding : 16
+            )
             .padding(.vertical, density == .compact ? 12 : 20)
             .background(
                 LinearGradient(
@@ -458,10 +499,16 @@ private struct NewPlayerCard: View {
 
             }
             .frame(
-                minWidth: isCompact ? 172 : nil,
-                maxWidth: isCompact ? 220 : .infinity
+                minWidth: isCompact
+                    ? ProfileChooserCompactGridPolicy.cardContentWidth : nil,
+                maxWidth: isCompact
+                    ? ProfileChooserCompactGridPolicy.cardContentWidth : .infinity
             )
-            .padding(.horizontal, 16)
+            .padding(
+                .horizontal,
+                isCompact
+                    ? ProfileChooserCompactGridPolicy.cardHorizontalPadding : 16
+            )
             .padding(.vertical, isCompact ? 12 : 20)
             .background(
                 Color.white.opacity(0.88),
