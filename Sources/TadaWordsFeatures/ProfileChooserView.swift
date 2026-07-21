@@ -118,7 +118,10 @@ struct ProfileChooserView: View {
             }
 
             ScrollView(.vertical) {
-                LazyVStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                LazyVStack(
+                    alignment: .leading,
+                    spacing: TadaPrimitiveTokens.Spacing.small
+                ) {
                     HStack(spacing: ProfileChooserCompactGridPolicy.itemSpacing) {
                         ForEach(primaryProfiles, id: \.id) { profile in
                             compactProfileCard(profile)
@@ -127,6 +130,7 @@ struct ProfileChooserView: View {
                             presentNewPlayer()
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     ForEach(overflowProfileRows.indices, id: \.self) { rowIndex in
                         HStack(spacing: ProfileChooserCompactGridPolicy.itemSpacing) {
@@ -134,6 +138,7 @@ struct ProfileChooserView: View {
                                 compactProfileCard(profile)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .frame(maxWidth: 760)

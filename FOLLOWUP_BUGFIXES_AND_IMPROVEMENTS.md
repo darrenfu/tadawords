@@ -1232,6 +1232,8 @@ Profiles and remains within the landscape safe area.
   inside the existing 760-point content envelope.
 - The fourth existing Profile starts a vertically scrollable second row;
   subsequent rows never contain more than three Profiles.
+- Every compact row shares the same leading edge, so partial overflow rows do
+  not drift toward the center of the iPhone screen.
 - Standard-height and iPad layouts keep their existing adaptive grid.
 
 ## v0.7.18 — 2026-07-21
