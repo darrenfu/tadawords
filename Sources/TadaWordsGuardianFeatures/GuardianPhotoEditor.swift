@@ -613,6 +613,7 @@
                         }
                     }
                     .pickerStyle(.segmented)
+                    .environment(\.colorScheme, .dark)
                     .frame(maxWidth: 260)
 
                     Spacer()
