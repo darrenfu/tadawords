@@ -13,13 +13,13 @@ twelve starter Profile avatars shipped in Tada Words.
 - No third-party artwork was supplied as a reference or incorporated into the
   generation.
 - The resulting sheet was visually reviewed for the requested animals, order,
-  clean crop boundaries, and absence of text or recognizable third-party
-  characters.
+  clean crop boundaries, transparent edges, and absence of text or
+  recognizable third-party characters.
 
 The generated source is `zodiac-avatar-master.png`, SHA-256 recorded below:
 
 ```text
-2a5f98313e325f8875bd522cee7dbe9491595564db10b9e82331178b8f183168  zodiac-avatar-master.png
+1abdc56e278d8ce8a476bde3beaa0d2c58f94057f09212bc6842d8f4df0f320f  zodiac-avatar-master.png
 ```
 
 ## Export contract
@@ -31,10 +31,14 @@ The source is a 1448 × 1086 PNG arranged as 4 columns × 3 rows. Every tile is
 2. Dragon, Snake, Horse, Goat
 3. Monkey, Rooster, Dog, Pig
 
-Each tile was cropped losslessly by coordinate and stripped of ancillary PNG
-metadata before being added to `Apps/TadaWordsApp/Assets.xcassets` as a
-universal raster image. The app clips the square art to circles where needed;
-the original square remains available for card layouts.
+The generated sheet used a uniform chroma background so the background could
+be removed mechanically. The checked-in master and all twelve exports are
+true RGBA PNGs with transparent corners and non-opaque alpha, not images with a
+white or checkerboard background baked into the pixels. Each tile was cropped
+losslessly by coordinate and stripped of ancillary PNG metadata before being
+added to `Apps/TadaWordsApp/Assets.xcassets` as a universal raster image. The
+app clips the square art to circles where needed; the original transparent
+square remains available for card layouts.
 
 ## Generation prompt
 
@@ -51,7 +55,8 @@ the original square remains available for card layouts.
 > not depict or imitate any existing film character, mascot, logo, costume, or
 > recognizable protected composition. No humans. No props crossing tile
 > boundaries. No words, letters, numbers, zodiac symbols, borders, dividers,
-> frames, drop shadows, or labels. Every tile has the same flat warm ivory
-> background (#FFF7E8) extending cleanly to edges, with no texture at the crop
-> edges. Pixel-clean equal spacing so the sheet can be mechanically cropped into
-> 12 square icons.
+> frames, drop shadows, or labels. Put every animal on the same perfectly
+> uniform vivid magenta chroma-key background (#F607E9), extending cleanly to
+> every tile edge with no texture or shadows at the crop edges. Do not use
+> magenta in the animals themselves. Pixel-clean equal spacing so the sheet can
+> be mechanically converted to transparency and cropped into 12 square icons.

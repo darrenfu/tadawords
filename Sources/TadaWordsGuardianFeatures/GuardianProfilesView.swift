@@ -214,25 +214,23 @@ struct GuardianProfileEditorView: View {
                 learningLevelSection
                 worldSection
 
-                Button(action: save) {
-                    Label(
-                        existingProfile == nil ? "Create profile" : "Save changes",
-                        systemImage: "checkmark.circle.fill"
+                if existingProfile == nil {
+                    Button(action: save) {
+                        Label("Create profile", systemImage: "checkmark.circle.fill")
+                    }
+                    .buttonStyle(GuardianPrimaryButtonStyle())
+                    .disabled(assembledDraft == nil)
+                    .accessibilityHint(
+                        ageYears == nil
+                            ? "Choose the child’s age before creating the profile"
+                            : "Creates this kid profile"
                     )
+                } else {
+                    Label("Changes save automatically", systemImage: "checkmark.circle")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                        .accessibilityIdentifier("guardian.profile.autosave-status")
                 }
-                .buttonStyle(GuardianPrimaryButtonStyle())
-                .disabled(
-                    normalizedName.isEmpty
-                        || normalizedName.count
-                            > RepositoryGuardianFamilyStore.maximumDisplayNameCharacterCount
-                        || (existingProfile == nil
-                            && ageYears.map(ProfileAgePolicy.isSupported) != true)
-                )
-                .accessibilityHint(
-                    existingProfile == nil && ageYears == nil
-                        ? "Choose the child’s age before creating the profile"
-                        : "Saves this kid profile"
-                )
 
                 if existingProfile != nil {
                     deletionSection
@@ -245,6 +243,13 @@ struct GuardianProfileEditorView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .scrollIndicators(.hidden)
+        .onChange(of: assembledDraft) { previousDraft, newDraft in
+            guard existingProfile != nil,
+                let newDraft,
+                newDraft != previousDraft
+            else { return }
+            onSave(newDraft)
+        }
         .alert("Delete this profile?", isPresented: $confirmsDeletion) {
             Button("Cancel", role: .cancel) {}
             Button("Delete profile", role: .destructive) {
@@ -461,17 +466,24 @@ struct GuardianProfileEditorView: View {
     }
 
     private func save() {
-        guard existingProfile != nil || ageYears.map(ProfileAgePolicy.isSupported) == true
-        else { return }
-        onSave(
-            GuardianProfileDraft(
-                displayName: normalizedName,
-                avatar: avatar,
-                selectedWorld: selectedWorld,
-                schoolGrade: schoolGrade,
-                ageYears: ageYears,
-                guardianUnlockedWorlds: guardianUnlockedWorlds
-            )
+        guard let assembledDraft else { return }
+        onSave(assembledDraft)
+    }
+
+    private var assembledDraft: GuardianProfileDraft? {
+        guard !normalizedName.isEmpty,
+            normalizedName.count
+                <= RepositoryGuardianFamilyStore.maximumDisplayNameCharacterCount,
+            existingProfile != nil || ageYears.map(ProfileAgePolicy.isSupported) == true
+        else { return nil }
+
+        return GuardianProfileDraft(
+            displayName: normalizedName,
+            avatar: avatar,
+            selectedWorld: selectedWorld,
+            schoolGrade: schoolGrade,
+            ageYears: ageYears,
+            guardianUnlockedWorlds: guardianUnlockedWorlds
         )
     }
 }
