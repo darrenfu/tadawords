@@ -160,6 +160,7 @@ final class SystemPermissionInventoryContractTests: XCTestCase {
 
         for requiredToken in [
             ".iOS(interfaceOrientations: .portrait)",
+            "interfaceOrientation.isPortrait == true",
             "picker.modalPresentationStyle = .fullScreen",
             "presenter.present(picker, animated: false)",
         ] {
@@ -168,6 +169,24 @@ final class SystemPermissionInventoryContractTests: XCTestCase {
                 "The portrait-only system camera lost: \(requiredToken)"
             )
         }
+        let portraitGate = try XCTUnwrap(
+            cameraSource.range(of: "interfaceOrientation.isPortrait == true")
+        )
+        let pickerCreation = try XCTUnwrap(
+            cameraSource.range(of: "let picker = UIImagePickerController()")
+        )
+        XCTAssertLessThan(
+            portraitGate.lowerBound,
+            pickerCreation.lowerBound,
+            "The system camera must not be created until the scene is portrait."
+        )
+        XCTAssertFalse(
+            cameraSource.contains(
+                "requestGeometryUpdate(\n                    "
+                    + ".iOS(interfaceOrientations: .portrait)\n                ) { _ in"
+            ),
+            "A denied camera geometry request must not be silently ignored."
+        )
         XCTAssertFalse(
             cameraSource.split(separator: "\n").contains { line in
                 line.contains("class") && line.contains(": UIImagePickerController")
