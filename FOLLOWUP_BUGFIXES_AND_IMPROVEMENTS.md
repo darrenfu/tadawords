@@ -1139,3 +1139,44 @@ of scope.
 - App behavior is unchanged, but the version/build and generated package
   metadata alter the built artifact. Exact-HEAD simulator validation and signed
   LocalQA iPhone and iPad evidence is pending in the serialized device lane.
+
+## v0.7.12 — 2026-07-20
+
+Target release: `v0.7.12`
+
+Branch: `codex/pawgoo-formal-identity-v0.7.12`
+
+Build: `2026072012`
+
+Overall state: Issue #68 moves only the normal Debug/Release identity to the
+PawGoo LLC Team. The CloudKit container and every persisted Family Sync
+identifier stay unchanged. LocalQA keeps its existing bundle, team flexibility,
+empty entitlements, installed data, and physical-device workflow.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0712-IDENTITY-001 | P0 release identity | Release/Persistence | Use `app.tadawords.app` and PawGoo `7R78Q4HP86` for the normal app without deriving or replacing LocalQA identities. | Implementation in progress on the reserved branch | Static identity contract, generated build-setting matrix, focused verifier tests, full repository gate, exact-HEAD iPhone/iPad simulator evidence, and exact PawGoo Development signed-artifact verification |
+
+### 2026-07-20 v0.7.12 notes
+
+- Reserved version `0.7.12` and build `2026072012` for reclaimed P0 Issue #68.
+- Normal app Debug/Release uses bundle `app.tadawords.app`; its normal UI-test
+  target uses `app.tadawords.app.uitests`. Both are pinned to PawGoo Team
+  `7R78Q4HP86`.
+- LocalQA remains `com.tadawords.app.localqa`; LocalQA UI tests remain
+  `com.tadawords.app.uitests`; DeviceTests remain
+  `com.tadawords.app.devicetests`. These configurations do not inherit the
+  PawGoo team or APNs setting.
+- The normal app retains APNs and the sole CloudKit container
+  `iCloud.com.tadawords.app`, while the unused KVS source entitlement is
+  removed. CloudKit zone/root/subscription identifiers and the device-local
+  voiceprint service are unchanged.
+- The new normal bundle creates a new local sandbox, permission state, and
+  default Keychain group. This batch does not install it; #60 owns old-normal
+  inventory and first normal-app installation. LocalQA data is untouched.
+- The pre-commit source gate passes 1,119/1,119 Swift tests, 91/91 Issue Agent
+  tests, and 54/54 release/identity-verifier tests. The Development verifier
+  now binds Apple CMS trust and signer pinning, the PawGoo code-signing leaf,
+  the profile authorization envelope, exact approved device coverage,
+  iPhoneOS-only arm64 metadata, and a stable app-tree digest. Exact committed-
+  HEAD simulator and signed-artifact evidence remains pending.

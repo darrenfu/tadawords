@@ -1165,7 +1165,7 @@ final class ApplicationBootstrapModel: ObservableObject {
 
     private let bootstrapper: any ApplicationBootstrapping
     private let logger = Logger(
-        subsystem: "com.tadawords.app",
+        subsystem: Bundle.main.bundleIdentifier ?? "app.tadawords.app",
         category: "ApplicationBootstrap"
     )
     private var loadTask: Task<Void, Never>?

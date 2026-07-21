@@ -15,6 +15,11 @@ PRIVACY="$ROOT/Apps/TadaWordsApp/PrivacyInfo.xcprivacy"
 ICON_SET="$ROOT/Apps/TadaWordsApp/Assets.xcassets/AppIcon.appiconset"
 DERIVED_DATA="$ROOT/.build/device-readiness-derived-data"
 LOCAL_DERIVED_DATA="$ROOT/.build/local-qa-readiness-derived-data"
+PAWGOO_TEAM="7R78Q4HP86"
+NORMAL_BUNDLE_ID="app.tadawords.app"
+NORMAL_UI_TEST_BUNDLE_ID="app.tadawords.app.uitests"
+LOCAL_BUNDLE_ID="com.tadawords.app.localqa"
+LOCAL_UI_TEST_BUNDLE_ID="com.tadawords.app.uitests"
 STATUS=0
 
 fail() {
@@ -101,6 +106,10 @@ printf '%s' "$BACKGROUND_MODES" | grep -q '"remote-notification"' \
 test "$(plutil -extract aps-environment raw -o - "$ENTITLEMENTS" 2>/dev/null)" \
     = '$(APS_ENVIRONMENT)' \
     || fail "production APNs entitlement must bind to APS_ENVIRONMENT"
+if plutil -extract com.apple.developer.ubiquity-kvstore-identifier raw -o - \
+    "$ENTITLEMENTS" >/dev/null 2>&1; then
+    fail "the unused KVS entitlement must not be present in the normal app"
+fi
 if plutil -extract UIBackgroundModes json -o - "$LOCAL_INFO" >/dev/null 2>&1; then
     fail "LocalQA must not advertise remote notification background delivery"
 fi
@@ -152,14 +161,47 @@ fi
 "$ROOT/Scripts/generate-xcode-project.sh" >/dev/null
 pass "Xcode project regenerated from project.yml"
 
-if grep -q 'DEVELOPMENT_TEAM' "$PROJECT/project.pbxproj"; then
-    fail "the generated project must not commit a personal DEVELOPMENT_TEAM"
+if grep -q 'DEVELOPMENT_TEAM = 6S245NCUPQ' "$PROJECT/project.pbxproj"; then
+    fail "the generated project must not retain the Personal Team"
 fi
 test -f "$LOCAL_SCHEME_FILE" || fail "TadaWordsLocalQA scheme is missing"
 LOCAL_ACTION_COUNT=$(grep -c 'buildConfiguration = "LocalQA"' "$LOCAL_SCHEME_FILE" || true)
 test "$LOCAL_ACTION_COUNT" = 5 \
     || fail "LocalQA run, test, profile, analyze, and archive actions must all use LocalQA"
-pass "generated schemes contain no personal Team and keep every LocalQA action isolated"
+pass "generated schemes exclude the Personal Team and keep every LocalQA action isolated"
+
+for configuration in Debug Release; do
+    NORMAL_BUILD_SETTINGS=$(
+        xcodebuild \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration "$configuration" \
+            -sdk iphonesimulator \
+            -showBuildSettings 2>/dev/null
+    )
+    printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
+        | grep -q "PRODUCT_BUNDLE_IDENTIFIER = $NORMAL_BUNDLE_ID" \
+        || fail "normal $configuration bundle identifier is incorrect"
+    printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
+        | grep -q "DEVELOPMENT_TEAM = $PAWGOO_TEAM" \
+        || fail "normal $configuration must be pinned to PawGoo"
+
+    UI_TEST_BUILD_SETTINGS=$(
+        xcodebuild \
+            -project "$PROJECT" \
+            -target TadaWordsUITests \
+            -configuration "$configuration" \
+            -sdk iphonesimulator \
+            -showBuildSettings 2>/dev/null
+    )
+    printf '%s\n' "$UI_TEST_BUILD_SETTINGS" \
+        | grep -q "PRODUCT_BUNDLE_IDENTIFIER = $NORMAL_UI_TEST_BUNDLE_ID" \
+        || fail "normal UI-test $configuration bundle identifier is incorrect"
+    printf '%s\n' "$UI_TEST_BUILD_SETTINGS" \
+        | grep -q "DEVELOPMENT_TEAM = $PAWGOO_TEAM" \
+        || fail "normal UI-test $configuration must be pinned to PawGoo"
+done
+pass "normal app and UI-test Debug/Release identities are pinned to PawGoo"
 
 LOCAL_BUILD_SETTINGS=$(
     xcodebuild \
@@ -170,8 +212,16 @@ LOCAL_BUILD_SETTINGS=$(
         -showBuildSettings 2>/dev/null
 )
 printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
-    | grep -q 'PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app.localqa' \
+    | grep -q "PRODUCT_BUNDLE_IDENTIFIER = $LOCAL_BUNDLE_ID" \
     || fail "LocalQA bundle identifier is incorrect"
+if printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
+    | grep -Eq '^[[:space:]]*DEVELOPMENT_TEAM = [^[:space:]]+'; then
+    fail "LocalQA must remain team-flexible in committed settings"
+fi
+if printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
+    | grep -Eq '^[[:space:]]*APS_ENVIRONMENT = [^[:space:]]+'; then
+    fail "LocalQA must not inherit an APNs environment build setting"
+fi
 printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
     | grep -q 'PRODUCT_NAME = Tada Words QA' \
     || fail "LocalQA product name is incorrect"
@@ -184,6 +234,23 @@ printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
 printf '%s\n' "$LOCAL_BUILD_SETTINGS" | grep -q 'LOCAL_DEVICE_QA' \
     || fail "LocalQA is missing the LOCAL_DEVICE_QA compilation condition"
 pass "LocalQA build settings select the isolated app identity and code path"
+
+LOCAL_UI_TEST_BUILD_SETTINGS=$(
+    xcodebuild \
+        -project "$PROJECT" \
+        -target TadaWordsUITests \
+        -configuration LocalQA \
+        -sdk iphonesimulator \
+        -showBuildSettings 2>/dev/null
+)
+printf '%s\n' "$LOCAL_UI_TEST_BUILD_SETTINGS" \
+    | grep -q "PRODUCT_BUNDLE_IDENTIFIER = $LOCAL_UI_TEST_BUNDLE_ID" \
+    || fail "LocalQA UI-test bundle identifier must retain its isolated identity"
+if printf '%s\n' "$LOCAL_UI_TEST_BUILD_SETTINGS" \
+    | grep -Eq '^[[:space:]]*DEVELOPMENT_TEAM = [^[:space:]]+'; then
+    fail "LocalQA UI tests must remain team-flexible in committed settings"
+fi
+pass "LocalQA UI-test identity remains independent and team-flexible"
 
 rm -rf "$DERIVED_DATA"
 for destination in "iPhone 17 Pro Max" "iPad Pro 13-inch (M5)"; do
@@ -200,6 +267,9 @@ done
 pass "Release builds succeeded for iPhone 17 Pro Max and iPad Pro 13-inch"
 
 BUILT_APP="$DERIVED_DATA/Build/Products/Release-iphonesimulator/Tada Words.app"
+test "$(plutil -extract CFBundleIdentifier raw -o - "$BUILT_APP/Info.plist")" \
+    = "$NORMAL_BUNDLE_ID" \
+    || fail "the normal built app has the wrong PawGoo bundle identifier"
 validate_orientation_envelope "$BUILT_APP/Info.plist" UISupportedInterfaceOrientations false
 validate_orientation_envelope "$BUILT_APP/Info.plist" 'UISupportedInterfaceOrientations~ipad' true
 test -f "$BUILT_APP/PrivacyInfo.xcprivacy" \
@@ -225,7 +295,7 @@ test -f "$LOCAL_BUILT_INFO" || fail "the LocalQA built app is missing"
 validate_orientation_envelope "$LOCAL_BUILT_INFO" UISupportedInterfaceOrientations false
 validate_orientation_envelope "$LOCAL_BUILT_INFO" 'UISupportedInterfaceOrientations~ipad' true
 test "$(plutil -extract CFBundleIdentifier raw -o - "$LOCAL_BUILT_INFO")" \
-    = "com.tadawords.app.localqa" \
+    = "$LOCAL_BUNDLE_ID" \
     || fail "the LocalQA built app has the wrong bundle identifier"
 test "$(plutil -extract CFBundleDisplayName raw -o - "$LOCAL_BUILT_INFO")" \
     = "Tada Words QA" \

@@ -960,7 +960,7 @@ struct AppleSpeechErrorMapping: Equatable, Sendable {
 
 private enum AppleSpeechDiagnosticLogger {
     private static let logger = Logger(
-        subsystem: "com.tadawords.app",
+        subsystem: Bundle.main.bundleIdentifier ?? "app.tadawords.app",
         category: "SpeechRecognition"
     )
 

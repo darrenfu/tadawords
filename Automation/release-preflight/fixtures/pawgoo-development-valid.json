@@ -1,0 +1,70 @@
+{
+  "info": {
+    "CFBundleIdentifier": "app.tadawords.app",
+    "CFBundleShortVersionString": "0.7.12",
+    "CFBundleVersion": "2026072012",
+    "TadaWordsGitCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "signature_details": {
+    "Identifier": "app.tadawords.app",
+    "TeamIdentifier": "7R78Q4HP86"
+  },
+  "entitlements": {
+    "application-identifier": "7R78Q4HP86.app.tadawords.app",
+    "aps-environment": "development",
+    "com.apple.developer.icloud-container-environment": "Development",
+    "com.apple.developer.icloud-container-identifiers": [
+      "iCloud.com.tadawords.app"
+    ],
+    "com.apple.developer.icloud-services": [
+      "CloudKit"
+    ],
+    "com.apple.developer.team-identifier": "7R78Q4HP86",
+    "com.apple.developer.ubiquity-kvstore-identifier": "7R78Q4HP86.app.tadawords.app",
+    "get-task-allow": true,
+    "keychain-access-groups": [
+      "7R78Q4HP86.app.tadawords.app"
+    ]
+  },
+  "profile": {
+    "ApplicationIdentifierPrefix": [
+      "7R78Q4HP86"
+    ],
+    "Entitlements": {
+      "application-identifier": "7R78Q4HP86.app.tadawords.app",
+      "aps-environment": "development",
+      "com.apple.developer.icloud-container-development-container-identifiers": [
+        "iCloud.com.tadawords.app"
+      ],
+      "com.apple.developer.icloud-container-environment": [
+        "Production",
+        "Development"
+      ],
+      "com.apple.developer.icloud-container-identifiers": [
+        "iCloud.com.tadawords.app"
+      ],
+      "com.apple.developer.icloud-services": "*",
+      "com.apple.developer.team-identifier": "7R78Q4HP86",
+      "com.apple.developer.ubiquity-container-identifiers": [
+        "iCloud.com.tadawords.app"
+      ],
+      "com.apple.developer.ubiquity-kvstore-identifier": "7R78Q4HP86.*",
+      "get-task-allow": true,
+      "keychain-access-groups": [
+        "7R78Q4HP86.*",
+        "com.apple.token"
+      ]
+    },
+    "ExpirationDate": "2099-01-01T00:00:00Z",
+    "Name": "Tada Words PawGoo Development",
+    "ProvisionedDevices": [
+      "IPHONE-TEST-UDID",
+      "IPAD-TEST-UDID"
+    ],
+    "TeamIdentifier": [
+      "7R78Q4HP86"
+    ],
+    "TeamName": "PawGoo LLC",
+    "UUID": "11111111-2222-3333-4444-555555555555"
+  }
+}

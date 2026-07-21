@@ -1,5 +1,7 @@
 .PHONY: generate format lint test test-automation test-release-preflight release-preflight check
 
+TEAM_ID ?= 7R78Q4HP86
+
 generate:
 	./Scripts/generate-xcode-project.sh
 
@@ -20,6 +22,7 @@ test-automation:
 test-release-preflight:
 	python3 -m unittest discover -s Automation/release-preflight/tests -v
 	python3 -m py_compile Scripts/release-candidate-preflight.py
+	python3 -m py_compile Scripts/verify-pawgoo-development-app.py
 	python3 -m json.tool Config/release-candidate-policy.json >/dev/null
 
 release-preflight:

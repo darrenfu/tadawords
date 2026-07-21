@@ -321,8 +321,12 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
 
     private func unlockParentArea() {
         let parents = app.buttons["profile-chooser.grown-ups"]
-        XCTAssertTrue(parents.waitForExistence(timeout: 12))
-        parents.tap()
+        tapCenterWhenHittable(
+            parents,
+            timeout: 12,
+            failureMessage:
+                "The profile chooser Parents button should become tappable after launch."
+        )
 
         let question = app.staticTexts.matching(
             NSPredicate(format: "label BEGINSWITH %@", "What is ")

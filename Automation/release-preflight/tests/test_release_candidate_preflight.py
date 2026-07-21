@@ -11,6 +11,12 @@ from pathlib import Path
 
 
 MODULE_PATH = Path(__file__).parents[3] / "Scripts/release-candidate-preflight.py"
+PAWGOO_TEAM = "7R78Q4HP86"
+NORMAL_BUNDLE = "app.tadawords.app"
+LOCALQA_BUNDLE = "com.tadawords.app.localqa"
+UI_TEST_BUNDLE = "app.tadawords.app.uitests"
+LOCALQA_UI_TEST_BUNDLE = "com.tadawords.app.uitests"
+DEVICE_TESTS_BUNDLE = "com.tadawords.app.devicetests"
 SPEC = importlib.util.spec_from_file_location("release_candidate_preflight", MODULE_PATH)
 assert SPEC and SPEC.loader
 preflight = importlib.util.module_from_spec(SPEC)
@@ -37,8 +43,11 @@ def source_fixture(root: Path) -> dict:
     (root / "project.yml").write_text(
         """MARKETING_VERSION: 0.6.7
 CURRENT_PROJECT_VERSION: 2026071804
-PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app
+PRODUCT_BUNDLE_IDENTIFIER: app.tadawords.app
 PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app.localqa
+PRODUCT_BUNDLE_IDENTIFIER: app.tadawords.app.uitests
+PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app.uitests
+PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app.devicetests
 """
     )
     project = root / "TadaWords.xcodeproj/project.pbxproj"
@@ -46,16 +55,25 @@ PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app.localqa
     project.write_text(
         """MARKETING_VERSION = 0.6.7;
 CURRENT_PROJECT_VERSION = 2026071804;
-PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app;
+PRODUCT_BUNDLE_IDENTIFIER = app.tadawords.app;
 PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app.localqa;
+PRODUCT_BUNDLE_IDENTIFIER = app.tadawords.app.uitests;
+PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app.uitests;
+PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app.devicetests;
 """
     )
-    return {"bundle_id": "com.tadawords.app"}
-
-
-def valid_entitlements(team: str = "TEAM123") -> dict:
     return {
-        "application-identifier": f"{team}.com.tadawords.app",
+        "bundle_id": NORMAL_BUNDLE,
+        "localqa_bundle_id": LOCALQA_BUNDLE,
+        "ui_test_bundle_id": UI_TEST_BUNDLE,
+        "localqa_ui_test_bundle_id": LOCALQA_UI_TEST_BUNDLE,
+        "device_tests_bundle_id": DEVICE_TESTS_BUNDLE,
+    }
+
+
+def valid_entitlements(team: str = PAWGOO_TEAM) -> dict:
+    return {
+        "application-identifier": f"{team}.{NORMAL_BUNDLE}",
         "aps-environment": "production",
         "com.apple.developer.icloud-container-environment": "Production",
         "com.apple.developer.icloud-container-identifiers": [
@@ -63,8 +81,8 @@ def valid_entitlements(team: str = "TEAM123") -> dict:
         ],
         "com.apple.developer.icloud-services": ["CloudKit"],
         "com.apple.developer.team-identifier": team,
-        "com.apple.developer.ubiquity-kvstore-identifier": f"{team}.com.tadawords.app",
-        "keychain-access-groups": [f"{team}.com.tadawords.app"],
+        "com.apple.developer.ubiquity-kvstore-identifier": f"{team}.{NORMAL_BUNDLE}",
+        "keychain-access-groups": [f"{team}.{NORMAL_BUNDLE}"],
         "get-task-allow": False,
     }
 
@@ -134,35 +152,66 @@ class ReleaseCandidatePreflightTests(unittest.TestCase):
             root = Path(temporary)
             policy = source_fixture(root)
             policy["bundle_id"] = "com.example.wrong"
-            with self.assertRaisesRegex(preflight.PreflightError, "expected production/LocalQA"):
+            with self.assertRaisesRegex(preflight.PreflightError, "expected explicit bundles"):
                 preflight.validate_source_identity(root, policy)
 
     def test_wrong_team_entitlement_fails(self):
         entitlements = valid_entitlements(team="WRONG")
         with self.assertRaisesRegex(preflight.PreflightError, "application-identifier"):
             preflight.validate_signed_entitlements(
-                entitlements, canonical_policy(), "TEAM123"
+                entitlements, canonical_policy(), PAWGOO_TEAM
             )
+
+    def test_production_preflight_rejects_personal_team(self):
+        with self.assertRaisesRegex(preflight.PreflightError, "PawGoo team"):
+            preflight.validate_expected_team("6S245NCUPQ", canonical_policy())
+
+    def test_production_preflight_accepts_only_fixed_pawgoo_team(self):
+        preflight.validate_expected_team(PAWGOO_TEAM, canonical_policy())
+
+    def test_policy_cannot_be_rewritten_to_accept_personal_team(self):
+        policy = canonical_policy()
+        policy["team_id"] = "6S245NCUPQ"
+        policy["application_identifier_prefix"] = "6S245NCUPQ"
+        with self.assertRaisesRegex(preflight.PreflightError, "policy identity"):
+            preflight.validate_expected_team("6S245NCUPQ", policy)
 
     def test_unexpected_entitlement_fails(self):
         entitlements = valid_entitlements()
         entitlements["com.apple.developer.healthkit"] = True
         with self.assertRaisesRegex(preflight.PreflightError, "unexpected signed entitlements"):
             preflight.validate_signed_entitlements(
-                entitlements, canonical_policy(), "TEAM123"
+                entitlements, canonical_policy(), PAWGOO_TEAM
             )
 
     def test_valid_production_push_entitlement_passes_for_export(self):
         preflight.validate_signed_entitlements(
-            valid_entitlements(), canonical_policy(), "TEAM123", "export"
+            valid_entitlements(), canonical_policy(), PAWGOO_TEAM, "export"
         )
+
+    def test_export_may_omit_unused_kvstore_entitlement(self):
+        entitlements = valid_entitlements()
+        del entitlements["com.apple.developer.ubiquity-kvstore-identifier"]
+        preflight.validate_signed_entitlements(
+            entitlements, canonical_policy(), PAWGOO_TEAM, "export"
+        )
+
+    def test_export_rejects_wrong_injected_kvstore_entitlement(self):
+        entitlements = valid_entitlements()
+        entitlements[
+            "com.apple.developer.ubiquity-kvstore-identifier"
+        ] = f"{PAWGOO_TEAM}.com.tadawords.app"
+        with self.assertRaisesRegex(preflight.PreflightError, "ubiquity-kvstore"):
+            preflight.validate_signed_entitlements(
+                entitlements, canonical_policy(), PAWGOO_TEAM, "export"
+            )
 
     def test_missing_production_push_entitlement_fails_for_export(self):
         entitlements = valid_entitlements()
         del entitlements["aps-environment"]
         with self.assertRaisesRegex(preflight.PreflightError, "aps-environment"):
             preflight.validate_signed_entitlements(
-                entitlements, canonical_policy(), "TEAM123", "export"
+                entitlements, canonical_policy(), PAWGOO_TEAM, "export"
             )
 
     def test_development_push_entitlement_fails_for_export(self):
@@ -170,18 +219,18 @@ class ReleaseCandidatePreflightTests(unittest.TestCase):
         entitlements["aps-environment"] = "development"
         with self.assertRaisesRegex(preflight.PreflightError, "aps-environment"):
             preflight.validate_signed_entitlements(
-                entitlements, canonical_policy(), "TEAM123", "export"
+                entitlements, canonical_policy(), PAWGOO_TEAM, "export"
             )
 
     def test_localqa_entitlements_cannot_be_export_evidence(self):
         entitlements = {
-            "application-identifier": "TEAM123.com.tadawords.app.localqa",
-            "com.apple.developer.team-identifier": "TEAM123",
+            "application-identifier": f"{PAWGOO_TEAM}.{LOCALQA_BUNDLE}",
+            "com.apple.developer.team-identifier": PAWGOO_TEAM,
             "get-task-allow": True,
         }
         with self.assertRaisesRegex(preflight.PreflightError, "application-identifier"):
             preflight.validate_signed_entitlements(
-                entitlements, canonical_policy(), "TEAM123", "export"
+                entitlements, canonical_policy(), PAWGOO_TEAM, "export"
             )
 
     def test_archive_may_be_development_signed_but_export_must_be_production(self):
@@ -190,14 +239,14 @@ class ReleaseCandidatePreflightTests(unittest.TestCase):
         entitlements["com.apple.developer.icloud-container-environment"] = "Development"
         entitlements["get-task-allow"] = True
         preflight.validate_signed_entitlements(
-            entitlements, canonical_policy(), "TEAM123", "archive"
+            entitlements, canonical_policy(), PAWGOO_TEAM, "archive"
         )
         entitlements["aps-environment"] = "production"
         with self.assertRaisesRegex(
             preflight.PreflightError, "icloud-container-environment"
         ):
             preflight.validate_signed_entitlements(
-                entitlements, canonical_policy(), "TEAM123", "export"
+                entitlements, canonical_policy(), PAWGOO_TEAM, "export"
             )
 
     def test_missing_privacy_manifest_fails(self):
@@ -248,10 +297,10 @@ class ReleaseCandidatePreflightTests(unittest.TestCase):
                 "0.6.7",
                 "2026071804",
                 "a" * 40,
-                "com.tadawords.app",
-                "TEAM123",
+                NORMAL_BUNDLE,
+                PAWGOO_TEAM,
             )
-            self.assertEqual(json.loads(output.read_text())[-1], "TEAM123")
+            self.assertEqual(json.loads(output.read_text())[-1], PAWGOO_TEAM)
 
     def test_manifest_gate_names_remain_distinct(self):
         source = MODULE_PATH.read_text()

@@ -1,6 +1,15 @@
 {
-  "schema_version": 1,
-  "bundle_id": "com.tadawords.app",
+  "schema_version": 2,
+  "team_id": "7R78Q4HP86",
+  "team_name": "PawGoo LLC",
+  "application_identifier_prefix": "7R78Q4HP86",
+  "bundle_id": "app.tadawords.app",
+  "localqa_bundle_id": "com.tadawords.app.localqa",
+  "ui_test_bundle_id": "app.tadawords.app.uitests",
+  "localqa_ui_test_bundle_id": "com.tadawords.app.uitests",
+  "device_tests_bundle_id": "com.tadawords.app.devicetests",
+  "icloud_container": "iCloud.com.tadawords.app",
+  "voiceprint_service": "com.tadawords.device-voiceprints",
   "source_entitlements": {
     "aps-environment": "$(APS_ENVIRONMENT)",
     "com.apple.developer.icloud-container-identifiers": [
@@ -8,12 +17,11 @@
     ],
     "com.apple.developer.icloud-services": [
       "CloudKit"
-    ],
-    "com.apple.developer.ubiquity-kvstore-identifier": "$(TeamIdentifierPrefix)com.tadawords.app"
+    ]
   },
   "signed_entitlements": {
     "required_exact": {
-      "application-identifier": "${TEAM_ID}.com.tadawords.app",
+      "application-identifier": "${APP_IDENTIFIER_PREFIX}.app.tadawords.app",
       "aps-environment": "production",
       "com.apple.developer.icloud-container-environment": "Production",
       "com.apple.developer.icloud-container-identifiers": [
@@ -22,14 +30,14 @@
       "com.apple.developer.icloud-services": [
         "CloudKit"
       ],
-      "com.apple.developer.team-identifier": "${TEAM_ID}",
-      "com.apple.developer.ubiquity-kvstore-identifier": "${TEAM_ID}.com.tadawords.app"
+      "com.apple.developer.team-identifier": "${TEAM_ID}"
     },
     "optional_exact": {
       "get-task-allow": false,
       "keychain-access-groups": [
-        "${TEAM_ID}.com.tadawords.app"
-      ]
+        "${APP_IDENTIFIER_PREFIX}.app.tadawords.app"
+      ],
+      "com.apple.developer.ubiquity-kvstore-identifier": "${APP_IDENTIFIER_PREFIX}.app.tadawords.app"
     },
     "artifact_allowed_values": {
       "archive": {
@@ -51,6 +59,42 @@
       "application-identifier",
       "aps-environment",
       "beta-reports-active",
+      "com.apple.developer.icloud-container-environment",
+      "com.apple.developer.icloud-container-identifiers",
+      "com.apple.developer.icloud-services",
+      "com.apple.developer.team-identifier",
+      "com.apple.developer.ubiquity-kvstore-identifier",
+      "get-task-allow",
+      "keychain-access-groups"
+    ]
+  },
+  "development_signed_entitlements": {
+    "required_exact": {
+      "application-identifier": "${APP_IDENTIFIER_PREFIX}.app.tadawords.app",
+      "aps-environment": "development",
+      "com.apple.developer.icloud-container-environment": "Development",
+      "com.apple.developer.icloud-container-identifiers": [
+        "iCloud.com.tadawords.app"
+      ],
+      "com.apple.developer.icloud-services": [
+        "CloudKit"
+      ],
+      "com.apple.developer.team-identifier": "${TEAM_ID}",
+      "get-task-allow": true,
+      "keychain-access-groups": [
+        "${APP_IDENTIFIER_PREFIX}.app.tadawords.app"
+      ]
+    },
+    "optional_exact": {
+      "com.apple.developer.icloud-container-development-container-identifiers": [
+        "iCloud.com.tadawords.app"
+      ],
+      "com.apple.developer.ubiquity-kvstore-identifier": "${APP_IDENTIFIER_PREFIX}.app.tadawords.app"
+    },
+    "allowed_keys": [
+      "application-identifier",
+      "aps-environment",
+      "com.apple.developer.icloud-container-development-container-identifiers",
       "com.apple.developer.icloud-container-environment",
       "com.apple.developer.icloud-container-identifiers",
       "com.apple.developer.icloud-services",

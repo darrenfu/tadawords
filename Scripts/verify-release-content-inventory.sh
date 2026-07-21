@@ -206,7 +206,7 @@ source_version="$(plutil -extract CFBundleShortVersionString raw "$production_pl
 source_build="$(plutil -extract CFBundleVersion raw "$production_plist")"
 expected_version="${TADA_EXPECTED_VERSION:-$source_version}"
 expected_build="${TADA_EXPECTED_BUILD:-$source_build}"
-expected_bundle_id="${TADA_EXPECTED_BUNDLE_ID:-com.tadawords.app}"
+expected_bundle_id="${TADA_EXPECTED_BUNDLE_ID:-app.tadawords.app}"
 expected_commit="${TADA_EXPECTED_COMMIT:-$(git -C "$repo_root" rev-parse HEAD)}"
 
 assert_equal "$source_version" "$expected_version" "production plist version"

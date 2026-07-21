@@ -33,13 +33,36 @@ if the device is locked/unavailable. It never edits or resets device data.
 
 The first direct install can use Xcode-managed personal-team signing for testing on
 the owner's devices. TestFlight requires an active paid Apple Developer Program team.
-The generated project intentionally does not store a personal Team ID in Git. Xcode
-may remember the choice locally, or a command-line build can pass
-`DEVELOPMENT_TEAM=<your-team-id>` without editing the committed project.
+The generated project pins only the normal Debug/Release app and UI tests to
+PawGoo LLC Team `7R78Q4HP86`. LocalQA and its device/UI tests intentionally
+remain team-flexible; Xcode may remember that local choice, or a command-line
+LocalQA build can pass `DEVELOPMENT_TEAM=<your-team-id>` without editing the
+committed project.
 
 LocalQA data is stored under its own app identity, separate from a normal Tada Words
 Release install. It stays on that device: reinstalling another device does not copy it,
 and it cannot be used to test cross-device sync.
+
+The normal PawGoo app uses bundle `app.tadawords.app`. That identity creates a
+new sandbox, OS-permission state, and default Keychain group; it cannot read or
+replace Personal-Team normal-app data or LocalQA data. Issue #68 may build and
+verify the signed PawGoo Development artifact, but must not install it. Issue
+#60 owns pre-install inventory and the first explicitly accepted normal-app
+installation on the approved iPhone and M4 iPad.
+
+Before that handoff, verify v0.7.12 without installing it:
+
+```sh
+./Scripts/verify-pawgoo-development-app.py \
+  '/path/to/Tada Words.app' \
+  0.7.12 2026072012 "$(git rev-parse HEAD)" \
+  --device-udid 'APPROVED_IPHONE_HARDWARE_UDID' \
+  --device-udid 'APPROVED_IPAD_HARDWARE_UDID'
+```
+
+Use the hardware UDIDs encoded under the profile's `ProvisionedDevices`; do
+not pass the CoreDevice UUIDs printed by `devicectl`. Retain the verifier's app
+tree SHA-256 with the handoff and recheck it immediately before installation.
 
 Xcode may ask the owner to sign in to their Apple Account or approve a macOS/iOS security prompt. Credentials must be entered by the owner; they are never needed by the source code or stored in this repository.
 
