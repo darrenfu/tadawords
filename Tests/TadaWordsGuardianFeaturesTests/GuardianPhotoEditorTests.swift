@@ -38,6 +38,16 @@
             )
             XCTAssertEqual(normalized.x, 0.72, accuracy: 0.000_001)
             XCTAssertEqual(normalized.y, 0.38, accuracy: 0.000_001)
+
+            let handleSafe = GuardianImageGeometry.aspectFitRect(
+                imageSize: CGSize(width: 1_200, height: 800),
+                viewportSize: CGSize(width: 300, height: 500),
+                contentInset: 26
+            )
+            XCTAssertEqual(handleSafe.minX, 26, accuracy: 0.000_001)
+            XCTAssertEqual(handleSafe.maxX, 274, accuracy: 0.000_001)
+            XCTAssertGreaterThanOrEqual(handleSafe.minY, 26)
+            XCTAssertLessThanOrEqual(handleSafe.maxY, 474)
         }
 
         func testRendererNormalizesRightOrientedImageBeforeCropMapping() throws {

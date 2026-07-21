@@ -482,6 +482,20 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Use Photo"].exists)
         XCTAssertTrue(app.buttons["Reset"].exists)
 
+        let topLeftCropHandle = app.otherElements["Crop top left corner"]
+        XCTAssertTrue(topLeftCropHandle.waitForExistence(timeout: 3))
+        XCTAssertTrue(topLeftCropHandle.isHittable)
+        let undo = app.buttons["Undo"]
+        XCTAssertFalse(undo.isEnabled)
+        let cropStart = topLeftCropHandle.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+        )
+        cropStart.press(
+            forDuration: 0.1,
+            thenDragTo: cropStart.withOffset(CGVector(dx: 36, dy: 28))
+        )
+        XCTAssertTrue(undo.isEnabled, "Dragging a visible crop handle should record an edit.")
+
         let cancel = app.buttons["Cancel"]
         XCTAssertTrue(cancel.exists)
         cancel.tap()

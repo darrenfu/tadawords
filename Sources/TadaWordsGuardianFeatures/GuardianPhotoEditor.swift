@@ -50,14 +50,20 @@
         static func aspectFitRect(
             imageSize: CGSize,
             viewportSize: CGSize,
-            zoomScale: CGFloat = 1
+            zoomScale: CGFloat = 1,
+            contentInset: CGFloat = 0
         ) -> CGRect {
             guard imageSize.width > 0, imageSize.height > 0,
                 viewportSize.width > 0, viewportSize.height > 0
             else { return .zero }
+            let inset = max(contentInset, 0)
+            let availableSize = CGSize(
+                width: max(viewportSize.width - inset * 2, 1),
+                height: max(viewportSize.height - inset * 2, 1)
+            )
             let fitScale = min(
-                viewportSize.width / imageSize.width,
-                viewportSize.height / imageSize.height
+                availableSize.width / imageSize.width,
+                availableSize.height / imageSize.height
             )
             let size = CGSize(
                 width: imageSize.width * fitScale * zoomScale,
@@ -440,7 +446,8 @@
                 let imageRect = GuardianImageGeometry.aspectFitRect(
                     imageSize: sourceImage.size,
                     viewportSize: proxy.size,
-                    zoomScale: zoomScale
+                    zoomScale: zoomScale,
+                    contentInset: 26
                 )
                 ZStack {
                     Image(uiImage: sourceImage)
@@ -570,8 +577,12 @@
                     }
                     .onEnded { _ in model.endCropEdit() }
                 )
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Crop \(cropCornerName(corner)) corner")
                 .accessibilityHint("Drag to resize the retained photo area")
+                .accessibilityIdentifier(
+                    "guardian.photo-editor.crop.\(cropCornerIdentifier(corner))"
+                )
         }
 
         private func maskGesture(imageRect: CGRect) -> some Gesture {
@@ -722,6 +733,15 @@
             case .topRight: "top right"
             case .bottomLeft: "bottom left"
             case .bottomRight: "bottom right"
+            }
+        }
+
+        private func cropCornerIdentifier(_ corner: GuardianCropCorner) -> String {
+            switch corner {
+            case .topLeft: "top-left"
+            case .topRight: "top-right"
+            case .bottomLeft: "bottom-left"
+            case .bottomRight: "bottom-right"
             }
         }
     }
