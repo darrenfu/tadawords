@@ -68,6 +68,43 @@ struct LetterKeyboardInputState: Equatable, Sendable {
     }
 }
 
+struct SpellQuestLayoutMetrics: Equatable, Sendable {
+    let isHeightConstrained: Bool
+
+    init(availableHeight: CGFloat) {
+        isHeightConstrained = availableHeight < 560
+    }
+
+    var chromeHeight: CGFloat { isHeightConstrained ? 44 : 52 }
+    var outerSpacing: CGFloat { isHeightConstrained ? 4 : 8 }
+    var horizontalPadding: CGFloat { isHeightConstrained ? 10 : 18 }
+    var bottomPadding: CGFloat { isHeightConstrained ? 4 : 12 }
+    var boardSpacing: CGFloat { isHeightConstrained ? 4 : 12 }
+    var boardPadding: CGFloat { isHeightConstrained ? 8 : 16 }
+    var promptControlDiameter: CGFloat { isHeightConstrained ? 44 : 72 }
+    var mascotDiameter: CGFloat { isHeightConstrained ? 32 : 44 }
+    var responseSlotHeight: CGFloat { isHeightConstrained ? 36 : 52 }
+    var responseLetterSize: CGFloat { isHeightConstrained ? 24 : 34 }
+    var letterKeyHeight: CGFloat { isHeightConstrained ? 44 : 50 }
+    var submissionControlHeight: CGFloat { isHeightConstrained ? 44 : 72 }
+    var keyboardSpacing: CGFloat { isHeightConstrained ? 6 : 7 }
+    var keyboardPadding: CGFloat { isHeightConstrained ? 6 : 10 }
+
+    var minimumContentHeight: CGFloat {
+        let keyboardHeight =
+            letterKeyHeight * 3 + submissionControlHeight
+            + keyboardSpacing * 3
+            + keyboardPadding * 2
+        let boardHeight =
+            boardPadding * 2
+            + promptControlDiameter
+            + responseSlotHeight
+            + keyboardHeight
+            + boardSpacing * 2
+        return chromeHeight + outerSpacing + boardHeight + bottomPadding
+    }
+}
+
 struct SpellQuestView: View {
     let session: QuestSession
     let theme: TadaWorldTheme
@@ -134,42 +171,51 @@ struct SpellQuestView: View {
 
     var body: some View {
         TadaWorldBackground(theme: theme, sceneStyle: .quest) {
-            ZStack {
-                VStack(spacing: 8) {
-                    QuestChrome(
-                        mode: .write,
-                        currentItem: session.currentItem,
-                        totalItems: session.totalItems,
-                        elapsedText: questTimer.elapsedText,
-                        isEmergency: questTimer.isEmergency,
+            GeometryReader { proxy in
+                let metrics = SpellQuestLayoutMetrics(
+                    availableHeight: proxy.size.height
+                )
+                ZStack {
+                    VStack(spacing: metrics.outerSpacing) {
+                        QuestChrome(
+                            mode: .write,
+                            currentItem: session.currentItem,
+                            totalItems: session.totalItems,
+                            elapsedText: questTimer.elapsedText,
+                            isEmergency: questTimer.isEmergency,
+                            theme: theme,
+                            isHeightConstrained: metrics.isHeightConstrained,
+                            onBack: onBack,
+                            onPause: pause
+                        )
+
+                        spellingBoard(metrics: metrics)
+                            .frame(maxWidth: 980, maxHeight: .infinity)
+                            .padding(.horizontal, metrics.horizontalPadding)
+                            .padding(.bottom, metrics.bottomPadding)
+                    }
+                    .hiddenFromAccessibility(when: isPaused)
+
+                    TadaEmergencyAtmosphere(
                         theme: theme,
-                        onBack: onBack,
-                        onPause: pause
+                        isActive: questTimer.isEmergency
                     )
 
-                    spellingBoard
-                        .frame(maxWidth: 980, maxHeight: .infinity)
-                        .padding(.horizontal, 18)
-                        .padding(.bottom, 12)
-                }
-                .hiddenFromAccessibility(when: isPaused)
+                    if let summary = completionFeedbackLifecycle.visibleFeedback(
+                        for: session.prompt.id
+                    ) {
+                        completionFeedback(for: summary)
+                            .transition(.scale(scale: 0.88).combined(with: .opacity))
+                            .zIndex(2)
+                    }
 
-                TadaEmergencyAtmosphere(theme: theme, isActive: questTimer.isEmergency)
-
-                if let summary = completionFeedbackLifecycle.visibleFeedback(
-                    for: session.prompt.id
-                ) {
-                    completionFeedback(for: summary)
-                        .transition(.scale(scale: 0.88).combined(with: .opacity))
-                        .zIndex(2)
-                }
-
-                if isPaused {
-                    QuestPauseOverlay(
-                        theme: theme,
-                        onResume: resume,
-                        onExit: onBack
-                    )
+                    if isPaused {
+                        QuestPauseOverlay(
+                            theme: theme,
+                            onResume: resume,
+                            onExit: onBack
+                        )
+                    }
                 }
             }
         }
@@ -192,10 +238,14 @@ struct SpellQuestView: View {
         .sensoryFeedback(.selection, trigger: keyFeedbackTrigger)
     }
 
-    private var spellingBoard: some View {
-        VStack(spacing: 12) {
+    private func spellingBoard(metrics: SpellQuestLayoutMetrics) -> some View {
+        VStack(spacing: metrics.boardSpacing) {
             HStack(spacing: 12) {
-                TadaWorldMascot(theme: theme, pose: .encouraging, size: 44)
+                TadaWorldMascot(
+                    theme: theme,
+                    pose: .encouraging,
+                    size: metrics.mascotDiameter
+                )
 
                 Spacer()
 
@@ -206,10 +256,16 @@ struct SpellQuestView: View {
                         systemName: isPlayingPrompt
                             ? "speaker.wave.3.fill" : "speaker.wave.2.fill"
                     )
-                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .font(
+                        .system(
+                            metrics.isHeightConstrained ? .headline : .title2,
+                            design: .rounded,
+                            weight: .bold
+                        )
+                    )
                     .frame(
-                        width: TadaChildScaleTokens.Action.primaryTouchDiameter,
-                        height: TadaChildScaleTokens.Action.primaryTouchDiameter
+                        width: metrics.promptControlDiameter,
+                        height: metrics.promptControlDiameter
                     )
                 }
                 .buttonStyle(
@@ -222,29 +278,42 @@ struct SpellQuestView: View {
 
             if showGuidedWord {
                 Text(session.prompt.displayText)
-                    .font(.system(.title, design: .rounded, weight: .heavy))
+                    .font(
+                        .system(
+                            metrics.isHeightConstrained ? .headline : .title,
+                            design: .rounded,
+                            weight: .heavy
+                        )
+                    )
                     .foregroundStyle(theme.primary)
                     .padding(.horizontal, 18)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, metrics.isHeightConstrained ? 2 : 6)
                     .background(theme.surface.opacity(0.94), in: Capsule())
                     .accessibilityLabel(
                         "Example spelling: \(session.prompt.displayText)"
                     )
             }
 
-            responseSlots
+            responseSlots(metrics: metrics)
 
             if let feedbackMessage {
                 Label(feedbackMessage, systemImage: "arrow.counterclockwise.circle.fill")
-                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .font(
+                        .system(
+                            metrics.isHeightConstrained ? .caption : .subheadline,
+                            design: .rounded,
+                            weight: .bold
+                        )
+                    )
                     .foregroundStyle(theme.ink.opacity(0.72))
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, metrics.isHeightConstrained ? 2 : 6)
                     .background(theme.surface.opacity(0.92), in: Capsule())
             }
 
             ThemeLetterKeyboardView(
                 theme: theme,
+                metrics: metrics,
                 isEnabled: !isPaused && !isPlayingPrompt && !isCompleted,
                 onLetter: append,
                 onDelete: removeLast,
@@ -253,7 +322,7 @@ struct SpellQuestView: View {
                 canSubmit: !inputState.isEmpty
             )
         }
-        .padding(16)
+        .padding(metrics.boardPadding)
         .background(
             Color.white.opacity(0.90),
             in: RoundedRectangle(
@@ -271,21 +340,30 @@ struct SpellQuestView: View {
         .shadow(color: theme.ink.opacity(0.10), radius: 12, y: 6)
     }
 
-    private var responseSlots: some View {
+    private func responseSlots(metrics: SpellQuestLayoutMetrics) -> some View {
         HStack(spacing: 8) {
             ForEach(0..<inputState.maximumLetterCount, id: \.self) { index in
                 VStack(spacing: 3) {
                     Text(letter(at: index))
-                        .font(.system(size: 34, weight: .heavy, design: .rounded))
+                        .font(
+                            .system(
+                                size: metrics.responseLetterSize,
+                                weight: .heavy,
+                                design: .rounded
+                            )
+                        )
                         .foregroundStyle(theme.ink)
-                        .frame(minWidth: 30, minHeight: 40)
+                        .frame(
+                            minWidth: 30,
+                            minHeight: metrics.responseSlotHeight - 12
+                        )
                     Capsule()
                         .fill(theme.primary.opacity(0.52))
                         .frame(width: 36, height: 4)
                 }
             }
         }
-        .frame(minHeight: 52)
+        .frame(minHeight: metrics.responseSlotHeight)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             inputState.response.isEmpty
@@ -483,6 +561,7 @@ struct SpellQuestView: View {
 
 private struct ThemeLetterKeyboardView: View {
     let theme: TadaWorldTheme
+    let metrics: SpellQuestLayoutMetrics
     let isEnabled: Bool
     let onLetter: (Character) -> Void
     let onDelete: () -> Void
@@ -498,9 +577,9 @@ private struct ThemeLetterKeyboardView: View {
 
     var body: some View {
         let submission = KidSubmissionControl.spelling
-        VStack(spacing: 7) {
+        VStack(spacing: metrics.keyboardSpacing) {
             ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
-                HStack(spacing: 7) {
+                HStack(spacing: metrics.keyboardSpacing) {
                     ForEach(row, id: \.self) { letter in
                         Button {
                             onLetter(letter)
@@ -513,7 +592,10 @@ private struct ThemeLetterKeyboardView: View {
                                         design: .rounded
                                     )
                                 )
-                                .frame(maxWidth: .infinity, minHeight: 50)
+                                .frame(
+                                    maxWidth: .infinity,
+                                    minHeight: metrics.letterKeyHeight
+                                )
                         }
                         .buttonStyle(ThemeLetterKeyStyle(theme: theme))
                         .disabled(!isEnabled)
@@ -530,7 +612,7 @@ private struct ThemeLetterKeyboardView: View {
                         .font(.system(.title2, design: .rounded, weight: .bold))
                         .frame(
                             maxWidth: .infinity,
-                            minHeight: submission.minimumTouchSize
+                            minHeight: metrics.submissionControlHeight
                         )
                 }
                 .buttonStyle(ThemeLetterKeyStyle(theme: theme))
@@ -544,7 +626,7 @@ private struct ThemeLetterKeyboardView: View {
                         .font(.system(.largeTitle, design: .rounded, weight: .heavy))
                         .frame(
                             maxWidth: .infinity,
-                            minHeight: submission.minimumTouchSize
+                            minHeight: metrics.submissionControlHeight
                         )
                 }
                 .buttonStyle(
@@ -560,7 +642,7 @@ private struct ThemeLetterKeyboardView: View {
             }
             .frame(maxWidth: 520)
         }
-        .padding(10)
+        .padding(metrics.keyboardPadding)
         .background(theme.secondary.opacity(0.14), in: RoundedRectangle(cornerRadius: 18))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Theme letter keyboard")

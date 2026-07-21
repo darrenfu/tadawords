@@ -21,6 +21,31 @@ protocol QuestContentProviding: Sendable {
         for plan: QuestPlan,
         profile: KidProfile
     ) async throws -> [WordPrompt]
+
+    /// Selects a reward-free freestyle batch. Implementations should prefer
+    /// active pool words outside the canonical Today plan, then gracefully
+    /// fall back to a replay when the pool has no alternative words.
+    func prepareFreestyleQuest(
+        for mode: LearningMode,
+        profile: KidProfile,
+        excluding wordIDs: Set<WordPromptID>
+    ) async throws -> PreparedQuest
+}
+
+extension QuestContentProviding {
+    func prepareFreestyleQuest(
+        for mode: LearningMode,
+        profile: KidProfile,
+        excluding wordIDs: Set<WordPromptID>
+    ) async throws -> PreparedQuest {
+        let prepared = try await prepareQuest(for: mode, profile: profile)
+        let alternatives = prepared.orderedPrompts.filter {
+            !wordIDs.contains($0.id)
+        }
+        return prepared.asFreestyle(
+            prompts: alternatives.isEmpty ? prepared.orderedPrompts : alternatives
+        )
+    }
 }
 
 struct PreparedQuest: Equatable, Sendable {
@@ -45,6 +70,28 @@ struct PreparedQuest: Equatable, Sendable {
         self.deviceClass = deviceClass
         self.personalPaceBands = personalPaceBands
         self.interfacePreferences = interfacePreferences
+    }
+
+    func asFreestyle(prompts: [WordPrompt]) -> PreparedQuest {
+        let uniquePrompts = prompts.reduce(into: [WordPrompt]()) { result, prompt in
+            guard !result.contains(where: { $0.id == prompt.id }) else { return }
+            result.append(prompt)
+        }
+        let freestylePlan = QuestPlan(
+            profileID: plan.profileID,
+            configuration: plan.configuration,
+            reviewWordIDs: uniquePrompts.map(\.id),
+            newWordIDs: [],
+            createdAt: plan.createdAt
+        )
+        return PreparedQuest(
+            plan: freestylePlan,
+            orderedPrompts: uniquePrompts,
+            emergencyAfter: emergencyAfter,
+            deviceClass: deviceClass,
+            personalPaceBands: personalPaceBands,
+            interfacePreferences: interfacePreferences
+        )
     }
 }
 
@@ -247,6 +294,58 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
             }
             return prompt
         }
+    }
+
+    func prepareFreestyleQuest(
+        for mode: LearningMode,
+        profile: KidProfile,
+        excluding wordIDs: Set<WordPromptID>
+    ) async throws -> PreparedQuest {
+        let storedSettings = try await practiceSettingsRepository.settings(
+            for: profile.id
+        )
+        let settings = storedSettings ?? .defaults(for: profile.id)
+        guard settings.profileID == profile.id else {
+            throw QuestContentError.inconsistentContent
+        }
+        let modeConfiguration = settings.configuration(for: mode)
+        try await gradeWordRecommender?.refillIfNeeded(
+            profile: profile,
+            learningMode: mode,
+            settings: settings
+        )
+        let entries = try await activeEntries(for: profile.id, mode: mode)
+        guard !entries.isEmpty else { throw QuestContentError.emptyPool }
+        let batchSize = max(
+            1,
+            modeConfiguration.questConfiguration.attentionBudget
+        )
+        let alternatives = entries.filter { !wordIDs.contains($0.prompt.id) }
+        let selectedEntries = Array(
+            (alternatives.isEmpty ? entries : alternatives).prefix(batchSize)
+        )
+        let selected = selectedEntries.map(\.prompt)
+        guard !selected.isEmpty else { throw QuestContentError.emptyPool }
+        let plan = QuestPlan(
+            profileID: profile.id,
+            configuration: modeConfiguration.questConfiguration,
+            reviewWordIDs: selected.map(\.id),
+            newWordIDs: [],
+            createdAt: clock.now
+        )
+        return PreparedQuest(
+            plan: plan,
+            orderedPrompts: selected,
+            emergencyAfter: TimeInterval(
+                modeConfiguration.emergencyAfterSeconds
+            ),
+            deviceClass: deviceClass,
+            personalPaceBands: try await loadPersonalPaceBands(
+                profileID: profile.id,
+                mode: mode
+            ),
+            interfacePreferences: settings.interface
+        )
     }
 
     private func activeEntries(

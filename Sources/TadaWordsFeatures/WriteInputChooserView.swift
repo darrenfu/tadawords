@@ -2,28 +2,35 @@ import SwiftUI
 import TadaWordsDesignSystem
 import TadaWordsDomain
 
+enum WriteInputChooserPresentation {
+    static let title = "Spell Mode"
+    static let handwritingTitle = "Handwriting"
+    static let typingTitle = "Typing"
+}
+
 /// A short child-facing fork inside the one shared Write quest.
 /// Choosing either surface completes the same daily route (product rule B).
 struct WriteInputChooserView: View {
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
     let theme: TadaWorldTheme
     let onSelect: (WriteQuestInputMethod) -> Void
     let onBack: () -> Void
 
     var body: some View {
         TadaWorldBackground(theme: theme, sceneStyle: .quest) {
-            VStack(spacing: TadaPrimitiveTokens.Spacing.large) {
+            VStack(spacing: isCompactHeight ? 10 : TadaPrimitiveTokens.Spacing.large) {
                 header
 
                 HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                    TadaWorldMascot(theme: theme, pose: .encouraging, size: 64)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("How do you want to spell?")
-                            .font(.system(.largeTitle, design: .rounded, weight: .heavy))
-                            .foregroundStyle(theme.ink)
-                        Text("Either choice finishes today’s Write quest.")
-                            .font(.system(.headline, design: .rounded, weight: .medium))
-                            .foregroundStyle(theme.ink.opacity(0.65))
-                    }
+                    TadaWorldMascot(
+                        theme: theme,
+                        pose: .encouraging,
+                        size: isCompactHeight ? 48 : 64
+                    )
+                    Text(WriteInputChooserPresentation.title)
+                        .font(.system(.largeTitle, design: .rounded, weight: .heavy))
+                        .foregroundStyle(theme.ink)
                 }
                 .accessibilityElement(children: .combine)
 
@@ -39,20 +46,23 @@ struct WriteInputChooserView: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(TadaPrimitiveTokens.Spacing.large)
+            .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
+            .padding(.vertical, isCompactHeight ? 8 : TadaPrimitiveTokens.Spacing.large)
         }
+    }
+
+    private var isCompactHeight: Bool {
+        verticalSizeClass == .compact
     }
 
     private var header: some View {
         HStack {
-            Button(action: onBack) {
-                Label("Quests", systemImage: "chevron.left")
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                    .frame(minHeight: TadaPrimitiveTokens.TouchTarget.minimum)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(theme.ink.opacity(0.74))
-            .accessibilityIdentifier("write-method.back")
+            KidBackButton(
+                theme: theme,
+                destinationHint: "Returns to the Kid Lobby",
+                accessibilityIdentifier: "write-method.back",
+                action: onBack
+            )
 
             Spacer()
         }
@@ -62,14 +72,14 @@ struct WriteInputChooserView: View {
     private var choiceCards: some View {
         choiceCard(
             method: .handwriting,
-            title: "Write by Hand",
-            subtitle: "Draw every letter",
+            title: WriteInputChooserPresentation.handwritingTitle,
+            hint: "Draw each letter by hand",
             symbol: "pencil.and.scribble"
         )
         choiceCard(
             method: .letterKeyboard,
-            title: "Spell with Letters",
-            subtitle: "Tap A to Z",
+            title: WriteInputChooserPresentation.typingTitle,
+            hint: "Build the word with letter keys",
             symbol: "character.cursor.ibeam"
         )
     }
@@ -77,31 +87,34 @@ struct WriteInputChooserView: View {
     private func choiceCard(
         method: WriteQuestInputMethod,
         title: String,
-        subtitle: String,
+        hint: String,
         symbol: String
     ) -> some View {
         Button {
             onSelect(method)
         } label: {
-            VStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
+            VStack(spacing: isCompactHeight ? 8 : TadaPrimitiveTokens.Spacing.medium) {
                 ZStack {
                     Circle()
                         .fill(theme.primary.opacity(0.14))
                     Image(systemName: symbol)
-                        .font(.system(size: 58, weight: .bold))
+                        .font(.system(size: isCompactHeight ? 42 : 58, weight: .bold))
                         .foregroundStyle(theme.primary)
                 }
-                .frame(width: 112, height: 112)
+                .frame(
+                    width: isCompactHeight ? 78 : 112,
+                    height: isCompactHeight ? 78 : 112
+                )
 
                 Text(title)
                     .font(.system(.title, design: .rounded, weight: .heavy))
                     .foregroundStyle(theme.ink)
-                Text(subtitle)
-                    .font(.system(.headline, design: .rounded, weight: .semibold))
-                    .foregroundStyle(theme.ink.opacity(0.62))
             }
-            .frame(maxWidth: .infinity, minHeight: 250)
-            .padding(TadaPrimitiveTokens.Spacing.large)
+            .frame(maxWidth: .infinity, minHeight: isCompactHeight ? 154 : 220)
+            .padding(
+                isCompactHeight
+                    ? TadaPrimitiveTokens.Spacing.medium : TadaPrimitiveTokens.Spacing.large
+            )
             .background(Color.white.opacity(0.94))
             .clipShape(
                 RoundedRectangle(
@@ -122,7 +135,7 @@ struct WriteInputChooserView: View {
         .frame(minWidth: 300, maxWidth: 420)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
-        .accessibilityHint("Uses (subtitle.lowercased()) for this Write quest")
+        .accessibilityHint(hint)
         .accessibilityIdentifier("write-method.\(method.rawValue)")
     }
 }
