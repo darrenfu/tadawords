@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.7.12%20PawGoo%20Identity-6D48D7" alt="v0.7.12 PawGoo formal identity">
+  <img src="https://img.shields.io/badge/status-v0.7.15%20Camera%20OCR%20Editor-6D48D7" alt="v0.7.15 camera OCR editor">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
@@ -21,7 +21,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.7.12` (build `2026072012`) moves the normal Debug/Release app identity to PawGoo LLC: bundle `app.tadawords.app`, Team `7R78Q4HP86`. The CloudKit container remains `iCloud.com.tadawords.app`; the device-only LocalQA app remains independently signed as `com.tadawords.app.localqa`. This source batch verifies the formal Development identity but does not install the new normal app. Pre-install inventory and signed cross-device acceptance remain separate gates under #60/#66/#62. The v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md) remains internal until it is regenerated from an accepted signed release. See the [shipping permission inventory](Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** Version `0.7.15` (build `2026072015`) adds a local crop-and-mask editor before camera OCR while retaining the PawGoo LLC app identity: bundle `app.tadawords.app`, Team `7R78Q4HP86`. The CloudKit container remains `iCloud.com.tadawords.app`; the device-only LocalQA app remains independently signed as `com.tadawords.app.localqa`. Captured and edited word-sheet photos remain on device and are not persisted. Physical iPhone and iPad camera acceptance remains a separate release gate. The v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md) remains internal until it is regenerated from an accepted signed release. See the [shipping permission inventory](Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -115,7 +115,7 @@ The iOS target depends on `TadaWordsAppShell`, `TadaWordsApplePlatform`, and `Ta
 - A free Apple Account for direct LocalQA installation on personal devices
 - A paid Apple Developer Program team for TestFlight and CloudKit acceptance
 
-The current v0.7.12 source candidate uses Xcode 26.6. Merged v0.7.2 passed
+The current v0.7.15 source candidate uses Xcode 26.6. Merged v0.7.2 passed
 the exact-HEAD iPhone/iPad simulator matrix, LocalQA install guard, and a data-
 preserving physical iPhone update; merged v0.7.3 added offline Parent notices
 and exact content verification. Family Sync production schema, signed cross-
@@ -149,7 +149,7 @@ build, commit, and bundle ID:
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.7.12 2026072012 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.7.15 2026072015 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 For the normal PawGoo Development artifact, use the stricter no-install gate:
@@ -157,7 +157,7 @@ For the normal PawGoo Development artifact, use the stricter no-install gate:
 ```sh
 ./Scripts/verify-pawgoo-development-app.py \
   '/path/to/Tada Words.app' \
-  0.7.12 2026072012 "$(git rev-parse HEAD)" \
+  0.7.15 2026072015 "$(git rev-parse HEAD)" \
   --device-udid 'APPROVED_IPHONE_HARDWARE_UDID' \
   --device-udid 'APPROVED_IPAD_HARDWARE_UDID'
 ```
@@ -207,8 +207,8 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Version and build | v0.7.12 (`2026072012`) in source Plists and generated project settings |
-| Swift tests | v0.7.12 source gate: 1119/1119 plus 91/91 Issue Agent and 54/54 release/identity-verifier tests; committed-HEAD simulator and signed-artifact evidence pending |
+| Version and build | v0.7.15 (`2026072015`) in source Plists and generated project settings |
+| Swift tests | v0.7.15 focused source and simulator gates are recorded with the camera OCR editor batch; committed-HEAD full regression and signed-artifact evidence pending |
 | Family Sync simulator E2E | Merged v0.7.2: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5 |
 | Critical XCUITest flows | Merged v0.7.2: full critical matrix passed on iPad; the single iPhone Photos-dismiss timing case passed 2/2 in isolated fresh reruns after the combined run, and every other flow passed |
 | Third-Party Notices | Parent-gated offline text, exact attribution, source/license links, and route tests passed; focused UI flow passed 1/1 on iPhone 17 Pro Max and 1/1 on iPad Pro 13-inch (M5), iOS 26.5 |
@@ -232,7 +232,7 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | CloudKit remote erasure | Durable lifecycle, exact owner/participant disposition, crash repair, retry, terminal completion, and account-provenance tests passed; production destructive test-only proof open |
 | Physical child speech, handwriting, audio, accessibility, and CloudKit | Acceptance open |
 
-The [feature audit](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md) records the merged v0.2 implementation evidence. The [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md) records changes through v0.7.12, and the [V1 backlog](V1_BACKLOG.md) lists the remaining device and human acceptance work.
+The [feature audit](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md) records the merged v0.2 implementation evidence. The [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md) records earlier changes, and the [V1 backlog](V1_BACKLOG.md) lists the remaining device and human acceptance work.
 
 ## Test fixture attribution
 
