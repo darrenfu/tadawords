@@ -253,8 +253,10 @@ final class ApplicationCompositionTests: XCTestCase {
 
         let restartedSettings = try await restarted.practiceSettingsRepository
             .settings(for: created.id)
+        let restartedFamily = try await restarted.guardianStore.familySnapshot()
         XCTAssertTrue(restarted.profiles.contains(created))
         XCTAssertEqual(restarted.lastSelectedProfileID, created.id)
+        XCTAssertEqual(restartedFamily.selectedProfileID, created.id)
         XCTAssertEqual(
             restartedSettings,
             .defaults(for: created.id)
