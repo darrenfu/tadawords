@@ -1,4 +1,4 @@
-# App Store 1.0 distribution decisions — v0.7.21
+# App Store 1.0 distribution decisions — v0.7.27
 
 > **Decision record only.** This document does not enter values in App Store
 > Connect, submit a build, or authorize public release.
