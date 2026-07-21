@@ -7,8 +7,9 @@
 > an accepted signed release candidate. Family Sync is required for Tada Words
 > 1.0, but its production CloudKit, physical-device, and human acceptance remain
 > gated.
-> Kids age band, price, storefront availability, DSA status, and release method
-> also remain behind the human gates linked below.
+> The Made for Kids 6–8 band, free/no-IAP model, United States-only
+> availability, and manual release method are fixed by the 2026-07-21 owner
+> decision. App Store Connect entry and release remain separately gated.
 
 ## Audit identity
 
@@ -69,20 +70,20 @@ execute.
 
 | Decision | Current treatment in this draft | Human gate |
 |---|---|---|
-| Made for Kids and age band | **Unresolved.** Do not select an age band. The base copy avoids the reserved phrases “For Kids” and “For Children.” | [#24](https://github.com/darrenfu/tadawords/issues/24) |
-| Price | **Unresolved.** No free/paid claim appears in copy or screenshots. | [#24](https://github.com/darrenfu/tadawords/issues/24) |
+| Made for Kids and age band | **Resolved: Made for Kids, primary age band 6–8.** This is the durable owner decision; issue #65 must enter the same value against the exact RC. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.21.md), [#24](https://github.com/darrenfu/tadawords/issues/24) |
+| Price | **Resolved: Free, with no IAP, subscription, advertising, or paid unlock in 1.0.** | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.21.md), [#24](https://github.com/darrenfu/tadawords/issues/24) |
 | Family Sync in 1.0 | **Resolved: required.** The source contract is present in the audited baseline, but public availability, sharing, convergence, revocation, and remote-erasure claims remain blocked until exact-RC production acceptance. | [#40](https://github.com/darrenfu/tadawords/issues/40), [#19](https://github.com/darrenfu/tadawords/issues/19), [#41](https://github.com/darrenfu/tadawords/issues/41) |
-| Storefronts | **Unresolved.** No country or region is presumed. | [#24](https://github.com/darrenfu/tadawords/issues/24), [#23](https://github.com/darrenfu/tadawords/issues/23) |
-| EU DSA trader status and displayed contact data | **Unresolved.** Do not infer from the public website. | [#23](https://github.com/darrenfu/tadawords/issues/23) |
-| Release method | **Unresolved.** Manual, automatic, and phased release remain unselected. | [#24](https://github.com/darrenfu/tadawords/issues/24), [#26](https://github.com/darrenfu/tadawords/issues/26) |
+| Storefronts | **Resolved for 1.0: United States only.** Do not select all countries or regions, EU storefronts, or pre-order. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.21.md), [#24](https://github.com/darrenfu/tadawords/issues/24), [#23](https://github.com/darrenfu/tadawords/issues/23) |
+| EU DSA trader status and displayed contact data | **No EU distribution in 1.0.** The account-level trader-status declaration remains unresolved and must not be inferred from the public website. | [#23](https://github.com/darrenfu/tadawords/issues/23) |
+| Release method | **Resolved: Manually release this version.** After approval, keep Pending Developer Release until the separately authorized #26 step. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.21.md), [#24](https://github.com/darrenfu/tadawords/issues/24), [#26](https://github.com/darrenfu/tadawords/issues/26) |
 | Exact RC and device acceptance | **Unresolved.** Captures must come from the accepted signed RC, not this documentation branch by default. | [#22](https://github.com/darrenfu/tadawords/issues/22) |
 | Kids permission requests | **Source fixed; exact-device gate open.** Child Read has no request capability. The review path starts behind the Parent Gate at App & Family → Speech & Microphone, but first-install, denied, authorized, and revoked behavior still needs exact signed iPhone/iPad acceptance. | [#55](https://github.com/darrenfu/tadawords/issues/55), [permission inventory](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md) |
 | App Privacy answers | **Merged inventory; conditional answer set.** The source-backed inventory covers bundled picture hints, Family Sync, device-local data, support/export flows, the privacy manifest, and every configured or dormant network path. Exact signed-build and operating-practice gates remain. | [`APP_STORE_PRIVACY_v0.7.4.md`](APP_STORE_PRIVACY_v0.7.4.md), [#17](https://github.com/darrenfu/tadawords/issues/17), [#54](https://github.com/darrenfu/tadawords/issues/54) |
 | Shipped-content rights | **Merged inventory; final release evidence blocked.** Twemoji provenance and in-app attribution are present. Cartesia account/tier evidence is preserved only for the recorded current pack; every retained generated-audio asset must be reconciled at exact RC. Pawgoo authorship/rights-chain attestation remains open. | [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md), [#32](https://github.com/darrenfu/tadawords/issues/32), [#33](https://github.com/darrenfu/tadawords/issues/33) |
 
 Apple states that a Made for Kids selection cannot be changed after approval,
-and subsequent updates must continue to follow the Kids Category rules. This
-pack therefore does not choose an age band by implication.
+and subsequent updates must continue to follow the Kids Category rules. The
+owner deliberately selected the 6–8 band; it is not inferred from copy.
 
 ## Draft App Store metadata
 
@@ -95,14 +96,17 @@ limits come from Apple's current App Store Connect reference.
 | Subtitle | `Personal sight-word practice` | 28 characters; limit 30 |
 | Primary category | `Education` | Draft category; verify at exact-RC preflight |
 | Secondary category | Leave blank | Draft; do not add Games merely for discoverability |
+| Kids Category | `Made for Kids` | Owner-approved; irreversible after App Review approval |
+| Primary Kids age band | `6–8` | Owner-approved primary audience |
 | Promotional text | `Turn school word lists into short Read and Write quests, with photo import, separate word libraries, and adaptive review for each learner.` | 138 characters; limit 170 |
 | Keywords | `sight words,reading,spelling,handwriting,vocabulary,school,practice,word lists,early literacy` | 93 UTF-8 bytes; limit 100 bytes |
 | Marketing URL | `https://pawgoo.app/en/tadawords` | Live audit: HTTP 200 |
 | Support URL | `https://pawgoo.app/en/support` | Live audit: HTTP 200; legal-contact sufficiency remains part of #23 |
 | Privacy Policy URL | `https://pawgoo.app/en/tadawords/privacy` | Live audit: HTTP 200 |
 | Copyright | `2026 Pawgoo LLC` | **Provisional — do not enter until #33 confirms the Pawgoo ownership/rights chain.** Apple adds the copyright symbol automatically |
-| Price | **UNRESOLVED — #24** | Do not enter from this pack |
-| Availability | **UNRESOLVED — #23/#24** | Do not select storefronts from this pack |
+| Price | `Free` | No IAP, subscription, advertising, or paid unlock in 1.0 |
+| Availability | `United States only` | Do not select all countries/regions, EU storefronts, or pre-order |
+| Release option | `Manually release this version` | Keep Pending Developer Release until #26 authorizes release |
 
 ### Description
 
@@ -135,8 +139,8 @@ absent from the paste-ready description above only because #19/#41 production
 acceptance, the privacy inventory's exact-release gates, and matching public-site
 copy are not complete. Add a source-backed Family Sync paragraph after those
 gates pass; do not describe the feature as optional release scope or imply
-tested remote erasure before the evidence exists. Do not add “for kids,” “for
-children,” or an age range unless #24 selects Made for Kids.
+tested remote erasure before the evidence exists. The owner has selected Made
+for Kids 6–8, but public wording must still be accurate and age-appropriate.
 
 ## Draft App Review information
 
@@ -159,7 +163,7 @@ filled with invented personal data.
 > limited to 4,000 characters.
 
 ```text
-Tada Words is a local-first sight-word practice app for iPhone and iPad. [Before submission, confirm the selected Kids Category/age-band decision from issue #24.] Core practice requires no Pawgoo account or login. Parent-opted-in Family Sync requires an available iCloud account. This build contains no advertising, third-party analytics, or in-app purchases.
+Tada Words is a local-first Made for Kids sight-word practice app for the 6–8 primary age band on iPhone and iPad. Core practice requires no Pawgoo account or login. Parent-opted-in Family Sync requires an available iCloud account. This build contains no advertising, third-party analytics, or in-app purchases.
 
 FIRST-LAUNCH PATH
 1. Complete the parent onboarding and create a fictional profile. No email address or phone number is requested.
@@ -290,7 +294,7 @@ exact RC preflight must confirm that these symbols and tests still apply.
 | Eligible concrete-word picture hints load from the app bundle without a runtime picture CDN request | [`AppleWordPictureHintService.swift`](../Sources/TadaWordsApplePlatform/AppleWordPictureHintService.swift); [`WordPictureHints.swift`](../Sources/TadaWordsDomain/WordPictureHints.swift); bundled `PictureHints/Twemoji-17.0.3` resources | [`AppleWordPictureHintServiceTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleWordPictureHintServiceTests.swift); [`WordPictureHintTests.swift`](../Tests/TadaWordsDomainTests/WordPictureHintTests.swift); release content inventory | Abstract/ineligible words intentionally have no picture; Twemoji attribution is present and must remain |
 | The app targets iPhone and iPad | [`project.yml`](../project.yml) (`TARGETED_DEVICE_FAMILY: "1,2"`); [`AppleInterfaceOrientationController.swift`](../Sources/TadaWordsApplePlatform/AppleInterfaceOrientationController.swift) | [`ResponsiveLayoutPolicyTests.swift`](../Tests/TadaWordsFeaturesTests/ResponsiveLayoutPolicyTests.swift); [`AppleInterfaceOrientationPolicyTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleInterfaceOrientationPolicyTests.swift); critical UI matrix | Store screenshots and #22 acceptance are required for both device families |
 | Core practice is offline-first; raw speech recordings are not persisted or uploaded to Pawgoo | [`AppleSpeechRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechRecognitionService.swift); [`BundledTeacherWordAudioProvider.swift`](../Sources/TadaWordsApplePlatform/BundledTeacherWordAudioProvider.swift); [`KeychainDeviceVoiceprintRepository.swift`](../Sources/TadaWordsApplePlatform/KeychainDeviceVoiceprintRepository.swift); [`TadaWordsApp.swift`](../Apps/TadaWordsApp/TadaWordsApp.swift) | [`AppleSpeechAdapterTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleSpeechAdapterTests.swift); [`BundledTeacherWordAudioProviderTests.swift`](../Tests/TadaWordsApplePlatformTests/BundledTeacherWordAudioProviderTests.swift); repository tests | Family Sync requires parent opt-in and an available iCloud account. The remote audio client is dormant: neither shipping plist configures `TadaWordsTeacherAudioEndpoint`, so current teacher audio uses the app bundle or offline Apple speech. Do not call the entire app fully offline |
-| No advertising, third-party analytics, or IAP code is present in the audited baseline | [`Package.swift`](../Package.swift) has no external package dependencies; no StoreKit/ad/analytics integration appears in `Apps/` or `Sources/` | Repeat dependency and symbol scan on the exact RC | Final privacy answers remain conditional under the merged inventory and #17; price remains unresolved even without IAP |
+| No advertising, third-party analytics, or IAP code is present in the audited baseline | [`Package.swift`](../Package.swift) has no external package dependencies; no StoreKit/ad/analytics integration appears in `Apps/` or `Sources/` | Repeat dependency and symbol scan on the exact RC | Final privacy answers remain conditional under the merged inventory and #17; 1.0 price is fixed at Free |
 
 The audited baseline also contains the required Family Sync source contract:
 versioned CloudKit records, durable local-first outbox/apply state, canonical
@@ -320,8 +324,9 @@ final-Profile/delete-all, and human gates pass.
   permission setup behind the Parent Gate and removes requesting capability from
   child features. Issue #55 still requires exact-device verification; do not
   paste the proposed reviewer path until that evidence exists.
-- **A specific Kids Category age band, price, storefront set, DSA status, or
-  release method:** human decisions in #23/#24/#26.
+- **EU DSA trader classification or broader storefront availability:** 1.0 is
+  United States only, but #23 must still complete the account-level declaration
+  and any later expansion requires a new review.
 - **“Improves reading,” “proven,” “guaranteed,” or similar outcome claims:** no
   such claim is supported or needed for this submission pack.
 
@@ -346,8 +351,8 @@ content-consistency gate.
 
 - [ ] Record the immutable PR/archive commit, version, build, bundle ID, and
       TeamIdentifier; replace the runtime baseline at the top of this pack.
-- [ ] Resolve #24 and apply the selected Made for Kids age band or deliberately
-      avoid Kids-reserved metadata wording.
+- [ ] Apply the resolved #24 values exactly: Made for Kids, age band 6–8, Free
+      with no IAP, United States only, no pre-order, and manual release.
 - [ ] Treat Family Sync as required 1.0 scope and complete #19/#41 production,
       physical-device, destructive test-only erasure, and human acceptance.
 - [ ] Start from the merged App Privacy inventory; verify every SDK, CloudKit
@@ -381,8 +386,9 @@ content-consistency gate.
       content consistent with the RC.
 - [ ] Enter real App Review contact information from #23/#26; never commit it to
       this repository unless the owner explicitly requests that record.
-- [ ] Leave upload, Add for Review, Submit for Review, release method, and
-      storefront availability to the human-gated #26 workflow.
+- [ ] Let #65 enter the approved price, storefronts, age band, and release
+      option against the exact RC. Leave upload, Add for Review, Submit for
+      Review, and the final manual-release click to the human-gated #26 workflow.
 
 ## Apple primary sources
 
@@ -403,3 +409,11 @@ Only current Apple documentation was used for App Store constraints:
   Kids Category parental gates, privacy, analytics, and advertising rules.
 - [Set an app age rating](https://developer.apple.com/help/app-store-connect/manage-app-information/set-an-app-age-rating)
   — age questionnaire and the post-approval Made for Kids lock-in.
+- [Categories and Discoverability](https://developer.apple.com/app-store/categories/)
+  — Kids Category primary-audience age bands.
+- [Manage availability for your app](https://developer.apple.com/help/app-store-connect/manage-your-apps-availability/manage-availability-for-your-app-on-the-app-store)
+  — specific country or region availability.
+- [Select an App Store version release option](https://developer.apple.com/help/app-store-connect/manage-your-apps-availability/select-an-app-store-version-release-option)
+  — manual release and Pending Developer Release.
+- [Manage EU DSA trader requirements](https://developer.apple.com/help/app-store-connect/manage-compliance-information/manage-european-union-digital-services-act-trader-requirements/)
+  — account-level status and EU distribution requirements.

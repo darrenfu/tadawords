@@ -93,6 +93,11 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "BLOCKED BY ISSUE #55",
             "SYSTEM_PERMISSION_INVENTORY_v0.7.8.md",
             "Child Read has no request capability",
+            "APP_STORE_RELEASE_DECISIONS_v0.7.21.md",
+            "Made for Kids, primary age band 6–8",
+            "United States only",
+            "Manually release this version",
+            "No IAP, subscription, advertising, or paid unlock in 1.0",
             "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/",
         ]
         for claim in requiredClaims {
@@ -137,6 +142,17 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
         )
         XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.24"))
         XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072124"))
+
+        for unresolvedDecision in [
+            "Price | **UNRESOLVED — #24**",
+            "Availability | **UNRESOLVED — #23/#24**",
+            "Do not select an age band",
+        ] {
+            XCTAssertFalse(
+                document.contains(unresolvedDecision),
+                "Resolved #24 decision regressed: \(unresolvedDecision)"
+            )
+        }
     }
 
     private var repositoryRoot: URL {

@@ -1211,6 +1211,33 @@ transient `.syncing` snapshot when it opened during an existing reconciliation.
 - Focused concurrency tests and the complete 1129-test Swift suite pass.
   Exact-HEAD build and signed-device acceptance remain pending.
 
+## v0.7.21 — 2026-07-21
+
+Target release: `v0.7.21`
+
+Branch: `codex/appstore-decisions-v0.7.21`
+
+Overall state: the App Store 1.0 distribution contract is explicit and
+consistent across the release-decision record, submission pack, privacy plan,
+review notes, and exact-RC checklist.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0721-RELEASE-001 | P1 decision | App Store | Use Made for Kids 6–8, Free/no IAP or ads, United States-only availability, and manual release everywhere. | Owner-approved; source contract implemented | Exact source tests, generated-project identity, PR merge, and later #65 App Store Connect entry against the accepted RC. |
+
+### 2026-07-21 v0.7.21 notes
+
+- The owner deliberately selected Made for Kids with the primary 6–8 age band;
+  the post-approval lock-in is recorded as irreversible.
+- The first public release is Free, has no IAP/subscription/advertising/paid
+  unlock, and is available only in the United States without pre-order.
+- The approved release option is manual. App Review approval must leave the
+  version in Pending Developer Release until #26 authorizes the final release.
+- The account-level EU DSA trader declaration remains #23 scope even though no
+  EU storefront is included in 1.0.
+- This documentation and release-identity batch does not enter App Store
+  Connect values, submit a build, or change runtime/data behavior.
+
 ## v0.7.19 — 2026-07-21
 
 Target release: `v0.7.19`
