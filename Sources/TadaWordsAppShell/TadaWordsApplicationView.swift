@@ -547,6 +547,9 @@ public struct TadaWordsApplicationView: View {
             childSessionRepository: environment.childSessionRepository,
             onboardingRepository: environment.firstRunOnboardingRepository,
             guardianStore: environment.guardianStore,
+            familySyncCoordinator: familySyncCapability == .iCloud
+                ? environment.familySyncCoordinator
+                : nil,
             discoveryAdmissionGate:
                 environment.firstRunDiscoveryAdmissionGate,
             clock: environment.clock
@@ -564,7 +567,15 @@ public struct TadaWordsApplicationView: View {
         hasCompletedFirstRunOnboarding = true
 
         Task {
-            _ = await environment.familySyncCoordinator.synchronize()
+            if submission.familySyncEnabled,
+                familySyncCapability == .iCloud
+            {
+                await FamilySyncRemoteNotificationBridge.shared
+                    .requestRegistration()
+            }
+            _ = await environment.familySyncCoordinator.synchronize(
+                trigger: .localMutation
+            )
             await environment.notificationReconciler?.reconcileAll()
         }
 

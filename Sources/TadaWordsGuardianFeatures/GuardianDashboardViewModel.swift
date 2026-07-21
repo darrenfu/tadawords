@@ -906,6 +906,17 @@ final class GuardianDashboardViewModel: ObservableObject {
             do {
                 syncStatus = try await familySyncCoordinator.setEnabled(isEnabled)
                 isFamilySyncEnabled = await familySyncCoordinator.isEnabled()
+                // Family Sync can be enabled after the app has finished its
+                // bootstrap task. Register here as well, otherwise APNs stays
+                // unrequested until a later relaunch and a background device
+                // cannot be woken for a remote family change.
+                if isFamilySyncEnabled {
+                    await FamilySyncRemoteNotificationBridge.shared
+                        .requestRegistration()
+                } else {
+                    await FamilySyncRemoteNotificationBridge.shared
+                        .requestUnregistration()
+                }
                 if !isFamilySyncEnabled {
                     shareURL = nil
                     shareURLText = ""

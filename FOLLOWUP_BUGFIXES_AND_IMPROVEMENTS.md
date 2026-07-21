@@ -1211,6 +1211,37 @@ transient `.syncing` snapshot when it opened during an existing reconciliation.
 - Focused concurrency tests and the complete 1129-test Swift suite pass.
   Exact-HEAD build and signed-device acceptance remain pending.
 
+## v0.7.18 — 2026-07-21
+
+Target release: `v0.7.18`
+
+Branch: `codex/family-sync-background-and-default-consent-v0.7.18`
+
+Overall state: Family Sync now registers for remote notifications whenever a
+parent turns it on after launch. First-run parents on iCloud-capable devices
+see Family Sync enabled by default, can turn it off before profile creation,
+and must explicitly keep it on before using iCloud profile discovery.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0718-SYNC-001 | P0 bug | Parent/Family Sync | Enabling Family Sync in Parents must register APNs immediately rather than waiting for a relaunch; background devices may then receive a CloudKit change wake-up. | Source pass; signed-device pass blocked by locked login keychain | Exact signed iPhone and iPad: enable Family Sync, mutate a Profile on the other device while the receiver is backgrounded, then verify automatic convergence without opening Family Sync. |
+| V0718-ONBOARDING-001 | P1 improvement | First-run parent agreement | Present Family Sync as the iCloud-capable default, with plain-language disclosure and an on-screen opt-out before any new Profile is queued. | Source pass; signed-device pass blocked by locked login keychain | Fresh-install parent path: verify default-on, explicit off, new Profile creation, and disabled Find-my-kid while opted out. |
+
+### 2026-07-21 v0.7.18 notes
+
+- Turning Family Sync on or off in Parents now respectively requests or
+  unregisters remote-notification delivery in the same session.
+- The first-run agreement defaults the iCloud-capable option to on; its
+  completion writes the chosen preference before it creates a Profile, so an
+  opt-out never queues that first mutation for Family Sync.
+- “Find my kid” remains an iCloud-only action and is unavailable when the
+  parent has explicitly opted out; creating a local Profile remains available.
+- Focused first-run, notification-registration, Parent presentation, and the
+  complete 233-test Family Sync regression suite pass. New signed artifacts
+  cannot yet be created because the Mac login keychain rejects the PawGoo
+  development private-key operation (`errSecInternalComponent`); no device
+  data was reset, replaced, or uninstalled during this investigation.
+
 ## v0.7.13 — 2026-07-20
 
 Target release: `v0.7.13`
