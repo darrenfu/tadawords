@@ -79,8 +79,7 @@ final class SystemPermissionInventoryContractTests: XCTestCase {
                 sourceToken: "UIImagePickerController()",
                 inventoryToken: "UIImagePickerController",
                 expectedPaths: [
-                    "Sources/TadaWordsGuardianFeatures/GuardianProfilesView.swift",
-                    "Sources/TadaWordsGuardianFeatures/GuardianQuickAddView.swift",
+                    "Sources/TadaWordsGuardianFeatures/GuardianSystemCameraPicker.swift"
                 ]
             ),
             RequestSurface(
@@ -150,6 +149,31 @@ final class SystemPermissionInventoryContractTests: XCTestCase {
                 "Missing release contract: \(contract)"
             )
         }
+    }
+
+    func testPortraitOnlySystemCameraIsTopLevelAndFullScreen() throws {
+        let cameraSource = try source(
+            repositoryRoot.appendingPathComponent(
+                "Sources/TadaWordsGuardianFeatures/GuardianSystemCameraPicker.swift"
+            )
+        )
+
+        for requiredToken in [
+            ".iOS(interfaceOrientations: .portrait)",
+            "picker.modalPresentationStyle = .fullScreen",
+            "presenter.present(picker, animated: false)",
+        ] {
+            XCTAssertTrue(
+                cameraSource.contains(requiredToken),
+                "The portrait-only system camera lost: \(requiredToken)"
+            )
+        }
+        XCTAssertFalse(
+            cameraSource.split(separator: "\n").contains { line in
+                line.contains("class") && line.contains(": UIImagePickerController")
+            },
+            "Apple's system camera must be presented as-is, not subclassed."
+        )
     }
 
     private struct RequestSurface {

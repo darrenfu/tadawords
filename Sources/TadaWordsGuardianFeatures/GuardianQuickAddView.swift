@@ -1323,52 +1323,18 @@ private enum GuardianWordManagerFeedback: Equatable {
 
 #if os(iOS)
     @MainActor
-    private struct GuardianWordSheetCameraPicker: UIViewControllerRepresentable {
+    private struct GuardianWordSheetCameraPicker: View {
         let onImage: (Data) -> Void
         let onCancel: () -> Void
 
-        func makeCoordinator() -> Coordinator {
-            Coordinator(onImage: onImage, onCancel: onCancel)
-        }
-
-        func makeUIViewController(context: Context) -> UIImagePickerController {
-            let controller = UIImagePickerController()
-            controller.sourceType = .camera
-            controller.cameraCaptureMode = .photo
-            controller.delegate = context.coordinator
-            return controller
-        }
-
-        func updateUIViewController(
-            _ uiViewController: UIImagePickerController,
-            context: Context
-        ) {}
-
-        final class Coordinator: NSObject, UINavigationControllerDelegate,
-            UIImagePickerControllerDelegate
-        {
-            let onImage: (Data) -> Void
-            let onCancel: () -> Void
-
-            init(onImage: @escaping (Data) -> Void, onCancel: @escaping () -> Void) {
-                self.onImage = onImage
-                self.onCancel = onCancel
-            }
-
-            func imagePickerController(
-                _ picker: UIImagePickerController,
-                didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
-            ) {
-                guard let image = info[.originalImage] as? UIImage,
-                    let data = image.jpegData(compressionQuality: 0.92)
-                else {
+        var body: some View {
+            GuardianSystemCameraPicker { image in
+                guard let data = image.jpegData(compressionQuality: 0.92) else {
                     onCancel()
                     return
                 }
                 onImage(data)
-            }
-
-            func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            } onCancel: {
                 onCancel()
             }
         }

@@ -504,43 +504,13 @@ extension ProfileAvatar {
 }
 
 #if os(iOS)
-    private struct GuardianCameraPicker: UIViewControllerRepresentable {
+    private struct GuardianCameraPicker: View {
         let onImage: (Data) -> Void
         let onCancel: () -> Void
 
-        func makeCoordinator() -> Coordinator {
-            Coordinator(onImage: onImage, onCancel: onCancel)
-        }
-
-        func makeUIViewController(context: Context) -> UIImagePickerController {
-            let controller = UIImagePickerController()
-            controller.sourceType = .camera
-            controller.cameraCaptureMode = .photo
-            controller.delegate = context.coordinator
-            return controller
-        }
-
-        func updateUIViewController(
-            _ uiViewController: UIImagePickerController,
-            context: Context
-        ) {}
-
-        final class Coordinator: NSObject, UINavigationControllerDelegate,
-            UIImagePickerControllerDelegate
-        {
-            let onImage: (Data) -> Void
-            let onCancel: () -> Void
-
-            init(onImage: @escaping (Data) -> Void, onCancel: @escaping () -> Void) {
-                self.onImage = onImage
-                self.onCancel = onCancel
-            }
-
-            func imagePickerController(
-                _ picker: UIImagePickerController,
-                didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
-            ) {
-                guard let image = info[.originalImage] as? UIImage,
+        var body: some View {
+            GuardianSystemCameraPicker { image in
+                guard
                     let source = image.jpegData(compressionQuality: 0.9),
                     let prepared = ProfilePhotoPreparation.prepare(source)
                 else {
@@ -548,9 +518,7 @@ extension ProfileAvatar {
                     return
                 }
                 onImage(prepared)
-            }
-
-            func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            } onCancel: {
                 onCancel()
             }
         }
