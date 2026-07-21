@@ -60,7 +60,7 @@ struct FirstRunParentOnboardingView: View {
             initialProfile
             ?? KidProfile(
                 displayName: "My Kid",
-                avatar: .cartoonAnimal(assetID: "hare"),
+                avatar: .cartoonAnimal(assetID: "rat"),
                 selectedWorld: .moonpetalKingdom,
                 schoolGrade: .preK,
                 createdAt: .distantPast
@@ -83,7 +83,7 @@ struct FirstRunParentOnboardingView: View {
                 : presentationProfile.displayName
         )
         _avatarAssetID = State(
-            initialValue: presentationProfile.avatar.cartoonAnimalAssetID ?? "hare"
+            initialValue: presentationProfile.avatar.cartoonAnimalAssetID ?? "rat"
         )
         _schoolGrade = State(initialValue: presentationProfile.schoolGrade)
         _ageYears = State(
@@ -384,14 +384,17 @@ struct FirstRunParentOnboardingView: View {
             selectedDiscoveredProfileID = profile.id
         } label: {
             HStack(spacing: 14) {
-                Image(systemName: profile.avatar.onboardingSymbol)
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(isSelected ? Color.white : theme.primary)
-                    .frame(width: 60, height: 60)
-                    .background(
-                        isSelected ? theme.primary : theme.primary.opacity(0.10),
-                        in: Circle()
-                    )
+                OnboardingProfileAvatarArtwork(
+                    avatar: profile.avatar,
+                    symbolSize: 28,
+                    symbolColor: isSelected ? Color.white : theme.primary
+                )
+                .padding(5)
+                .frame(width: 60, height: 60)
+                .background(
+                    isSelected ? theme.primary : theme.primary.opacity(0.10),
+                    in: Circle()
+                )
                 VStack(alignment: .leading, spacing: 3) {
                     Text(profile.displayName)
                         .font(.system(.title3, design: .rounded, weight: .black))
@@ -491,7 +494,10 @@ struct FirstRunParentOnboardingView: View {
                             .submitLabel(.done)
                             .accessibilityHint("Up to 24 characters")
 
-                        HStack(spacing: 8) {
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: 68), spacing: 8)],
+                            spacing: 8
+                        ) {
                             ForEach(GuardianAnimalAvatar.available) { option in
                                 avatarButton(option)
                             }
@@ -559,11 +565,14 @@ struct FirstRunParentOnboardingView: View {
 
             onboardingCard {
                 HStack(spacing: 14) {
-                    Image(systemName: presentationProfile.avatar.onboardingSymbol)
-                        .font(.system(size: 34, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 68, height: 68)
-                        .background(theme.primary, in: Circle())
+                    OnboardingProfileAvatarArtwork(
+                        avatar: presentationProfile.avatar,
+                        symbolSize: 34,
+                        symbolColor: Color.white
+                    )
+                    .padding(5)
+                    .frame(width: 68, height: 68)
+                    .background(theme.primary, in: Circle())
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(presentationProfile.displayName)
@@ -631,14 +640,22 @@ struct FirstRunParentOnboardingView: View {
         Button {
             avatarAssetID = option.id
         } label: {
-            VStack(spacing: 3) {
-                Image(systemName: option.symbol)
-                    .font(.system(size: 22, weight: .bold))
+            VStack(spacing: 4) {
+                if let imageAssetName = option.imageAssetName {
+                    Image(imageAssetName)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(Circle())
+                        .frame(width: 44, height: 44)
+                } else {
+                    Image(systemName: option.symbol)
+                        .font(.system(size: 22, weight: .bold))
+                }
                 Text(option.name)
                     .font(.system(.caption2, design: .rounded, weight: .bold))
                     .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, minHeight: 52)
+            .frame(maxWidth: .infinity, minHeight: 78)
         }
         .buttonStyle(.plain)
         .foregroundStyle(avatarAssetID == option.id ? Color.white : theme.primary)
@@ -646,6 +663,7 @@ struct FirstRunParentOnboardingView: View {
             avatarAssetID == option.id ? theme.primary : theme.primary.opacity(0.09),
             in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
+        .accessibilityLabel(option.name)
         .accessibilityAddTraits(avatarAssetID == option.id ? .isSelected : [])
     }
 
@@ -892,6 +910,28 @@ struct FirstRunParentOnboardingView: View {
     }
 }
 
+private struct OnboardingProfileAvatarArtwork: View {
+    let avatar: ProfileAvatar
+    let symbolSize: CGFloat
+    let symbolColor: Color
+
+    var body: some View {
+        Group {
+            if let imageAssetName = avatar.starterProfileAvatar?.imageAssetName {
+                Image(imageAssetName)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(Circle())
+            } else {
+                Image(systemName: avatar.onboardingSymbol)
+                    .font(.system(size: symbolSize, weight: .bold))
+                    .foregroundStyle(symbolColor)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
 extension ProfileAvatar {
     fileprivate var cartoonAnimalAssetID: String? {
         guard case .cartoonAnimal(let assetID) = self else { return nil }
@@ -899,10 +939,10 @@ extension ProfileAvatar {
     }
 
     fileprivate var onboardingSymbol: String {
-        guard let assetID = cartoonAnimalAssetID else {
+        guard cartoonAnimalAssetID != nil else {
             return "person.crop.circle.fill"
         }
-        return GuardianAnimalAvatar.option(for: assetID)?.symbol ?? "pawprint.fill"
+        return starterProfileAvatar?.fallbackSystemImageName ?? "pawprint.fill"
     }
 }
 

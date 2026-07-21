@@ -301,7 +301,9 @@ struct ChildCollectionView: View {
         if let progression {
             return progression.cartoonIconStates.map(\.assetID)
         }
-        let starterAssetID = profile.avatar.cartoonAnimalAssetID ?? "hare"
+        let starterAssetID =
+            profile.avatar.cartoonAnimalAssetID
+            ?? CosmeticProgressionCatalog.photoProfileFallbackCartoonIconAssetID
         return [starterAssetID]
             + CosmeticProgressionCatalog.cartoonIconAssetIDs.filter {
                 $0 != starterAssetID
@@ -398,7 +400,10 @@ struct ChildCollectionView: View {
         let isUnlocked =
             progression?.unlockedCartoonIconAssetIDs.contains(assetID)
             ?? (assetID == profile.avatar.cartoonAnimalAssetID
-                || (profile.avatar.isPhotoAvatar && assetID == "hare"))
+                || (profile.avatar.isPhotoAvatar
+                    && assetID
+                        == CosmeticProgressionCatalog
+                        .photoProfileFallbackCartoonIconAssetID))
         let isCurrent = profile.displayAvatar.cartoonAnimalAssetID == assetID
         return Button {
             guard isUnlocked else { return }
@@ -601,23 +606,7 @@ extension ProfileAvatar {
 
 extension String {
     fileprivate var collectionDisplayName: String {
-        switch self {
-        case "hare":
-            "Bunny"
-        case "fox":
-            "Fox"
-        case "bear":
-            "Bear"
-        case "owl":
-            "Owl"
-        case "cat":
-            "Cat"
-        case "dog":
-            "Dog"
-        case "beaver":
-            "Beaver"
-        default:
-            "Animal Friend"
-        }
+        StarterProfileAvatar.option(for: self)?.name
+            ?? (self == "beaver" ? "Beaver" : "Animal Friend")
     }
 }

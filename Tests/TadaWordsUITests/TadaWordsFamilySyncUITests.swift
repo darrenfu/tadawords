@@ -26,6 +26,42 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         suite = nil
     }
 
+    func testFirstRunNewProfileShowsCanonicalZodiacAvatarChoices() throws {
+        launch(scenario: "second-device-adoption", reset: true)
+
+        let createNew = app.buttons["first-run.create-new"]
+        XCTAssertTrue(createNew.waitForExistence(timeout: 10))
+        createNew.tap()
+
+        let expectedAnimals = [
+            "Rat", "Ox", "Tiger", "Rabbit", "Dragon", "Snake",
+            "Horse", "Goat", "Monkey", "Rooster", "Dog", "Pig",
+        ]
+        XCTAssertTrue(app.buttons["Rat"].isSelected)
+
+        let topScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        topScreenshot.name = "First-run zodiac Profile avatar picker - top"
+        topScreenshot.lifetime = .keepAlways
+        add(topScreenshot)
+
+        for animal in expectedAnimals {
+            var remainingScrollAttempts = 4
+            while !app.buttons[animal].exists, remainingScrollAttempts > 0 {
+                app.swipeUp()
+                remainingScrollAttempts -= 1
+            }
+            XCTAssertTrue(
+                app.buttons[animal].waitForExistence(timeout: 5),
+                "Missing zodiac Profile choice: \(animal)"
+            )
+        }
+
+        let bottomScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        bottomScreenshot.name = "First-run zodiac Profile avatar picker - bottom"
+        bottomScreenshot.lifetime = .keepAlways
+        add(bottomScreenshot)
+    }
+
     func testCleanSecondDeviceAdoptsIndependentRemoteProfileWithoutLocalSeed()
         throws
     {

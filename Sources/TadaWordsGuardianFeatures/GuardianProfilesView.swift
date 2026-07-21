@@ -307,7 +307,7 @@ struct GuardianProfileEditorView: View {
                 #endif
             }
 
-            Text("Or choose an animal icon")
+            Text("Or choose a zodiac animal")
                 .font(.system(.subheadline, design: .rounded, weight: .semibold))
                 .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
 
@@ -320,12 +320,20 @@ struct GuardianProfileEditorView: View {
                         self.avatar = .cartoonAnimal(assetID: avatar.id)
                     } label: {
                         VStack(spacing: 7) {
-                            Image(systemName: avatar.symbol)
-                                .font(.system(size: 28, weight: .bold))
+                            if let imageAssetName = avatar.imageAssetName {
+                                Image(imageAssetName)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .clipShape(Circle())
+                                    .frame(width: 62, height: 62)
+                            } else {
+                                Image(systemName: avatar.symbol)
+                                    .font(.system(size: 28, weight: .bold))
+                            }
                             Text(avatar.name)
                                 .font(.system(.caption, design: .rounded, weight: .bold))
                         }
-                        .frame(maxWidth: .infinity, minHeight: 76)
+                        .frame(maxWidth: .infinity, minHeight: 104)
                     }
                     .buttonStyle(.bordered)
                     .tint(
@@ -333,6 +341,7 @@ struct GuardianProfileEditorView: View {
                             ? GuardianSemanticTokens.primary
                             : GuardianSemanticTokens.secondaryForeground
                     )
+                    .accessibilityLabel(avatar.name)
                     .accessibilityAddTraits(
                         self.avatar.cartoonAnimalAssetID == avatar.id ? .isSelected : []
                     )
@@ -484,11 +493,19 @@ struct GuardianProfileAvatarView: View {
     }
 
     private var fallback: some View {
-        Image(systemName: avatar.guardianPresentationSymbol)
-            .resizable()
-            .scaledToFit()
-            .foregroundStyle(GuardianSemanticTokens.primary)
-            .padding(8)
+        Group {
+            if let imageAssetName = avatar.starterProfileAvatar?.imageAssetName {
+                Image(imageAssetName)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: avatar.guardianPresentationSymbol)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(GuardianSemanticTokens.primary)
+                    .padding(8)
+            }
+        }
     }
 }
 

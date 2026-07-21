@@ -14,16 +14,9 @@ public enum CosmeticProgressionCatalog {
         .coasterCarnival,
     ]
 
-    public static let cartoonIconAssetIDs: [String] = [
-        "hare",
-        "fox",
-        "bear",
-        "owl",
-        "cat",
-        "dog",
-    ]
+    public static let cartoonIconAssetIDs = StarterProfileAvatar.zodiac.map(\.id)
 
-    public static let photoProfileFallbackCartoonIconAssetID = "hare"
+    public static let photoProfileFallbackCartoonIconAssetID = "rat"
 }
 
 public struct WorldUnlockState: Equatable, Sendable {

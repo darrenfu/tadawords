@@ -3,6 +3,37 @@ import TadaWordsDomain
 import XCTest
 
 final class ProfileAvatarTests: XCTestCase {
+    func testStarterCatalogUsesCanonicalZodiacOrderAndUniqueAssets() throws {
+        XCTAssertEqual(
+            StarterProfileAvatar.zodiac.map(\.id),
+            [
+                "rat", "ox", "tiger", "rabbit", "dragon", "snake",
+                "horse", "goat", "monkey", "rooster", "dog", "pig",
+            ]
+        )
+        XCTAssertEqual(Set(StarterProfileAvatar.zodiac.map(\.id)).count, 12)
+        XCTAssertEqual(
+            Set(StarterProfileAvatar.zodiac.compactMap(\.imageAssetName)).count,
+            12
+        )
+        XCTAssertTrue(
+            StarterProfileAvatar.zodiac.allSatisfy { $0.imageAssetName != nil }
+        )
+    }
+
+    func testLegacyStarterIDsRemainReadableWithoutReturningToPicker() {
+        XCTAssertEqual(
+            StarterProfileAvatar.option(for: "hare")?.name,
+            "Bunny"
+        )
+        XCTAssertFalse(StarterProfileAvatar.zodiac.map(\.id).contains("hare"))
+        XCTAssertEqual(
+            ProfileAvatar.cartoonAnimal(assetID: "fox")
+                .starterProfileAvatar?.fallbackSystemImageName,
+            "pawprint.fill"
+        )
+    }
+
     func testEmbeddedPhotoRoundTripsPreparedImageData() {
         let data = Data([0, 1, 2, 3, 254, 255])
 
