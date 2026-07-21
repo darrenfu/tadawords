@@ -116,7 +116,7 @@ private struct GuardianProfileManagementCard: View {
     }
 
     @ViewBuilder private var actionButtons: some View {
-        Button(isSelected ? "Selected" : "Manage", action: onSelect)
+        Button(isSelected ? "Managing now" : "Manage profile", action: onSelect)
             .buttonStyle(.borderedProminent)
             .disabled(isSelected)
             .accessibilityIdentifier("guardian.profile.\(profile.id).manage")
@@ -453,10 +453,13 @@ struct GuardianProfileEditorView: View {
 
     private var deletionSection: some View {
         VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.small) {
-            Button("Delete profile", role: .destructive) {
+            Button(role: .destructive) {
                 confirmsDeletion = true
+            } label: {
+                Label("Delete profile", systemImage: "trash.fill")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(GuardianPrimaryButtonStyle(tint: GuardianSemanticTokens.destructive))
+            .accessibilityIdentifier("guardian.profile.delete")
             Text(
                 "Deletes this child’s profile, words, progress, and device voice setup together."
             )

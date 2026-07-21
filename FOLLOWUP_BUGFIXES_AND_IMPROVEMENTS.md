@@ -1211,6 +1211,65 @@ transient `.syncing` snapshot when it opened during an existing reconciliation.
 - Focused concurrency tests and the complete 1129-test Swift suite pass.
   Exact-HEAD build and signed-device acceptance remain pending.
 
+## v0.7.19 — 2026-07-21
+
+Target release: `v0.7.19`
+
+Branch: `codex/profile-chooser-grid-v0.7.19`
+
+Overall state: the compact iPhone Profile chooser uses a bounded vertical grid
+instead of an unbounded horizontal strip. The first row contains at most three
+existing Profiles plus `New Kid`; every later row contains at most three
+Profiles and remains within the landscape safe area.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0719-UI-001 | P1 bug | Kid/Profile chooser | Keep more than three Profiles inside the iPhone landscape bounds while retaining `New Kid` in the first row. | Automated pass | Layout-policy coverage for 0 through 20 Profiles, focused Swift tests, and exact iPhone landscape visual/tap verification with four Profiles. |
+
+### 2026-07-21 v0.7.19 notes
+
+- Compact cards use a bounded width that fits three Profiles plus `New Kid`
+  inside the existing 760-point content envelope.
+- The fourth existing Profile starts a vertically scrollable second row;
+  subsequent rows never contain more than three Profiles.
+- Every compact row shares the same leading edge, so partial overflow rows do
+  not drift toward the center of the iPhone screen.
+- Standard-height and iPad layouts keep their existing adaptive grid.
+
+## v0.7.18 — 2026-07-21
+
+Target release: `v0.7.18`
+
+Branch: `codex/family-sync-background-and-default-consent-v0.7.18`
+
+Overall state: Family Sync now registers for remote notifications whenever a
+parent turns it on after launch. First-run parents on iCloud-capable devices
+see Family Sync enabled by default, can turn it off before profile creation,
+and must explicitly keep it on before using iCloud profile discovery.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0718-SYNC-001 | P0 bug | Parent/Family Sync | Enabling Family Sync in Parents must register APNs immediately rather than waiting for a relaunch; background devices may then receive a CloudKit change wake-up. | Automated pass; signed iPhone-to-iPad propagation observed | On the normal `app.tadawords.app` build, iPhone creation of `Push Pebble 0721` converged to the untouched iPad without opening Family Sync; both device snapshots contained exactly one matching Profile and four Profiles total. |
+| V0718-ONBOARDING-001 | P1 improvement | First-run parent agreement | Present Family Sync as the iCloud-capable default, with plain-language disclosure and an on-screen opt-out before any new Profile is queued. | Automated pass; clean-device physical acceptance pending | Fresh-install parent path: verify default-on, explicit off, new Profile creation, and disabled Find-my-kid while opted out. The existing family-data devices were intentionally not uninstalled or reset for this test. |
+
+### 2026-07-21 v0.7.18 notes
+
+- Turning Family Sync on or off in Parents now respectively requests or
+  unregisters remote-notification delivery in the same session.
+- The first-run agreement defaults the iCloud-capable option to on; its
+  completion writes the chosen preference before it creates a Profile, so an
+  opt-out never queues that first mutation for Family Sync.
+- “Find my kid” remains an iCloud-only action and is unavailable when the
+  parent has explicitly opted out; creating a local Profile remains available.
+- Focused first-run, notification-registration, Parent presentation, and the
+  complete 233-test Family Sync regression suite pass. Signed v0.7.18 app
+  artifacts are now installed in place on the approved iPhone and iPad;
+  neither device data container was reset, replaced, or uninstalled.
+- In the normal PawGoo app, creating `Push Pebble 0721` on the iPhone produced
+  one matching Profile on the untouched iPad without visiting Family Sync.
+  Read-only device-container snapshots showed four Profiles on each device and
+  exactly one record with that display name on each side.
+
 ## v0.7.13 — 2026-07-20
 
 Target release: `v0.7.13`

@@ -770,6 +770,85 @@ final class FirstRunOnboardingTests: XCTestCase {
         XCTAssertEqual(restarted.profiles.first?.displayName, "Coco")
     }
 
+    func testCompletionHonorsDefaultOnFamilySyncBeforeCreatingProfile()
+        async throws
+    {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let environment = try await bootstrap(
+            in: directory,
+            familySyncTransport: OnboardingSyncTransport()
+        )
+        let coordinator = FirstRunOnboardingCoordinator(
+            profileRepository: environment.profileRepository,
+            childSessionRepository: environment.childSessionRepository,
+            onboardingRepository: environment.firstRunOnboardingRepository,
+            guardianStore: environment.guardianStore,
+            familySyncCoordinator: environment.familySyncCoordinator,
+            clock: OnboardingClock(now: testDate.addingTimeInterval(50))
+        )
+
+        _ = try await coordinator.complete(
+            profileID: defaultProfile.id,
+            submission: FirstRunOnboardingSubmission(
+                action: .createProfile(
+                    GuardianProfileDraft(
+                        displayName: "Coco",
+                        avatarAssetID: "owl",
+                        selectedWorld: .buildItBay,
+                        schoolGrade: .kindergarten,
+                        ageYears: 4
+                    )
+                ),
+                familySyncEnabled: true
+            )
+        )
+
+        let isSyncEnabled = await environment.familySyncCoordinator.isEnabled()
+        let savedProfile = try await environment.profileRepository.profile(
+            id: defaultProfile.id
+        )
+        XCTAssertTrue(isSyncEnabled)
+        XCTAssertNotNil(savedProfile)
+    }
+
+    func testCompletionHonorsFirstRunFamilySyncOptOut() async throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let environment = try await bootstrap(
+            in: directory,
+            familySyncTransport: OnboardingSyncTransport()
+        )
+        _ = try await environment.familySyncCoordinator.setEnabled(true)
+        let coordinator = FirstRunOnboardingCoordinator(
+            profileRepository: environment.profileRepository,
+            childSessionRepository: environment.childSessionRepository,
+            onboardingRepository: environment.firstRunOnboardingRepository,
+            guardianStore: environment.guardianStore,
+            familySyncCoordinator: environment.familySyncCoordinator,
+            clock: OnboardingClock(now: testDate.addingTimeInterval(50))
+        )
+
+        _ = try await coordinator.complete(
+            profileID: defaultProfile.id,
+            submission: FirstRunOnboardingSubmission(
+                action: .createProfile(
+                    GuardianProfileDraft(
+                        displayName: "Coco",
+                        avatarAssetID: "owl",
+                        selectedWorld: .buildItBay,
+                        schoolGrade: .kindergarten,
+                        ageYears: 4
+                    )
+                ),
+                familySyncEnabled: false
+            )
+        )
+
+        let isSyncEnabled = await environment.familySyncCoordinator.isEnabled()
+        XCTAssertFalse(isSyncEnabled)
+    }
+
     func testCompletionRejectsBlankNameWithoutCompletingMarker() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -898,7 +977,7 @@ final class FirstRunOnboardingTests: XCTestCase {
         XCTAssertFalse(local.localizedCaseInsensitiveContains("icloud"))
         XCTAssertTrue(local.localizedCaseInsensitiveContains("this device"))
         XCTAssertTrue(cloud.localizedCaseInsensitiveContains("icloud"))
-        XCTAssertTrue(cloud.localizedCaseInsensitiveContains("off by default"))
+        XCTAssertTrue(cloud.localizedCaseInsensitiveContains("on by default"))
     }
 
     private func bootstrap(
