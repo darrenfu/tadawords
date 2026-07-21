@@ -9,7 +9,7 @@ enum FirstRunPrivacyDisclosure {
         case .deviceOnly:
             "Raw voice recordings are not saved. A voice template and learning data stay on this device. Deleting a profile removes its local learning data and cannot be undone."
         case .iCloud:
-            "Raw voice recordings are not saved. A voice template stays on this device. iCloud learning-data sync is off by default and turns on only when a parent chooses Find my kid or enables it later. Deleting a profile may affect family devices and cannot be undone."
+            "Raw voice recordings are not saved. A voice template stays on this device. iCloud Family Sync is on by default and keeps profiles, words, progress, settings, and rewards available on this family's devices. You can turn it off now or later in Parents. Deleting a profile may affect family devices and cannot be undone."
         }
     }
 }
@@ -45,6 +45,7 @@ struct FirstRunParentOnboardingView: View {
     @State private var ageYears: Int?
     @State private var selectedWorld: WorldTheme
     @State private var hasAcceptedConsent = false
+    @State private var isFamilySyncEnabled: Bool
     @State private var isSaving = false
     @State private var errorMessage: String?
     @FocusState private var nicknameIsFocused: Bool
@@ -90,6 +91,9 @@ struct FirstRunParentOnboardingView: View {
             initialValue: purpose == .fullSetup ? nil : presentationProfile.ageYears
         )
         _selectedWorld = State(initialValue: presentationProfile.selectedWorld)
+        _isFamilySyncEnabled = State(
+            initialValue: familySyncCapability == .iCloud
+        )
     }
 
     var body: some View {
@@ -261,7 +265,10 @@ struct FirstRunParentOnboardingView: View {
                 ) {
                     discoverProfiles()
                 }
-                .disabled(!hasAcceptedConsent)
+                // Finding an existing profile contacts the family's iCloud
+                // container. Respect a parent's explicit opt-out on this
+                // agreement instead of quietly re-enabling sync for search.
+                .disabled(!hasAcceptedConsent || !isFamilySyncEnabled)
 
                 setupRouteButton(
                     title: "Create a new kid",
@@ -586,25 +593,43 @@ struct FirstRunParentOnboardingView: View {
     }
 
     private var privacyConfirmation: some View {
-        Toggle(isOn: $hasAcceptedConsent) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Parent privacy confirmation")
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                Text(FirstRunPrivacyDisclosure.message(for: familySyncCapability))
-                    .font(.system(.caption, design: .rounded, weight: .medium))
-                    .foregroundStyle(theme.ink.opacity(0.72))
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 12) {
+            if familySyncCapability == .iCloud {
+                Toggle(isOn: $isFamilySyncEnabled) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Family Sync")
+                            .font(.system(.headline, design: .rounded, weight: .bold))
+                        Text("On by default — keep this family's learning data together across devices.")
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                            .foregroundStyle(theme.ink.opacity(0.72))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+                .tint(theme.primary)
+                .accessibilityIdentifier("first-run.family-sync-enabled")
             }
+
+            Toggle(isOn: $hasAcceptedConsent) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Parent privacy confirmation")
+                        .font(.system(.headline, design: .rounded, weight: .bold))
+                    Text(FirstRunPrivacyDisclosure.message(for: familySyncCapability))
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .foregroundStyle(theme.ink.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+            .tint(theme.primary)
+            .accessibilityHint("Required before continuing")
+            .accessibilityIdentifier("first-run.privacy-consent")
         }
-        .toggleStyle(.switch)
-        .tint(theme.primary)
         .padding(16)
         .background(
             Color.white.opacity(0.90),
             in: RoundedRectangle(cornerRadius: 20, style: .continuous)
         )
-        .accessibilityHint("Required before continuing")
-        .accessibilityIdentifier("first-run.privacy-consent")
     }
 
     private func heading(
@@ -780,7 +805,10 @@ struct FirstRunParentOnboardingView: View {
             defer { isSaving = false }
             do {
                 try await onFinish(
-                    FirstRunOnboardingSubmission(action: submissionAction)
+                    FirstRunOnboardingSubmission(
+                        action: submissionAction,
+                        familySyncEnabled: isFamilySyncEnabled
+                    )
                 )
             } catch {
                 errorMessage = Self.message(for: error)
@@ -816,7 +844,7 @@ struct FirstRunParentOnboardingView: View {
     }
 
     private func discoverProfiles() {
-        guard hasAcceptedConsent else { return }
+        guard hasAcceptedConsent, isFamilySyncEnabled else { return }
         // A retry may confirm a different iCloud account. Never keep the
         // previous account's candidates interactive while its cache is being
         // fenced and replaced.
