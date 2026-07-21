@@ -15,22 +15,11 @@ struct QuestLoadingView: View {
                     VStack(spacing: TadaPrimitiveTokens.Spacing.large) {
                         if phase.allowsBackNavigation {
                             HStack {
-                                Button(action: onBack) {
-                                    Label("Quests", systemImage: "chevron.left")
-                                        .font(
-                                            .system(
-                                                .subheadline,
-                                                design: .rounded,
-                                                weight: .bold
-                                            )
-                                        )
-                                }
-                                .buttonStyle(
-                                    TadaPrimaryButtonStyle(
-                                        fill: theme.surface,
-                                        foreground: theme.ink,
-                                        isCompact: true
-                                    )
+                                KidBackButton(
+                                    theme: theme,
+                                    destinationHint: "Returns to the Kid Lobby",
+                                    accessibilityIdentifier: "quest-loading.back",
+                                    action: onBack
                                 )
                                 Spacer()
                             }

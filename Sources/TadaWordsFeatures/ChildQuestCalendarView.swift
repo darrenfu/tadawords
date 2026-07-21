@@ -28,24 +28,17 @@ struct ChildQuestCalendarView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
+            KidBackButton(
+                theme: theme,
+                destinationHint: "Returns to the Kid Lobby",
+                accessibilityIdentifier: "child-calendar.back",
+                action: onClose
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text("Quest Calendar")
                     .font(.system(.title, design: .rounded, weight: .heavy))
             }
             Spacer()
-            Button(action: onClose) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(.title2, design: .rounded, weight: .bold))
-            }
-            .buttonStyle(
-                TadaPrimaryButtonStyle(
-                    fill: theme.surface,
-                    foreground: theme.ink,
-                    isCompact: true
-                )
-            )
-            .accessibilityLabel("Close")
-            .accessibilityHint("Returns to the Kid Lobby")
         }
     }
 

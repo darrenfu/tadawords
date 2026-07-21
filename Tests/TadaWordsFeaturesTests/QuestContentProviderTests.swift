@@ -74,6 +74,56 @@ final class QuestContentProviderTests: XCTestCase {
         }
     }
 
+    func testFreestylePrefersActiveWordsOutsideTodayAndFallsBackWhenExhausted()
+        async throws
+    {
+        let fixture = ProviderFixture()
+        _ = try await ManualWordPoolImporter(repository: fixture.wordPool).importBatch(
+            "cat dog fox hen",
+            profileID: fixture.profile.id,
+            learningMode: .read,
+            addedAt: fixture.clock.now
+        )
+        let entries = try await fixture.wordPool.entries(
+            for: fixture.profile.id,
+            learningMode: .read,
+            includingInactive: false
+        )
+
+        let alternate = try await fixture.provider.prepareFreestyleQuest(
+            for: .read,
+            profile: fixture.profile,
+            excluding: Set(entries.prefix(2).map(\.prompt.id))
+        )
+        XCTAssertEqual(
+            alternate.orderedPrompts.map(\.id),
+            entries.suffix(2).map(\.prompt.id)
+        )
+        XCTAssertTrue(alternate.plan.newWordIDs.isEmpty)
+        XCTAssertEqual(
+            alternate.plan.reviewWordIDs,
+            alternate.orderedPrompts.map(\.id)
+        )
+
+        for entry in entries {
+            try await fixture.records.save(
+                fixture.progress(
+                    for: entry.prompt,
+                    nextReviewAt: fixture.clock.now.addingTimeInterval(86_400)
+                )
+            )
+        }
+        let fallback = try await fixture.provider.prepareFreestyleQuest(
+            for: .read,
+            profile: fixture.profile,
+            excluding: Set(entries.map(\.prompt.id))
+        )
+        XCTAssertEqual(
+            fallback.orderedPrompts.map(\.id),
+            entries.map(\.prompt.id)
+        )
+    }
+
     func testStartedPoolWithoutDueReviewReportsCaughtUp() async throws {
         let fixture = ProviderFixture()
         _ = try await ManualWordPoolImporter(repository: fixture.wordPool).importBatch(

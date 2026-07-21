@@ -20,6 +20,7 @@ final class TadaWordsAppModel: ObservableObject {
     @Published private(set) var worldProgression: WorldProgression?
     @Published private(set) var rewardCollections: [WorldTheme: RewardCollection] = [:]
     @Published private(set) var worldSelectionError: String?
+    @Published private(set) var rechargingModes: Set<LearningMode> = []
 
     private let contentProvider: any QuestContentProviding
     private let audioPromptService: any AudioPromptService
@@ -48,6 +49,8 @@ final class TadaWordsAppModel: ObservableObject {
     private var handwritingToolTask: Task<Void, Never>?
     private var worldProgressTask: Task<Void, Never>?
     private var focusedReplaySeed: FocusedReplaySeed?
+    private var pendingWritePreparationIntent: QuestPreparationIntent = .standard
+    private var lastPracticeWordOrderByMode: [LearningMode: [WordPromptID]] = [:]
     private var isApplicationActive = true
     private var externalSyncRefreshGeneration: UInt64 = 0
 
@@ -169,6 +172,8 @@ final class TadaWordsAppModel: ObservableObject {
     private func applyProfileSelection(_ profile: KidProfile) {
         abandonActiveQuest()
         focusedReplaySeed = nil
+        rechargingModes.removeAll()
+        lastPracticeWordOrderByMode = [:]
         routeStatusTask?.cancel()
         calendarTask?.cancel()
         todayRouteStatuses = [:]
@@ -196,6 +201,8 @@ final class TadaWordsAppModel: ObservableObject {
     func showProfiles() {
         abandonActiveQuest()
         focusedReplaySeed = nil
+        rechargingModes.removeAll()
+        lastPracticeWordOrderByMode = [:]
         routeStatusTask?.cancel()
         routeStatusTask = nil
         calendarTask?.cancel()
@@ -215,6 +222,8 @@ final class TadaWordsAppModel: ObservableObject {
     func showLobby() {
         abandonActiveQuest()
         focusedReplaySeed = nil
+        pendingWritePreparationIntent = .standard
+        rechargingModes.removeAll()
         destination = .lobby
         refreshCalendar()
         refreshWorldProgress()
@@ -441,6 +450,7 @@ final class TadaWordsAppModel: ObservableObject {
         case .available:
             abandonActiveQuest()
             focusedReplaySeed = nil
+            pendingWritePreparationIntent = .standard
             destination = .writeInputChooser
             Task { await audioExperienceService.play(.click) }
         case .blocked:
@@ -449,17 +459,81 @@ final class TadaWordsAppModel: ObservableObject {
     }
 
     func startWriteQuest(using inputMethod: WriteQuestInputMethod) {
-        startQuest(.write, writeInputMethod: inputMethod)
+        let intent = pendingWritePreparationIntent
+        pendingWritePreparationIntent = .standard
+        startQuest(
+            .write,
+            writeInputMethod: inputMethod,
+            writeInputMethodSource: .explicitChooserSelection,
+            intent: intent
+        )
+    }
+
+    /// Loads another reward-free batch after Today is complete. Write keeps
+    /// the same explicit Handwriting/Typing choice as the ordinary route.
+    func rechargeQuest(_ mode: LearningMode) {
+        guard todayRouteStatus(for: mode).action == .practiceAgain,
+            !rechargingModes.contains(mode)
+        else { return }
+        if mode == .write {
+            guard let profile = selectedProfile else { return }
+            guard
+                case .available = contentProvider.availability(
+                    for: mode,
+                    profile: profile
+                )
+            else { return }
+            pendingWritePreparationIntent = .freestyleRecharge
+            destination = .writeInputChooser
+            return
+        }
+        startQuest(mode, intent: .freestyleRecharge)
+    }
+
+    /// Async test seam for both recharge routes.
+    func rechargeQuestAndWait(
+        _ mode: LearningMode,
+        writeInputMethod: WriteQuestInputMethod = .handwriting
+    ) async {
+        guard todayRouteStatus(for: mode).action == .practiceAgain,
+            !rechargingModes.contains(mode),
+            let request = beginPreparation(
+                for: mode,
+                writeInputMethod: writeInputMethod,
+                writeInputMethodSource: .explicitChooserSelection,
+                intent: .freestyleRecharge
+            )
+        else { return }
+        await loadPreparedQuest(request)
+    }
+
+    /// Async test/integration seam for the same explicit chooser path.
+    func startWriteQuestAndWait(using inputMethod: WriteQuestInputMethod) async {
+        let intent = pendingWritePreparationIntent
+        pendingWritePreparationIntent = .standard
+        guard
+            let request = beginPreparation(
+                for: .write,
+                writeInputMethod: inputMethod,
+                writeInputMethodSource: .explicitChooserSelection,
+                intent: intent
+            )
+        else { return }
+        await loadPreparedQuest(request)
     }
 
     func startQuest(
         _ mode: LearningMode,
-        writeInputMethod: WriteQuestInputMethod = .handwriting
+        writeInputMethod: WriteQuestInputMethod = .handwriting,
+        writeInputMethodSource: WriteInputMethodSource = .recoveryFallback,
+        intent: QuestPreparationIntent = .standard
     ) {
         guard
             let request = beginPreparation(
                 for: mode,
-                writeInputMethod: writeInputMethod
+                writeInputMethod: writeInputMethod,
+                writeInputMethodSource: writeInputMethodSource,
+                intent: intent
             )
         else { return }
         Task {
@@ -685,8 +759,15 @@ final class TadaWordsAppModel: ObservableObject {
 
     private func beginPreparation(
         for mode: LearningMode,
-        writeInputMethod: WriteQuestInputMethod = .handwriting
+        writeInputMethod: WriteQuestInputMethod = .handwriting,
+        writeInputMethodSource: WriteInputMethodSource = .recoveryFallback,
+        intent: QuestPreparationIntent = .standard
     ) -> QuestPreparationRequest? {
+        guard activePreparationID == nil, activeQuest == nil,
+            pendingCompletion == nil
+        else {
+            return nil
+        }
         guard let profile = selectedProfile else {
             destination = .profileChooser
             return nil
@@ -705,10 +786,18 @@ final class TadaWordsAppModel: ObservableObject {
 
         abandonActiveQuest()
         focusedReplaySeed = nil
+        if intent == .freestyleRecharge {
+            guard todayRouteStatus(for: mode).action == .practiceAgain,
+                !rechargingModes.contains(mode)
+            else { return nil }
+            rechargingModes.insert(mode)
+        }
         let request = QuestPreparationRequest(
             id: UUID(),
             mode: mode,
             writeInputMethod: mode == .write ? writeInputMethod : .handwriting,
+            writeInputMethodSource: writeInputMethodSource,
+            intent: intent,
             profile: profile
         )
         activePreparationID = request.id
@@ -802,10 +891,28 @@ final class TadaWordsAppModel: ObservableObject {
 
     private func loadPreparedQuest(_ request: QuestPreparationRequest) async {
         do {
-            let candidate = try await contentProvider.prepareQuest(
-                for: request.mode,
-                profile: request.profile
+            let existingState = try await dailyQuestCoordinator.state(
+                profileID: request.profile.id,
+                learningMode: request.mode,
+                on: clock.now
             )
+            let excludedWordIDs = Set(
+                existingState.plan?.questPlan.orderedItems.map(\.wordPromptID) ?? []
+            )
+            let candidate =
+                switch request.intent {
+                case .standard:
+                    try await contentProvider.prepareQuest(
+                        for: request.mode,
+                        profile: request.profile
+                    )
+                case .freestyleRecharge:
+                    try await contentProvider.prepareFreestyleQuest(
+                        for: request.mode,
+                        profile: request.profile,
+                        excluding: excludedWordIDs
+                    )
+                }
             try Task.checkCancellation()
             guard activePreparationID == request.id else { return }
             guard selectedProfile?.id == request.profile.id else { return }
@@ -817,19 +924,36 @@ final class TadaWordsAppModel: ObservableObject {
                 showPreparationFailure(.storageUnavailable, request: request)
                 return
             }
-            let dailyState = try await dailyQuestCoordinator.loadOrCreateToday(
-                candidate: candidate.plan,
-                on: clock.now
-            )
+            let dailyState =
+                switch request.intent {
+                case .standard:
+                    try await dailyQuestCoordinator.loadOrCreateToday(
+                        candidate: candidate.plan,
+                        on: clock.now
+                    )
+                case .freestyleRecharge:
+                    existingState
+                }
             try Task.checkCancellation()
             guard activePreparationID == request.id else { return }
             guard selectedProfile?.id == request.profile.id else { return }
             let launch =
-                dailyQuestCoordinator.todayLaunch(from: dailyState)
-                ?? dailyQuestCoordinator.practiceAgainLaunch(
-                    from: dailyState,
-                    startedAt: clock.now
-                )
+                switch request.intent {
+                case .standard:
+                    dailyQuestCoordinator.todayLaunch(from: dailyState)
+                        ?? dailyQuestCoordinator.practiceAgainLaunch(
+                            from: dailyState,
+                            avoiding: lastPracticeWordOrderByMode[request.mode],
+                            startedAt: clock.now
+                        )
+                case .freestyleRecharge:
+                    dailyQuestCoordinator.practiceAgainLaunch(
+                        from: dailyState,
+                        freshCandidate: candidate.plan,
+                        avoiding: lastPracticeWordOrderByMode[request.mode],
+                        startedAt: clock.now
+                    )
+                }
             guard let launch else {
                 showPreparationFailure(.storageUnavailable, request: request)
                 return
@@ -873,6 +997,10 @@ final class TadaWordsAppModel: ObservableObject {
                 showPreparationFailure(.storageUnavailable, request: request)
                 return
             }
+            if launch.runKind == .practiceAgain {
+                lastPracticeWordOrderByMode[request.mode] =
+                    launch.questPlan.orderedItems.map(\.wordPromptID)
+            }
 
             let storedAttempts = try await attemptEventRepository.attempts(
                 for: request.profile.id,
@@ -883,6 +1011,7 @@ final class TadaWordsAppModel: ObservableObject {
             }
             let recoveredWriteInputMethod = Self.recoveredWriteInputMethod(
                 requested: request.writeInputMethod,
+                source: request.writeInputMethodSource,
                 mode: request.mode,
                 attempts: runAttempts
             )
@@ -978,6 +1107,7 @@ final class TadaWordsAppModel: ObservableObject {
         activePreparationID = nil
         preparationTask = nil
         activeQuest = nil
+        rechargingModes.remove(request.mode)
         destination = .blocked(mode: request.mode, reason: reason)
     }
 
@@ -1211,9 +1341,12 @@ final class TadaWordsAppModel: ObservableObject {
             activeQuest = nil
             pendingCompletion = nil
             persistenceTask = nil
-            todayRouteStatuses[quest.mode] = TodayQuestRouteStatus(
-                completion: resultState.persistedCompletion
-            )
+            if resultState.persistedCompletion.runKind == .today {
+                todayRouteStatuses[quest.mode] = TodayQuestRouteStatus(
+                    completion: resultState.persistedCompletion
+                )
+            }
+            rechargingModes.remove(quest.mode)
             destination = .result(resultState.viewState)
             refreshCalendar()
             refreshWorldProgress()
@@ -1343,6 +1476,9 @@ final class TadaWordsAppModel: ObservableObject {
     }
 
     private func abandonActiveQuest() {
+        if let activeQuest, activeQuest.launch.runKind == .practiceAgain {
+            rechargingModes.remove(activeQuest.mode)
+        }
         cancelQuestWork()
         activeQuest?.timer.stop()
         activeQuest = nil
@@ -1498,9 +1634,11 @@ final class TadaWordsAppModel: ObservableObject {
     /// generic handwriting fallback remains in control.
     private static func recoveredWriteInputMethod(
         requested: WriteQuestInputMethod,
+        source: WriteInputMethodSource,
         mode: LearningMode,
         attempts: [AttemptEvent]
     ) -> WriteQuestInputMethod {
+        guard source == .recoveryFallback else { return requested }
         guard mode == .write, !attempts.isEmpty else { return requested }
 
         let inferredMethods = attempts.map { attempt -> WriteQuestInputMethod? in
@@ -1563,7 +1701,19 @@ private struct QuestPreparationRequest: Sendable {
     let id: UUID
     let mode: LearningMode
     let writeInputMethod: WriteQuestInputMethod
+    let writeInputMethodSource: WriteInputMethodSource
+    let intent: QuestPreparationIntent
     let profile: KidProfile
+}
+
+enum QuestPreparationIntent: Sendable {
+    case standard
+    case freestyleRecharge
+}
+
+enum WriteInputMethodSource: Sendable {
+    case explicitChooserSelection
+    case recoveryFallback
 }
 
 private struct FocusedReplayRequest: Sendable {

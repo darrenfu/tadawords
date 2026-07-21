@@ -42,6 +42,17 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         XCTAssertTrue(writeQuest.waitForExistence(timeout: 8))
         writeQuest.tap()
 
+        XCTAssertTrue(app.staticTexts["Spell Mode"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["How do you want to spell?"].exists)
+        XCTAssertTrue(app.buttons["Handwriting"].exists)
+        XCTAssertTrue(app.buttons["Typing"].exists)
+        let chooserBack = app.buttons["write-method.back"]
+        XCTAssertTrue(chooserBack.exists)
+        XCTAssertEqual(chooserBack.label, "Back")
+        chooserBack.tap()
+        XCTAssertTrue(writeQuest.waitForExistence(timeout: 5))
+        writeQuest.tap()
+
         let spellWithLetters = app.descendants(matching: .any)[
             "write-method.letterKeyboard"
         ]
@@ -53,6 +64,18 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
             app.keyboards.count,
             0,
             "The in-app letter board must not present a native iOS keyboard."
+        )
+        assertContainedInVisibleWindow(
+            app.buttons["quest.back"],
+            message: "The compact quest chrome must keep Back on screen."
+        )
+        assertContainedInVisibleWindow(
+            app.buttons["spell.key.A"],
+            message: "The compact letter board must keep its first row on screen."
+        )
+        assertContainedInVisibleWindow(
+            app.buttons["spell.done"],
+            message: "The compact letter board must keep submission on screen."
         )
         for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
             let key = app.buttons["spell.key.\(letter)"]
@@ -482,6 +505,22 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
             app.launchArguments.append("--demo-start=\(route)")
         }
         app.launch()
+    }
+
+    private func assertContainedInVisibleWindow(
+        _ element: XCUIElement,
+        message: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(element.waitForExistence(timeout: 5), file: file, line: line)
+        let visibleFrame = app.windows.firstMatch.frame.insetBy(dx: -1, dy: -1)
+        XCTAssertTrue(
+            visibleFrame.contains(element.frame),
+            "\(message) Window: \(visibleFrame), element: \(element.frame)",
+            file: file,
+            line: line
+        )
     }
 
     private func launchParentWordManager(
