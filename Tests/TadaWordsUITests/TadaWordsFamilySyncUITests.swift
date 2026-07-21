@@ -138,9 +138,8 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         kids.tap()
         unlockParentArea()
 
-        let selectedKid = app.buttons["guardian.home.selected-kid"]
-        XCTAssertTrue(selectedKid.waitForExistence(timeout: 10))
-        XCTAssertTrue(selectedKid.label.contains("Remote Mia"))
+        XCTAssertTrue(app.staticTexts["Remote Mia"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["guardian.home.switch-child"].exists)
 
         let progress = app.buttons["guardian.home.progress-and-performance"]
         XCTAssertTrue(progress.waitForExistence(timeout: 5))
@@ -252,9 +251,9 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         kids.tap()
         unlockParentArea()
 
-        let selectedKid = app.buttons["guardian.home.selected-kid"]
-        XCTAssertTrue(selectedKid.waitForExistence(timeout: 6))
-        selectedKid.tap()
+        let switchChild = app.buttons["guardian.home.switch-child"]
+        XCTAssertTrue(switchChild.waitForExistence(timeout: 6))
+        switchChild.tap()
 
         let edit = app.buttons[
             "guardian.profile.\(Self.defaultProfileID).edit"
@@ -278,9 +277,9 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         kids.tap()
         unlockParentArea()
 
-        let selectedKid = app.buttons["guardian.home.selected-kid"]
-        XCTAssertTrue(selectedKid.waitForExistence(timeout: 6))
-        selectedKid.tap()
+        let switchChild = app.buttons["guardian.home.switch-child"]
+        XCTAssertTrue(switchChild.waitForExistence(timeout: 6))
+        switchChild.tap()
 
         let edit = app.buttons[
             "guardian.profile.\(Self.defaultProfileID).edit"
@@ -419,7 +418,7 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         answer.tap()
         answer.typeText(String(factors[0] * factors[1]))
         XCTAssertTrue(
-            app.buttons["guardian.home.selected-kid"].waitForExistence(timeout: 10)
+            app.buttons["guardian.home.switch-child"].waitForExistence(timeout: 10)
         )
     }
 
