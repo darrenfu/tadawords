@@ -496,6 +496,41 @@ final class TadaWordsAppModelTests: XCTestCase {
         XCTAssertEqual(recovered.writeInputMethod, .letterKeyboard)
     }
 
+    func testExplicitSpellChoiceOverridesRecoveredHandwritingAttemptContext()
+        async throws
+    {
+        let records = InMemoryLearningRecordRepository()
+        let dailyRepository = InMemoryDailyQuestRepository()
+        let coordinator = DailyQuestCoordinator(
+            repository: dailyRepository,
+            timeZone: .gmt
+        )
+        let fixture = try ModelFixture(
+            wordCount: 2,
+            mode: .write,
+            records: records,
+            dailyQuestCoordinator: coordinator
+        )
+        await fixture.model.prepareQuestAndWait(
+            .write,
+            writeInputMethod: .handwriting
+        )
+        let handwritingSession = try questSession(
+            from: fixture.model.destination
+        )
+        await fixture.model.finishItemAndWait(
+            handwritingSession,
+            summary: try TestFixture.summary(decisions: [.matched])
+        )
+        fixture.model.showLobby()
+
+        await fixture.model.startWriteQuestAndWait(using: .letterKeyboard)
+
+        let spellSession = try questSession(from: fixture.model.destination)
+        XCTAssertEqual(spellSession.currentItem, 2)
+        XCTAssertEqual(spellSession.writeInputMethod, .letterKeyboard)
+    }
+
     func testWriteRelaunchBeforeFirstAttemptKeepsGenericHandwritingFallback()
         async throws
     {

@@ -449,17 +449,35 @@ final class TadaWordsAppModel: ObservableObject {
     }
 
     func startWriteQuest(using inputMethod: WriteQuestInputMethod) {
-        startQuest(.write, writeInputMethod: inputMethod)
+        startQuest(
+            .write,
+            writeInputMethod: inputMethod,
+            writeInputMethodSource: .explicitChooserSelection
+        )
+    }
+
+    /// Async test/integration seam for the same explicit chooser path.
+    func startWriteQuestAndWait(using inputMethod: WriteQuestInputMethod) async {
+        guard
+            let request = beginPreparation(
+                for: .write,
+                writeInputMethod: inputMethod,
+                writeInputMethodSource: .explicitChooserSelection
+            )
+        else { return }
+        await loadPreparedQuest(request)
     }
 
     func startQuest(
         _ mode: LearningMode,
-        writeInputMethod: WriteQuestInputMethod = .handwriting
+        writeInputMethod: WriteQuestInputMethod = .handwriting,
+        writeInputMethodSource: WriteInputMethodSource = .recoveryFallback
     ) {
         guard
             let request = beginPreparation(
                 for: mode,
-                writeInputMethod: writeInputMethod
+                writeInputMethod: writeInputMethod,
+                writeInputMethodSource: writeInputMethodSource
             )
         else { return }
         Task {
@@ -685,7 +703,8 @@ final class TadaWordsAppModel: ObservableObject {
 
     private func beginPreparation(
         for mode: LearningMode,
-        writeInputMethod: WriteQuestInputMethod = .handwriting
+        writeInputMethod: WriteQuestInputMethod = .handwriting,
+        writeInputMethodSource: WriteInputMethodSource = .recoveryFallback
     ) -> QuestPreparationRequest? {
         guard let profile = selectedProfile else {
             destination = .profileChooser
@@ -709,6 +728,7 @@ final class TadaWordsAppModel: ObservableObject {
             id: UUID(),
             mode: mode,
             writeInputMethod: mode == .write ? writeInputMethod : .handwriting,
+            writeInputMethodSource: writeInputMethodSource,
             profile: profile
         )
         activePreparationID = request.id
@@ -883,6 +903,7 @@ final class TadaWordsAppModel: ObservableObject {
             }
             let recoveredWriteInputMethod = Self.recoveredWriteInputMethod(
                 requested: request.writeInputMethod,
+                source: request.writeInputMethodSource,
                 mode: request.mode,
                 attempts: runAttempts
             )
@@ -1498,9 +1519,11 @@ final class TadaWordsAppModel: ObservableObject {
     /// generic handwriting fallback remains in control.
     private static func recoveredWriteInputMethod(
         requested: WriteQuestInputMethod,
+        source: WriteInputMethodSource,
         mode: LearningMode,
         attempts: [AttemptEvent]
     ) -> WriteQuestInputMethod {
+        guard source == .recoveryFallback else { return requested }
         guard mode == .write, !attempts.isEmpty else { return requested }
 
         let inferredMethods = attempts.map { attempt -> WriteQuestInputMethod? in
@@ -1563,7 +1586,13 @@ private struct QuestPreparationRequest: Sendable {
     let id: UUID
     let mode: LearningMode
     let writeInputMethod: WriteQuestInputMethod
+    let writeInputMethodSource: WriteInputMethodSource
     let profile: KidProfile
+}
+
+enum WriteInputMethodSource: Sendable {
+    case explicitChooserSelection
+    case recoveryFallback
 }
 
 private struct FocusedReplayRequest: Sendable {

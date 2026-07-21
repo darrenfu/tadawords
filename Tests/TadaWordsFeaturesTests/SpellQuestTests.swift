@@ -4,6 +4,26 @@ import XCTest
 @testable import TadaWordsFeatures
 
 final class SpellQuestTests: XCTestCase {
+    func testCompactHeightMetricsKeepEverySpellControlInsideLandscapePhone() {
+        let metrics = SpellQuestLayoutMetrics(availableHeight: 420)
+
+        XCTAssertTrue(metrics.isHeightConstrained)
+        XCTAssertEqual(metrics.chromeHeight, 44)
+        XCTAssertEqual(metrics.promptControlDiameter, 44)
+        XCTAssertEqual(metrics.letterKeyHeight, 44)
+        XCTAssertEqual(metrics.submissionControlHeight, 44)
+        XCTAssertLessThanOrEqual(metrics.minimumContentHeight, 420)
+    }
+
+    func testRegularHeightMetricsPreserveLargeTabletPresentation() {
+        let metrics = SpellQuestLayoutMetrics(availableHeight: 768)
+
+        XCTAssertFalse(metrics.isHeightConstrained)
+        XCTAssertEqual(metrics.chromeHeight, 52)
+        XCTAssertEqual(metrics.promptControlDiameter, 72)
+        XCTAssertEqual(metrics.letterKeyHeight, 50)
+    }
+
     func testEvaluationIgnoresCaseDiacriticsAndNonLetterStructure() {
         let evaluator = SpellingAnswerEvaluator()
 

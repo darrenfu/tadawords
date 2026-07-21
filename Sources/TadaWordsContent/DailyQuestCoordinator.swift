@@ -28,8 +28,9 @@ public struct DailyQuestCoordinator: Sendable {
         self.timeZone = timeZone
     }
 
-    /// Persists the first candidate for Profile x Mode x Local Day and returns
-    /// that same plan on later calls, even if a later candidate differs.
+    /// Persists the first candidate for Profile x Mode x Local Day. A later
+    /// candidate remains ignored unless a parent raised a word limit, in which
+    /// case eligible words are appended without changing the stable plan ID.
     public func loadOrCreateToday(
         candidate: QuestPlan,
         on date: Date
@@ -37,7 +38,114 @@ public struct DailyQuestCoordinator: Sendable {
         let localDay = LocalDay(date: date, timeZone: timeZone)
         let proposed = DailyQuestPlan(localDay: localDay, questPlan: candidate)
         let stored = try await repository.createPlanIfAbsent(proposed)
-        return try await repository.state(for: stored.key)
+        guard
+            let expanded = Self.expandedPlan(
+                stored: stored,
+                candidate: proposed
+            ),
+            let reconciling = repository
+                as? any DailyQuestPlanReconcilingRepository
+        else {
+            return try await repository.state(for: stored.key)
+        }
+        let reconciled = try await reconciling.reconcileExpandedPlan(expanded)
+        return try await repository.state(for: reconciled.key)
+    }
+
+    private static func expandedPlan(
+        stored: DailyQuestPlan,
+        candidate: DailyQuestPlan
+    ) -> DailyQuestPlan? {
+        let existing = stored.questPlan
+        let proposed = candidate.questPlan
+        guard stored.key == candidate.key,
+            existing.profileID == proposed.profileID,
+            existing.configuration.learningMode
+                == proposed.configuration.learningMode
+        else { return nil }
+
+        let raisedNewLimit =
+            proposed.configuration.newWordLimit
+            > existing.configuration.newWordLimit
+        let raisedReviewLimit =
+            proposed.configuration.reviewWordLimit
+            > existing.configuration.reviewWordLimit
+        guard raisedNewLimit || raisedReviewLimit else { return nil }
+
+        let newTarget = max(
+            existing.configuration.newWordLimit,
+            proposed.configuration.newWordLimit
+        )
+        let reviewTarget = max(
+            existing.configuration.reviewWordLimit,
+            proposed.configuration.reviewWordLimit
+        )
+        let additionalNew = additions(
+            from: proposed.newWordIDs,
+            excluding: Set(
+                existing.newWordIDs
+                    + existing.reviewWordIDs
+                    + existing.deferredReviewWordIDs
+            ),
+            count: raisedNewLimit
+                ? max(0, newTarget - existing.newWordIDs.count) : 0
+        )
+        let additionalReview = additions(
+            from: proposed.reviewWordIDs,
+            excluding: Set(
+                existing.reviewWordIDs
+                    + existing.newWordIDs
+                    + existing.deferredReviewWordIDs
+            ).union(additionalNew),
+            count: raisedReviewLimit
+                ? max(0, reviewTarget - existing.reviewWordIDs.count) : 0
+        )
+        let selectedIDs = Set(
+            existing.newWordIDs
+                + additionalNew
+                + existing.reviewWordIDs
+                + additionalReview
+        )
+        let deferredReviewWordIDs = uniqued(
+            existing.deferredReviewWordIDs + proposed.deferredReviewWordIDs
+        ).filter { !selectedIDs.contains($0) }
+        let configuration = QuestConfiguration(
+            learningMode: existing.configuration.learningMode,
+            newWordLimit: newTarget,
+            reviewWordLimit: reviewTarget,
+            attentionBudget: newTarget + reviewTarget,
+            contentOrder: existing.configuration.contentOrder
+        )
+        let expanded = QuestPlan(
+            id: existing.id,
+            profileID: existing.profileID,
+            configuration: configuration,
+            reviewWordIDs: existing.reviewWordIDs + additionalReview,
+            newWordIDs: existing.newWordIDs + additionalNew,
+            deferredReviewWordIDs: deferredReviewWordIDs,
+            createdAt: existing.createdAt
+        )
+        guard expanded != existing else { return nil }
+        return DailyQuestPlan(localDay: stored.localDay, questPlan: expanded)
+    }
+
+    private static func additions(
+        from candidates: [WordPromptID],
+        excluding excluded: Set<WordPromptID>,
+        count: Int
+    ) -> [WordPromptID] {
+        guard count > 0 else { return [] }
+        var seen = excluded
+        return candidates.filter { seen.insert($0).inserted }.prefix(count).map {
+            $0
+        }
+    }
+
+    private static func uniqued(
+        _ values: [WordPromptID]
+    ) -> [WordPromptID] {
+        var seen: Set<WordPromptID> = []
+        return values.filter { seen.insert($0).inserted }
     }
 
     public func state(

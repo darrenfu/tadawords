@@ -9,6 +9,7 @@ struct QuestChrome: View {
     let elapsedText: String
     let isEmergency: Bool
     let theme: TadaWorldTheme
+    var isHeightConstrained = false
     let onBack: () -> Void
     let onPause: () -> Void
 
@@ -23,7 +24,7 @@ struct QuestChrome: View {
             .scrollIndicators(.hidden)
         }
         .padding(.horizontal, TadaPrimitiveTokens.Spacing.medium)
-        .frame(minHeight: 52)
+        .frame(minHeight: isHeightConstrained ? 44 : 52)
     }
 
     private var fullChrome: some View {

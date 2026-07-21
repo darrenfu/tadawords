@@ -79,6 +79,121 @@ final class DailyQuestRepositoryTests: XCTestCase {
         XCTAssertEqual(writeState.plan?.questPlan, writePlan)
     }
 
+    func testCompletedTodayPlanExpandsForRaisedNewAndReviewLimitsWithoutRegranting()
+        async throws
+    {
+        let snapshotURL = try makeSnapshotURL()
+        let repository = LocalJSONDailyQuestRepository(snapshotURL: snapshotURL)
+        let coordinator = DailyQuestCoordinator(
+            repository: repository,
+            timeZone: Self.timeZone
+        )
+        let initial = plan(
+            id: questID(12),
+            mode: .write,
+            newWordLimit: 1,
+            reviewWordLimit: 1,
+            reviewWordNumbers: [12],
+            newWordNumbers: [13]
+        )
+        let initialState = try await coordinator.loadOrCreateToday(
+            candidate: initial,
+            on: Self.today
+        )
+        let launch = try XCTUnwrap(coordinator.todayLaunch(from: initialState))
+        let completionID = DailyQuestCompletionID(rawValue: uuid(14))
+        let rewardID = RewardGrantID(rawValue: uuid(15))
+        _ = try await coordinator.complete(
+            launch,
+            score: Self.score,
+            world: .moonpetalKingdom,
+            completionID: completionID,
+            rewardGrantID: rewardID,
+            completedAt: Self.today.addingTimeInterval(300)
+        )
+
+        let raisedNew = plan(
+            id: questID(16),
+            mode: .write,
+            newWordLimit: 2,
+            reviewWordLimit: 1,
+            reviewWordNumbers: [],
+            newWordNumbers: [16, 17]
+        )
+        let newExpanded = try await coordinator.loadOrCreateToday(
+            candidate: raisedNew,
+            on: Self.today
+        )
+        XCTAssertEqual(
+            newExpanded.plan?.questPlan.newWordIDs,
+            [wordID(13), wordID(16)]
+        )
+        XCTAssertEqual(newExpanded.plan?.questPlan.reviewWordIDs, [wordID(12)])
+
+        let raisedReview = plan(
+            id: questID(18),
+            mode: .write,
+            newWordLimit: 2,
+            reviewWordLimit: 2,
+            reviewWordNumbers: [18, 19],
+            newWordNumbers: []
+        )
+        let fullyExpanded = try await coordinator.loadOrCreateToday(
+            candidate: raisedReview,
+            on: Self.today
+        )
+        XCTAssertEqual(fullyExpanded.plan?.id, initial.id)
+        XCTAssertEqual(
+            fullyExpanded.plan?.questPlan.newWordIDs,
+            [wordID(13), wordID(16)]
+        )
+        XCTAssertEqual(
+            fullyExpanded.plan?.questPlan.reviewWordIDs,
+            [wordID(12), wordID(18)]
+        )
+        XCTAssertEqual(fullyExpanded.todayCompletion?.id, completionID)
+        XCTAssertEqual(fullyExpanded.rewardGrant?.id, rewardID)
+
+        let repeated = try await coordinator.loadOrCreateToday(
+            candidate: raisedReview,
+            on: Self.today
+        )
+        XCTAssertEqual(repeated, fullyExpanded)
+        XCTAssertEqual(
+            coordinator.practiceAgainLaunch(
+                from: repeated,
+                startedAt: Self.today.addingTimeInterval(600)
+            )?.questPlan
+                .orderedItems.count,
+            4
+        )
+
+        let lowered = plan(
+            id: questID(20),
+            mode: .write,
+            newWordLimit: 0,
+            reviewWordLimit: 0,
+            reviewWordNumbers: [],
+            newWordNumbers: []
+        )
+        let afterLowering = try await coordinator.loadOrCreateToday(
+            candidate: lowered,
+            on: Self.today
+        )
+        XCTAssertEqual(afterLowering, fullyExpanded)
+
+        let restarted = DailyQuestCoordinator(
+            repository: LocalJSONDailyQuestRepository(snapshotURL: snapshotURL),
+            timeZone: Self.timeZone
+        )
+        let restored = try await restarted.state(
+            profileID: Self.profileID,
+            learningMode: .write,
+            on: Self.today
+        )
+        XCTAssertEqual(restored, fullyExpanded)
+    }
+
     func testTodayCompletionAndRewardAreIdempotentAndPracticeAgainCannotRegrant()
         async throws
     {
@@ -1127,6 +1242,8 @@ final class DailyQuestRepositoryTests: XCTestCase {
         id: QuestID,
         profileID: ProfileID = DailyQuestRepositoryTests.profileID,
         mode: LearningMode,
+        newWordLimit: Int = 5,
+        reviewWordLimit: Int = 5,
         reviewWordNumbers: [Int] = [],
         newWordNumbers: [Int]
     ) -> QuestPlan {
@@ -1135,9 +1252,9 @@ final class DailyQuestRepositoryTests: XCTestCase {
             profileID: profileID,
             configuration: QuestConfiguration(
                 learningMode: mode,
-                newWordLimit: 5,
-                reviewWordLimit: 5,
-                attentionBudget: 10,
+                newWordLimit: newWordLimit,
+                reviewWordLimit: reviewWordLimit,
+                attentionBudget: newWordLimit + reviewWordLimit,
                 contentOrder: .newThenReview
             ),
             reviewWordIDs: reviewWordNumbers.map(wordID),

@@ -54,6 +54,18 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
             0,
             "The in-app letter board must not present a native iOS keyboard."
         )
+        assertContainedInVisibleWindow(
+            app.buttons["Back to quests"],
+            message: "The compact quest chrome must keep Back on screen."
+        )
+        assertContainedInVisibleWindow(
+            app.buttons["spell.key.A"],
+            message: "The compact letter board must keep its first row on screen."
+        )
+        assertContainedInVisibleWindow(
+            app.buttons["spell.done"],
+            message: "The compact letter board must keep submission on screen."
+        )
         for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
             let key = app.buttons["spell.key.\(letter)"]
             XCTAssertTrue(key.exists, "Missing custom letter key \(letter).")
@@ -442,6 +454,22 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
             app.launchArguments.append("--demo-start=\(route)")
         }
         app.launch()
+    }
+
+    private func assertContainedInVisibleWindow(
+        _ element: XCUIElement,
+        message: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(element.waitForExistence(timeout: 5), file: file, line: line)
+        let visibleFrame = app.windows.firstMatch.frame.insetBy(dx: -1, dy: -1)
+        XCTAssertTrue(
+            visibleFrame.contains(element.frame),
+            "\(message) Window: \(visibleFrame), element: \(element.frame)",
+            file: file,
+            line: line
+        )
     }
 
     private func launchParentWordManager(
