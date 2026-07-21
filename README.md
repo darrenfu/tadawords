@@ -208,7 +208,8 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 |---|---|
 | Strict Swift format lint | Passed |
 | Version and build | v0.7.18 (`2026072118`) in source Plists and generated project settings |
-| Swift tests | v0.7.18 source gate: Family Sync 233/233; committed-HEAD simulator and signed-artifact evidence pending |
+| Swift tests | v0.7.18 source gate: Family Sync 233/233 with zero failures |
+| Family Sync physical delta | Normal PawGoo v0.7.18 installed in place on the approved iPhone and iPad; an iPhone-created test Profile converged automatically to the untouched iPad without opening Family Sync, with one matching record and four Profiles total on each side |
 | Family Sync simulator E2E | Merged v0.7.2: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5 |
 | Critical XCUITest flows | Merged v0.7.2: full critical matrix passed on iPad; the single iPhone Photos-dismiss timing case passed 2/2 in isolated fresh reruns after the combined run, and every other flow passed |
 | Third-Party Notices | Parent-gated offline text, exact attribution, source/license links, and route tests passed; focused UI flow passed 1/1 on iPhone 17 Pro Max and 1/1 on iPad Pro 13-inch (M5), iOS 26.5 |

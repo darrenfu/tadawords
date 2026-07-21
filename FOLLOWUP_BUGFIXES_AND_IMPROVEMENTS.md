@@ -1224,8 +1224,8 @@ and must explicitly keep it on before using iCloud profile discovery.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
-| V0718-SYNC-001 | P0 bug | Parent/Family Sync | Enabling Family Sync in Parents must register APNs immediately rather than waiting for a relaunch; background devices may then receive a CloudKit change wake-up. | Source pass; signed-device pass blocked by locked login keychain | Exact signed iPhone and iPad: enable Family Sync, mutate a Profile on the other device while the receiver is backgrounded, then verify automatic convergence without opening Family Sync. |
-| V0718-ONBOARDING-001 | P1 improvement | First-run parent agreement | Present Family Sync as the iCloud-capable default, with plain-language disclosure and an on-screen opt-out before any new Profile is queued. | Source pass; signed-device pass blocked by locked login keychain | Fresh-install parent path: verify default-on, explicit off, new Profile creation, and disabled Find-my-kid while opted out. |
+| V0718-SYNC-001 | P0 bug | Parent/Family Sync | Enabling Family Sync in Parents must register APNs immediately rather than waiting for a relaunch; background devices may then receive a CloudKit change wake-up. | Automated pass; signed iPhone-to-iPad propagation observed | On the normal `app.tadawords.app` build, iPhone creation of `Push Pebble 0721` converged to the untouched iPad without opening Family Sync; both device snapshots contained exactly one matching Profile and four Profiles total. |
+| V0718-ONBOARDING-001 | P1 improvement | First-run parent agreement | Present Family Sync as the iCloud-capable default, with plain-language disclosure and an on-screen opt-out before any new Profile is queued. | Automated pass; clean-device physical acceptance pending | Fresh-install parent path: verify default-on, explicit off, new Profile creation, and disabled Find-my-kid while opted out. The existing family-data devices were intentionally not uninstalled or reset for this test. |
 
 ### 2026-07-21 v0.7.18 notes
 
@@ -1240,6 +1240,10 @@ and must explicitly keep it on before using iCloud profile discovery.
   complete 233-test Family Sync regression suite pass. Signed v0.7.18 app
   artifacts are now installed in place on the approved iPhone and iPad;
   neither device data container was reset, replaced, or uninstalled.
+- In the normal PawGoo app, creating `Push Pebble 0721` on the iPhone produced
+  one matching Profile on the untouched iPad without visiting Family Sync.
+  Read-only device-container snapshots showed four Profiles on each device and
+  exactly one record with that display name on each side.
 
 ## v0.7.13 — 2026-07-20
 

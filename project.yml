@@ -56,9 +56,11 @@ targets:
         Debug:
           DEVELOPMENT_TEAM: 7R78Q4HP86
           APS_ENVIRONMENT: development
+          ICLOUD_CONTAINER_ENVIRONMENT: Development
         Release:
           DEVELOPMENT_TEAM: 7R78Q4HP86
           APS_ENVIRONMENT: production
+          ICLOUD_CONTAINER_ENVIRONMENT: Production
         LocalQA:
           PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app.localqa
           PRODUCT_NAME: Tada Words QA
