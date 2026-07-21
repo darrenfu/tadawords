@@ -43,8 +43,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tadawords.app
         PRODUCT_NAME: Tada Words
-        MARKETING_VERSION: 0.7.18
-        CURRENT_PROJECT_VERSION: 2026072118
+        MARKETING_VERSION: 0.7.20
+        CURRENT_PROJECT_VERSION: 2026072120
         TADA_GIT_COMMIT: unknown
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -56,9 +56,11 @@ targets:
         Debug:
           DEVELOPMENT_TEAM: 7R78Q4HP86
           APS_ENVIRONMENT: development
+          ICLOUD_CONTAINER_ENVIRONMENT: Development
         Release:
           DEVELOPMENT_TEAM: 7R78Q4HP86
           APS_ENVIRONMENT: production
+          ICLOUD_CONTAINER_ENVIRONMENT: Production
         LocalQA:
           PRODUCT_BUNDLE_IDENTIFIER: com.tadawords.app.localqa
           PRODUCT_NAME: Tada Words QA
@@ -69,8 +71,8 @@ targets:
       path: Apps/TadaWordsApp/Info.plist
       properties:
         CFBundleDisplayName: Tada Words
-        CFBundleShortVersionString: "0.7.18"
-        CFBundleVersion: "2026072118"
+        CFBundleShortVersionString: "0.7.20"
+        CFBundleVersion: "2026072120"
         TadaWordsGitCommit: "$(TADA_GIT_COMMIT)"
         CKSharingSupported: true
         ITSAppUsesNonExemptEncryption: false

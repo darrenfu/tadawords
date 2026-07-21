@@ -16,6 +16,39 @@ final class ResponsiveLayoutPolicyTests: XCTestCase {
         )
     }
 
+    func testCompactProfileChooserKeepsNewKidWithAtMostThreeProfiles() {
+        XCTAssertEqual(
+            ProfileChooserCompactGridPolicy.itemCounts(profileCount: 0),
+            [1]
+        )
+        XCTAssertEqual(
+            ProfileChooserCompactGridPolicy.itemCounts(profileCount: 1),
+            [2]
+        )
+        XCTAssertEqual(
+            ProfileChooserCompactGridPolicy.itemCounts(profileCount: 3),
+            [4]
+        )
+        XCTAssertEqual(
+            ProfileChooserCompactGridPolicy.itemCounts(profileCount: 4),
+            [4, 1]
+        )
+        XCTAssertEqual(
+            ProfileChooserCompactGridPolicy.itemCounts(profileCount: 7),
+            [4, 3, 1]
+        )
+    }
+
+    func testCompactProfileChooserNeverPlacesFourProfilesInOneRow() {
+        for profileCount in 0...20 {
+            let itemCounts = ProfileChooserCompactGridPolicy.itemCounts(
+                profileCount: profileCount
+            )
+            XCTAssertLessThanOrEqual(itemCounts[0], 4)
+            XCTAssertTrue(itemCounts.dropFirst().allSatisfy { $0 <= 3 })
+        }
+    }
+
     func testQuestResultUsesCompactLayoutOnlyForCompactHeight() {
         XCTAssertEqual(
             QuestResultLayoutMode.resolve(hasCompactHeight: true),

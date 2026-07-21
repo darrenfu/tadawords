@@ -1104,13 +1104,19 @@ struct FirstRunOnboardingSubmission: Sendable {
 
     let action: Action
     let consentVersion: Int
+    /// The first-run agreement presents Family Sync as the recommended default
+    /// on iCloud-capable devices. A parent may explicitly opt out before any
+    /// local profile mutation is made.
+    let familySyncEnabled: Bool
 
     init(
         action: Action,
-        consentVersion: Int = Self.currentConsentVersion
+        consentVersion: Int = Self.currentConsentVersion,
+        familySyncEnabled: Bool = false
     ) {
         self.action = action
         self.consentVersion = consentVersion
+        self.familySyncEnabled = familySyncEnabled
     }
 }
 
@@ -1121,6 +1127,7 @@ actor FirstRunOnboardingCoordinator {
     private let childSessionRepository: any ChildSessionRepository
     private let onboardingRepository: any FirstRunOnboardingPersisting
     private let guardianStore: any GuardianFamilyStore
+    private let familySyncCoordinator: (any FamilySyncCoordinating)?
     private let discoveryAdmissionGate: FirstRunDiscoveryAdmissionGate
     private let clock: any AppClock
 
@@ -1129,6 +1136,7 @@ actor FirstRunOnboardingCoordinator {
         childSessionRepository: any ChildSessionRepository,
         onboardingRepository: any FirstRunOnboardingPersisting,
         guardianStore: any GuardianFamilyStore,
+        familySyncCoordinator: (any FamilySyncCoordinating)? = nil,
         discoveryAdmissionGate: FirstRunDiscoveryAdmissionGate =
             FirstRunDiscoveryAdmissionGate(),
         clock: any AppClock
@@ -1137,6 +1145,7 @@ actor FirstRunOnboardingCoordinator {
         self.childSessionRepository = childSessionRepository
         self.onboardingRepository = onboardingRepository
         self.guardianStore = guardianStore
+        self.familySyncCoordinator = familySyncCoordinator
         self.discoveryAdmissionGate = discoveryAdmissionGate
         self.clock = clock
     }
@@ -1153,6 +1162,14 @@ actor FirstRunOnboardingCoordinator {
                 == FirstRunOnboardingSubmission.currentConsentVersion
         else {
             throw FirstRunOnboardingError.consentRequired
+        }
+        // Apply the parent's explicit first-run choice before profile creation
+        // so a default-on choice can immediately carry that first mutation,
+        // while an opt-out never queues it for CloudKit.
+        if let familySyncCoordinator {
+            _ = try await familySyncCoordinator.setEnabled(
+                submission.familySyncEnabled
+            )
         }
         switch submission.action {
         case .adoptExistingProfile(let adoptedProfileID):
