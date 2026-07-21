@@ -1181,6 +1181,36 @@ empty entitlements, installed data, and physical-device workflow.
   iPhoneOS-only arm64 metadata, and a stable app-tree digest. Exact committed-
   HEAD simulator and signed-artifact evidence remains pending.
 
+## v0.7.17 — 2026-07-21
+
+Target release: `v0.7.17`
+
+Branch: `codex/family-sync-status-refresh-v0.7.17`
+
+Build: `2026072117`
+
+Overall state: Issue #101 fixes a physical-device Family Sync status race.
+CloudKit had converged on both approved devices, but the Parent UI retained a
+transient `.syncing` snapshot when it opened during an existing reconciliation.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0717-BUG-001 | P0 bug | Parent/Family Sync | Readers that arrive during an in-flight reconciliation must receive its final parent-visible status instead of a transient `.syncing` snapshot. | Source pass | Coordinator concurrency regressions, full source suite, exact-HEAD build, then one physical iPhone plus one physical iPad without reinstalling or resetting data |
+
+### 2026-07-21 v0.7.17 notes
+
+- Reserved version `0.7.17` and build `2026072117` for reclaimed Issue #101.
+- The actor now queues concurrent status and synchronization callers while a
+  reconciliation is active, then resumes all of them with the same settled
+  status after every required immediate pass completes.
+- No polling, profile mutation, preference change, uninstall, or data reset is
+  involved in the repair.
+- Physical evidence before the fix showed both devices at 278 acknowledged of
+  278 local manifests, zero outbox and pending records, an idle durable
+  condition, and no error while both screens still displayed “Syncing…”.
+- Focused concurrency tests and the complete 1129-test Swift suite pass.
+  Exact-HEAD build and signed-device acceptance remain pending.
+
 ## v0.7.13 — 2026-07-20
 
 Target release: `v0.7.13`
