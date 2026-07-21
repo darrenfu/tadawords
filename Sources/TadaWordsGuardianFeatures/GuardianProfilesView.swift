@@ -312,7 +312,13 @@ struct GuardianProfileEditorView: View {
                 .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
 
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 92))],
+                columns: Array(
+                    repeating: GridItem(
+                        .flexible(minimum: 0),
+                        spacing: GuardianPrimitiveTokens.Spacing.small
+                    ),
+                    count: StarterProfileAvatar.pickerColumnCount
+                ),
                 spacing: GuardianPrimitiveTokens.Spacing.small
             ) {
                 ForEach(GuardianAnimalAvatar.available) { avatar in

@@ -34,6 +34,14 @@ final class ProfileAvatarTests: XCTestCase {
         )
     }
 
+    func testZodiacPickerUsesExactlyTwoRowsOfSix() {
+        XCTAssertEqual(StarterProfileAvatar.pickerColumnCount, 6)
+        XCTAssertEqual(
+            StarterProfileAvatar.zodiac.count,
+            StarterProfileAvatar.pickerColumnCount * 2
+        )
+    }
+
     func testEmbeddedPhotoRoundTripsPreparedImageData() {
         let data = Data([0, 1, 2, 3, 254, 255])
 

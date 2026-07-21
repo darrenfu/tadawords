@@ -495,7 +495,10 @@ struct FirstRunParentOnboardingView: View {
                             .accessibilityHint("Up to 24 characters")
 
                         LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 68), spacing: 8)],
+                            columns: Array(
+                                repeating: GridItem(.flexible(minimum: 0), spacing: 8),
+                                count: StarterProfileAvatar.pickerColumnCount
+                            ),
                             spacing: 8
                         ) {
                             ForEach(GuardianAnimalAvatar.available) { option in

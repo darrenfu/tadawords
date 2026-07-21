@@ -1,4 +1,6 @@
 public struct StarterProfileAvatar: Identifiable, Hashable, Sendable {
+    public static let pickerColumnCount = 6
+
     public static let zodiac: [StarterProfileAvatar] = [
         StarterProfileAvatar(
             id: "rat",
