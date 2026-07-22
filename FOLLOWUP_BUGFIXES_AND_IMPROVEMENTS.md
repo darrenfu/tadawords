@@ -1306,13 +1306,13 @@ pass; exact-HEAD simulator and physical-device acceptance remain separate.
 - Focused model, content-repository, and layout suites pass. Full source,
   automation, simulator, and signed-device gates are recorded separately.
 
-## v0.7.20 — 2026-07-21
+## v0.7.23 — 2026-07-21
 
-Target release: `v0.7.20`
+Target release: `v0.7.23`
 
 Branch: `codex/camera-ocr-editor-v0.7.15`
 
-Build: `2026072120`
+Build: `2026072123`
 
 Overall state: Issue #96 adds an on-device crop-and-mask editor between camera
 capture and OCR review while retaining the merged v0.7.17 Family Sync status
@@ -1322,7 +1322,7 @@ repair and all existing parent-approved word-pool rules.
 |---|---|---|---|---|---|
 | V0720-UX-001 | P1 improvement | Parent/Camera OCR | Let a parent crop a photographed word sheet and cover unrelated content before OCR, with undo, reset, retake, cancel, and an explicit Use Photo handoff. | Automated pass | Editor model/rendering tests, exact-HEAD iPhone and iPad simulator flows, signed LocalQA identity verification, and a data-preserving physical iPhone camera flow through OCR review |
 
-### 2026-07-21 v0.7.20 notes
+### 2026-07-21 v0.7.23 notes
 
 - The editor normalizes image orientation, preserves source resolution, and
   applies black masks only inside the selected crop before OCR.

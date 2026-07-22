@@ -66,20 +66,20 @@ final class WorldSelectionModelTests: XCTestCase {
         model.selectProfile(profile)
 
         await model.refreshWorldProgressAndWait()
-        await model.selectCartoonIconAndWait("hare")
+        await model.selectCartoonIconAndWait("rat")
         var storedProfile = try await repository.profile(id: profile.id)
         var persisted = try XCTUnwrap(storedProfile)
-        XCTAssertEqual(persisted.selectedCartoonIconAssetID, "hare")
+        XCTAssertEqual(persisted.selectedCartoonIconAssetID, "rat")
         XCTAssertEqual(persisted.avatar.embeddedPhotoData, photoData)
         XCTAssertEqual(
             model.selectedProfile?.displayAvatar,
-            .cartoonAnimal(assetID: "hare")
+            .cartoonAnimal(assetID: "rat")
         )
 
         await model.selectCartoonIconAndWait("dog")
         storedProfile = try await repository.profile(id: profile.id)
         persisted = try XCTUnwrap(storedProfile)
-        XCTAssertEqual(persisted.selectedCartoonIconAssetID, "hare")
+        XCTAssertEqual(persisted.selectedCartoonIconAssetID, "rat")
 
         await model.selectOriginalAvatarAndWait()
         storedProfile = try await repository.profile(id: profile.id)
@@ -175,11 +175,11 @@ final class WorldSelectionModelTests: XCTestCase {
         )
         XCTAssertEqual(persisted.avatar.embeddedPhotoData, photoData)
 
-        await model.selectCartoonIconAndWait("hare")
+        await model.selectCartoonIconAndWait("rat")
         storedProfile = try await profileRepository.profile(id: profile.id)
         persisted = try XCTUnwrap(storedProfile)
         XCTAssertNil(persisted.selectedTreasureAvatar)
-        XCTAssertEqual(persisted.selectedCartoonIconAssetID, "hare")
+        XCTAssertEqual(persisted.selectedCartoonIconAssetID, "rat")
         XCTAssertEqual(persisted.avatar.embeddedPhotoData, photoData)
     }
 }

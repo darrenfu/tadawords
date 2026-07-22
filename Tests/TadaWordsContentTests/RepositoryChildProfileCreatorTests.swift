@@ -34,7 +34,7 @@ final class RepositoryChildProfileCreatorTests: XCTestCase {
         )
 
         XCTAssertEqual(created.displayName, "Coco")
-        XCTAssertEqual(created.avatar, .cartoonAnimal(assetID: "fox"))
+        XCTAssertEqual(created.avatar, .cartoonAnimal(assetID: "ox"))
         XCTAssertEqual(created.selectedWorld, .buildItBay)
         XCTAssertEqual(created.ageYears, 4)
         XCTAssertEqual(created.schoolGrade, .preK)
@@ -143,6 +143,26 @@ final class RepositoryChildProfileCreatorTests: XCTestCase {
         )
 
         XCTAssertEqual(created.selectedWorld, .coasterCarnival)
+    }
+
+    func testCreationRotatesThroughCanonicalZodiacAvatarCatalog() async throws {
+        let profiles = InMemoryKidProfileRepository()
+        let creator = RepositoryChildProfileCreator(
+            profileRepository: profiles,
+            practiceSettingsRepository: InMemoryPracticeSettingsRepository(),
+            clock: CreatorTestClock()
+        )
+        let existingProfiles = (0..<11).map { index in
+            makeProfile(name: "Kid \(index)")
+        }
+
+        let created = try await creator.createProfile(
+            displayName: "Twelfth Kid",
+            ageYears: 4,
+            existingProfiles: existingProfiles
+        )
+
+        XCTAssertEqual(created.avatar, .cartoonAnimal(assetID: "pig"))
     }
 
     private func makeProfile(name: String) -> KidProfile {
