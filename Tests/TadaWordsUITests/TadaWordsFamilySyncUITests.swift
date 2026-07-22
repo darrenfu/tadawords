@@ -33,11 +33,21 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         XCTAssertTrue(createNew.waitForExistence(timeout: 10))
         createNew.tap()
 
+        // The merged first-run Profile editor now focuses the name field on
+        // entry. Dismiss its software keyboard before asserting the avatar
+        // grid so the test observes the product choices rather than a covered
+        // viewport.
+        if app.keyboards.firstMatch.waitForExistence(timeout: 3) {
+            app.typeText("\n")
+        }
+
         let expectedAnimals = [
             "Rat", "Ox", "Tiger", "Rabbit", "Dragon", "Snake",
             "Horse", "Goat", "Monkey", "Rooster", "Dog", "Pig",
         ]
-        XCTAssertTrue(app.buttons["Rat"].isSelected)
+        let rat = app.buttons["Rat"]
+        XCTAssertTrue(rat.waitForExistence(timeout: 5))
+        XCTAssertTrue(rat.isSelected)
 
         let topScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         topScreenshot.name = "First-run zodiac Profile avatar picker - top"
