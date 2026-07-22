@@ -131,7 +131,11 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
             reward.waitForExistence(timeout: 5),
             "The remote reward grant should appear in the real Kid collection."
         )
-        app.buttons["Close"].tap()
+        tapCenterWhenHittable(
+            app.buttons["child-collection.back"],
+            timeout: 5,
+            failureMessage: "The Kid collection should provide a route back to the lobby."
+        )
 
         let kids = app.buttons["child-lobby.kids"]
         XCTAssertTrue(kids.waitForExistence(timeout: 5))
