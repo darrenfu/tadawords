@@ -40,6 +40,31 @@ final class LocalFirstFamilySyncCoordinatorTests: XCTestCase {
         XCTAssertTrue(pushed.isEmpty, "Fetched remote winners must not be redundantly re-sent")
     }
 
+    func testCoordinatorRecoversAcceptedApplyBeforeFreshFingerprintRead()
+        async throws
+    {
+        let profileID = ProfileID()
+        let store = SyncStore(
+            profileID: profileID,
+            records: [],
+            startsRecoveryRequired: true
+        )
+        let coordinator = LocalFirstFamilySyncCoordinator(
+            store: store,
+            transport: SyncTransport(records: []),
+            preferenceRepository: InMemoryFamilySyncPreferenceRepository(
+                isEnabled: true
+            ),
+            clock: FixedClock(now: Date(timeIntervalSince1970: 31))
+        )
+
+        let status = await coordinator.synchronize()
+        let recoveryCount = await store.recoveryCount()
+
+        XCTAssertEqual(status, .synced(at: Date(timeIntervalSince1970: 31)))
+        XCTAssertEqual(recoveryCount, 1)
+    }
+
     func testTemporaryCloudFailureLeavesLocalDataPendingNotFailed() async {
         let store = SyncStore(profileID: ProfileID(), records: [])
         let transport = SyncTransport(
@@ -248,18 +273,32 @@ private actor SyncStore: FamilySyncRecordStore {
     var localRecords: [FamilySyncRecord]
     let idsForSync: [ProfileID]
     var applied: [FamilySyncRecord] = []
+    var recoveryRequired: Bool
+    var recoveries = 0
 
     init(
         profileID: ProfileID,
         records: [FamilySyncRecord],
-        profileIDsForSync: [ProfileID]? = nil
+        profileIDsForSync: [ProfileID]? = nil,
+        startsRecoveryRequired: Bool = false
     ) {
         self.profileID = profileID
         localRecords = records
         idsForSync = profileIDsForSync ?? [profileID]
+        recoveryRequired = startsRecoveryRequired
     }
 
-    func profileIDsForSync() async throws -> [ProfileID] { idsForSync }
+    func recoverPendingApplies() async throws {
+        recoveries += 1
+        recoveryRequired = false
+    }
+
+    func profileIDsForSync() async throws -> [ProfileID] {
+        guard !recoveryRequired else {
+            throw SyncStoreError.readBeforeRecovery
+        }
+        return idsForSync
+    }
 
     func records(for profileID: ProfileID) async throws -> [FamilySyncRecord] {
         localRecords
@@ -280,6 +319,11 @@ private actor SyncStore: FamilySyncRecordStore {
     }
 
     func appliedRecords() -> [FamilySyncRecord] { applied }
+    func recoveryCount() -> Int { recoveries }
+}
+
+private enum SyncStoreError: Error {
+    case readBeforeRecovery
 }
 
 private actor SyncTransport: FamilySyncTransport {

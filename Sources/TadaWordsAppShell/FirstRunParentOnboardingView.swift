@@ -599,10 +599,12 @@ struct FirstRunParentOnboardingView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("Family Sync")
                             .font(.system(.headline, design: .rounded, weight: .bold))
-                        Text("On by default — keep this family's learning data together across devices.")
-                            .font(.system(.caption, design: .rounded, weight: .medium))
-                            .foregroundStyle(theme.ink.opacity(0.72))
-                            .fixedSize(horizontal: false, vertical: true)
+                        Text(
+                            "On by default — keep this family's learning data together across devices."
+                        )
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .foregroundStyle(theme.ink.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .toggleStyle(.switch)

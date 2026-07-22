@@ -380,6 +380,7 @@ public struct TadaWordsApplicationView: View {
                                 environment.practiceSettingsRepository,
                             dailyQuestRepository: environment.dailyQuestRepository,
                             childSessionRepository: environment.childSessionRepository,
+                            profileMutationGate: environment.profileMutationGate,
                             initialProfileID: initialProfileID,
                             clock: environment.clock,
                             timeZone: environment.timeZone,

@@ -285,7 +285,13 @@ public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository,
     }
 
     public func state(for key: DailyQuestKey) async throws -> DailyQuestState {
-        try loadedStorage().state(for: key)
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: key.profileID,
+            allowingTerminal: true
+        ) {
+            try loadedStorage().state(for: key)
+        }
     }
 
     public func createPlanIfAbsent(
@@ -317,14 +323,26 @@ public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository,
     public func completions(
         for key: DailyQuestKey
     ) async throws -> [DailyQuestCompletion] {
-        try loadedStorage().completions(for: key)
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: key.profileID,
+            allowingTerminal: true
+        ) {
+            try loadedStorage().completions(for: key)
+        }
     }
 
     public func completions(
         for profileID: ProfileID,
         in month: LocalMonth
     ) async throws -> [DailyQuestCompletion] {
-        try loadedStorage().completions(for: profileID, in: month)
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: profileID,
+            allowingTerminal: true
+        ) {
+            try loadedStorage().completions(for: profileID, in: month)
+        }
     }
 
     public func recordCompletion(
@@ -349,19 +367,37 @@ public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository,
     public func allCompletions(
         for profileID: ProfileID
     ) async throws -> [DailyQuestCompletion] {
-        try loadedStorage().allCompletions(for: profileID)
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: profileID,
+            allowingTerminal: true
+        ) {
+            try loadedStorage().allCompletions(for: profileID)
+        }
     }
 
     public func allPlans(
         for profileID: ProfileID
     ) async throws -> [DailyQuestPlan] {
-        try loadedStorage().allPlans(for: profileID)
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: profileID,
+            allowingTerminal: true
+        ) {
+            try loadedStorage().allPlans(for: profileID)
+        }
     }
 
     public func rewardGrants(
         for profileID: ProfileID
     ) async throws -> [RewardGrant] {
-        try loadedStorage().rewardGrants(for: profileID)
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: profileID,
+            allowingTerminal: true
+        ) {
+            try loadedStorage().rewardGrants(for: profileID)
+        }
     }
 
     public func mergeCanonical(
@@ -424,7 +460,10 @@ public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository,
         guard let mutationGate else { return try operation() }
         let ids =
             profileIDs
-            .filter { ProfileScopedMutationLeaseContext.profileID != $0 }
+            .filter {
+                !ProfileScopedMutationLeaseContext.holdsAllProfiles
+                    && ProfileScopedMutationLeaseContext.profileID != $0
+            }
             .sorted { $0.description < $1.description }
         var acquiredIDs: [ProfileID] = []
         do {

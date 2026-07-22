@@ -88,11 +88,19 @@ public actor LocalJSONKidProfileRepository: KidProfileRepository {
     }
 
     public func profiles() async throws -> [KidProfile] {
-        try loadedStorage().profilesInStableOrder
+        try await withAllProfilesCommittedRead(mutationGate) {
+            try loadedStorage().profilesInStableOrder
+        }
     }
 
     public func profile(id: ProfileID) async throws -> KidProfile? {
-        try loadedStorage().profile(id: id)
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: id,
+            allowingTerminal: true
+        ) {
+            try loadedStorage().profile(id: id)
+        }
     }
 
     public func save(_ profile: KidProfile) async throws {
@@ -118,6 +126,7 @@ public actor LocalJSONKidProfileRepository: KidProfileRepository {
         _ operation: () throws -> Void
     ) async throws {
         guard let mutationGate,
+            !ProfileScopedMutationLeaseContext.holdsAllProfiles,
             ProfileScopedMutationLeaseContext.profileID != profileID
         else {
             try operation()
