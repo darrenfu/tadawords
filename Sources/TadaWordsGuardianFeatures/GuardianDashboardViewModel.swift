@@ -144,6 +144,8 @@ final class GuardianDashboardViewModel: ObservableObject {
     private var undoWordsByProfile: [ProfileID: [LearningMode: [WordPrompt]]] = [:]
     private var voiceprintSentences: [String] = []
     private var voiceprintPromptTask: Task<Void, Never>?
+    private var pendingProfileAutoSave: (profileID: ProfileID, draft: GuardianProfileDraft)?
+    private var profileAutoSaveTask: Task<Void, Never>?
     private var externalSyncRefreshGeneration: UInt64 = 0
     private var syncPresentationRefreshGeneration: UInt64 = 0
 
@@ -531,6 +533,16 @@ final class GuardianDashboardViewModel: ObservableObject {
         existingProfile: KidProfile?,
         draft: GuardianProfileDraft
     ) {
+        if let existingProfile {
+            pendingProfileAutoSave = (existingProfile.id, draft)
+            guard profileAutoSaveTask == nil else { return }
+            profileAutoSaveTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(250))
+                await self?.drainProfileAutoSaves()
+            }
+            return
+        }
+
         guard !isLoading else { return }
         isLoading = true
 
@@ -538,19 +550,34 @@ final class GuardianDashboardViewModel: ObservableObject {
             defer { isLoading = false }
             do {
                 let savedDashboard: GuardianDashboardSnapshot
-                if let existingProfile {
-                    savedDashboard = try await store.updateProfile(
-                        id: existingProfile.id,
-                        from: draft
-                    )
-                } else {
-                    savedDashboard = try await store.createProfile(from: draft)
-                }
+                savedDashboard = try await store.createProfile(from: draft)
                 showWordRemovalState(for: savedDashboard.profile.id)
                 snapshot = savedDashboard
                 familySnapshot = try await store.familySnapshot()
                 await applyAudioSnapshot()
                 destination = .dashboard
+            } catch let error as GuardianFamilyStoreError {
+                errorMessage = Self.profileErrorMessage(error)
+            } catch {
+                errorMessage = "That child profile could not be saved. Please try again."
+            }
+        }
+    }
+
+    private func drainProfileAutoSaves() async {
+        defer { profileAutoSaveTask = nil }
+
+        while let pendingProfileAutoSave {
+            self.pendingProfileAutoSave = nil
+            do {
+                let savedDashboard = try await store.updateProfile(
+                    id: pendingProfileAutoSave.profileID,
+                    from: pendingProfileAutoSave.draft
+                )
+                showWordRemovalState(for: savedDashboard.profile.id)
+                snapshot = savedDashboard
+                familySnapshot = try await store.familySnapshot()
+                await applyAudioSnapshot()
             } catch let error as GuardianFamilyStoreError {
                 errorMessage = Self.profileErrorMessage(error)
             } catch {

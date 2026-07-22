@@ -854,8 +854,8 @@ extension KidProfile {
 extension ProfileAvatar {
     var guardianPresentationSymbol: String {
         switch self {
-        case .cartoonAnimal(let assetID):
-            GuardianAnimalAvatar.option(for: assetID)?.symbol ?? "pawprint.fill"
+        case .cartoonAnimal:
+            starterProfileAvatar?.fallbackSystemImageName ?? "pawprint.fill"
         case .photo:
             "person.crop.circle.fill"
         case .treasure(_, let iconAssetID):

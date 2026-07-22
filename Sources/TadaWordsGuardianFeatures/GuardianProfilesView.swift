@@ -214,25 +214,23 @@ struct GuardianProfileEditorView: View {
                 learningLevelSection
                 worldSection
 
-                Button(action: save) {
-                    Label(
-                        existingProfile == nil ? "Create profile" : "Save changes",
-                        systemImage: "checkmark.circle.fill"
+                if existingProfile == nil {
+                    Button(action: save) {
+                        Label("Create profile", systemImage: "checkmark.circle.fill")
+                    }
+                    .buttonStyle(GuardianPrimaryButtonStyle())
+                    .disabled(assembledDraft == nil)
+                    .accessibilityHint(
+                        ageYears == nil
+                            ? "Choose the child’s age before creating the profile"
+                            : "Creates this kid profile"
                     )
+                } else {
+                    Label("Changes save automatically", systemImage: "checkmark.circle")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                        .accessibilityIdentifier("guardian.profile.autosave-status")
                 }
-                .buttonStyle(GuardianPrimaryButtonStyle())
-                .disabled(
-                    normalizedName.isEmpty
-                        || normalizedName.count
-                            > RepositoryGuardianFamilyStore.maximumDisplayNameCharacterCount
-                        || (existingProfile == nil
-                            && ageYears.map(ProfileAgePolicy.isSupported) != true)
-                )
-                .accessibilityHint(
-                    existingProfile == nil && ageYears == nil
-                        ? "Choose the child’s age before creating the profile"
-                        : "Saves this kid profile"
-                )
 
                 if existingProfile != nil {
                     deletionSection
@@ -245,6 +243,13 @@ struct GuardianProfileEditorView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .scrollIndicators(.hidden)
+        .onChange(of: assembledDraft) { previousDraft, newDraft in
+            guard existingProfile != nil,
+                let newDraft,
+                newDraft != previousDraft
+            else { return }
+            onSave(newDraft)
+        }
         .alert("Delete this profile?", isPresented: $confirmsDeletion) {
             Button("Cancel", role: .cancel) {}
             Button("Delete profile", role: .destructive) {
@@ -307,12 +312,18 @@ struct GuardianProfileEditorView: View {
                 #endif
             }
 
-            Text("Or choose an animal icon")
+            Text("Or choose a zodiac animal")
                 .font(.system(.subheadline, design: .rounded, weight: .semibold))
                 .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
 
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 92))],
+                columns: Array(
+                    repeating: GridItem(
+                        .flexible(minimum: 0),
+                        spacing: GuardianPrimitiveTokens.Spacing.small
+                    ),
+                    count: StarterProfileAvatar.pickerColumnCount
+                ),
                 spacing: GuardianPrimitiveTokens.Spacing.small
             ) {
                 ForEach(GuardianAnimalAvatar.available) { avatar in
@@ -320,12 +331,20 @@ struct GuardianProfileEditorView: View {
                         self.avatar = .cartoonAnimal(assetID: avatar.id)
                     } label: {
                         VStack(spacing: 7) {
-                            Image(systemName: avatar.symbol)
-                                .font(.system(size: 28, weight: .bold))
+                            if let imageAssetName = avatar.imageAssetName {
+                                Image(imageAssetName)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .clipShape(Circle())
+                                    .frame(width: 62, height: 62)
+                            } else {
+                                Image(systemName: avatar.symbol)
+                                    .font(.system(size: 28, weight: .bold))
+                            }
                             Text(avatar.name)
                                 .font(.system(.caption, design: .rounded, weight: .bold))
                         }
-                        .frame(maxWidth: .infinity, minHeight: 76)
+                        .frame(maxWidth: .infinity, minHeight: 104)
                     }
                     .buttonStyle(.bordered)
                     .tint(
@@ -333,6 +352,7 @@ struct GuardianProfileEditorView: View {
                             ? GuardianSemanticTokens.primary
                             : GuardianSemanticTokens.secondaryForeground
                     )
+                    .accessibilityLabel(avatar.name)
                     .accessibilityAddTraits(
                         self.avatar.cartoonAnimalAssetID == avatar.id ? .isSelected : []
                     )
@@ -449,17 +469,24 @@ struct GuardianProfileEditorView: View {
     }
 
     private func save() {
-        guard existingProfile != nil || ageYears.map(ProfileAgePolicy.isSupported) == true
-        else { return }
-        onSave(
-            GuardianProfileDraft(
-                displayName: normalizedName,
-                avatar: avatar,
-                selectedWorld: selectedWorld,
-                schoolGrade: schoolGrade,
-                ageYears: ageYears,
-                guardianUnlockedWorlds: guardianUnlockedWorlds
-            )
+        guard let assembledDraft else { return }
+        onSave(assembledDraft)
+    }
+
+    private var assembledDraft: GuardianProfileDraft? {
+        guard !normalizedName.isEmpty,
+            normalizedName.count
+                <= RepositoryGuardianFamilyStore.maximumDisplayNameCharacterCount,
+            existingProfile != nil || ageYears.map(ProfileAgePolicy.isSupported) == true
+        else { return nil }
+
+        return GuardianProfileDraft(
+            displayName: normalizedName,
+            avatar: avatar,
+            selectedWorld: selectedWorld,
+            schoolGrade: schoolGrade,
+            ageYears: ageYears,
+            guardianUnlockedWorlds: guardianUnlockedWorlds
         )
     }
 }
@@ -487,11 +514,19 @@ struct GuardianProfileAvatarView: View {
     }
 
     private var fallback: some View {
-        Image(systemName: avatar.guardianPresentationSymbol)
-            .resizable()
-            .scaledToFit()
-            .foregroundStyle(GuardianSemanticTokens.primary)
-            .padding(8)
+        Group {
+            if let imageAssetName = avatar.starterProfileAvatar?.imageAssetName {
+                Image(imageAssetName)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: avatar.guardianPresentationSymbol)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(GuardianSemanticTokens.primary)
+                    .padding(8)
+            }
+        }
     }
 }
 

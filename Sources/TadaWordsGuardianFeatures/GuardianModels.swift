@@ -108,27 +108,22 @@ public struct GuardianProfileDraft: Equatable, Sendable {
 }
 
 public struct GuardianAnimalAvatar: Identifiable, Equatable, Sendable {
-    public static let available: [GuardianAnimalAvatar] = [
-        GuardianAnimalAvatar(id: "hare", name: "Bunny", symbol: "hare.fill"),
-        GuardianAnimalAvatar(id: "fox", name: "Fox", symbol: "pawprint.fill"),
-        GuardianAnimalAvatar(id: "bear", name: "Bear", symbol: "teddybear.fill"),
-        GuardianAnimalAvatar(id: "owl", name: "Owl", symbol: "bird.fill"),
-        GuardianAnimalAvatar(id: "cat", name: "Cat", symbol: "cat.fill"),
-        GuardianAnimalAvatar(id: "dog", name: "Dog", symbol: "dog.fill"),
-    ]
+    public static let available = StarterProfileAvatar.zodiac.map(Self.init)
 
     public let id: String
     public let name: String
     public let symbol: String
+    public let imageAssetName: String?
 
-    public init(id: String, name: String, symbol: String) {
-        self.id = id
-        self.name = name
-        self.symbol = symbol
+    public init(_ starter: StarterProfileAvatar) {
+        id = starter.id
+        name = starter.name
+        symbol = starter.fallbackSystemImageName
+        imageAssetName = starter.imageAssetName
     }
 
     public static func option(for assetID: String) -> GuardianAnimalAvatar? {
-        available.first(where: { $0.id == assetID })
+        StarterProfileAvatar.option(for: assetID).map(Self.init)
     }
 }
 

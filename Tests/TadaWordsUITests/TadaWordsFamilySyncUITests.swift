@@ -26,6 +26,42 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         suite = nil
     }
 
+    func testFirstRunNewProfileShowsCanonicalZodiacAvatarChoices() throws {
+        launch(scenario: "second-device-adoption", reset: true)
+
+        let createNew = app.buttons["first-run.create-new"]
+        XCTAssertTrue(createNew.waitForExistence(timeout: 10))
+        createNew.tap()
+
+        let expectedAnimals = [
+            "Rat", "Ox", "Tiger", "Rabbit", "Dragon", "Snake",
+            "Horse", "Goat", "Monkey", "Rooster", "Dog", "Pig",
+        ]
+        XCTAssertTrue(app.buttons["Rat"].isSelected)
+
+        let topScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        topScreenshot.name = "First-run zodiac Profile avatar picker - top"
+        topScreenshot.lifetime = .keepAlways
+        add(topScreenshot)
+
+        for animal in expectedAnimals {
+            var remainingScrollAttempts = 4
+            while !app.buttons[animal].exists, remainingScrollAttempts > 0 {
+                app.swipeUp()
+                remainingScrollAttempts -= 1
+            }
+            XCTAssertTrue(
+                app.buttons[animal].waitForExistence(timeout: 5),
+                "Missing zodiac Profile choice: \(animal)"
+            )
+        }
+
+        let bottomScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        bottomScreenshot.name = "First-run zodiac Profile avatar picker - bottom"
+        bottomScreenshot.lifetime = .keepAlways
+        add(bottomScreenshot)
+    }
+
     func testCleanSecondDeviceAdoptsIndependentRemoteProfileWithoutLocalSeed()
         throws
     {
@@ -102,9 +138,8 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         kids.tap()
         unlockParentArea()
 
-        let selectedKid = app.buttons["guardian.home.selected-kid"]
-        XCTAssertTrue(selectedKid.waitForExistence(timeout: 10))
-        XCTAssertTrue(selectedKid.label.contains("Remote Mia"))
+        XCTAssertTrue(app.staticTexts["Remote Mia"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["guardian.home.switch-child"].exists)
 
         let progress = app.buttons["guardian.home.progress-and-performance"]
         XCTAssertTrue(progress.waitForExistence(timeout: 5))
@@ -216,9 +251,9 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         kids.tap()
         unlockParentArea()
 
-        let selectedKid = app.buttons["guardian.home.selected-kid"]
-        XCTAssertTrue(selectedKid.waitForExistence(timeout: 6))
-        selectedKid.tap()
+        let switchChild = app.buttons["guardian.home.switch-child"]
+        XCTAssertTrue(switchChild.waitForExistence(timeout: 6))
+        switchChild.tap()
 
         let edit = app.buttons[
             "guardian.profile.\(Self.defaultProfileID).edit"
@@ -232,6 +267,45 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
             "A remotely deleted Profile must not leave Parents on a stale editor."
         )
         XCTAssertFalse(app.staticTexts["Edit profile"].exists)
+    }
+
+    func testProfileEditorAutoSavesAvatarWithoutSaveButton() async throws {
+        seedRemoteProfileAndRememberSelection()
+
+        let kids = app.buttons["child-lobby.kids"]
+        XCTAssertTrue(kids.waitForExistence(timeout: 8))
+        kids.tap()
+        unlockParentArea()
+
+        let switchChild = app.buttons["guardian.home.switch-child"]
+        XCTAssertTrue(switchChild.waitForExistence(timeout: 6))
+        switchChild.tap()
+
+        let edit = app.buttons[
+            "guardian.profile.\(Self.defaultProfileID).edit"
+        ]
+        XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        edit.tap()
+        XCTAssertTrue(app.staticTexts["Edit profile"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.staticTexts["guardian.profile.autosave-status"].exists
+        )
+        XCTAssertFalse(app.buttons["Save changes"].exists)
+
+        let tiger = app.buttons["Tiger"]
+        XCTAssertTrue(tiger.waitForExistence(timeout: 5))
+        tiger.tap()
+        XCTAssertTrue(tiger.isSelected)
+        try await Task.sleep(for: .milliseconds(600))
+
+        app.buttons["Back"].tap()
+        XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        edit.tap()
+        XCTAssertTrue(app.buttons["Tiger"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.buttons["Tiger"].isSelected,
+            "Reopening the editor should show the automatically saved avatar."
+        )
     }
 
     private func seedRemoteProfileAndRememberSelection() {
@@ -344,7 +418,7 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         answer.tap()
         answer.typeText(String(factors[0] * factors[1]))
         XCTAssertTrue(
-            app.buttons["guardian.home.selected-kid"].waitForExistence(timeout: 10)
+            app.buttons["guardian.home.switch-child"].waitForExistence(timeout: 10)
         )
     }
 

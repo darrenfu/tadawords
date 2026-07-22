@@ -435,9 +435,17 @@ struct ProfileAvatarContent: View {
     }
 
     private var fallback: some View {
-        Image(systemName: avatar.presentationSymbol)
-            .font(.system(size: symbolSize, weight: .bold))
-            .foregroundStyle(Color.white)
+        Group {
+            if let imageAssetName = avatar.starterProfileAvatar?.imageAssetName {
+                Image(imageAssetName)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: avatar.presentationSymbol)
+                    .font(.system(size: symbolSize, weight: .bold))
+                    .foregroundStyle(Color.white)
+            }
+        }
     }
 }
 
