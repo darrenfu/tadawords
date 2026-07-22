@@ -235,6 +235,63 @@ final class GuardianParentNavigationTests: XCTestCase {
     }
 
     @MainActor
+    func testEditingProfileAutoSavesLatestDraftWithoutLeavingEditor() async throws {
+        let store = DemoGuardianFamilyStore()
+        let initialFamily = try await store.familySnapshot()
+        let original = try XCTUnwrap(initialFamily.profiles.first)
+        let model = GuardianDashboardViewModel(
+            store: store,
+            audioPromptService: NavigationTestAudioPromptService()
+        )
+        model.showEditProfile(original)
+
+        let firstDraft = GuardianProfileDraft(
+            displayName: "Mia First",
+            avatar: .cartoonAnimal(assetID: "rat"),
+            selectedWorld: .moonpetalKingdom,
+            schoolGrade: .preK,
+            ageYears: 5
+        )
+        let latestDraft = GuardianProfileDraft(
+            displayName: "Mia Latest",
+            avatar: .cartoonAnimal(assetID: "tiger"),
+            selectedWorld: .buildItBay,
+            schoolGrade: .kindergarten,
+            ageYears: 6,
+            guardianUnlockedWorlds: [.buildItBay]
+        )
+
+        model.saveProfile(existingProfile: original, draft: firstDraft)
+        model.saveProfile(existingProfile: original, draft: latestDraft)
+
+        let deadline = ContinuousClock.now + .seconds(2)
+        var savedProfile = original
+        while ContinuousClock.now < deadline {
+            let currentFamily = try await store.familySnapshot()
+            savedProfile = try XCTUnwrap(
+                currentFamily.profiles.first(where: { $0.id == original.id })
+            )
+            if savedProfile.displayName == latestDraft.displayName { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+
+        XCTAssertEqual(savedProfile.displayName, latestDraft.displayName)
+        XCTAssertEqual(savedProfile.avatar, latestDraft.avatar)
+        XCTAssertEqual(savedProfile.selectedWorld, latestDraft.selectedWorld)
+        XCTAssertEqual(savedProfile.schoolGrade, latestDraft.schoolGrade)
+        XCTAssertEqual(savedProfile.ageYears, latestDraft.ageYears)
+        XCTAssertEqual(
+            savedProfile.guardianUnlockedWorlds,
+            latestDraft.guardianUnlockedWorlds
+        )
+        XCTAssertEqual(
+            model.transitionKey,
+            "profile-editor-\(original.id)",
+            "Auto-save must not close the editor"
+        )
+    }
+
+    @MainActor
     private func makeModel() -> GuardianDashboardViewModel {
         GuardianDashboardViewModel(
             store: DemoGuardianFamilyStore(),

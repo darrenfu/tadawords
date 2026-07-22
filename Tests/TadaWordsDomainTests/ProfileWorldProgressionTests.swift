@@ -111,7 +111,7 @@ final class ProfileWorldProgressionTests: XCTestCase {
         )
         XCTAssertEqual(
             progression.unlockedCartoonIconAssetIDs,
-            ["hare", "fox"]
+            ["hare", "rat"]
         )
     }
 
@@ -236,8 +236,8 @@ final class ProfileWorldProgressionTests: XCTestCase {
     }
 
     func testCatalogsStopAfterEveryCosmeticIsUnlocked() throws {
-        let profile = makeProfile()
-        let localDays = try (1...10).map { try day(month: 6, day: $0) }
+        let profile = makeProfile(avatar: .cartoonAnimal(assetID: "rat"))
+        let localDays = try (1...12).map { try day(month: 6, day: $0) }
         let progression = WorldProgression(
             profile: profile,
             completions: qualifyingCompletions(
@@ -247,7 +247,7 @@ final class ProfileWorldProgressionTests: XCTestCase {
             currentLocalDay: try day(month: 7, day: 12)
         )
 
-        XCTAssertEqual(progression.qualifyingPriorDayCount, 10)
+        XCTAssertEqual(progression.qualifyingPriorDayCount, 12)
         XCTAssertEqual(progression.unlockedWorlds, Set(WorldTheme.allCases))
         XCTAssertEqual(
             progression.unlockedCartoonIconAssetIDs,
@@ -276,7 +276,7 @@ final class ProfileWorldProgressionTests: XCTestCase {
         XCTAssertEqual(
             foxProgression.cartoonIconStates.map(\.assetID).prefix(2),
             [
-                "fox", "hare",
+                "fox", "rat",
             ])
 
         let photoProfile = makeProfile(
@@ -288,8 +288,8 @@ final class ProfileWorldProgressionTests: XCTestCase {
             completions: [],
             currentLocalDay: try day(month: 7, day: 12)
         )
-        XCTAssertEqual(photoProgression.starterCartoonIconAssetID, "hare")
-        XCTAssertEqual(photoProgression.unlockedCartoonIconAssetIDs, ["hare"])
+        XCTAssertEqual(photoProgression.starterCartoonIconAssetID, "rat")
+        XCTAssertEqual(photoProgression.unlockedCartoonIconAssetIDs, ["rat"])
     }
 
     func testOldThreeAndEightQuestThresholdsNoLongerApply() throws {

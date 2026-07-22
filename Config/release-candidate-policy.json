@@ -12,11 +12,15 @@
   "voiceprint_service": "com.tadawords.device-voiceprints",
   "source_entitlements": {
     "aps-environment": "$(APS_ENVIRONMENT)",
+    "com.apple.developer.icloud-container-environment": "$(ICLOUD_CONTAINER_ENVIRONMENT)",
     "com.apple.developer.icloud-container-identifiers": [
       "iCloud.com.tadawords.app"
     ],
     "com.apple.developer.icloud-services": [
       "CloudKit"
+    ],
+    "keychain-access-groups": [
+      "$(AppIdentifierPrefix)app.tadawords.app"
     ]
   },
   "signed_entitlements": {

@@ -147,7 +147,7 @@ struct TadaWordsApp: App {
     private static let defaultProfile = KidProfile(
         id: defaultProfileID,
         displayName: "My Kid",
-        avatar: .cartoonAnimal(assetID: "hare"),
+        avatar: .cartoonAnimal(assetID: "rat"),
         selectedWorld: .moonpetalKingdom,
         createdAt: Date(timeIntervalSince1970: 1_735_689_600)
     )

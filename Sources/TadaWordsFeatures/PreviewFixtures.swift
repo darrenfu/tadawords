@@ -55,22 +55,8 @@ extension ProfileAvatar {
     var presentationSymbol: String {
         switch self {
         case .cartoonAnimal(let assetID):
-            switch assetID {
-            case "hare":
-                "hare.fill"
-            case "beaver":
-                "building.2.fill"
-            case "bear":
-                "teddybear.fill"
-            case "owl":
-                "bird.fill"
-            case "cat":
-                "cat.fill"
-            case "dog":
-                "dog.fill"
-            default:
-                "pawprint.fill"
-            }
+            StarterProfileAvatar.option(for: assetID)?.fallbackSystemImageName
+                ?? (assetID == "beaver" ? "building.2.fill" : "pawprint.fill")
         case .photo:
             "person.crop.circle.fill"
         case .treasure(_, let iconAssetID):

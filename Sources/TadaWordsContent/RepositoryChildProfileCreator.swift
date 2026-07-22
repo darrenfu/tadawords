@@ -6,9 +6,7 @@ import TadaWordsDomain
 public actor RepositoryChildProfileCreator: ChildProfileCreating {
     public static let maximumDisplayNameCharacterCount = 24
 
-    private static let avatarAssetIDs = [
-        "hare", "fox", "bear", "owl", "cat", "dog",
-    ]
+    private static let avatarAssetIDs = StarterProfileAvatar.zodiac.map(\.id)
     private static let worlds = CosmeticProgressionCatalog.worlds
 
     private let profileRepository: any KidProfileRepository
