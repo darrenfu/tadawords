@@ -47,7 +47,7 @@ public struct AppleSpeechRecognitionConfiguration: Equatable, Sendable {
         localeIdentifier: String = "en-US",
         maximumAllowedRecordingDuration: ElapsedTime = ElapsedTime(seconds: 15),
         requiresOnDeviceRecognition: Bool = true,
-        partialResultStabilityDuration: Duration = .milliseconds(1_200),
+        partialResultStabilityDuration: Duration = .milliseconds(450),
         decisionThresholds: AppleRecognitionThresholds = .speech,
         speechActivityThresholds: AppleSpeechActivityThresholds = .childSightWord
     ) {
@@ -60,7 +60,7 @@ public struct AppleSpeechRecognitionConfiguration: Equatable, Sendable {
         self.partialResultStabilityDuration =
             partialResultStabilityDuration > .zero
             ? partialResultStabilityDuration
-            : .milliseconds(1_200)
+            : .milliseconds(450)
         self.decisionThresholds = decisionThresholds
         self.speechActivityThresholds = speechActivityThresholds
     }
@@ -200,6 +200,7 @@ public actor AppleSpeechRecognitionService: SpeechRecognitionService {
             audioCapture.installTap(format: recordingFormat)
 
             let diagnosticHandler = self.diagnosticHandler
+            let earlyMatchResolver = resultResolver
             recognitionTask = try SpeechRecognitionStartupSequence.start(
                 startAudio: {
                     try audioCapture.start()
@@ -209,9 +210,15 @@ public actor AppleSpeechRecognitionService: SpeechRecognitionService {
                         result,
                         error in
                         if let result {
+                            let snapshot = SpeechTranscriptSnapshot(result: result)
                             completionBox.receive(
-                                SpeechTranscriptSnapshot(result: result),
-                                isFinal: result.isFinal
+                                snapshot,
+                                isFinal: result.isFinal,
+                                acceptImmediately: earlyMatchResolver
+                                    .isHighConfidenceMatch(
+                                        snapshot,
+                                        target: request.prompt
+                                    )
                             )
                         }
                         if let error {
@@ -476,7 +483,8 @@ struct SpeechRecognitionEndpointStateMachine: Sendable {
 
     mutating func receive(
         _ transcript: SpeechTranscriptSnapshot,
-        isFinal: Bool
+        isFinal: Bool,
+        acceptImmediately: Bool = false
     ) -> SpeechRecognitionEndpointTransition {
         guard !isCompleted else { return .none }
 
@@ -492,6 +500,13 @@ struct SpeechRecognitionEndpointStateMachine: Sendable {
             return .none
         }
         latestTranscript = transcript
+
+        // A high-confidence exact/pronunciation-equivalent target is already
+        // enough evidence for an isolated sight-word prompt. Returning that
+        // partial immediately avoids waiting for Apple's final-result pass.
+        if acceptImmediately {
+            return complete(with: .transcript(transcript))
+        }
 
         // SFSpeech may emit one last partial while it is finalizing after
         // `endAudio()`. Keep the fresher text, but do not start another timer.
@@ -516,7 +531,13 @@ struct SpeechRecognitionEndpointStateMachine: Sendable {
             return .none
         }
         activeStabilityGeneration = nil
-        return finishAudioTransition()
+        guard let latestTranscript else {
+            return finishAudioTransition()
+        }
+        // Once the hypothesis has stopped changing, use it directly. Waiting
+        // for a separate SFSpeech final callback adds another device-dependent
+        // 1–2 seconds without improving the product-level decision.
+        return complete(with: .transcript(latestTranscript))
     }
 
     mutating func fail(
@@ -615,9 +636,17 @@ final class SpeechRecognitionCompletionBox: @unchecked Sendable {
         }
     }
 
-    func receive(_ transcript: SpeechTranscriptSnapshot, isFinal: Bool) {
+    func receive(
+        _ transcript: SpeechTranscriptSnapshot,
+        isFinal: Bool,
+        acceptImmediately: Bool = false
+    ) {
         let transition = lock.withLock {
-            state.receive(transcript, isFinal: isFinal)
+            state.receive(
+                transcript,
+                isFinal: isFinal,
+                acceptImmediately: acceptImmediately
+            )
         }
         perform(transition)
     }
@@ -904,6 +933,23 @@ struct AppleSpeechRecognitionResultResolver: Sendable {
             capturedAudio,
             thresholds: activityThresholds
         ).hasUsableSpeech
+    }
+
+    func isHighConfidenceMatch(
+        _ snapshot: SpeechTranscriptSnapshot,
+        target: WordPrompt
+    ) -> Bool {
+        guard
+            let confidence = snapshot.confidence,
+            confidence >= decisionPolicy.thresholds.minimumMismatchConfidence
+        else {
+            return false
+        }
+        return decisionPolicy.evaluate(
+            transcript: snapshot.text,
+            confidence: confidence,
+            target: target
+        ).decision == .matched
     }
 
     func resolve(

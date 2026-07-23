@@ -89,7 +89,7 @@ final class AppleSpeechAdapterTests: XCTestCase {
         XCTAssertTrue(configuration.requiresOnDeviceRecognition)
         XCTAssertEqual(
             configuration.partialResultStabilityDuration,
-            .milliseconds(1_200)
+            .milliseconds(450)
         )
     }
 
@@ -262,7 +262,7 @@ final class AppleSpeechAdapterTests: XCTestCase {
         )
     }
 
-    func testLatestPartialSupersedesOlderDebounceAndEndsAudioOnce() {
+    func testLatestPartialSupersedesOlderDebounceAndCompletesAtStability() {
         var endpoint = SpeechRecognitionEndpointStateMachine()
         let first = SpeechTranscriptSnapshot(
             text: "lo",
@@ -285,7 +285,7 @@ final class AppleSpeechAdapterTests: XCTestCase {
 
         let stable = endpoint.stabilityReached(generation: 2)
         XCTAssertTrue(stable.shouldFinishAudio)
-        XCTAssertNil(stable.completion)
+        XCTAssertEqual(stable.completion, .transcript(latest))
 
         let newerAfterAudioEnded = SpeechTranscriptSnapshot(
             text: "Look",
@@ -297,13 +297,61 @@ final class AppleSpeechAdapterTests: XCTestCase {
         )
 
         let final = endpoint.receive(newerAfterAudioEnded, isFinal: true)
-        XCTAssertFalse(final.shouldFinishAudio)
-        XCTAssertEqual(final.completion, .transcript(newerAfterAudioEnded))
+        XCTAssertEqual(final, .none)
         XCTAssertEqual(endpoint.finishAudioIfNeeded(), .none)
         XCTAssertEqual(
             endpoint.deadlineReached(receivedUsableAudio: true),
             .none
         )
+    }
+
+    func testHighConfidenceTargetPartialCompletesImmediately() throws {
+        let prompt = try WordPrompt(learningMode: .read, text: "look")
+        let snapshot = SpeechTranscriptSnapshot(
+            text: "Look.",
+            confidence: RecognitionConfidence(0.91)
+        )
+        let resolver = AppleSpeechRecognitionResultResolver(
+            decisionPolicy: AppleRecognitionDecisionPolicy(
+                thresholds: .speech,
+                matchPolicy: .sightWordPronunciation
+            ),
+            activityThresholds: .childSightWord
+        )
+        var endpoint = SpeechRecognitionEndpointStateMachine()
+
+        XCTAssertTrue(resolver.isHighConfidenceMatch(snapshot, target: prompt))
+        let transition = endpoint.receive(
+            snapshot,
+            isFinal: false,
+            acceptImmediately: true
+        )
+
+        XCTAssertTrue(transition.shouldFinishAudio)
+        XCTAssertEqual(transition.completion, .transcript(snapshot))
+        XCTAssertNil(transition.stabilityGeneration)
+    }
+
+    func testLowConfidenceTargetPartialStillWaitsForStability() throws {
+        let prompt = try WordPrompt(learningMode: .read, text: "look")
+        let snapshot = SpeechTranscriptSnapshot(
+            text: "look",
+            confidence: RecognitionConfidence(0.70)
+        )
+        let resolver = AppleSpeechRecognitionResultResolver(
+            decisionPolicy: AppleRecognitionDecisionPolicy(
+                thresholds: .speech,
+                matchPolicy: .sightWordPronunciation
+            ),
+            activityThresholds: .childSightWord
+        )
+        var endpoint = SpeechRecognitionEndpointStateMachine()
+
+        XCTAssertFalse(resolver.isHighConfidenceMatch(snapshot, target: prompt))
+        let transition = endpoint.receive(snapshot, isFinal: false)
+
+        XCTAssertNil(transition.completion)
+        XCTAssertNotNil(transition.stabilityGeneration)
     }
 
     func testEmptyAndPunctuationOnlyPartialsDoNotArmAutomaticEndpointing() {
