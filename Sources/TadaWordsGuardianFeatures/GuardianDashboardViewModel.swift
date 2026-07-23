@@ -911,7 +911,7 @@ final class GuardianDashboardViewModel: ObservableObject {
             let isEnabled = await familySyncCoordinator.isEnabled()
             isFamilySyncEnabled = isEnabled
             if isEnabled {
-                syncStatus = await familySyncCoordinator.synchronize()
+                syncStatus = await familySyncCoordinator.retryProfileErasures()
             } else {
                 syncStatus = await familySyncCoordinator.status()
             }
