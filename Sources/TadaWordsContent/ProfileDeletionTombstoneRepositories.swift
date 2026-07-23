@@ -343,34 +343,52 @@ public actor LocalJSONProfileDeletionTombstoneRepository:
     }
 
     public func tombstones() async throws -> [ProfileDeletionTombstone] {
-        try loadedValues().values.map(\.tombstone).sorted {
-            $0.profileID.description < $1.profileID.description
+        try await withAllProfilesCommittedRead(mutationGate) {
+            try loadedValues().values.map(\.tombstone).sorted {
+                $0.profileID.description < $1.profileID.description
+            }
         }
     }
 
     public func pendingTombstones() async throws -> [ProfileDeletionTombstone] {
-        try loadedValues().values
-            .filter { !$0.isLocalPurgeCommitted }
-            .map(\.tombstone)
-            .sorted { $0.profileID.description < $1.profileID.description }
+        try await withAllProfilesCommittedRead(mutationGate) {
+            try loadedValues().values
+                .filter { !$0.isLocalPurgeCommitted }
+                .map(\.tombstone)
+                .sorted { $0.profileID.description < $1.profileID.description }
+        }
     }
 
     public func tombstone(
         for profileID: ProfileID
     ) async throws -> ProfileDeletionTombstone? {
-        try loadedValues()[profileID]?.tombstone
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: profileID,
+            allowingTerminal: true
+        ) {
+            try loadedValues()[profileID]?.tombstone
+        }
     }
 
     public func erasureLifecycles() async throws -> [ProfileErasureLifecycle] {
-        try loadedValues().values.map(\.lifecycle).sorted {
-            $0.profileID.description < $1.profileID.description
+        try await withAllProfilesCommittedRead(mutationGate) {
+            try loadedValues().values.map(\.lifecycle).sorted {
+                $0.profileID.description < $1.profileID.description
+            }
         }
     }
 
     public func erasureLifecycle(
         for profileID: ProfileID
     ) async throws -> ProfileErasureLifecycle? {
-        try loadedValues()[profileID]?.lifecycle
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: profileID,
+            allowingTerminal: true
+        ) {
+            try loadedValues()[profileID]?.lifecycle
+        }
     }
 
     public func save(_ tombstone: ProfileDeletionTombstone) async throws {
@@ -455,6 +473,7 @@ public actor LocalJSONProfileDeletionTombstoneRepository:
         _ operation: () throws -> Void
     ) async throws {
         guard let mutationGate,
+            !ProfileScopedMutationLeaseContext.holdsAllProfiles,
             ProfileScopedMutationLeaseContext.profileID != profileID
         else {
             try operation()

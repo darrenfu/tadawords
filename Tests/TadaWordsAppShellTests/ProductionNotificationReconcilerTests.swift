@@ -147,6 +147,43 @@ final class ProductionNotificationReconcilerTests: XCTestCase {
         XCTAssertEqual(requestCount, 0)
     }
 
+    func testRecoveryRequiredKeepsNotificationSideEffectsClosed() async {
+        let profileID = ProfileID()
+        let mutationGate = ProfileScopedMutationGate()
+        await mutationGate.requireRecovery(
+            profileID,
+            transactionID: UUID()
+        )
+        let scheduler = NotificationSchedulerSpy()
+        let reconciler = ProductionLearningNotificationReconciler(
+            scheduler: scheduler,
+            profileRepository: InMemoryKidProfileRepository(),
+            profileDeletionRepository:
+                InMemoryProfileDeletionTombstoneRepository(),
+            wordPoolRepository: InMemoryWordPoolRepository(),
+            practiceSettingsRepository:
+                InMemoryPracticeSettingsRepository(),
+            dailyQuestRepository: NotificationDailyRepository(
+                completedRunCount: 0
+            ),
+            familySyncCoordinator: NotificationSyncCoordinator(
+                currentStatus: .idle
+            ),
+            profileMutationGate: mutationGate,
+            clock: NotificationClock(now: now),
+            timeZone: TimeZone(secondsFromGMT: 0) ?? .current
+        )
+
+        await reconciler.reconcileAll()
+
+        let contexts = await scheduler.contexts()
+        let removedProfileIDs = await scheduler.removedProfileIDs()
+        let requestCount = await scheduler.requestCount()
+        XCTAssertTrue(contexts.isEmpty)
+        XCTAssertTrue(removedProfileIDs.isEmpty)
+        XCTAssertEqual(requestCount, 0)
+    }
+
     private let now = Date(timeIntervalSince1970: 2_000_000_000)
 }
 

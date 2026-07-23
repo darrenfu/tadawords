@@ -7,6 +7,55 @@ import XCTest
 
 @MainActor
 final class FamilySyncUIReceiptRefreshHarnessTests: XCTestCase {
+    func testRecoveryRequiredKeepsLastCommittedChildGenerationVisible()
+        async throws
+    {
+        let now = Date(timeIntervalSince1970: 2_176_050_000)
+        let oldProfile = KidProfile(
+            displayName: "Committed Old",
+            avatar: .cartoonAnimal(assetID: "hare"),
+            selectedWorld: .moonpetalKingdom,
+            createdAt: now.addingTimeInterval(-100)
+        )
+        let remoteProfile = KidProfile(
+            id: oldProfile.id,
+            displayName: "Remote Complete",
+            avatar: .cartoonAnimal(assetID: "fox"),
+            selectedWorld: .pawsAndPines,
+            starterWorld: oldProfile.starterWorld,
+            createdAt: oldProfile.createdAt,
+            updatedAt: now
+        )
+        let profiles = InMemoryKidProfileRepository()
+        try await profiles.save(remoteProfile)
+        let gate = ProfileScopedMutationGate()
+        let transactionID = UUID()
+        await gate.requireRecovery(
+            oldProfile.id,
+            transactionID: transactionID
+        )
+        let model = TadaWordsAppModel(
+            profiles: [oldProfile],
+            profileRepository: profiles,
+            profileMutationGate: gate
+        )
+        await model.selectProfileAndWait(oldProfile)
+
+        await model.refreshAfterExternalSyncAndWait()
+
+        XCTAssertEqual(model.selectedProfile, oldProfile)
+        XCTAssertEqual(model.profiles, [oldProfile])
+
+        await gate.clearRecovery(
+            oldProfile.id,
+            transactionID: transactionID
+        )
+        await model.refreshAfterExternalSyncAndWait()
+
+        XCTAssertEqual(model.selectedProfile, remoteProfile)
+        XCTAssertEqual(model.profiles, [remoteProfile])
+    }
+
     func testCommittedReceiptRefreshesProfileRewardAndFutureWordSettingsProgress()
         async throws
     {
