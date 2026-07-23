@@ -127,16 +127,16 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.21</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072121</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.24</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072124</string>"))
         }
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.21"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072121"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.24"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072124"))
     }
 
     private var repositoryRoot: URL {
