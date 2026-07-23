@@ -315,6 +315,7 @@ class PawGooDevelopmentAppVerifierTests(unittest.TestCase):
 
     def test_profile_authorization_rejects_wrong_cloudkit_or_team_wildcard(self):
         mutations = {
+            "com.apple.developer.devicecheck.appattest-environment": "production",
             "com.apple.developer.icloud-container-environment": ["Production"],
             "com.apple.developer.icloud-services": ["CloudDocuments"],
             "com.apple.developer.ubiquity-kvstore-identifier": "6S245NCUPQ.*",
@@ -431,6 +432,7 @@ class PawGooDevelopmentAppVerifierTests(unittest.TestCase):
     def test_wrong_environment_container_service_and_team_fail(self):
         mutations = {
             "aps-environment": "production",
+            "com.apple.developer.devicecheck.appattest-environment": "production",
             "com.apple.developer.icloud-container-environment": "Production",
             "com.apple.developer.icloud-container-identifiers": [
                 "iCloud.example.wrong"

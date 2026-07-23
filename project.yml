@@ -55,10 +55,12 @@ targets:
       configs:
         Debug:
           DEVELOPMENT_TEAM: 7R78Q4HP86
+          APP_ATTEST_ENVIRONMENT: development
           APS_ENVIRONMENT: development
           ICLOUD_CONTAINER_ENVIRONMENT: Development
         Release:
           DEVELOPMENT_TEAM: 7R78Q4HP86
+          APP_ATTEST_ENVIRONMENT: production
           APS_ENVIRONMENT: production
           ICLOUD_CONTAINER_ENVIRONMENT: Production
         LocalQA:

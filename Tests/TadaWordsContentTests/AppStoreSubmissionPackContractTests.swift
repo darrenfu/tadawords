@@ -139,6 +139,42 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
         XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072121"))
     }
 
+    func testTeacherAudioDocsProhibitAlternativeVoiceFallback() throws {
+        let paths = [
+            "README.md",
+            "Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md",
+            "Docs/TEACHER_AUDIO_RELEASE_GATES.md",
+            "Tools/Audio/README.md",
+        ]
+        for path in paths {
+            let document = try String(
+                contentsOf: repositoryRoot.appendingPathComponent(path),
+                encoding: .utf8
+            )
+            XCTAssertTrue(
+                document.localizedCaseInsensitiveContains(
+                    "no alternative-voice fallback"
+                )
+                    || document.localizedCaseInsensitiveContains(
+                        "never substitutes another voice"
+                    )
+                    || document.localizedCaseInsensitiveContains(
+                        "instead of selecting an offline alternative voice"
+                    )
+                    || document.localizedCaseInsensitiveContains(
+                        "no Apple or alternative-voice fallback"
+                    ),
+                "Missing no-fallback contract in \(path)"
+            )
+            XCTAssertFalse(
+                document.localizedCaseInsensitiveContains(
+                    "Apple speech remains the no-network fallback"
+                ),
+                "Stale Apple teacher fallback returned in \(path)"
+            )
+        }
+    }
+
     private var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

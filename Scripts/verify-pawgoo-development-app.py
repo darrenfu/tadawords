@@ -39,6 +39,7 @@ CANONICAL_DEVELOPMENT_ENTITLEMENT_CONTRACT = {
     "required_exact": {
         "application-identifier": "${APP_IDENTIFIER_PREFIX}.app.tadawords.app",
         "aps-environment": "development",
+        "com.apple.developer.devicecheck.appattest-environment": "development",
         "com.apple.developer.icloud-container-environment": "Development",
         "com.apple.developer.icloud-container-identifiers": [
             "iCloud.com.tadawords.app"
@@ -61,6 +62,7 @@ CANONICAL_DEVELOPMENT_ENTITLEMENT_CONTRACT = {
     "allowed_keys": [
         "application-identifier",
         "aps-environment",
+        "com.apple.developer.devicecheck.appattest-environment",
         "com.apple.developer.icloud-container-development-container-identifiers",
         "com.apple.developer.icloud-container-environment",
         "com.apple.developer.icloud-container-identifiers",
@@ -357,6 +359,7 @@ def validate_profile_authorization(
     allowed_keys = {
         "application-identifier",
         "aps-environment",
+        "com.apple.developer.devicecheck.appattest-environment",
         "com.apple.developer.icloud-container-development-container-identifiers",
         "com.apple.developer.icloud-container-environment",
         "com.apple.developer.icloud-container-identifiers",
@@ -379,6 +382,7 @@ def validate_profile_authorization(
     required_exact = {
         "application-identifier": f"{team_id}.{bundle_id}",
         "aps-environment": "development",
+        "com.apple.developer.devicecheck.appattest-environment": "development",
         "com.apple.developer.icloud-container-development-container-identifiers": [
             container
         ],
@@ -438,6 +442,7 @@ def validate_app_authorized_by_profile(
     """Bind each sealed app entitlement to the profile that authorizes it."""
     exact_or_member_keys = {
         "aps-environment",
+        "com.apple.developer.devicecheck.appattest-environment",
         "com.apple.developer.icloud-container-environment",
     }
     list_subset_keys = {

@@ -143,6 +143,7 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
     private let planner: QuestPlanner
     private let reviewRanker: ReviewPriorityRanker
     private let gradeWordRecommender: (any GradeWordRecommending)?
+    private let teacherAudioPreparer: (any TeacherWordAudioPreparing)?
 
     init(
         wordPoolRepository: any WordPoolRepository,
@@ -150,6 +151,7 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         practiceSettingsRepository: any PracticeSettingsRepository,
         attemptEventRepository: (any AttemptEventRepository)? = nil,
         gradeWordRecommender: (any GradeWordRecommending)? = nil,
+        teacherAudioPreparer: (any TeacherWordAudioPreparing)? = nil,
         deviceClass: DeviceClass = .tablet,
         clock: any AppClock,
         timeZone: TimeZone
@@ -159,6 +161,7 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         self.practiceSettingsRepository = practiceSettingsRepository
         self.attemptEventRepository = attemptEventRepository
         self.gradeWordRecommender = gradeWordRecommender
+        self.teacherAudioPreparer = teacherAudioPreparer
         self.deviceClass = deviceClass
         self.clock = clock
         self.dailyProvider = DailyQuestContentProvider(
@@ -198,6 +201,9 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         guard !entries.isEmpty else {
             throw QuestContentError.emptyPool
         }
+        try await teacherAudioPreparer?.requirePrepared(
+            entries.map(\.prompt)
+        )
 
         let progressByWordID = try await loadProgress(
             for: entries,
@@ -316,6 +322,9 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         )
         let entries = try await activeEntries(for: profile.id, mode: mode)
         guard !entries.isEmpty else { throw QuestContentError.emptyPool }
+        try await teacherAudioPreparer?.requirePrepared(
+            entries.map(\.prompt)
+        )
         let batchSize = max(
             1,
             modeConfiguration.questConfiguration.attentionBudget

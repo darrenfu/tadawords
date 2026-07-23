@@ -52,7 +52,21 @@ final class BundledTeacherWordAudioProviderTests: XCTestCase {
         XCTAssertEqual(write.audioData, Data([4, 5, 6]))
     }
 
-    func testUnknownOrContextualTextFallsBack() async throws {
+    func testManifestSelectsMP3AssetsForElevenLabsPack() async throws {
+        let fixture = try Fixture(fileExtension: "mp3")
+        defer { fixture.remove() }
+        let provider = try BundledTeacherWordAudioProvider(
+            resourceRoot: fixture.root
+        )
+
+        let clip = try await provider.audio(
+            for: TeacherWordAudioRequest(spokenText: "dog")
+        )
+
+        XCTAssertEqual(clip.audioData, Data([1, 2, 3]))
+    }
+
+    func testUnknownWordOrPronunciationVariantMissesBundle() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let provider = try BundledTeacherWordAudioProvider(
@@ -61,7 +75,6 @@ final class BundledTeacherWordAudioProviderTests: XCTestCase {
 
         for request in [
             try TeacherWordAudioRequest(spokenText: "cat"),
-            try TeacherWordAudioRequest(spokenText: "The dog runs."),
             try TeacherWordAudioRequest(
                 spokenText: "dog",
                 pronunciationKey: "alternate"
@@ -79,10 +92,21 @@ final class BundledTeacherWordAudioProviderTests: XCTestCase {
         }
     }
 
+    func testContextualTextIsRejectedBeforeAnyProvider() {
+        XCTAssertThrowsError(
+            try TeacherWordAudioRequest(spokenText: "The dog runs.")
+        ) { error in
+            XCTAssertEqual(
+                error as? TeacherWordAudioError,
+                .invalidIsolatedWord
+            )
+        }
+    }
+
     private struct Fixture {
         let root: URL
 
-        init() throws {
+        init(fileExtension: String = "m4a") throws {
             root = FileManager.default.temporaryDirectory.appendingPathComponent(
                 "BundledTeacherWordAudioProviderTests-\(UUID().uuidString)",
                 isDirectory: true
@@ -100,8 +124,13 @@ final class BundledTeacherWordAudioProviderTests: XCTestCase {
                 at: write,
                 withIntermediateDirectories: true
             )
+            let audioFormat =
+                fileExtension == "m4a"
+                ? ""
+                : #""audio_format": {"container": "\#(fileExtension)"},"#
             let manifest = """
                 {
+                  \(audioFormat)
                   "words": ["dog"],
                   "variants": {
                     "read_hint": {"directory": "read-hint"},
@@ -113,10 +142,10 @@ final class BundledTeacherWordAudioProviderTests: XCTestCase {
                 to: root.appendingPathComponent("manifest.json")
             )
             try Data([1, 2, 3]).write(
-                to: read.appendingPathComponent("dog.m4a")
+                to: read.appendingPathComponent("dog.\(fileExtension)")
             )
             try Data([4, 5, 6]).write(
-                to: write.appendingPathComponent("dog.m4a")
+                to: write.appendingPathComponent("dog.\(fileExtension)")
             )
         }
 

@@ -12,6 +12,7 @@
   "voiceprint_service": "com.tadawords.device-voiceprints",
   "source_entitlements": {
     "aps-environment": "$(APS_ENVIRONMENT)",
+    "com.apple.developer.devicecheck.appattest-environment": "$(APP_ATTEST_ENVIRONMENT)",
     "com.apple.developer.icloud-container-environment": "$(ICLOUD_CONTAINER_ENVIRONMENT)",
     "com.apple.developer.icloud-container-identifiers": [
       "iCloud.com.tadawords.app"
@@ -27,6 +28,7 @@
     "required_exact": {
       "application-identifier": "${APP_IDENTIFIER_PREFIX}.app.tadawords.app",
       "aps-environment": "production",
+      "com.apple.developer.devicecheck.appattest-environment": "production",
       "com.apple.developer.icloud-container-environment": "Production",
       "com.apple.developer.icloud-container-identifiers": [
         "iCloud.com.tadawords.app"
@@ -49,6 +51,10 @@
           "development",
           "production"
         ],
+        "com.apple.developer.devicecheck.appattest-environment": [
+          "development",
+          "production"
+        ],
         "com.apple.developer.icloud-container-environment": [
           "Development",
           "Production"
@@ -63,6 +69,7 @@
       "application-identifier",
       "aps-environment",
       "beta-reports-active",
+      "com.apple.developer.devicecheck.appattest-environment",
       "com.apple.developer.icloud-container-environment",
       "com.apple.developer.icloud-container-identifiers",
       "com.apple.developer.icloud-services",
@@ -76,6 +83,7 @@
     "required_exact": {
       "application-identifier": "${APP_IDENTIFIER_PREFIX}.app.tadawords.app",
       "aps-environment": "development",
+      "com.apple.developer.devicecheck.appattest-environment": "development",
       "com.apple.developer.icloud-container-environment": "Development",
       "com.apple.developer.icloud-container-identifiers": [
         "iCloud.com.tadawords.app"
@@ -98,6 +106,7 @@
     "allowed_keys": [
       "application-identifier",
       "aps-environment",
+      "com.apple.developer.devicecheck.appattest-environment",
       "com.apple.developer.icloud-container-development-container-identifiers",
       "com.apple.developer.icloud-container-environment",
       "com.apple.developer.icloud-container-identifiers",

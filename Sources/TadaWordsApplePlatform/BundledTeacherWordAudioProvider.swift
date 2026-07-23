@@ -6,9 +6,11 @@ public enum BundledTeacherWordAudioProviderError: Error, Equatable, Sendable {
     case invalidManifest
 }
 
-/// Reads the versioned Katie pack from the Swift package resource bundle.
+/// Reads the versioned canonical teacher pack from the Swift package resource
+/// bundle.
 /// Only isolated alphabetic entries listed in the manifest are accepted;
-/// everything else fails closed so the caller can use its Apple TTS fallback.
+/// everything else fails closed so the canonical remote/cache pipeline can
+/// prepare the exact same voice contract.
 public struct BundledTeacherWordAudioProvider: TeacherWordAudioProviding {
     private static let productionRelativePath =
         "Audio/TeacherWords/Katie-500-v1"
@@ -16,6 +18,7 @@ public struct BundledTeacherWordAudioProvider: TeacherWordAudioProviding {
     private let resourceRoot: URL
     private let words: Set<String>
     private let directories: [TeacherWordAudioUsage: String]
+    private let fileExtension: String
 
     var bundledWordCount: Int { words.count }
 
@@ -44,13 +47,17 @@ public struct BundledTeacherWordAudioProvider: TeacherWordAudioProviding {
                 TeacherWordAudioUsage.writePrompt.rawValue
             ],
             Self.isSafeDirectory(readHint.directory),
-            Self.isSafeDirectory(writePrompt.directory)
+            Self.isSafeDirectory(writePrompt.directory),
+            let fileExtension = Self.fileExtension(
+                for: manifest.audioFormat?.container
+            )
         else {
             throw BundledTeacherWordAudioProviderError.invalidManifest
         }
 
         self.resourceRoot = resourceRoot
         words = Set(normalizedWords.compactMap { $0 })
+        self.fileExtension = fileExtension
         directories = [
             .readHint: readHint.directory,
             .writePrompt: writePrompt.directory,
@@ -83,7 +90,7 @@ public struct BundledTeacherWordAudioProvider: TeacherWordAudioProviding {
             resourceRoot
             .appendingPathComponent(directory, isDirectory: true)
             .appendingPathComponent(word)
-            .appendingPathExtension("m4a")
+            .appendingPathExtension(fileExtension)
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             throw TeacherWordAudioError.unavailableOfflineClip
         }
@@ -111,12 +118,34 @@ public struct BundledTeacherWordAudioProvider: TeacherWordAudioProviding {
             && !directory.contains("..")
     }
 
+    private static func fileExtension(for container: String?) -> String? {
+        switch container?.lowercased() {
+        case nil, "m4a":
+            "m4a"
+        case "mp3":
+            "mp3"
+        default:
+            nil
+        }
+    }
+
     private struct Manifest: Decodable {
         let words: [String]
         let variants: [String: Variant]
+        let audioFormat: AudioFormat?
+
+        private enum CodingKeys: String, CodingKey {
+            case words
+            case variants
+            case audioFormat = "audio_format"
+        }
     }
 
     private struct Variant: Decodable {
         let directory: String
+    }
+
+    private struct AudioFormat: Decodable {
+        let container: String
     }
 }

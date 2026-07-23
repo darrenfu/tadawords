@@ -24,13 +24,16 @@ public struct ManualWordPoolImportResult: Sendable {
 public struct ManualWordPoolImporter: Sendable {
     private let repository: any WordPoolRepository
     private let parser: ManualWordBatchParser
+    private let audioPreparer: (any TeacherWordAudioPreparing)?
 
     public init(
         repository: any WordPoolRepository,
-        parser: ManualWordBatchParser = ManualWordBatchParser()
+        parser: ManualWordBatchParser = ManualWordBatchParser(),
+        audioPreparer: (any TeacherWordAudioPreparing)? = nil
     ) {
         self.repository = repository
         self.parser = parser
+        self.audioPreparer = audioPreparer
     }
 
     public func importBatch(
@@ -55,6 +58,10 @@ public struct ManualWordPoolImporter: Sendable {
                 positionInBatch: parsedWord.inputPosition
             )
         }
+        // No membership becomes active until its exact teacher clip is either
+        // bundled or atomically cached. A preparation failure leaves the pool
+        // unchanged and is safe for the Parent to retry.
+        try await audioPreparer?.prepare(drafts.map(\.prompt))
         let outcomes = try await repository.upsert(drafts)
 
         var inserted: [WordPoolEntry] = []

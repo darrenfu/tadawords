@@ -21,6 +21,11 @@ content-rights readiness remains **blocked**:
   allowed on 2026-07-14.
 - #33 requires an authorized Pawgoo representative to attest the authorship and
   rights chain for the original visual and editorial content.
+- #74's ElevenLabs replacement remains a non-shipping candidate. The owner
+  confirmed a monthly Creator subscription on 2026-07-23, but the exact voice
+  and pronunciation dictionary still require listening approval, and private
+  account/plan evidence must be retained for the actual generation date before
+  the replacement invalidates the current Cartesia pack evidence.
 
 Do not infer, fabricate, or commit private account evidence to resolve these
 blockers. The Parent-gated, offline Third-Party Notices route from #34 is present
@@ -38,6 +43,7 @@ account and ownership evidence required by #32 and #33.
 | Katie teacher words | 500 manifest words with Read and Write variants: 1,000 AAC-LC M4A files in `Katie-500-v1` | Copied into the `TadaWordsApplePlatform` resource bundle | Manifest SHA-256 `c2909c26c4423d0254b0bfdf996894d6d9420c5c9b7543a12bc78d7d350aa93b`; Cartesia Sonic 3.5; Katie voice; pack `1.1.0`; created 2026-07-14 | Repository metadata says a paid commercial plan was used, but account-level proof is absent. Blocked by #32. |
 | Aurora launch and celebrations | Eight AAC-LC M4A files: launch, five positive transitions, quest complete, and the `ta-da` source | Copied into the same resource bundle | Manifest SHA-256 `4f49d4e97d0113419a78cee8b96cae252dfa9e2df230233151eae76c8bdca31b`; Cartesia Sonic 3.5; Aurora voice; pack `1.1.0`; created 2026-07-14 | Account-level proof is absent. Blocked by #32. |
 | Complete voice pack | 1,008 M4A files | Bundled offline | Stable relative-path/checksum digest `d8556c3035e6bce1947ce094531b64164a88433d0f58ee54ca03fd81a02fab86` | No runtime teacher-audio endpoint is configured in the production plist. Rights remain blocked by #32. |
+| ElevenLabs teacher candidates | 98 MP3 files across five `QAArtifacts/TeacherAudio-ElevenLabs-*` directories plus pronunciation-alias evaluation: seeded and exploratory Bella/Jessica Read/Write clips for the nine acceptance words and listening montages | QA-only; not copied into the app target | ElevenLabs Creator subscription owner-confirmed 2026-07-23; candidate manifests record exact provider/model/voice/seed/speed/playback metadata. No provider credential is present. The Bella seeded alias candidate passes 18/18 local SpeechTranscriber checks and exact format/tail inspection | Human approval of Bella and the proposed `a → ay`, `i → eye`, `come → kum` dictionary remains open. Failed exploratory candidates are QA evidence, not fallback voices. Candidate generation is not shipping-rights or physical listening evidence; replace this row with the exact 1,000-clip manifest/digest if #74 is approved. |
 | World music and functional effects | `ProceduralAudioDesign.swift` and `ProceduralAudioRenderer.swift` synthesize oscillator/noise output | Compiled code; generated PCM exists only at runtime | `DesignAssets/Audio/README.md` documents the method and absence of third-party samples | Ownership confirmation remains part of #33. |
 | Apple speech, handwriting, OCR, and recognition | Operating-system frameworks and services | Uses platform APIs; no Apple voice/model file is bundled | Apple platform APIs | Not represented as Pawgoo-owned recordings or models. |
 | Twemoji picture hints | 74 unmodified PNGs, `manifest.json`, `README.md`, and `LICENSE-GRAPHICS.txt` under `PictureHints/Twemoji-17.0.3` | All 77 files are copied into the `TadaWordsApplePlatform` resource bundle; the app reads them offline and contains no picture-hint CDN path | `jdecked/twemoji` 17.0.3, commit `b6b55fef1e8636b540a6d016a4729ca8cdf2e60b`, CC BY 4.0; manifest SHA-256 `e2232045781f9984879eedcee3ae4cd410aa506daa77710e53f06759a29f7a27`; license SHA-256 `8ae9438818c26e4873b91d8c6ad620526c011e27e125677f13031eda903f007c`; complete-pack digest `fbe89ce4496e0f50a59f93b3dc55f2e3e24eb1bcd463597c218a40e5f19d7a1a` | Source/license evidence is present. Parent Home → App & Family → Third-Party Notices identifies the source, version, unmodified quantity, copyright attribution, CC BY 4.0 license, and offline availability. |
@@ -79,6 +85,8 @@ account and ownership evidence required by #32 and #33.
 | Repository third-party notice | `THIRD_PARTY_NOTICES.md` |
 | Twemoji manifest, provenance, and full license | `Sources/TadaWordsApplePlatform/Resources/PictureHints/Twemoji-17.0.3/` |
 | Cartesia pack metadata | `Sources/TadaWordsApplePlatform/Resources/Audio/**/manifest.json` |
+| ElevenLabs candidate metadata and listening samples | `QAArtifacts/TeacherAudio-ElevenLabs-*` and `QAArtifacts/TeacherAudio-Pronunciation-Alias-Evaluation/` |
+| ElevenLabs replacement generator, inspector, and proposed dictionary | `Tools/Audio/` |
 | Generated/procedural audio notes | `DesignAssets/Audio/README.md` |
 | Preset source/method record | `Sources/TadaWordsContent/Resources/PresetWords.json` and `Docs/TADA_WORDS_PRESET_CATALOG.md` |
 | Child fixture license/checksum | `Tests/Fixtures/ChildSpeech/LICENSE_SOURCE.md` and `SHA256SUMS` |

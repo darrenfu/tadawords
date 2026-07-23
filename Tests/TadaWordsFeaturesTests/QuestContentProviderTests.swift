@@ -6,6 +6,41 @@ import XCTest
 @testable import TadaWordsFeatures
 
 final class QuestContentProviderTests: XCTestCase {
+    func testUnpreparedSyncedWordCannotEnterChildQuest() async throws {
+        let fixture = ProviderFixture()
+        _ = try await ManualWordPoolImporter(
+            repository: fixture.wordPool
+        ).importBatch(
+            "cat",
+            profileID: fixture.profile.id,
+            learningMode: .read,
+            addedAt: fixture.clock.now
+        )
+        let provider = RepositoryBackedQuestContentProvider(
+            wordPoolRepository: fixture.wordPool,
+            wordProgressRepository: fixture.records,
+            practiceSettingsRepository: fixture.settings,
+            attemptEventRepository: fixture.records,
+            teacherAudioPreparer: UnpreparedAudioGate(),
+            deviceClass: .tablet,
+            clock: fixture.clock,
+            timeZone: TestFixture.utc
+        )
+
+        do {
+            _ = try await provider.prepareQuest(
+                for: .read,
+                profile: fixture.profile
+            )
+            XCTFail("Expected the unprepared word to be blocked")
+        } catch {
+            XCTAssertEqual(
+                error as? TeacherWordAudioError,
+                .unavailableOfflineClip
+            )
+        }
+    }
+
     func testGuardianEnteredPoolBecomesDefaultOrderedDailyNewWords() async throws {
         let fixture = ProviderFixture()
         _ = try await ManualWordPoolImporter(repository: fixture.wordPool).importBatch(
@@ -680,6 +715,17 @@ final class QuestContentProviderTests: XCTestCase {
         XCTAssertEqual(firstPrepared.emergencyAfter, 60)
         XCTAssertEqual(secondPrepared.orderedPrompts.count, 3)
         XCTAssertEqual(secondPrepared.emergencyAfter, 120)
+    }
+}
+
+private struct UnpreparedAudioGate: TeacherWordAudioPreparing {
+    func prepare(_ prompts: [WordPrompt]) async throws {
+        _ = prompts
+    }
+
+    func requirePrepared(_ prompts: [WordPrompt]) async throws {
+        _ = prompts
+        throw TeacherWordAudioError.unavailableOfflineClip
     }
 }
 

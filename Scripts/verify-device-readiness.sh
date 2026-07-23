@@ -109,6 +109,9 @@ test "$(plutil -extract aps-environment raw -o - "$ENTITLEMENTS" 2>/dev/null)" \
 test "$(plutil -extract 'com\.apple\.developer\.icloud-container-environment' raw -o - "$ENTITLEMENTS" 2>/dev/null)" \
     = '$(ICLOUD_CONTAINER_ENVIRONMENT)' \
     || fail "production CloudKit entitlement must bind to ICLOUD_CONTAINER_ENVIRONMENT"
+test "$(plutil -extract 'com\.apple\.developer\.devicecheck\.appattest-environment' raw -o - "$ENTITLEMENTS" 2>/dev/null)" \
+    = '$(APP_ATTEST_ENVIRONMENT)' \
+    || fail "App Attest entitlement must bind to APP_ATTEST_ENVIRONMENT"
 test "$(plutil -extract 'keychain-access-groups.0' raw -o - "$ENTITLEMENTS" 2>/dev/null)" \
     = '$(AppIdentifierPrefix)app.tadawords.app' \
     || fail "normal app keychain access must stay bound to the PawGoo app identifier"
@@ -193,12 +196,17 @@ for configuration in Debug Release; do
         || fail "normal $configuration must be pinned to PawGoo"
     if test "$configuration" = Debug; then
         EXPECTED_ICLOUD_ENVIRONMENT=Development
+        EXPECTED_APP_ATTEST_ENVIRONMENT=development
     else
         EXPECTED_ICLOUD_ENVIRONMENT=Production
+        EXPECTED_APP_ATTEST_ENVIRONMENT=production
     fi
     printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
         | grep -q "ICLOUD_CONTAINER_ENVIRONMENT = $EXPECTED_ICLOUD_ENVIRONMENT" \
         || fail "normal $configuration CloudKit environment is incorrect"
+    printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
+        | grep -q "APP_ATTEST_ENVIRONMENT = $EXPECTED_APP_ATTEST_ENVIRONMENT" \
+        || fail "normal $configuration App Attest environment is incorrect"
 
     UI_TEST_BUILD_SETTINGS=$(
         xcodebuild \
@@ -239,6 +247,10 @@ fi
 if printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
     | grep -Eq '^[[:space:]]*ICLOUD_CONTAINER_ENVIRONMENT = [^[:space:]]+'; then
     fail "LocalQA must not inherit a CloudKit environment build setting"
+fi
+if printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
+    | grep -Eq '^[[:space:]]*APP_ATTEST_ENVIRONMENT = [^[:space:]]+'; then
+    fail "LocalQA must not inherit an App Attest environment build setting"
 fi
 printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
     | grep -q 'PRODUCT_NAME = Tada Words QA' \

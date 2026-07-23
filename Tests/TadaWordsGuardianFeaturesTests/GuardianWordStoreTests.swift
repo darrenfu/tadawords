@@ -6,6 +6,40 @@ import XCTest
 @testable import TadaWordsGuardianFeatures
 
 final class GuardianWordStoreTests: XCTestCase {
+    @MainActor
+    func testTeacherAudioImportFailuresStayParentRecoverableAndPrivacySafe() {
+        let cases: [(Error, String)] = [
+            (
+                TeacherWordAudioError.serverRejected(statusCode: 422),
+                "approved teacher-audio vocabulary"
+            ),
+            (
+                TeacherWordAudioError.serverRejected(statusCode: 429),
+                "temporarily busy"
+            ),
+            (
+                TeacherWordAudioError.appAttestUnavailable,
+                "could not verify"
+            ),
+            (
+                TeacherWordAudioError.unconfiguredEndpoint,
+                "not available in this build"
+            ),
+            (
+                URLError(.notConnectedToInternet),
+                "Connect to the internet"
+            ),
+        ]
+
+        for (error, expectedCopy) in cases {
+            let message = GuardianDashboardViewModel.wordImportErrorMessage(error)
+            XCTAssertTrue(message.contains(expectedCopy))
+            XCTAssertFalse(message.localizedCaseInsensitiveContains("profile"))
+            XCTAssertFalse(message.localizedCaseInsensitiveContains("child"))
+            XCTAssertFalse(message.contains("Mia"))
+        }
+    }
+
     func testKeyboardDismissGestureNeverOwnsControlTouchesExclusively() {
         XCTAssertFalse(GuardianKeyboardDismissGesturePolicy.cancelsControlTouches)
         XCTAssertFalse(GuardianKeyboardDismissGesturePolicy.delaysTouchDelivery)

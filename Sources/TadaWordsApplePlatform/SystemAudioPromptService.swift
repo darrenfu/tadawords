@@ -32,13 +32,8 @@ public actor SystemAudioPromptService: AudioPromptService {
         _ = profileID
         guard await audioExperienceService.prepareForVoicePrompt() else { return }
         do {
-            let spokenText = prompt.audioCue.spokenContext ?? prompt.displayText
-            let role: SpokenAudioRole =
-                prompt.learningMode == .write ? .writeLearning : .learning
-            try await playTeacherAudioOrFallback(
-                request: TeacherWordAudioRequest(prompt: prompt),
-                fallbackText: spokenText,
-                fallbackRole: role
+            try await playTeacherAudio(
+                request: TeacherWordAudioRequest(prompt: prompt)
             )
             await audioExperienceService.finishVoicePrompt()
         } catch {
@@ -64,28 +59,14 @@ public actor SystemAudioPromptService: AudioPromptService {
         }
     }
 
-    private func playTeacherAudioOrFallback(
-        request: TeacherWordAudioRequest,
-        fallbackText: String,
-        fallbackRole: SpokenAudioRole
+    private func playTeacherAudio(
+        request: TeacherWordAudioRequest
     ) async throws {
-        if let teacherWordAudioProvider {
-            do {
-                let clip = try await teacherWordAudioProvider.audio(for: request)
-                try await playAudioClip(clip)
-                return
-            } catch {
-                if error is CancellationError {
-                    throw error
-                }
-                // A missing endpoint, offline device, or remote playback
-                // failure must not block a child's quest. This is explicitly
-                // the single Apple system-voice fallback, never a direct
-                // runtime vendor call from the child's device.
-            }
+        guard let teacherWordAudioProvider else {
+            throw TeacherWordAudioError.unavailableOfflineClip
         }
-
-        try await playPreparedText(fallbackText, role: fallbackRole)
+        let clip = try await teacherWordAudioProvider.audio(for: request)
+        try await playAudioClip(clip)
     }
 
     private func playPreparedText(
@@ -130,6 +111,8 @@ public actor SystemAudioPromptService: AudioPromptService {
 
         let player = try AVAudioPlayer(data: clip.audioData)
         player.delegate = audioPlaybackDelegate
+        player.enableRate = true
+        player.rate = Float(TeacherWordAudioRequest.clientPlaybackRate)
         player.prepareToPlay()
         audioPlayer = player
         let cancellationToken = SendableAudioPlayer(player)
