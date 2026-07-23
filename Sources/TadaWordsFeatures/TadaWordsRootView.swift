@@ -140,6 +140,7 @@ public struct TadaWordsRootView: View {
         practiceSettingsRepository: any PracticeSettingsRepository,
         dailyQuestRepository: any DailyQuestRepository,
         childSessionRepository: any ChildSessionRepository,
+        profileMutationGate: ProfileScopedMutationGate? = nil,
         initialProfileID: ProfileID? = nil,
         clock: any AppClock = SystemAppClock(),
         timeZone: TimeZone = .current,
@@ -202,6 +203,7 @@ public struct TadaWordsRootView: View {
                     clock: clock
                 ),
                 profileRepository: profileRepository,
+                profileMutationGate: profileMutationGate,
                 onLearningDataChanged: onLearningDataChanged
             )
         )

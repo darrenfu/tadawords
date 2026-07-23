@@ -328,45 +328,69 @@ public actor LocalJSONLearningRecordRepository: ProfileLearningRecordRepository,
     public func correctionRoute(
         for attemptID: AttemptID
     ) async throws -> ProfileID? {
-        try loadedStorage().correctionRoute(for: attemptID)
+        try await withAllProfilesCommittedRead(mutationGate) {
+            try loadedStorage().correctionRoute(for: attemptID)
+        }
     }
 
     public func corrections(
         routedTo profileID: ProfileID
     ) async throws -> [AttemptCorrectionEvent] {
-        try loadedStorage().corrections(routedTo: profileID)
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: profileID,
+            allowingTerminal: true
+        ) {
+            try loadedStorage().corrections(routedTo: profileID)
+        }
     }
 
     public func sourceRecord(
         for correctionID: AttemptCorrectionID
     ) async throws -> FamilySyncRecord? {
-        try loadedStorage().sourceRecord(for: correctionID)
+        try await withAllProfilesCommittedRead(mutationGate) {
+            try loadedStorage().sourceRecord(for: correctionID)
+        }
     }
 
     public func attempts(
         for profileID: ProfileID,
         wordPromptID: WordPromptID?
     ) async throws -> [AttemptEvent] {
-        try loadedStorage().attempts(
+        try await withProfileScopedMutationLease(
+            mutationGate,
             for: profileID,
-            wordPromptID: wordPromptID
-        )
+            allowingTerminal: true
+        ) {
+            try loadedStorage().attempts(
+                for: profileID,
+                wordPromptID: wordPromptID
+            )
+        }
     }
 
     public func corrections(
         for attemptID: AttemptID
     ) async throws -> [AttemptCorrectionEvent] {
-        try loadedStorage().corrections(for: attemptID)
+        try await withAllProfilesCommittedRead(mutationGate) {
+            try loadedStorage().corrections(for: attemptID)
+        }
     }
 
     public func progress(
         for profileID: ProfileID,
         wordPromptID: WordPromptID
     ) async throws -> WordProgress? {
-        try loadedStorage().progress(
+        try await withProfileScopedMutationLease(
+            mutationGate,
             for: profileID,
-            wordPromptID: wordPromptID
-        )
+            allowingTerminal: true
+        ) {
+            try loadedStorage().progress(
+                for: profileID,
+                wordPromptID: wordPromptID
+            )
+        }
     }
 
     /// Mode-explicit convenience for composition code that already owns a
@@ -376,11 +400,17 @@ public actor LocalJSONLearningRecordRepository: ProfileLearningRecordRepository,
         wordPromptID: WordPromptID,
         learningMode: LearningMode
     ) async throws -> WordProgress? {
-        try loadedStorage().progress(
+        try await withProfileScopedMutationLease(
+            mutationGate,
             for: profileID,
-            wordPromptID: wordPromptID,
-            learningMode: learningMode
-        )
+            allowingTerminal: true
+        ) {
+            try loadedStorage().progress(
+                for: profileID,
+                wordPromptID: wordPromptID,
+                learningMode: learningMode
+            )
+        }
     }
 
     public func save(_ progress: WordProgress) async throws {
@@ -395,7 +425,13 @@ public actor LocalJSONLearningRecordRepository: ProfileLearningRecordRepository,
     public func allProgress(
         for profileID: ProfileID
     ) async throws -> [WordProgress] {
-        try loadedStorage().allProgress(for: profileID)
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: profileID,
+            allowingTerminal: true
+        ) {
+            try loadedStorage().allProgress(for: profileID)
+        }
     }
 
     public func deleteLearningRecords(for profileID: ProfileID) async throws {
@@ -424,7 +460,10 @@ public actor LocalJSONLearningRecordRepository: ProfileLearningRecordRepository,
         }
         let ids =
             profileIDs
-            .filter { ProfileScopedMutationLeaseContext.profileID != $0 }
+            .filter {
+                !ProfileScopedMutationLeaseContext.holdsAllProfiles
+                    && ProfileScopedMutationLeaseContext.profileID != $0
+            }
             .sorted { $0.description < $1.description }
         var acquiredIDs: [ProfileID] = []
         do {
@@ -445,6 +484,7 @@ public actor LocalJSONLearningRecordRepository: ProfileLearningRecordRepository,
         _ operation: () throws -> Void
     ) async throws {
         guard let profileID, let mutationGate,
+            !ProfileScopedMutationLeaseContext.holdsAllProfiles,
             ProfileScopedMutationLeaseContext.profileID != profileID
         else {
             try operation()

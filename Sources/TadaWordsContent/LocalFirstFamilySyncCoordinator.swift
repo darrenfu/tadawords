@@ -2,6 +2,10 @@ import Foundation
 import TadaWordsDomain
 
 public protocol FamilySyncRecordStore: Sendable {
+    /// Replays exact payload bytes accepted by an earlier interrupted local
+    /// apply before any fresh fingerprint or winner calculation occurs.
+    func recoverPendingApplies() async throws
+
     func profileIDsForSync() async throws -> [ProfileID]
 
     /// Returns local identities that are still inside a durable creation or
@@ -31,6 +35,8 @@ public protocol FamilySyncRecordStore: Sendable {
 }
 
 extension FamilySyncRecordStore {
+    public func recoverPendingApplies() async throws {}
+
     public func profileIDsExcludedFromSync() async throws -> Set<ProfileID> {
         []
     }
@@ -313,6 +319,7 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
         let profileIDs: [ProfileID]
         let versionedRecords: [FamilySyncRecord]
         do {
+            try await store.recoverPendingApplies()
             let excludedProfileIDs = try await store.profileIDsExcludedFromSync()
             profileIDs = Array(
                 Set(try await store.profileIDsForSync())

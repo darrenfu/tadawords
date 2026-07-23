@@ -78,7 +78,13 @@ public actor LocalJSONPracticeSettingsRepository: PracticeSettingsRepository {
     public func settings(
         for profileID: ProfileID
     ) async throws -> ProfilePracticeSettings? {
-        try loadedStorage().settings(for: profileID)
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: profileID,
+            allowingTerminal: true
+        ) {
+            try loadedStorage().settings(for: profileID)
+        }
     }
 
     public func save(_ settings: ProfilePracticeSettings) async throws {
@@ -104,6 +110,7 @@ public actor LocalJSONPracticeSettingsRepository: PracticeSettingsRepository {
         _ operation: () throws -> Void
     ) async throws {
         guard let mutationGate,
+            !ProfileScopedMutationLeaseContext.holdsAllProfiles,
             ProfileScopedMutationLeaseContext.profileID != profileID
         else {
             try operation()
