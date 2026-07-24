@@ -69,6 +69,10 @@ final class RemoteTeacherWordAudioProviderTests: XCTestCase {
 
         XCTAssertEqual(clip.audioData, audioData)
         XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(
+            request.url?.absoluteString,
+            "https://audio.tadawords.example/v1/teacher-audio"
+        )
         XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "audio/mpeg")
         XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
         XCTAssertNil(request.value(forHTTPHeaderField: "xi-api-key"))

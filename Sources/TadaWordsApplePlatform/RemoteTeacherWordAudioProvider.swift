@@ -110,7 +110,17 @@ public struct RemoteTeacherWordAudioProvider: TeacherWordAudioProviding {
         let authorized = try await authorizer.authorize { challenge in
             try Self.canonicalBody(request: request, challenge: challenge)
         }
-        var urlRequest = URLRequest(url: endpoint)
+        var components = URLComponents(
+            url: endpoint,
+            resolvingAgainstBaseURL: false
+        )
+        components?.path = "/v1/teacher-audio"
+        components?.query = nil
+        components?.fragment = nil
+        guard let requestURL = components?.url else {
+            throw TeacherWordAudioError.invalidEndpoint
+        }
+        var urlRequest = URLRequest(url: requestURL)
         urlRequest.httpMethod = "POST"
         urlRequest.timeoutInterval = 15
         urlRequest.cachePolicy = .reloadIgnoringLocalCacheData
