@@ -78,8 +78,11 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
 
         XCTAssertEqual(model.profileErasurePresentation?.state, .complete)
         let synchronizeCallCount = await coordinator.synchronizeCallCount
+        let retryProfileErasuresCallCount =
+            await coordinator.retryProfileErasuresCallCount
         let lifecycleReadCount = await coordinator.lifecycleReadCount
-        XCTAssertEqual(synchronizeCallCount, 1)
+        XCTAssertEqual(synchronizeCallCount, 0)
+        XCTAssertEqual(retryProfileErasuresCallCount, 1)
         XCTAssertGreaterThanOrEqual(lifecycleReadCount, 2)
     }
 
@@ -580,6 +583,7 @@ private actor GuardianFamilySyncCoordinatorStub: FamilySyncCoordinating {
     private var lifecycles: [ProfileErasureLifecycle]
     private var lifecycleReadShouldFail: Bool
     private(set) var synchronizeCallCount = 0
+    private(set) var retryProfileErasuresCallCount = 0
     private(set) var lifecycleReadCount = 0
 
     init(
@@ -603,6 +607,11 @@ private actor GuardianFamilySyncCoordinatorStub: FamilySyncCoordinating {
 
     func synchronize() async -> FamilySyncStatus {
         synchronizeCallCount += 1
+        return .synced(at: Date(timeIntervalSince1970: 1_735_689_600))
+    }
+
+    func retryProfileErasures() async -> FamilySyncStatus {
+        retryProfileErasuresCallCount += 1
         return .synced(at: Date(timeIntervalSince1970: 1_735_689_600))
     }
 
