@@ -148,6 +148,63 @@ final class ProfileErasureLifecycleCoordinatorTests: XCTestCase {
         XCTAssertEqual(sendCount, 0)
     }
 
+    func testManualRetryBypassesBackoffForNeedsAttentionDeletion() async throws {
+        let harness = try await ProfileErasureCoordinatorHarness.make(
+            sendBehavior: .failed(
+                route: .owner,
+                category: .unknown,
+                retryAfter: 300
+            )
+        )
+        defer { harness.remove() }
+
+        let failedStatus = await harness.coordinator.synchronize()
+        guard case .failed = failedStatus else {
+            return XCTFail("Expected needs-attention failure, got \(failedStatus)")
+        }
+        let failedLifecycle = try await requiredLifecycle(in: harness)
+        XCTAssertEqual(failedLifecycle.state, .needsAttention)
+
+        let recoveryTransport = ProfileErasureTestTransport(
+            availability: .available,
+            sendBehavior: .completed(route: .owner)
+        )
+        let retryTime = harness.now.addingTimeInterval(10)
+        let restarted = LocalFirstFamilySyncCoordinator(
+            store: harness.store,
+            transport: recoveryTransport,
+            preferenceRepository: InMemoryFamilySyncPreferenceRepository(
+                isEnabled: true
+            ),
+            journalRepository: LocalJSONFamilySyncJournalRepository(
+                snapshotURL: harness.journalURL
+            ),
+            profileDeletionRepository:
+                LocalJSONProfileDeletionTombstoneRepository(
+                    snapshotURL: harness.tombstoneURL
+                ),
+            deviceID: "manual-retry-device",
+            clock: ProfileErasureFixedClock(now: retryTime)
+        )
+
+        let ordinaryStatus = await restarted.synchronize()
+        guard case .pendingOffline = ordinaryStatus else {
+            return XCTFail(
+                "Ordinary sync should respect durable backoff, got \(ordinaryStatus)"
+            )
+        }
+        let sendCountBeforeRetry = await recoveryTransport.sendCount()
+        XCTAssertEqual(sendCountBeforeRetry, 0)
+
+        let retryStatus = await restarted.retryProfileErasures()
+        XCTAssertEqual(retryStatus, .synced(at: retryTime))
+        let sendCountAfterRetry = await recoveryTransport.sendCount()
+        XCTAssertEqual(sendCountAfterRetry, 1)
+        let recovered = try await restarted.profileErasureLifecycles()
+        XCTAssertEqual(recovered.first?.state, .complete)
+        XCTAssertEqual(recovered.first?.route, .owner)
+    }
+
     func testRestartRepairsRouteResolvedAcknowledgementAfterCrashWindow()
         async throws
     {
