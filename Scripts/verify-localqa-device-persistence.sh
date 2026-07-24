@@ -41,6 +41,57 @@ TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/tadawords-persistence-preflight.XXXXXX")
 trap 'rm -rf "$TEMP_ROOT"' EXIT
 chmod 700 "$TEMP_ROOT"
 
+if ! xcrun devicectl device info apps \
+    --device "$DEVICE_ID" \
+    --json-output "$TEMP_ROOT/apps.json" \
+    --log-output "$TEMP_ROOT/apps.log" \
+    --timeout 120 \
+    --quiet
+then
+    fail "could not inspect installed apps; wake/unlock the device and retry"
+fi
+
+if python3 - "$TEMP_ROOT/apps.json" "$BUNDLE_ID" <<'PY'
+import json
+import pathlib
+import sys
+
+payload_path = pathlib.Path(sys.argv[1])
+bundle_id = sys.argv[2]
+
+try:
+    with payload_path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    apps = payload["result"]["apps"]
+except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError):
+    print("FAIL: installed-app inventory is unreadable", file=sys.stderr)
+    raise SystemExit(1)
+
+if not isinstance(apps, list):
+    print("FAIL: installed-app inventory has an invalid app list", file=sys.stderr)
+    raise SystemExit(1)
+
+if any(
+    isinstance(app, dict) and app.get("bundleIdentifier") == bundle_id
+    for app in apps
+):
+    raise SystemExit(0)
+
+print(
+    f"PASS: {bundle_id} is not installed; this is a data-preserving first install"
+)
+raise SystemExit(3)
+PY
+then
+    :
+else
+    APP_INVENTORY_STATUS=$?
+    if [[ "$APP_INVENTORY_STATUS" -eq 3 ]]; then
+        exit 0
+    fi
+    fail "could not verify whether the LocalQA bundle is already installed"
+fi
+
 if ! xcrun devicectl device copy from \
     --device "$DEVICE_ID" \
     --domain-type appDataContainer \

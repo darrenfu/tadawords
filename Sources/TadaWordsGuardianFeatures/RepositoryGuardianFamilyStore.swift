@@ -518,12 +518,9 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         guard !requiresAge || draft.ageYears != nil else {
             throw GuardianFamilyStoreError.invalidAge
         }
-        let ageIsValid =
-            draft.ageYears.map {
-                requiresAge
-                    ? ProfileAgePolicy.isSupported($0)
-                    : ProfileAgePolicy.isDurable($0)
-            } ?? true
+        // Durable decoding still accepts historical snapshots outside the
+        // product range. New create/edit writes may only set ages 3 through 8.
+        let ageIsValid = draft.ageYears.map(ProfileAgePolicy.isSupported) ?? true
         guard ageIsValid else {
             throw GuardianFamilyStoreError.invalidAge
         }

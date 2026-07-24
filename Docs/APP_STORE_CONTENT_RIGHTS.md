@@ -13,41 +13,42 @@ release-candidate archive after every content-bearing merge.
 
 ## Release conclusion
 
-The source and archive boundary is mechanically verifiable, but App Store
-content-rights readiness remains **blocked**:
+The source and archive boundary is mechanically verifiable. The release owner
+confirmed the Pawgoo authorship and rights chain on 2026-07-23:
 
 - #32's Cartesia account/tier evidence is preserved for the enumerated current
   Katie/Aurora pack; the exact release candidate must reconcile its actual
   retained audio assets and provider terms before this record is relied on.
-- #33 requires an authorized Pawgoo representative to attest the authorship and
-  rights chain for the original visual and editorial content.
-- #74's ElevenLabs replacement remains a non-shipping candidate. The owner
-  confirmed a monthly Creator subscription on 2026-07-23, but the exact voice
-  and pronunciation dictionary still require listening approval, and private
-  account/plan evidence must be retained for the actual generation date before
-  the replacement invalidates the current Cartesia pack evidence.
+- The authorized Pawgoo representative confirmed that the original icon and
+  marks, SwiftUI worlds and mascots, reward names/icons, procedural
+  music/effects, preset editorial selection, and OpenAI-generated zodiac
+  avatars were created or generated under Pawgoo authorization and that Pawgoo
+  LLC is authorized to distribute them.
+- Licensed Twemoji, Cartesia output, Apple platform resources, and test-only
+  fixtures remain governed by their separately recorded terms.
 
-Do not infer, fabricate, or commit private account evidence to resolve these
-blockers. The Parent-gated, offline Third-Party Notices route from #34 is present
-in this baseline and is mechanically checked below; it does not replace the
-ownership evidence still required by #33.
+The private Pawgoo rights evidence index remains outside Git; its recorded
+SHA-256 is
+`85a98c0275800457e53d8607312650a6621afd3ce2e2f165c0c6fa2ab47ee73f`.
+The Parent-gated, offline Third-Party Notices route from #34 remains the
+in-product attribution surface.
 
 ## Current inventory
 
 | Content class | Concrete source and quantity | Production `.app` status | Evidence and permission basis | Attribution / status |
 | --- | --- | --- | --- | --- |
-| Tada Words app icon and mark | `AppIcon-1024.png`; `TadaWordsAppIcon.svg`; duplicate design source under `DesignAssets` | Asset catalogs compile the production copies into app-icon output and `Assets.car`; design sources do not ship | SHA-256: PNG `ce1782b295901de1a7cc82f6f61cfc5ffbebf9bc0745256a573058bd1281e637`; SVG `e47bfb19efa22e38db1b2a796bb47bb87993fc35b5ae4e6ba6624a9ec5e7b816` | No third-party source is recorded. Rights-chain confirmation is blocked by #33. |
-| Pawgoo mark | `Apps/TadaWordsApp/Assets.xcassets/PawgooMark.imageset/pawgoo-mark.svg` | Compiled into `Assets.car` | SHA-256 `2653ed92cac054f5df24d1726a90cd8e147b7e784cd98653c26f99d08c05f6c9` | Rights-chain confirmation is blocked by #33. |
-| World scenes, mascots, avatars, rewards | SwiftUI `Shape`, `Path`, gradients, colors, SF Symbols, and local catalogs under `Sources` | Ships as compiled code; there is no world raster-art pack | Repository-authored source plus Apple platform symbols | Pawgoo ownership confirmation is blocked by #33. SF Symbols are platform resources, not redistributed custom files. |
+| Tada Words app icon and mark | `AppIcon-1024.png`; `TadaWordsAppIcon.svg`; duplicate design source under `DesignAssets` | Asset catalogs compile the production copies into app-icon output and `Assets.car`; design sources do not ship | SHA-256: PNG `ce1782b295901de1a7cc82f6f61cfc5ffbebf9bc0745256a573058bd1281e637`; SVG `e47bfb19efa22e38db1b2a796bb47bb87993fc35b5ae4e6ba6624a9ec5e7b816` | Pawgoo ownership confirmed by the 2026-07-23 owner attestation. |
+| Pawgoo mark | `Apps/TadaWordsApp/Assets.xcassets/PawgooMark.imageset/pawgoo-mark.svg` | Compiled into `Assets.car` | SHA-256 `2653ed92cac054f5df24d1726a90cd8e147b7e784cd98653c26f99d08c05f6c9` | Pawgoo ownership confirmed by the 2026-07-23 owner attestation. |
+| World scenes, mascots, avatars, rewards | SwiftUI `Shape`, `Path`, gradients, colors, SF Symbols, and local catalogs under `Sources` | Ships as compiled code; there is no world raster-art pack | Repository-authored source plus Apple platform symbols | Pawgoo ownership confirmed by the 2026-07-23 owner attestation. SF Symbols are platform resources, not redistributed custom files. |
 | Fonts and text | SwiftUI system font APIs | No `.ttf` or `.otf` file ships | Apple system font APIs | Re-audit if a custom font is introduced. |
 | Bella teacher words | 500 manifest words with Read and Write variants: 1,000 MP3 files in `ElevenLabs-Teacher-500-v1` | Copied into the `TadaWordsApplePlatform` resource bundle | Manifest SHA-256 `8aacd3073ea2a9d99cd99b1f64eb35e330b64685a91e29782cf32a53b497ab18`; stable MP3 digest `b843da5702521e2e40b5ae6e990a079cc92c69175236ba125128d5cd405055bc`; ElevenLabs Multilingual v2; Bella voice `hpp4J3VqNfWAUOO0d1Us`; seed `20260725`; approved dictionary/version; pack `2.0.0`; full 1,000-clip inspection and 18/18 representative SpeechTranscriber matrix pass | ElevenLabs Creator subscription and Bella selection were owner-confirmed 2026-07-23. Preserve the subscription evidence with the release record. Physical-device listening remains mandatory. |
 | Aurora launch and celebrations | Eight AAC-LC M4A files: launch, five positive transitions, quest complete, and the `ta-da` source | Copied into the same resource bundle | Manifest SHA-256 `4f49d4e97d0113419a78cee8b96cae252dfa9e2df230233151eae76c8bdca31b`; Cartesia Sonic 3.5; Aurora voice; pack `1.1.0`; created 2026-07-14 | Private evidence records Cartesia Pro entitlement during generation; see #32 pointer below. It applies only while these exact assets remain in the release candidate. |
 | Complete voice pack | 1,000 Bella MP3 teacher clips plus eight Aurora AAC-LC M4A accents | Bundled offline | Stable relative-path/checksum digest `44b85c73a2da092e0634fb71792496b947245c76b55638d925de3855869cc6f4` | No runtime teacher-audio endpoint is configured in the production plist until the PawGoo production deployment passes. |
 | ElevenLabs teacher QA artifacts | 98 MP3 files across five `QAArtifacts/TeacherAudio-ElevenLabs-*` directories plus pronunciation-alias evaluation: seeded and exploratory Bella/Jessica Read/Write clips for the nine acceptance words and listening montages | QA-only; not copied into the app target | Candidate manifests record exact provider/model/voice/seed/speed/playback metadata. No provider credential is present. The approved shipping pack is recorded separately above | Failed exploratory candidates remain QA evidence and are never fallback voices. |
-| World music and functional effects | `ProceduralAudioDesign.swift` and `ProceduralAudioRenderer.swift` synthesize oscillator/noise output | Compiled code; generated PCM exists only at runtime | `DesignAssets/Audio/README.md` documents the method and absence of third-party samples | Ownership confirmation remains part of #33. |
+| World music and functional effects | `ProceduralAudioDesign.swift` and `ProceduralAudioRenderer.swift` synthesize oscillator/noise output | Compiled code; generated PCM exists only at runtime | `DesignAssets/Audio/README.md` documents the method and absence of third-party samples | Pawgoo ownership confirmed by the 2026-07-23 owner attestation. |
 | Apple speech, handwriting, OCR, and recognition | Operating-system frameworks and services | Uses platform APIs; no Apple voice/model file is bundled | Apple platform APIs | Not represented as Pawgoo-owned recordings or models. |
 | Twemoji picture hints | 74 unmodified PNGs, `manifest.json`, `README.md`, and `LICENSE-GRAPHICS.txt` under `PictureHints/Twemoji-17.0.3` | All 77 files are copied into the `TadaWordsApplePlatform` resource bundle; the app reads them offline and contains no picture-hint CDN path | `jdecked/twemoji` 17.0.3, commit `b6b55fef1e8636b540a6d016a4729ca8cdf2e60b`, CC BY 4.0; manifest SHA-256 `e2232045781f9984879eedcee3ae4cd410aa506daa77710e53f06759a29f7a27`; license SHA-256 `8ae9438818c26e4873b91d8c6ad620526c011e27e125677f13031eda903f007c`; complete-pack digest `fbe89ce4496e0f50a59f93b3dc55f2e3e24eb1bcd463597c218a40e5f19d7a1a` | Source/license evidence is present. Parent Home → App & Family → Third-Party Notices identifies the source, version, unmodified quantity, copyright attribution, CC BY 4.0 license, and offline availability. |
-| Preset word catalog | Five roots, 34 leaf presets, 1,365 references, 1,166 normalized unique words, and seven method references | `PresetWords.json` is processed into the `TadaWordsContent` resource bundle | SHA-256 `f5b0a273a816d97de265f82f8a16d56bc45cbc2be19d585dfda05449827e3fd0`; source/method notes are in the JSON and `Docs/TADA_WORDS_PRESET_CATALOG.md` | Editorial ownership confirmation is blocked by #33. Do not describe the catalog as a copied branded list. |
+| Preset word catalog | Five roots, 34 leaf presets, 1,365 references, 1,166 normalized unique words, and seven method references | `PresetWords.json` is processed into the `TadaWordsContent` resource bundle | SHA-256 `f5b0a273a816d97de265f82f8a16d56bc45cbc2be19d585dfda05449827e3fd0`; source/method notes are in the JSON and `Docs/TADA_WORDS_PRESET_CATALOG.md` | Editorial ownership confirmed by the 2026-07-23 owner attestation. Do not describe the catalog as a copied branded list. |
 | Persistence compatibility table | `Apps/TadaWordsApp/PersistenceSchemaCompatibility.json` | Copied to the application root to declare supported local-store schema versions | SHA-256 `51f579dccf3d44c5b03176cbb6abc975e983b547f7be205867f1a65df8156676`; repository-authored runtime configuration | It contains schema names and integer versions, not user or third-party content. |
 | Family-provided photos and word-sheet images | Parent-selected profile photos and transient camera/photo OCR input | Not bundled. Profile photos may become family sync data only after the parent enables that feature; word-sheet images are input, not release assets | Runtime user-selected content and privacy/data-flow controls | Not approved by this inventory for App Store marketing or Pawgoo ownership claims. |
 | QA and candidate screenshots | 19 tracked PNG/JPEG captures under `QAArtifacts` | Not copied into the application target | Generated from Tada Words builds; current source scan found no imported stock photo | Exact App Store screenshots still require release-candidate selection and human review. |
@@ -93,7 +94,7 @@ ownership evidence still required by #33.
 | Child fixture license/checksum | `Tests/Fixtures/ChildSpeech/LICENSE_SOURCE.md` and `SHA256SUMS` |
 | Repeatable source/archive assertions | `Scripts/verify-release-content-inventory.sh` |
 | Cartesia commercial entitlement for the current pack | Private owner-controlled evidence vault `Cartesia/2026-07-14/` (outside Git): Cartesia Pro effective 2026-07-14 through 2026-08-14; safe invoice reference `DO1RKSRC-0001`, receipt reference `2706-2686`, invoice SHA-256 `71e3533be3361733cf5d13ae9fe5240a0e87e2d1c9aa8f854876a9e51175f24b`, receipt SHA-256 `1ca2ed49122c0298d3fcd1278341a8b4bbaf5b62387f4610f93297df3a657082`, private index SHA-256 `868275560ed488189442a7f863e9ed9cf281fd4f77cf0901bbc9ea35d66faecf`; official sources: [pricing](https://www.cartesia.ai/pricing), [Terms](https://www.cartesia.ai/legal/terms), and [Acceptable Use Policy](https://www.cartesia.ai/legal/acceptable-use). The pointer covers only the listed 1,008-file Cartesia pack and is not a legal opinion. |
-| Pawgoo ownership attestation | Missing; #33 |
+| Pawgoo ownership attestation | Owner-confirmed 2026-07-23; private evidence index SHA-256 `85a98c0275800457e53d8607312650a6621afd3ce2e2f165c0c6fa2ab47ee73f` |
 | Adult-accessible in-app attribution | `GuardianTodayView.swift`, `GuardianRootView.swift`, and `GuardianThirdPartyNoticesView.swift`; implemented by #34 |
 | Attribution route tests | `GuardianParentNavigationTests.testThirdPartyNoticeMatchesBundledTwemojiAttribution` and `TadaWordsCriticalFlowUITests.testParentCanOpenOfflineThirdPartyNotices` |
 
@@ -106,10 +107,10 @@ may display family-provided profile content. The conservative draft is:
 > necessary rights or permissions to use that content in every selected App
 > Store country or region.
 
-Do **not** submit that representation until #33 is resolved, the exact
-release-candidate archive passes the verifier, and #32 is reconciled to every
-retained generated-audio asset and applicable provider term. Repeat the review
-if the content set, generation terms, or storefront list changes.
+The owner attestation and recorded Cartesia evidence support this
+representation for the current United States-only content set after the exact
+release-candidate archive passes the verifier. Repeat the review if the content
+set, generation terms, or storefront list changes.
 
 ## Exact-archive acceptance
 

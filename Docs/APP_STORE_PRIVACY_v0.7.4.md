@@ -45,10 +45,10 @@ issue [#18](https://github.com/darrenfu/tadawords/issues/18), but it remains off
 by default on every device. A parent must explicitly enable it on each device.
 Local practice remains available while sync is off, offline, or recovering.
 
-Do **not** publish App Store Privacy answers yet. The source supports a
-conditional **No data collected** draft, but the release owner still needs to
-attest the operating practices that source cannot prove, and these release
-gates remain open:
+Do **not** publish App Store Privacy answers until the remaining exact-release
+gates pass. The source and the 2026-07-23 owner operating-practice attestations
+support a conditional **No data collected** draft, with these release gates
+still open:
 
 1. Deploy and physically accept the production CloudKit schema, sharing,
    background delivery, and test-only destructive erasure in issue
@@ -56,15 +56,24 @@ gates remain open:
 2. Physically verify the implemented fail-closed Keychain cleanup across a
    signed uninstall/reinstall on iPhone and iPad in issue
    [#28](https://github.com/darrenfu/tadawords/issues/28).
-3. Correct the live Pawgoo privacy/support copy described below.
-4. Confirm that Pawgoo has no CloudKit server/API access and does not export or
-   retain user CloudKit records.
-5. Confirm the support mailbox's retention/use and whether parent-initiated
-   support qualifies for Apple's optional-disclosure exception.
-6. Before #74/#81 deployment, audit the PawGoo Worker, ElevenLabs operating
+3. Before #74/#81 production deployment, audit the PawGoo Worker, ElevenLabs operating
    practice, App Attest key linkage, retention, logs, domain, and exact request
-   fields. Then scan and observe the exact signed iPhone/iPad release candidate
-   against that updated inventory.
+   fields.
+4. Scan and observe the exact signed iPhone/iPad release candidate. Confirm
+   that its production endpoint matches the verified deployment and that no
+   unexpected SDK or domain has appeared.
+
+Resolved operating-practice evidence:
+
+- The live Pawgoo product, privacy, support, and update copy was corrected and
+  verified on 2026-07-23.
+- The owner confirmed on 2026-07-23 that Pawgoo has no CloudKit server, API,
+  dashboard, export, support attachment, or retention path for user CloudKit
+  records.
+- In-app Support opens `https://pawgoo.app/en/support`; the app itself does not
+  collect or transmit a support message. The owner confirmed that
+  parent-initiated support is used only to respond to that request, with no
+  tracking, advertising, marketing, or unrelated use.
 
 `PrivacyInfo.xcprivacy` currently declares no collected data. That remains a
 candidate declaration, not proof that the final App Store Connect answers are
@@ -251,9 +260,10 @@ Use this only after every gate in the Decision summary passes:
 
 This draft treats on-device processing as not collected; Apple CloudKit as an
 Apple-operated user service that Pawgoo does not access; parent-chosen exports
-as user-directed transfers; and support contact as either outside the app or
-within Apple's optional-disclosure criteria. Each assumption needs release-
-owner confirmation. Source code alone cannot finalize it.
+as user-directed transfers; and Support as navigation to the open web rather
+than an in-app data-submission interface. The owner confirmed the related
+operating practices on 2026-07-23. Exact-release artifact and physical-device
+gates still control publication.
 
 ### Conditional support-contact disclosure
 
@@ -312,10 +322,10 @@ shipping behavior and obtain the operator's retention/access facts.
 | Voiceprint after app removal | Run the signed `KeychainVoiceprintLifecycleDeviceTests` on the exact candidate. It uses retained real Keychain items in isolated services to prove repository recreation preserves them until the same scoped fresh-install reset removes them, while never uninstalling the user's app or touching production voiceprints. Update deployed site copy separately | [lifecycle record](VOICEPRINT_KEYCHAIN_LIFECYCLE_v0.7.30.md), [#28](https://github.com/darrenfu/tadawords/issues/28), and [Apple DTS forum guidance](https://developer.apple.com/forums/thread/36442) |
 | Family Sync physical acceptance | Same-account private sync, different-Apple-ID sharing, background delivery, recovery, and accessibility on exact signed iPhone/iPad RC | [#22](https://github.com/darrenfu/tadawords/issues/22) plus Family Sync acceptance Issues |
 | App Store container/configuration | Final App ID/container/App Store Connect configuration and production schema | [#23](https://github.com/darrenfu/tadawords/issues/23) |
-| Distribution decisions | **Resolved for 1.0:** Made for Kids 6–8, Free with no IAP/ads, United States only, no pre-order, and manual release. #65 must enter the exact values; #26 retains submission and release authority | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24), [#26](https://github.com/darrenfu/tadawords/issues/26) |
+| Distribution decisions | **Resolved for 1.0:** Made for Kids with Apple's `6–8` primary band, product and in-app Profile ages 3–8, Free with no IAP/ads, United States only, no pre-order, and manual release. #65 must enter the exact values; #26 retains submission and release authority | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24), [#26](https://github.com/darrenfu/tadawords/issues/26) |
 | Pawgoo live copy | Remove old hint-download statements; qualify deletion; clarify Keychain lifecycle and full sync scope | [#54](https://github.com/darrenfu/tadawords/issues/54); no public-site mutation in this batch |
 | Complete child-data erasure | Allow the authorized parent to delete the final Profile and all associated local/CloudKit data, or provide an equally complete Delete All Data flow that returns to first-run without resurrection | [#19](https://github.com/darrenfu/tadawords/issues/19) |
-| Pawgoo CloudKit access | Owner attests that no separate server credential, dashboard, export, or support process reads/retains CloudKit records | Release-owner attestation |
+| Pawgoo CloudKit access | **Owner-confirmed 2026-07-23:** no separate server credential, API, dashboard, export, support attachment, or retention process reads/retains CloudKit records | Release-owner attestation |
 | Installation Device ID classification | Confirm the random per-install logical-revision UUID is handled consistently in the final Privacy Report and App Store Privacy questionnaire; if the conditional no-collection assumptions do not hold, disclose Device ID for App Functionality rather than guessing | Release-owner/privacy review |
 | Support retention/use | Owner confirms mailbox retention, uses, access, deletion response, and optional-disclosure eligibility | Release-owner/privacy review |
 | Remote teacher audio | Before endpoint enablement, audit the exact deployed PawGoo/ElevenLabs fields, linkage, retention, logs, cache, rate state, secrets boundary, and domain; then verify the signed plist endpoint and observed traffic match that inventory | #74/#81 and exact signed-RC gate |

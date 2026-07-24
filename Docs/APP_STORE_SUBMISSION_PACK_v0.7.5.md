@@ -7,7 +7,7 @@
 > an accepted signed release candidate. Family Sync is required for Tada Words
 > 1.0, but its production CloudKit, physical-device, and human acceptance remain
 > gated.
-> The Made for Kids 6–8 band, free/no-IAP model, United States-only
+> The Made for Kids product range of ages 3–8, free/no-IAP model, United States-only
 > availability, and manual release method are fixed by the 2026-07-21 owner
 > decision. App Store Connect entry and release remain separately gated.
 
@@ -48,9 +48,9 @@ be replaced with exact signed-release evidence during submission preparation:
   repeat its exact-build, CloudKit, Pawgoo-access, support-retention, and traffic
   gates before entering answers in App Store Connect.
 - **Content-rights representation and copyright:** start from the merged
-  content-rights inventory. Current Cartesia evidence covers only its recorded
-  pack; reconcile the exact retained audio/provider terms and obtain the Pawgoo
-  ownership-chain attestation in #33 before submitting a representation.
+  content-rights inventory. The Cartesia evidence and Pawgoo ownership-chain
+  attestation are recorded; reconcile them to the exact retained
+  audio/provider terms before submitting a representation.
 - **Family Sync reviewer steps and public claim:** add only after #19/#41 pass
   against production CloudKit and the exact signed release candidate.
 - **Pawgoo wording:** issue #54 owns alignment and deployment evidence for the
@@ -70,7 +70,7 @@ execute.
 
 | Decision | Current treatment in this draft | Human gate |
 |---|---|---|
-| Made for Kids and age band | **Resolved: Made for Kids, primary age band 6–8.** This is the durable owner decision; issue #65 must enter the same value against the exact RC. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24) |
+| Made for Kids and age range | **Resolved: Made for Kids, Apple primary band `6–8`, product and in-app Profile ages 3–8.** Apple Kids Category supports one primary band rather than a combined 3–8 value. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24) |
 | Price | **Resolved: Free, with no IAP, subscription, advertising, or paid unlock in 1.0.** | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24) |
 | Family Sync in 1.0 | **Resolved: required.** The source contract is present in the audited baseline, but public availability, sharing, convergence, revocation, and remote-erasure claims remain blocked until exact-RC production acceptance. | [#40](https://github.com/darrenfu/tadawords/issues/40), [#19](https://github.com/darrenfu/tadawords/issues/19), [#41](https://github.com/darrenfu/tadawords/issues/41) |
 | Storefronts | **Resolved for 1.0: United States only.** Do not select all countries or regions, EU storefronts, or pre-order. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24), [#23](https://github.com/darrenfu/tadawords/issues/23) |
@@ -79,11 +79,12 @@ execute.
 | Exact RC and device acceptance | **Unresolved.** Captures must come from the accepted signed RC, not this documentation branch by default. | [#22](https://github.com/darrenfu/tadawords/issues/22) |
 | Kids permission requests | **Source fixed; exact-device gate open.** Child Read has no request capability. The review path starts behind the Parent Gate at App & Family → Speech & Microphone, but first-install, denied, authorized, and revoked behavior still needs exact signed iPhone/iPad acceptance. | [#55](https://github.com/darrenfu/tadawords/issues/55), [permission inventory](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md) |
 | App Privacy answers | **Merged inventory; conditional answer set.** The source-backed inventory covers bundled picture hints, Family Sync, device-local data, support/export flows, the privacy manifest, and every configured or dormant network path. Exact signed-build and operating-practice gates remain. | [`APP_STORE_PRIVACY_v0.7.4.md`](APP_STORE_PRIVACY_v0.7.4.md), [#17](https://github.com/darrenfu/tadawords/issues/17), [#54](https://github.com/darrenfu/tadawords/issues/54) |
-| Shipped-content rights | **Merged inventory; final release evidence blocked.** Twemoji provenance and in-app attribution are present. Cartesia account/tier evidence is preserved only for the recorded current pack; every retained generated-audio asset must be reconciled at exact RC. Pawgoo authorship/rights-chain attestation remains open. | [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md), [#32](https://github.com/darrenfu/tadawords/issues/32), [#33](https://github.com/darrenfu/tadawords/issues/33) |
+| Shipped-content rights | **Owner-confirmed; exact-archive reconciliation required.** Twemoji provenance and in-app attribution are present. Cartesia account/tier evidence is preserved for the recorded current pack. The Pawgoo representative confirmed the original-content rights chain on 2026-07-23; the exact RC must still pass the archive verifier. | [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md), [#32](https://github.com/darrenfu/tadawords/issues/32), [#33](https://github.com/darrenfu/tadawords/issues/33) |
 
 Apple states that a Made for Kids selection cannot be changed after approval,
-and subsequent updates must continue to follow the Kids Category rules. The
-owner deliberately selected the 6–8 band; it is not inferred from copy.
+and subsequent updates must continue to follow the Kids Category rules. Apple
+offers one primary band rather than the product's combined ages 3–8; do not
+infer or invent that single-band choice from public copy.
 
 ## Draft App Store metadata
 
@@ -97,13 +98,14 @@ limits come from Apple's current App Store Connect reference.
 | Primary category | `Education` | Draft category; verify at exact-RC preflight |
 | Secondary category | Leave blank | Draft; do not add Games merely for discoverability |
 | Kids Category | `Made for Kids` | Owner-approved; irreversible after App Review approval |
-| Primary Kids age band | `6–8` | Owner-approved primary audience |
+| Product age range | `3–8` | Use consistently in product metadata and profile creation/edit surfaces |
+| Primary Kids age band | `6–8` | Owner-selected on 2026-07-23; the product and in-app Profile range remain ages 3–8 |
 | Promotional text | `Turn school word lists into short Read and Write quests, with photo import, separate word libraries, and adaptive review for each learner.` | 138 characters; limit 170 |
 | Keywords | `sight words,reading,spelling,handwriting,vocabulary,school,practice,word lists,early literacy` | 93 UTF-8 bytes; limit 100 bytes |
 | Marketing URL | `https://pawgoo.app/en/tadawords` | Live audit: HTTP 200 |
 | Support URL | `https://pawgoo.app/en/support` | Live audit: HTTP 200; legal-contact sufficiency remains part of #23 |
 | Privacy Policy URL | `https://pawgoo.app/en/tadawords/privacy` | Live audit: HTTP 200 |
-| Copyright | `2026 Pawgoo LLC` | **Provisional — do not enter until #33 confirms the Pawgoo ownership/rights chain.** Apple adds the copyright symbol automatically |
+| Copyright | `2026 Pawgoo LLC` | Owner-confirmed on 2026-07-23. Apple adds the copyright symbol automatically |
 | Price | `Free` | No IAP, subscription, advertising, or paid unlock in 1.0 |
 | Availability | `United States only` | Do not select all countries/regions, EU storefronts, or pre-order |
 | Release option | `Manually release this version` | Keep Pending Developer Release until #26 authorizes release |
@@ -111,7 +113,7 @@ limits come from Apple's current App Store Connect reference.
 ### Description
 
 ```text
-Tada Words turns the exact sight words you choose into short, focused reading and writing practice.
+Made for children ages 3–8, Tada Words turns the exact sight words you choose into short, focused reading and writing practice.
 
 BUILD PERSONAL WORD LIBRARIES
 Type words one at a time or import a photo of a school list. Review every detected word before adding it to separate Read and Write libraries for each profile.
@@ -140,7 +142,7 @@ acceptance, the privacy inventory's exact-release gates, and matching public-sit
 copy are not complete. Add a source-backed Family Sync paragraph after those
 gates pass; do not describe the feature as optional release scope or imply
 tested remote erasure before the evidence exists. The owner has selected Made
-for Kids 6–8, but public wording must still be accurate and age-appropriate.
+for Kids ages 3–8, but public wording must still be accurate and age-appropriate.
 
 ## Draft App Review information
 
@@ -163,7 +165,7 @@ filled with invented personal data.
 > limited to 4,000 characters.
 
 ```text
-Tada Words is a local-first Made for Kids sight-word practice app for the 6–8 primary age band on iPhone and iPad. Core practice requires no Pawgoo account or login. Parent-opted-in Family Sync requires an available iCloud account. This build contains no advertising, third-party analytics, or in-app purchases.
+Tada Words is a local-first Made for Kids sight-word practice app for children ages 3–8 on iPhone and iPad. Core practice requires no Pawgoo account or login. Parent-opted-in Family Sync requires an available iCloud account. This build contains no advertising, third-party analytics, or in-app purchases.
 
 FIRST-LAUNCH PATH
 1. Complete the parent onboarding and create a fictional profile. No email address or phone number is requested.
@@ -314,8 +316,9 @@ final-Profile/delete-all, and human gates pass.
   but its exact signed-build, operating-practice, CloudKit, support-retention,
   Pawgoo-access, and public-copy gates must pass before submission.
 - **All shipped content is fully cleared for every storefront:** the merged
-  content-rights inventory is the source of truth, but Cartesia account/tier
-  evidence (#32) and Pawgoo authorship/rights-chain attestation (#33) remain.
+  content-rights inventory is the source of truth, but its recorded Cartesia,
+  ElevenLabs, Pawgoo, and licensed-asset evidence still requires exact-archive
+  reconciliation.
 - **Complete Profile deletion or Delete All App Data:** the Parent area offers
   Profile deletion guidance, but it cannot delete the sole remaining Profile
   and has no complete delete-all reset. Issue #19 owns the required behavior
@@ -338,34 +341,35 @@ privacy copy still describe the pre-bundling picture-hint network behavior.
 
 | URL | Current source/content finding | Submission consequence |
 |---|---|---|
-| `https://pawgoo.app/en/tadawords` | Product route exists and describes photo import, separate word libraries, adaptive review, iPhone/iPad, optional parent-controlled Family Sync, and picture-hint downloads | Picture hints are now bundled, so the download/network wording is stale. Family Sync is required 1.0 scope but remains parent opt-in on each device; align availability language only after production acceptance. |
-| `https://pawgoo.app/en/tadawords/privacy` | Product privacy route identifies Pawgoo LLC, `privacy@pawgoo.app`, local data, Apple processing, a Twemoji CDN request, and current CloudKit limitations | The Twemoji CDN disclosure no longer matches current app source. Reconcile it with the merged privacy inventory and the accepted Family Sync data flow before submission. |
+| `https://pawgoo.app/en/tadawords` | Must say Made for Kids ages 3–8; picture hints are bundled and work offline; Family Sync is optional, off by default, and parent controlled | Verify the deployed route against the exact website commit before submission. |
+| `https://pawgoo.app/en/tadawords/privacy` | Must identify Pawgoo LLC, `privacy@pawgoo.app`, local data, exact Apple/iCloud processing, bundled Twemoji assets, and Family Sync's opt-in scope | Verify the deployed route against the exact website commit before submission. |
 | `https://pawgoo.app/en/support` | Support route identifies the product, compatibility, developer, `support@pawgoo.app`, and `privacy@pawgoo.app` | It provides working contact email, but #23 must determine any legal address/phone/DSA display obligations for selected storefronts. |
 
-No website change or deployment is part of this draft. Issue #54 owns the
-reviewed public-copy change, deployment identity, and live verification. Until
-that evidence exists, none of the HTTP-200 results above closes the
-content-consistency gate.
+Website copy and deployment are tracked independently. Record the reviewed
+website commit and live verification here before submission; an HTTP 200 alone
+does not close the content-consistency gate.
 
 ## Exact-RC preflight before upload
 
 - [ ] Record the immutable PR/archive commit, version, build, bundle ID, and
       TeamIdentifier; replace the runtime baseline at the top of this pack.
-- [ ] Apply the resolved #24 values exactly: Made for Kids, age band 6–8, Free
-      with no IAP, United States only, no pre-order, and manual release.
+- [ ] Apply the resolved #24 values exactly: Made for Kids, product and in-app
+      Profile ages 3–8, Apple primary band `6–8`, Free with
+      no IAP, United States only, no pre-order, and manual release.
 - [ ] Treat Family Sync as required 1.0 scope and complete #19/#41 production,
       physical-device, destructive test-only erasure, and human acceptance.
 - [ ] Start from the merged App Privacy inventory; verify every SDK, CloudKit
       path, device-local data class, Pawgoo-access practice, support-retention
-      practice, and shipping configuration. Confirm that
-      `TadaWordsTeacherAudioEndpoint` remains absent.
+      practice, and shipping configuration. Keep
+      `TadaWordsTeacherAudioEndpoint` absent from Release until the production
+      Worker passes, then confirm it matches only that verified deployment.
 - [ ] Confirm merged #15/#16 behavior on the exact RC, then reconcile the
       in-app links, product page, privacy policy, support page, review notes,
       bundled picture-hint claim, and offline wording.
 - [ ] Start from the merged content-rights inventory; reconcile #32 to every
-      retained generated-audio asset and resolve #33 for every asset visible in
-      the app and screenshots. Do not enter the provisional Pawgoo copyright
-      until #33 passes.
+      retained Cartesia asset, reconcile the ElevenLabs subscription/voice
+      evidence to every retained Bella asset, and verify the #33 owner
+      attestation covers every Pawgoo asset visible in the app and screenshots.
 - [ ] Resolve #19 with a final-Profile/delete-all route and production
       destructive evidence before claiming complete in-app or CloudKit erasure.
 - [ ] Confirm the #76 conservative 1.0 fallback remains enforced: no Parent
