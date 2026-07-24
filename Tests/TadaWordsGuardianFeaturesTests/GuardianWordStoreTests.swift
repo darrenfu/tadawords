@@ -10,10 +10,6 @@ final class GuardianWordStoreTests: XCTestCase {
     func testTeacherAudioImportFailuresStayParentRecoverableAndPrivacySafe() {
         let cases: [(Error, String)] = [
             (
-                TeacherWordAudioError.serverRejected(statusCode: 422),
-                "approved teacher-audio vocabulary"
-            ),
-            (
                 TeacherWordAudioError.serverRejected(statusCode: 429),
                 "temporarily busy"
             ),

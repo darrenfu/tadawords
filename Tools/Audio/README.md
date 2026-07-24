@@ -3,6 +3,21 @@
 This directory contains reproducible teacher-audio generators. They never store
 an API key in the repository.
 
+The two-tier word catalog is rebuilt with pinned `wordfreq` data and the pinned
+macOS lowercase dictionary filter:
+
+```bash
+python3 -m venv /private/tmp/tadawords-wordfreq
+/private/tmp/tadawords-wordfreq/bin/pip install wordfreq==3.1.1
+/private/tmp/tadawords-wordfreq/bin/python \
+  Tools/Audio/build_teacher_word_catalog.py
+```
+
+`TeacherWordCatalog-4000-v1.json` keeps the existing 500 bundled words and all
+1,166 preset words, selects 2,000 for offline Bella clips, and authorizes 4,000
+for PawGoo Bella generation. wordfreq code is Apache 2.0 and its derived data is
+CC BY-SA 4.0; the Parent-gated Third-Party Notices screen carries attribution.
+
 For the approved ElevenLabs pack, store the restricted development key in the
 macOS Keychain service `app.tadawords.audio.elevenlabs` (or set
 `ELEVENLABS_API_KEY` only in the active shell), then run:
@@ -82,6 +97,8 @@ Roles are intentionally separate:
 - Aurora remains the independently scoped launch brand mark and short
   celebratory transition accent.
 
-Guardian-entered words outside the bundled 500-word pack must be prepared
-through PawGoo and cached before the Pool mutation commits. Child playback is
-local-only and has no Apple or alternative-voice fallback.
+Guardian-entered words outside the bundled pack are checked through PawGoo.
+Bella catalog hits are cached before the Pool mutation commits; an explicit
+catalog miss may commit and uses device-local Apple speech. Child playback is
+local-only. Apple speech is the catalog-miss fallback, while no alternative
+ElevenLabs voice is permitted.

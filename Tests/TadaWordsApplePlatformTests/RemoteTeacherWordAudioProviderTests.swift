@@ -438,6 +438,96 @@ final class RemoteTeacherWordAudioProviderTests: XCTestCase {
         XCTAssertEqual(relaunchedClip.audioData, audioData)
         XCTAssertEqual(requestCount.value, 1)
     }
+
+    func testPipelineTreatsExplicitCatalogMissAsAppleSpeechEligible() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "TadaWordsTeacherAudioCatalogMiss-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = try XCTUnwrap(URL(string: "https://audio.example/word"))
+        let remote = RemoteTeacherWordAudioProvider(
+            endpoint: endpoint,
+            authorizer: TestTeacherAudioAuthorizer(),
+            dataLoader: { _ in
+                (
+                    Data(),
+                    try XCTUnwrap(
+                        HTTPURLResponse(
+                            url: endpoint,
+                            statusCode: 422,
+                            httpVersion: nil,
+                            headerFields: nil
+                        )
+                    )
+                )
+            }
+        )
+        let pipeline = TeacherWordAudioPipeline(
+            bundled: nil,
+            remote: remote,
+            cache: FileTeacherWordAudioCache(directory: directory)
+        )
+        let prompt = try WordPrompt(learningMode: .write, text: "as")
+        let request = TeacherWordAudioRequest(prompt: prompt)
+
+        try await pipeline.prepare([prompt])
+        try await pipeline.requirePrepared([prompt])
+
+        do {
+            _ = try await pipeline.audio(for: request)
+            XCTFail("A catalog miss must remain distinguishable at playback")
+        } catch {
+            XCTAssertEqual(
+                error as? TeacherWordAudioError,
+                .unavailableOfflineClip
+            )
+        }
+    }
+
+    func testPipelineDoesNotMaskOperationalServerFailure() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "TadaWordsTeacherAudioOperationalFailure-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = try XCTUnwrap(URL(string: "https://audio.example/word"))
+        let remote = RemoteTeacherWordAudioProvider(
+            endpoint: endpoint,
+            authorizer: TestTeacherAudioAuthorizer(),
+            dataLoader: { _ in
+                (
+                    Data(),
+                    try XCTUnwrap(
+                        HTTPURLResponse(
+                            url: endpoint,
+                            statusCode: 503,
+                            httpVersion: nil,
+                            headerFields: nil
+                        )
+                    )
+                )
+            }
+        )
+        let pipeline = TeacherWordAudioPipeline(
+            bundled: nil,
+            remote: remote,
+            cache: FileTeacherWordAudioCache(directory: directory)
+        )
+        let prompt = try WordPrompt(learningMode: .read, text: "as")
+
+        do {
+            try await pipeline.prepare([prompt])
+            XCTFail("Operational failures must leave the pool unchanged")
+        } catch {
+            XCTAssertEqual(
+                error as? TeacherWordAudioError,
+                .serverRejected(statusCode: 503)
+            )
+        }
+    }
 }
 
 private actor TestTeacherAudioAuthorizer: TeacherAudioRequestAuthorizing {

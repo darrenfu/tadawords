@@ -719,11 +719,6 @@ final class GuardianDashboardViewModel: ObservableObject {
                     Teacher audio is not available in this build yet. \
                     No words were added; your existing pools are unchanged.
                     """
-            case .serverRejected(statusCode: 422):
-                return """
-                    One or more words are not in the approved teacher-audio \
-                    vocabulary. They were not sent or added.
-                    """
             case .serverRejected(statusCode: 429):
                 return """
                     Teacher audio is temporarily busy. Wait a moment and try \

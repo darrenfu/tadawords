@@ -7,6 +7,17 @@ import XCTest
 final class SpeechVoiceDesignTests: XCTestCase {
     private let policy = VoiceSelectionPolicy.canonicalTeacherAmericanEnglish
 
+    func testTeacherAudioFallbackPreservesReadAndWriteLearningRoles() {
+        XCTAssertEqual(
+            TeacherAudioFallbackPolicy.spokenRole(for: .readHint),
+            .learning
+        )
+        XCTAssertEqual(
+            TeacherAudioFallbackPolicy.spokenRole(for: .writePrompt),
+            .writeLearning
+        )
+    }
+
     func testPrefersPremiumNaturalTeacherVoiceBeforeCompactCharacterVoice() {
         let compactCharacter = candidate(
             id: "com.apple.eloquence.en-US.Sandy",

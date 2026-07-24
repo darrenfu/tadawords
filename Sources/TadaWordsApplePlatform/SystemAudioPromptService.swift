@@ -32,9 +32,17 @@ public actor SystemAudioPromptService: AudioPromptService {
         _ = profileID
         guard await audioExperienceService.prepareForVoicePrompt() else { return }
         do {
-            try await playTeacherAudio(
-                request: TeacherWordAudioRequest(prompt: prompt)
-            )
+            let request = TeacherWordAudioRequest(prompt: prompt)
+            do {
+                try await playTeacherAudio(request: request)
+            } catch TeacherWordAudioError.unavailableOfflineClip {
+                try await playPreparedText(
+                    request.spokenText,
+                    role: TeacherAudioFallbackPolicy.spokenRole(
+                        for: request.usage
+                    )
+                )
+            }
             await audioExperienceService.finishVoicePrompt()
         } catch {
             await audioExperienceService.finishVoicePrompt()
@@ -164,6 +172,19 @@ public actor SystemAudioPromptService: AudioPromptService {
     private func cancelCurrentAudioClip() {
         guard let audioPlayer else { return }
         cancelAudioPlayback(for: audioPlayer)
+    }
+}
+
+enum TeacherAudioFallbackPolicy {
+    static func spokenRole(
+        for usage: TeacherWordAudioUsage
+    ) -> SpokenAudioRole {
+        switch usage {
+        case .readHint:
+            .learning
+        case .writePrompt:
+            .writeLearning
+        }
     }
 }
 

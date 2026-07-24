@@ -18,7 +18,8 @@ The final teacher contract must freeze these values together:
 - contract version `elevenlabs-teacher-v1`;
 - MP3 response and checksum validation;
 - separate Read and Write variants for every word;
-- no per-word voice or speed override and no alternative-voice fallback.
+- no per-word ElevenLabs voice or speed override; Apple speech is the
+  catalog-miss fallback only.
 
 A paid monthly ElevenLabs plan is owner-confirmed. The API key remains outside
 the repository and the app; the development key is restricted and stored in
@@ -27,17 +28,18 @@ commercial-rights, or exact-release evidence.
 
 ## Offline pack
 
-The shipping pack contains exactly 500 normalized words × two variants = 1,000
-clips. `Tools/Audio/generate_elevenlabs_teacher_pack.sh` generates only the
-manifest contract. `Tools/Audio/inspect_teacher_audio_pack.sh` rejects missing
-or extra clips, pending approval, wrong provider/model/speed/playback values,
-local text overrides, bad encoding, unsafe duration/tail, clipping, and
-inaudible output.
+The target shipping pack contains exactly 2,000 normalized words × two variants
+= 4,000 clips, selected from the pinned 4,000-word online catalog. The current
+500-word pack remains the measured baseline until expansion completes.
+`Tools/Audio/generate_elevenlabs_teacher_pack.sh` generates only the manifest
+contract. `Tools/Audio/inspect_teacher_audio_pack.sh` rejects missing or extra
+clips, pending approval, wrong provider/model/speed/playback values, local text
+overrides, bad encoding, unsafe duration/tail, clipping, and inaudible output.
 
-The approved `ElevenLabs-Teacher-500-v1` pack replaces the former Katie
-compatibility resources. Its 1,000 declared MP3 clips must pass the exact
-manifest contract, full-pack acoustic inspection, representative
-SpeechTranscriber matrix, release inventory digest, and physical listening.
+The expanded Bella pack replaces `ElevenLabs-Teacher-500-v1` only after all
+4,000 declared MP3 clips pass the exact manifest contract, full-pack acoustic
+inspection, representative SpeechTranscriber matrix, release inventory digest,
+and physical listening.
 
 ## Runtime preparation
 
@@ -54,13 +56,15 @@ logs.
 The iOS app sends no Profile ID, child name, learning history, recording,
 transcript, or provider credential. A Parent import may prepare a normalized
 word, usage, and immutable contract metadata. The Pool mutation becomes visible
-only after every required clip is bundled or cached. A failed preparation
-leaves the prior Pool visible.
+only after every required word is bundled, cached, or explicitly confirmed
+absent from the PawGoo catalog. Only the last case is eligible for device-local
+Apple speech. Every other failed preparation leaves the prior Pool visible.
 
-Child Quest planning and playback are strictly local. They may read the bundle
-or validated cache but never start a network request. A missing, corrupt, or
-mismatched clip fails visibly; it never substitutes Apple speech or another
-voice.
+Child Quest planning and playback are strictly local. They read the bundle or
+validated cache and use Apple speech for an approved catalog miss; they never
+start a network request. Corrupt or mismatched clips and security/operational
+failures remain visible. Apple speech is the catalog-miss fallback, not a mask
+for those failures.
 
 ## Owner decisions and remaining deployment actions
 
@@ -81,7 +85,7 @@ the production deployment and App Attest path pass end to end.
 
 ## Acceptance
 
-1. Generate and inspect all 1,000 clips under the frozen contract.
+1. Generate and inspect all 4,000 offline clips under the frozen contract.
 2. Run the full Swift tests, formatting, lint, source inventory, and exact-pack
    inspection at the intended commit.
 3. Deploy the PawGoo Worker only after its preflight, database migration, cache,
@@ -90,8 +94,8 @@ the production deployment and App Attest path pass end to end.
    with only the verified production endpoint. LocalQA remains endpoint-free.
 5. Install the same PawGoo Development-signed normal build on the approved
    iPhone and iPad.
-6. Prove bundled playback, Parent preparation, cache reuse, relaunch, offline
-   child playback, rate-limit failure, corrupt-cache rejection, and no
-   alternative voice on both device classes.
+6. Prove bundled Bella playback, remote Bella preparation, cache reuse,
+   relaunch, offline child playback, Apple speech for an explicit catalog miss,
+   rate-limit failure, and corrupt-cache rejection on both device classes.
 7. Re-run the privacy, content-rights, archive, and exact-HEAD release evidence
    against the unchanged candidate before guarded merge.

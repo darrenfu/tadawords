@@ -125,6 +125,18 @@ final class GuardianParentNavigationTests: XCTestCase {
             GuardianThirdPartyNoticesContent.licenseURL.absoluteString,
             "https://creativecommons.org/licenses/by/4.0/"
         )
+        XCTAssertTrue(
+            GuardianThirdPartyNoticesContent.wordCatalogAttribution
+                .contains("Robyn Speer")
+        )
+        XCTAssertTrue(
+            GuardianThirdPartyNoticesContent.wordCatalogDescription
+                .contains("wordfreq 3.1.1")
+        )
+        XCTAssertEqual(
+            GuardianThirdPartyNoticesContent.wordCatalogLicenseURL.absoluteString,
+            "https://creativecommons.org/licenses/by-sa/4.0/"
+        )
     }
 
     func testDataControlCopyNamesExistingParentPathsAndIOSPermissions() {

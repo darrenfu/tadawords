@@ -207,7 +207,7 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
         }
     }
 
-    func testTeacherAudioDocsProhibitAlternativeVoiceFallback() throws {
+    func testTeacherAudioDocsDefineCatalogMissAppleFallback() throws {
         let paths = [
             "README.md",
             "Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md",
@@ -221,25 +221,49 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             )
             XCTAssertTrue(
                 document.localizedCaseInsensitiveContains(
-                    "no alternative-voice fallback"
-                )
-                    || document.localizedCaseInsensitiveContains(
-                        "never substitutes another voice"
-                    )
-                    || document.localizedCaseInsensitiveContains(
-                        "instead of selecting an offline alternative voice"
-                    )
-                    || document.localizedCaseInsensitiveContains(
-                        "no Apple or alternative-voice fallback"
-                    ),
-                "Missing no-fallback contract in \(path)"
-            )
-            XCTAssertFalse(
-                document.localizedCaseInsensitiveContains(
-                    "Apple speech remains the no-network fallback"
+                    "catalog-miss fallback"
                 ),
-                "Stale Apple teacher fallback returned in \(path)"
+                "Missing bounded Apple fallback contract in \(path)"
             )
+        }
+    }
+
+    func testTeacherAudioCatalogFreezesOfflineOnlineAndCostBoundaries() throws {
+        let catalogURL = repositoryRoot.appendingPathComponent(
+            "Tools/Audio/Catalogs/TeacherWordCatalog-4000-v1.json"
+        )
+        let catalog = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: catalogURL))
+                as? [String: Any]
+        )
+        let offline = try XCTUnwrap(catalog["offlineWords"] as? [String])
+        let online = try XCTUnwrap(catalog["onlineWords"] as? [String])
+        let counts = try XCTUnwrap(catalog["counts"] as? [String: Int])
+
+        XCTAssertEqual(offline.count, 2_000)
+        XCTAssertEqual(online.count, 4_000)
+        XCTAssertEqual(Set(offline).count, offline.count)
+        XCTAssertEqual(Set(online).count, online.count)
+        XCTAssertTrue(Set(offline).isSubset(of: Set(online)))
+        XCTAssertEqual(counts["twoVariantCharacters"], 50_136)
+        XCTAssertEqual(counts["newTwoVariantCharacters"], 45_902)
+
+        let manifestURL = repositoryRoot.appendingPathComponent(
+            "Sources/TadaWordsApplePlatform/Resources/Audio/TeacherWords/"
+                + "ElevenLabs-Teacher-500-v1/manifest.json"
+        )
+        let manifest = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL))
+                as? [String: Any]
+        )
+        let bundled = try XCTUnwrap(manifest["words"] as? [String])
+        XCTAssertTrue(Set(bundled).isSubset(of: Set(offline)))
+
+        for excluded in [
+            "fuck", "shit", "bitch", "porn", "rape", "sex", "sexual",
+            "sexy", "suicide",
+        ] {
+            XCTAssertFalse(online.contains(excluded))
         }
     }
 

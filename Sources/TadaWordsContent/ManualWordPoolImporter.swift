@@ -58,9 +58,10 @@ public struct ManualWordPoolImporter: Sendable {
                 positionInBatch: parsedWord.inputPosition
             )
         }
-        // No membership becomes active until its exact teacher clip is either
-        // bundled or atomically cached. A preparation failure leaves the pool
-        // unchanged and is safe for the Parent to retry.
+        // Membership may become active once its teacher audio is bundled,
+        // atomically cached, or PawGoo explicitly confirms the word is outside
+        // the Bella catalog and therefore eligible for on-device Apple speech.
+        // Every other preparation failure leaves the pool unchanged.
         try await audioPreparer?.prepare(drafts.map(\.prompt))
         let outcomes = try await repository.upsert(drafts)
 
