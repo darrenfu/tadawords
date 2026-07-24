@@ -1,5 +1,14 @@
 import Foundation
 
+/// The conservative App Store 1.0 boundary selected while the COPPA analysis
+/// in issue #76 remains unresolved.
+///
+/// Cleanup remains composed separately so an existing template can still be
+/// removed by Profile deletion or a proven fresh installation.
+public enum VoiceprintReleasePolicy {
+    public static let shipsEnrollmentAndSpeakerMatching = false
+}
+
 /// A device-local speaker embedding. Raw microphone audio is deliberately not
 /// represented by this domain type and must never cross the platform-adapter
 /// boundary as durable data.
