@@ -456,6 +456,60 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         )
     }
 
+    /// Runs on both iPhone and iPad destinations. A deterministic captured-image
+    /// fixture replaces only the unavailable simulator camera; the app still
+    /// exercises the production capture-to-editor and cancellation state path.
+    func testCameraCaptureRoutesToEditorAndCancelPreservesWordPool() throws {
+        launchParentWordManager(
+            additionalLaunchArguments: [
+                "--ui-testing",
+                "--ui-testing-camera-editor-fixture",
+            ]
+        )
+
+        let takePhoto = app.buttons["Take Photo"]
+        let managerScrollView = app.scrollViews.firstMatch
+        for _ in 0..<3 where !takePhoto.exists {
+            managerScrollView.swipeUp()
+        }
+        XCTAssertTrue(takePhoto.waitForExistence(timeout: 5))
+        XCTAssertTrue(takePhoto.isEnabled)
+        takePhoto.tap()
+
+        XCTAssertTrue(
+            app.otherElements["guardian.photo-editor"].waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(app.buttons["Use Photo"].exists)
+        XCTAssertTrue(app.buttons["Reset"].exists)
+
+        let topLeftCropHandle = app.otherElements["Crop top left corner"]
+        XCTAssertTrue(topLeftCropHandle.waitForExistence(timeout: 3))
+        XCTAssertTrue(topLeftCropHandle.isHittable)
+        let undo = app.buttons["Undo"]
+        XCTAssertFalse(undo.isEnabled)
+        let cropStart = topLeftCropHandle.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+        )
+        cropStart.press(
+            forDuration: 0.1,
+            thenDragTo: cropStart.withOffset(CGVector(dx: 36, dy: 28))
+        )
+        XCTAssertTrue(undo.isEnabled, "Dragging a visible crop handle should record an edit.")
+
+        let cancel = app.buttons["Cancel"]
+        XCTAssertTrue(cancel.exists)
+        cancel.tap()
+
+        XCTAssertTrue(
+            waitUntil(timeout: 8) {
+                !self.app.otherElements["guardian.photo-editor"].exists
+            },
+            "Cancel should release the editor and return without opening OCR Review."
+        )
+        XCTAssertFalse(app.staticTexts["Review scanned words"].exists)
+        XCTAssertTrue(app.staticTexts["Manage words"].waitForExistence(timeout: 5))
+    }
+
     private func launchDemo(
         startingAt route: String? = nil,
         additionalLaunchArguments: [String] = []

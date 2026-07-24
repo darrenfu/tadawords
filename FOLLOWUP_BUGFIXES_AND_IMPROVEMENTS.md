@@ -1366,3 +1366,32 @@ closed without publishing a partial child, Parent, or notification snapshot.
 - The release keeps the existing PawGoo bundle identity, CloudKit container,
   and in-place data contracts. Simulator and signed-device evidence remains
   exact-HEAD and is recorded separately from source tests.
+
+## v0.7.28 — 2026-07-24
+
+Target release: `v0.7.28`
+
+Branch: `codex/camera-ocr-editor-v0.7.15`
+
+Build: `2026072402`
+
+Overall state: Issue #96 adds an on-device crop-and-mask editor between camera
+capture and OCR review while retaining v0.7.21 atomic Family Sync visibility
+and all existing parent-approved word-pool rules.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0720-UX-001 | P1 improvement | Parent/Camera OCR | Let a parent crop a photographed word sheet and cover unrelated content before OCR, with undo, reset, retake, cancel, and an explicit Use Photo handoff. | Automated pass | Editor model/rendering tests, exact-HEAD iPhone and iPad simulator flows, signed LocalQA identity verification, and a data-preserving physical iPhone camera flow through OCR review |
+
+### 2026-07-24 v0.7.28 notes
+
+- The editor normalizes image orientation, preserves source resolution, and
+  applies black masks only inside the selected crop before OCR.
+- Camera and edited images remain device-local and are not persisted. Cancel
+  leaves the word pool unchanged; OCR results still require parent review and
+  explicit addition.
+- Crop and Mask use white text when inactive against the editor's black
+  background, while the active tool retains a white segment with black text.
+- The physical iPad and Apple Pencil lane is waived for this merge only by the
+  owner; iPad simulator coverage remains required. One physical iPhone camera
+  flow is still a mandatory release gate.
