@@ -737,6 +737,7 @@ final class GuardianDashboardViewModel: ObservableObject {
                     Please try again later.
                     """
             case .serverRejected, .unavailableOfflineClip,
+                .catalogMissAppleFallback,
                 .emptySpokenText, .invalidIsolatedWord:
                 break
             }

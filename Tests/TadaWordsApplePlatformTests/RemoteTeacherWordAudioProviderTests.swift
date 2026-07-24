@@ -356,9 +356,46 @@ final class RemoteTeacherWordAudioProviderTests: XCTestCase {
         )
         try Data([9, 9, 9]).write(to: audioURL, options: .atomic)
 
-        let mutatedReadClip = try await cache.clip(for: read)
-        XCTAssertNil(mutatedReadClip)
+        do {
+            _ = try await cache.clip(for: read)
+            XCTFail("Mutated cache bytes must fail closed")
+        } catch {
+            XCTAssertEqual(
+                error as? TeacherWordAudioError,
+                .invalidAudioChecksum
+            )
+        }
         XCTAssertFalse(FileManager.default.fileExists(atPath: audioURL.path))
+    }
+
+    func testCatalogMissMarkerIsDurableAndClearedByBellaClip() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "TadaWordsTeacherAudioCatalogMarker-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = FileTeacherWordAudioCache(directory: directory)
+        let request = try TeacherWordAudioRequest(
+            spokenText: "flibbertigibbet",
+            usage: .readHint
+        )
+
+        let initiallyMissing = await cache.isCatalogMiss(for: request)
+        XCTAssertFalse(initiallyMissing)
+        try await cache.markCatalogMiss(for: request)
+        let markedMissing = await cache.isCatalogMiss(for: request)
+        XCTAssertTrue(markedMissing)
+        let missingClip = try await cache.clip(for: request)
+        XCTAssertNil(missingClip)
+
+        let clip = try TeacherWordAudioClip(audioData: Data([1, 2, 3]))
+        try await cache.store(clip, for: request)
+
+        let markerCleared = await cache.isCatalogMiss(for: request)
+        XCTAssertFalse(markerCleared)
+        let storedClip = try await cache.clip(for: request)
+        XCTAssertEqual(storedClip, clip)
     }
 
     func testPipelineAllowsNetworkOnlyDuringParentPreparation() async throws {
@@ -481,7 +518,7 @@ final class RemoteTeacherWordAudioProviderTests: XCTestCase {
         } catch {
             XCTAssertEqual(
                 error as? TeacherWordAudioError,
-                .unavailableOfflineClip
+                .catalogMissAppleFallback
             )
         }
     }

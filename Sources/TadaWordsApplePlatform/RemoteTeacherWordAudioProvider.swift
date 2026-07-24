@@ -186,13 +186,15 @@ public actor FileTeacherWordAudioCache: TeacherWordAudioCaching {
         }
         let fileURL = fileURL(for: request)
         let checksumURL = checksumURL(for: request)
-        guard
-            fileManager.fileExists(atPath: fileURL.path),
-            fileManager.fileExists(atPath: checksumURL.path)
-        else {
+        let hasAudio = fileManager.fileExists(atPath: fileURL.path)
+        let hasChecksum = fileManager.fileExists(atPath: checksumURL.path)
+        guard hasAudio || hasChecksum else {
+            return nil
+        }
+        guard hasAudio && hasChecksum else {
             try? fileManager.removeItem(at: fileURL)
             try? fileManager.removeItem(at: checksumURL)
-            return nil
+            throw TeacherWordAudioError.invalidAudioChecksum
         }
 
         do {
@@ -205,10 +207,14 @@ public actor FileTeacherWordAudioCache: TeacherWordAudioCaching {
                 throw TeacherWordAudioError.invalidAudioChecksum
             }
             return try TeacherWordAudioClip(audioData: data)
+        } catch let error as TeacherWordAudioError {
+            try? fileManager.removeItem(at: fileURL)
+            try? fileManager.removeItem(at: checksumURL)
+            throw error
         } catch {
             try? fileManager.removeItem(at: fileURL)
             try? fileManager.removeItem(at: checksumURL)
-            return nil
+            throw TeacherWordAudioError.persistentCacheUnavailable
         }
     }
 
@@ -242,17 +248,50 @@ public actor FileTeacherWordAudioCache: TeacherWordAudioCaching {
             else {
                 throw TeacherWordAudioError.invalidAudioChecksum
             }
+            try? fileManager.removeItem(at: catalogMissURL(for: request))
             return
         }
 
         do {
             try clip.audioData.write(to: fileURL, options: .atomic)
             try Data(checksum.utf8).write(to: checksumURL, options: .atomic)
+            try? fileManager.removeItem(at: catalogMissURL(for: request))
         } catch {
             try? fileManager.removeItem(at: fileURL)
             try? fileManager.removeItem(at: checksumURL)
             throw error
         }
+    }
+
+    public func markCatalogMiss(
+        for request: TeacherWordAudioRequest
+    ) async throws {
+        guard let directory else {
+            throw TeacherWordAudioError.persistentCacheUnavailable
+        }
+        try fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        try? fileManager.removeItem(at: fileURL(for: request))
+        try? fileManager.removeItem(at: checksumURL(for: request))
+        do {
+            try Data("catalog-miss-v1".utf8).write(
+                to: catalogMissURL(for: request),
+                options: .atomic
+            )
+        } catch {
+            throw TeacherWordAudioError.persistentCacheUnavailable
+        }
+    }
+
+    public func isCatalogMiss(
+        for request: TeacherWordAudioRequest
+    ) async -> Bool {
+        guard directory != nil else { return false }
+        return fileManager.fileExists(
+            atPath: catalogMissURL(for: request).path
+        )
     }
 
     private func fileURL(for request: TeacherWordAudioRequest) -> URL {
@@ -276,6 +315,12 @@ public actor FileTeacherWordAudioCache: TeacherWordAudioCaching {
 
     private func checksumURL(for request: TeacherWordAudioRequest) -> URL {
         fileURL(for: request).appendingPathExtension("sha256")
+    }
+
+    private func catalogMissURL(for request: TeacherWordAudioRequest) -> URL {
+        fileURL(for: request)
+            .deletingPathExtension()
+            .appendingPathExtension("catalog-miss")
     }
 
     private static func checksum(_ data: Data) -> String {

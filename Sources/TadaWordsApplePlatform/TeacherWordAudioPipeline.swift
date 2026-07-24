@@ -47,6 +47,9 @@ public actor TeacherWordAudioPipeline:
         if let cached = try await cache.clip(for: request) {
             return cached
         }
+        if await cache.isCatalogMiss(for: request) {
+            throw TeacherWordAudioError.catalogMissAppleFallback
+        }
         throw TeacherWordAudioError.unavailableOfflineClip
     }
 
@@ -55,6 +58,8 @@ public actor TeacherWordAudioPipeline:
             let request = TeacherWordAudioRequest(prompt: prompt)
             do {
                 _ = try await audio(for: request)
+            } catch TeacherWordAudioError.catalogMissAppleFallback {
+                continue
             } catch TeacherWordAudioError.unavailableOfflineClip {
                 guard let remote else {
                     throw TeacherWordAudioError.unconfiguredEndpoint
@@ -67,6 +72,7 @@ public actor TeacherWordAudioPipeline:
                     // isolated word is outside the online Bella catalog.
                     // The word may still be committed; playback will use the
                     // device-local Apple English voice.
+                    try await cache.markCatalogMiss(for: request)
                 }
             }
         }
@@ -83,10 +89,12 @@ public actor TeacherWordAudioPipeline:
                     // Check only the device-local immutable cache next.
                 }
             }
-            // A cache miss is valid after PawGoo returned 422 during Parent
-            // preparation. Quest playback will use on-device Apple speech.
-            // Cache corruption and persistence failures still throw.
-            _ = try await cache.clip(for: request)
+            if try await cache.clip(for: request) != nil {
+                continue
+            }
+            guard await cache.isCatalogMiss(for: request) else {
+                throw TeacherWordAudioError.unavailableOfflineClip
+            }
         }
     }
 

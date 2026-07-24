@@ -95,6 +95,7 @@ public enum TeacherWordAudioError: Error, Equatable, Sendable {
     case serverRejected(statusCode: Int)
     case unsupportedContentType(String?)
     case unavailableOfflineClip
+    case catalogMissAppleFallback
     case persistentCacheUnavailable
     case appAttestUnavailable
     case invalidAudioChecksum

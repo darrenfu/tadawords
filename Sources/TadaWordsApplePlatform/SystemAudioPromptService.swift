@@ -35,7 +35,7 @@ public actor SystemAudioPromptService: AudioPromptService {
             let request = TeacherWordAudioRequest(prompt: prompt)
             do {
                 try await playTeacherAudio(request: request)
-            } catch TeacherWordAudioError.unavailableOfflineClip {
+            } catch TeacherWordAudioError.catalogMissAppleFallback {
                 try await playPreparedText(
                     request.spokenText,
                     role: TeacherAudioFallbackPolicy.spokenRole(
