@@ -1216,6 +1216,38 @@ transient `.syncing` snapshot when it opened during an existing reconciliation.
 - Focused concurrency tests and the complete 1129-test Swift suite pass.
   Exact-HEAD build and signed-device acceptance remain pending.
 
+## v0.7.32 — 2026-07-24
+
+Target release: `v0.7.32`
+
+Branch: `codex/privacy-support-alignment-v0.7.32`
+
+Build: `2026072406`
+
+Overall state: Issue #76's owner-approved conservative App Store 1.0 fallback
+removes every production enrollment and speaker-matching entry point while
+retaining only the existing Profile-deletion and proven-fresh-install cleanup
+paths for a dormant pre-release Keychain template.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0732-PRIVACY-001 | P0 release scope | Voiceprint/COPPA | Do not ship voiceprint enrollment or speaker matching in App Store 1.0 without a qualified written treatment; preserve deletion of any dormant pre-release template. | Automated pass; exact-artifact acceptance pending | Source contracts, complete regression gate, exact-HEAD iPhone and iPad simulator UI checks, signed in-place iPhone acceptance without deleting app data, and retained lifecycle cleanup tests |
+
+### 2026-07-24 v0.7.32 notes
+
+- Production composition no longer constructs an enrollment service or injects
+  a speaker verifier into Read Practice.
+- Parent Profile cards do not expose voice setup while the release policy is
+  disabled, and view-model guards fail closed if legacy code attempts to
+  navigate or begin enrollment.
+- Microphone permission copy now covers spoken Read Practice only.
+- Existing templates are not silently erased during update. The production
+  repository remains composed only so Profile deletion and proven-fresh-install
+  bootstrap can perform the previously verified scoped cleanup.
+- This is a release-scope fallback, not a legal conclusion. Issue #76 remains
+  open for qualified treatment of transient Read speech, Profile/photo data,
+  persistent identifiers, and optional CloudKit Family Sync.
+
 ## v0.7.30 — 2026-07-23
 
 Target release: `v0.7.30`
@@ -2367,6 +2399,33 @@ Build: `2026072117`
 278 个本地清单，零发件箱和待处理记录，空闲持久状态，并且在两个屏幕仍显示“正在同步...”时没有错误。
 - 重点并发测试和完整的 1129 测试Swift套件通过。
 Exact-HEAD 构建和签名设备验收仍在等待中。
+
+## v0.7.32 — 2026-07-24
+
+目标发布：`v0.7.32`
+
+Branch: `codex/privacy-support-alignment-v0.7.32`
+
+Build: `2026072406`
+
+总体状态：Issue #76 采用所有者批准的保守 App Store 1.0 fallback：移除所有生产
+voiceprint 注册和说话人匹配入口，仅为休眠的预发布 Keychain 模板保留既有的
+Profile 删除与已验证首次安装清理路径。
+
+| ID | 类型 | 区域 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V0732-PRIVACY-001 | P0 发布范围 | Voiceprint/COPPA | 在没有合格书面处理前，不得在 App Store 1.0 发布 voiceprint 注册或说话人匹配；保留任何休眠预发布模板的删除能力。 | 自动通过；exact-artifact 验收待定 | 源契约、完整回归门、exact-HEAD iPhone 和 iPad 模拟器 UI 检查、保留数据的签名实体 iPhone 验收，以及保留的生命周期清理测试 |
+
+### 2026-07-24 v0.7.32 说明
+
+- 生产组合不再构造注册 service，也不会向 Read Practice 注入说话人验证器。
+- 当发布策略禁用时，Parent Profile 卡片不暴露 voice 设置；如果遗留代码尝试
+  导航或开始注册，view-model guard 会 fail closed。
+- 麦克风权限文案现在只覆盖 spoken Read Practice。
+- 更新期间不会静默擦除现有模板。生产 repository 仍保持组合，只为使 Profile 删除
+  与已验证首次安装 bootstrap 能执行此前验证过的限定范围清理。
+- 这是发布范围 fallback，而不是法律结论。Issue #76 仍待针对瞬态 Read 语音、
+  Profile/photo 数据、持久标识符和可选 CloudKit Family Sync 的合格处理。
 
 ## v0.7.30 — 2026-07-23
 

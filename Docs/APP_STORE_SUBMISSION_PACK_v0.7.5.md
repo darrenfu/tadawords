@@ -368,6 +368,10 @@ content-consistency gate.
       until #33 passes.
 - [ ] Resolve #19 with a final-Profile/delete-all route and production
       destructive evidence before claiming complete in-app or CloudKit erasure.
+- [ ] Confirm the #76 conservative 1.0 fallback remains enforced: no Parent
+      voice-enrollment action and no speaker verifier in production
+      composition. Keep the repository only for retained-template cleanup. See
+      [`VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md`](VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md).
 - [ ] Run #28's signed physical-device
       `KeychainVoiceprintLifecycleDeviceTests` on the exact candidate. The
       isolated real-Keychain proof must show retained items survive repository

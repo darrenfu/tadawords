@@ -26,7 +26,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.7.33` (build `2026072407`) is a documentation-only release that makes every repository-root Markdown file English-first bilingual. It preserves the v0.7.30 runtime baseline: the v0.7.28 on-device crop-and-mask editor before camera OCR, signed physical-device coverage for the owner-approved voiceprint Keychain lifecycle, and the App Store 1.0 distribution contract (Made for Kids 6–8, Free with no IAP or ads, United States only, manual release). Captured and edited word-sheet photos remain on device and are not persisted; voiceprint proof uses isolated test services and never uninstalls the user's app or touches production voiceprints. Existing Profile data, attempts, completion, rewards, PawGoo app identity, CloudKit identifiers, and LocalQA data contracts remain unchanged. Exact-HEAD simulator and signed-device acceptance remain separate gates. See the [voiceprint lifecycle record](Docs/VOICEPRINT_KEYCHAIN_LIFECYCLE_v0.7.30.md), [decision record](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md), v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), and [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md).
+> **Project status:** Version `0.7.33` (build `2026072407`) is a documentation-only release that makes every repository-root Markdown file English-first bilingual. It preserves the v0.7.32 runtime baseline: the conservative App Store 1.0 fallback does not ship voiceprint enrollment or speaker matching, while retaining only dormant pre-release template cleanup for Profile deletion and proven fresh installation; v0.7.28 adds the on-device crop-and-mask editor before camera OCR; and v0.7.30 adds signed Keychain lifecycle proof. Captured and edited word-sheet photos remain on device and are not persisted. Existing Profile data, attempts, completion, rewards, PawGoo app identity, CloudKit identifiers, and LocalQA data contracts remain unchanged. Exact-HEAD simulator and signed-device acceptance remain separate gates. See the [1.0 fallback record](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md), [voiceprint lifecycle record](Docs/VOICEPRINT_KEYCHAIN_LIFECYCLE_v0.7.30.md), [decision record](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md), v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), and [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -37,7 +37,7 @@ music, sound cues, and 25-item reward collection.
 
 | Route | Prompt | Child response | Evidence |
 |---|---|---|---|
-| Read Quest | The app shows a sight word | The child says the word | On-device speech recognition plus optional device voiceprint confidence |
+| Read Quest | The app shows a sight word | The child says the word | On-device speech recognition; App Store 1.0 does not use voiceprint speaker matching |
 | Write Quest | The app speaks a sight word | The child chooses handwriting or the in-app A–Z spelling keyboard | Vision handwriting recognition or exact case-insensitive typed spelling; both complete the same Write Quest while pace stays separate |
 | Review | The scheduler selects due and weak words | The child retrieves the word again | Accuracy, elapsed time, help, replay, and retry history |
 
@@ -93,7 +93,7 @@ Preset imports also stay bound to the initiating Profile. An import to **Both** 
 | Motivation | Eight original worlds, 20 small rewards and five milestones per world, 200 distinct treasure icons, Double-Quest next-day Theme/Icon unlocks, My Collection, and a monthly calendar |
 | Guardian tools | Single-tap `Parents` → auto-checking math Parent Gate, World-themed Parent Home with a Profile card, Words & Practice, Progress, and App & Family entrances, Word Manager, reports, corrections, settings, CSV export, offline Third-Party Notices, and Back-to-child navigation |
 | Accessibility | Landscape child routes plus rotatable parent routes, shared 44-point minimum targets, VoiceOver labels and announcements, Reduce Motion, left-handed writing, Reduced Sound, and Calm Rescue; physical accessibility acceptance remains open |
-| Platform | A 1.8s branded launch page with official Tada Words and Pawgoo marks, offline-first Katie teacher audio with an Apple Speech fallback, bundled Aurora launch/transitions, repeat-after-me Keychain voiceprints, target-informed Vision handwriting recognition, local notifications, local JSON snapshots, device-only LocalQA, and explicitly enabled CloudKit family sync |
+| Platform | A 1.8s branded launch page with official Tada Words and Pawgoo marks, offline-first Katie teacher audio with an Apple Speech fallback, bundled Aurora launch/transitions, dormant Keychain-template cleanup with no 1.0 enrollment or matching, target-informed Vision handwriting recognition, local notifications, local JSON snapshots, device-only LocalQA, and explicitly enabled CloudKit family sync |
 
 ## Architecture
 
@@ -182,10 +182,10 @@ Follow [DEVICE_DEPLOYMENT.md](DEVICE_DEPLOYMENT.md) for signing, Developer Mode,
 ## Data and privacy
 
 - The app stores child profiles, word pools, quest history, and settings in local JSON snapshots.
-- The PawGoo normal bundle `app.tadawords.app` has a new iOS sandbox, permission state, and default Keychain group. It cannot read, replace, or migrate the separate `com.tadawords.app.localqa` data. Normal-app installation waits for #60's old-normal inventory; voice setup and OS permissions are device-local and must be established for the new normal app.
+- The PawGoo normal bundle `app.tadawords.app` has a new iOS sandbox, permission state, and default Keychain group. It cannot read, replace, or migrate the separate `com.tadawords.app.localqa` data.
 - The app does not run an app-owned server database.
-- Speech and enrollment audio buffers stay in memory. The app does not save or upload raw child recordings.
-- Voice setup shuffles six short Pre-K sentences for the child to hear and repeat. Each device stores only the resulting voiceprint template in Keychain. CloudKit does not sync the template, so each device needs its own enrollment. A true fresh install receives a random Profile identity and, before creating any local data, clears only Tada Words' retained voiceprint Keychain service; ordinary upgrades preserve enrolled templates, and a failed reset fails bootstrap closed for a safe retry.
+- Speech audio buffers stay in memory. The app does not save or upload raw child recordings.
+- App Store 1.0 does not expose voiceprint enrollment or use a retained template for speaker matching. An existing pre-release template stays inaccessible to practice and remains device-only; Profile deletion and proven-fresh-install bootstrap retain their fail-closed cleanup paths.
 - Practice uses one canonical teacher-voice contract rather than a per-Profile style picker. A versioned offline pack covers 500 words with Katie as the canonical voice and one manifest-documented Aurora quality override for `bun`; other words use the clearest compatible American-English Apple voice already installed. Aurora launch and transition clips are also bundled. No Cartesia API key or runtime Cartesia request is present in the app.
 - Pool import prefetches only the child-safe concrete-word picture catalog. All 74 unique Twemoji PNGs are bundled with the app, so a fresh offline install needs no CDN request. Abstract words have no picture mapping.
 - Parents can open offline Third-Party Notices behind the Parent Gate to review the exact Twemoji source, modification status, copyright attribution, and CC BY 4.0 license.
@@ -201,7 +201,7 @@ Follow [DEVICE_DEPLOYMENT.md](DEVICE_DEPLOYMENT.md) for signing, Developer Mode,
   behavior, deterministic negative route contracts, and the exact-device matrix
   still required for release.
 
-The voiceprint provides a confidence signal. It does not prove that only the selected child spoke. Production use needs representative same-child and different-speaker testing.
+Voiceprint enrollment and speaker matching are not included in App Store 1.0 while issue #76 remains unresolved.
 
 The `TadaWordsLocalQA` scheme installs a visibly separate **Tada Words QA** app with bundle ID `com.tadawords.app.localqa`. It has no iCloud entitlement, does not advertise CloudKit sharing, and keeps data only on that device. Its local data is separate from the release app and does not sync to another device.
 
@@ -213,7 +213,7 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 |---|---|
 | Strict Swift format lint | Passed |
 | Version and build | v0.7.33 (`2026072407`) in source Plists and generated project settings |
-| Swift tests | The v0.7.30 runtime baseline includes voiceprint lifecycle and App Store decision contracts, the v0.7.28 camera OCR editor, atomic Family Sync, Profile chooser, and content-rights coverage; the full source gate must be rerun at the immutable v0.7.33 release HEAD |
+| Swift tests | The v0.7.32 voiceprint release-policy and composition contracts, v0.7.30 lifecycle cleanup, v0.7.28 camera OCR editor, atomic Family Sync, Profile chooser, and content-rights coverage; the full source gate must be rerun at the immutable v0.7.33 release HEAD |
 | Family Sync physical delta | Normal PawGoo v0.7.18 installed in place on the approved iPhone and iPad; an iPhone-created test Profile converged automatically to the untouched iPad without opening Family Sync, with one matching record and four Profiles total on each side |
 | Family Sync simulator E2E | Merged v0.7.2: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5 |
 | Critical XCUITest flows | Merged v0.7.2: full critical matrix passed on iPad; the single iPhone Photos-dismiss timing case passed 2/2 in isolated fresh reruns after the combined run, and every other flow passed |
@@ -238,7 +238,7 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | CloudKit remote erasure | Durable lifecycle, exact owner/participant disposition, crash repair, retry, terminal completion, and account-provenance tests passed; production destructive test-only proof open |
 | Physical child speech, handwriting, audio, accessibility, and CloudKit | Acceptance open |
 
-The [feature audit](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md) records the merged v0.2 implementation evidence. The [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md) records runtime changes through v0.7.30, and the [V1 backlog](V1_BACKLOG.md) lists the remaining device and human acceptance work.
+The [feature audit](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md) records the merged v0.2 implementation evidence. The [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md) records changes through v0.7.32, and the [V1 backlog](V1_BACKLOG.md) lists the remaining device and human acceptance work.
 
 ## Test fixture attribution
 
@@ -293,7 +293,7 @@ Tada Words为孩子们提供了每天两个独立的视字任务：
 
 Parents通过键入、使用光学字符识别（OCR）扫描学校列表或从离线预设中选择单词来添加每个练习单词。Tada Words从不自动填充池。审查时间表根据回忆强度、错误、帮助使用、重播和每个孩子的反应速度将家长批准的单词带回。
 
-> **项目状态：**版本 `0.7.33`（构建 `2026072407`）是仅文档版本，将仓库根目录中的所有 Markdown 文件改为英文优先的中英双语文档。它保留 v0.7.30 的运行时基线：v0.7.28 在相机 OCR 前提供的设备端裁剪与遮罩编辑器、针对已获所有者批准的 voiceprint Keychain 生命周期的签名真机覆盖，以及 App Store 1.0 分发约定（Made for Kids 6–8、免费、无 IAP 或广告、仅美国、手动发布）。拍摄和编辑后的词表照片仅保留在设备上且不持久化；voiceprint 验证使用隔离的测试 service，绝不卸载用户 App，也不会触碰生产 voiceprint。现有 Profile 数据、attempt、completion、reward、PawGoo App 身份、CloudKit 标识符和 LocalQA 数据契约均不变。exact-HEAD 模拟器验收与签名真机验收仍是独立门槛。另见 [voiceprint 生命周期记录](Docs/VOICEPRINT_KEYCHAIN_LIFECYCLE_v0.7.30.md)、[发布决策记录](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md)、v0.7.5 [提交包](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md)、[隐私清单](Docs/APP_STORE_PRIVACY_v0.7.4.md)、[内容权利清单](Docs/APP_STORE_CONTENT_RIGHTS.md)、[数据清单](Docs/FAMILY-SYNC-DATA-MANIFEST.md)和[后续日志](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md)。
+> **项目状态：**版本 `0.7.33`（构建 `2026072407`）是仅文档版本，将仓库根目录中的所有 Markdown 文件改为英文优先的中英双语文档。它保留 v0.7.32 的运行时基线：保守的 App Store 1.0 fallback 不会发布 voiceprint 注册或说话人匹配，仅保留用于 Profile 删除和已验证首次安装清理的预发布模板清理；v0.7.28 在相机 OCR 前提供设备端裁剪与遮罩编辑器；v0.7.30 提供签名 Keychain 生命周期验证。拍摄和编辑后的词表照片仅保留在设备上且不持久化。现有 Profile 数据、attempt、completion、reward、PawGoo App 身份、CloudKit 标识符和 LocalQA 数据契约均不变。exact-HEAD 模拟器验收与签名真机验收仍是独立门槛。另见 [1.0 fallback 记录](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md)、[voiceprint 生命周期记录](Docs/VOICEPRINT_KEYCHAIN_LIFECYCLE_v0.7.30.md)、[发布决策记录](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md)、v0.7.5 [提交包](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md)、[隐私清单](Docs/APP_STORE_PRIVACY_v0.7.4.md)、[内容权利清单](Docs/APP_STORE_CONTENT_RIGHTS.md)、[数据清单](Docs/FAMILY-SYNC-DATA-MANIFEST.md)和[后续日志](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md)。
 
 该应用程序包含八个独立的视觉世界：Moonpetal Kingdom、Build-It Bay、Paws & Pines、Dino Discovery、Firehouse Heroes、Brickwork City、Frostlight World和Coaster Carnival。每个世界都保留了自己的原创场景、吉祥物、音乐、声音线索和25个物品的奖励收藏。
 
@@ -461,7 +461,7 @@ open TadaWords.xcodeproj
 |---|---|
 |严格Swift格式杂毛|通过|
 | 版本和构建 | 源 Plist 与生成项目设置中的 v0.7.33（`2026072407`） |
-| Swift 测试 | v0.7.30 运行时基线包含 voiceprint 生命周期与 App Store 决策契约、v0.7.28 相机 OCR 编辑器、原子 Family Sync、Profile chooser 与内容权利覆盖；必须在不可变的 v0.7.33 发布 HEAD 上重跑完整 source gate |
+| Swift 测试 | v0.7.32 运行时基线包含 voiceprint 发布策略与组合契约、v0.7.30 生命周期清理、v0.7.28 相机 OCR 编辑器、原子 Family Sync、Profile chooser 与内容权利覆盖；必须在不可变的 v0.7.33 发布 HEAD 上重跑完整 source gate |
 | 家庭同步物理差分 | 正常 PawGoo v0.7.18 已安装在批准的 iPhone 和 iPad 上；一个 iPhone 创建的测试 Profile 自动收敛到未触碰的 iPad，无需打开家庭同步，每侧总共有一个匹配记录和四个 Profile |
 | 家庭同步模拟器E2E |合并v0.7.2：6/6在iPhone 17 Pro Max和6/6在iPad Pro 13英寸（M5），iOS 26.5 |
 | 关键 XCUITest 流程 | 合并 v0.7.2：完整的关键矩阵通过 iPad；单个 iPhone 照片-拒绝时间案例在合并运行后在孤立的新重播中通过了 2/2，其余每个流程都通过了 |
@@ -486,7 +486,7 @@ open TadaWords.xcodeproj
 | CloudKit 远程擦除 | 持久生命周期，准确的所有者/参与者处置，崩溃修复，重试，终端完成和帐户来源测试通过；仅生产破坏性测试证明开放 |
 | 身体儿童的语言、手写、音频、可访问性以及CloudKit | 接受开放|
 
-[功能审计](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md)记录合并后的 v0.2 实施证据。[后续日志](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md)记录到 v0.7.30 为止的运行时更改，[V1 backlog](V1_BACKLOG.md)列出剩余的设备与人工验收工作。
+[功能审计](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md)记录合并后的 v0.2 实施证据。[后续日志](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md)记录到 v0.7.32 为止的运行时更改，[V1 backlog](V1_BACKLOG.md)列出剩余的设备与人工验收工作。
 
 ## 测试固定装置归属
 

@@ -123,11 +123,13 @@ private struct GuardianProfileManagementCard: View {
         Button("Edit", action: onEdit)
             .buttonStyle(.bordered)
             .accessibilityIdentifier("guardian.profile.\(profile.id).edit")
-        Button(action: onVoiceprint) {
-            Label(voiceprintTitle, systemImage: "waveform.badge.mic")
+        if VoiceprintReleasePolicy.shipsEnrollmentAndSpeakerMatching {
+            Button(action: onVoiceprint) {
+                Label(voiceprintTitle, systemImage: "waveform.badge.mic")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("guardian.profile.\(profile.id).voice")
         }
-        .buttonStyle(.bordered)
-        .accessibilityIdentifier("guardian.profile.\(profile.id).voice")
     }
 
     private var voiceprintTitle: String {

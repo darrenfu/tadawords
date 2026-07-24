@@ -235,6 +235,27 @@ final class GuardianParentNavigationTests: XCTestCase {
     }
 
     @MainActor
+    func testAppStoreOnePointZeroVoiceprintRoutesFailClosed() async throws {
+        let store = DemoGuardianFamilyStore()
+        let family = try await store.familySnapshot()
+        let profile = try XCTUnwrap(family.profiles.first)
+        let model = GuardianDashboardViewModel(
+            store: store,
+            audioPromptService: NavigationTestAudioPromptService()
+        )
+
+        XCTAssertEqual(model.transitionKey, "parent-gate")
+        model.showVoiceprint(profile)
+        XCTAssertEqual(model.transitionKey, "parent-gate")
+
+        model.beginVoiceprint(for: profile)
+        XCTAssertEqual(
+            model.errorMessage,
+            "Voice setup is not included in this release."
+        )
+    }
+
+    @MainActor
     func testEditingProfileAutoSavesLatestDraftWithoutLeavingEditor() async throws {
         let store = DemoGuardianFamilyStore()
         let initialFamily = try await store.familySnapshot()
