@@ -368,9 +368,12 @@ content-consistency gate.
       until #33 passes.
 - [ ] Resolve #19 with a final-Profile/delete-all route and production
       destructive evidence before claiming complete in-app or CloudKit erasure.
-- [ ] Complete #28's signed iPhone/iPad uninstall/reinstall proof for the
-      fail-closed Tada Words voiceprint-service reset, verify that an in-place
-      upgrade preserves enrollment, and reconcile final policy/support wording.
+- [ ] Run #28's signed physical-device
+      `KeychainVoiceprintLifecycleDeviceTests` on the exact candidate. The
+      isolated real-Keychain proof must show retained items survive repository
+      recreation until the fail-closed scoped reset, without uninstalling the
+      user's app or touching production voiceprints. Reconcile final deployed
+      policy/support wording under #54.
 - [ ] Complete #54 and verify that the deployed Pawgoo Privacy and Support copy
       matches bundled hints, Family Sync scope, deletion limits, and Keychain
       lifecycle on the exact RC.
