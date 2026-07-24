@@ -211,14 +211,15 @@ public actor AppleSpeechRecognitionService: SpeechRecognitionService {
                         error in
                         if let result {
                             let snapshot = SpeechTranscriptSnapshot(result: result)
+                            let acceptImmediately =
+                                earlyMatchResolver.isHighConfidenceMatch(
+                                    snapshot,
+                                    target: request.prompt
+                                )
                             completionBox.receive(
                                 snapshot,
                                 isFinal: result.isFinal,
-                                acceptImmediately: earlyMatchResolver
-                                    .isHighConfidenceMatch(
-                                        snapshot,
-                                        target: request.prompt
-                                    )
+                                acceptImmediately: acceptImmediately
                             )
                         }
                         if let error {
