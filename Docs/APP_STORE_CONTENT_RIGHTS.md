@@ -1,6 +1,6 @@
 # App Store content-rights inventory
 
-- Exact source baseline inspected: `57a84e68be35c279976c81a10080a41b0b589453`
+- Exact source baseline inspected: `4bf1ef30f7a28721b2dab4840cb8a2ab65a75f1b`
 - Content-bearing Third-Party Notices implementation: `1fd65c583583bf9ec6b01a4f5cacee3a4c286011`
 - Final evidence-freeze identity: `0.7.35 / 2026072409`
 - Audit date: 2026-07-23
