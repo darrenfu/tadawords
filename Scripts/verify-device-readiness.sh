@@ -197,9 +197,16 @@ for configuration in Debug Release; do
     if test "$configuration" = Debug; then
         EXPECTED_ICLOUD_ENVIRONMENT=Development
         EXPECTED_APP_ATTEST_ENVIRONMENT=development
+        printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
+            | grep -q 'INFOPLIST_KEY_TadaWordsTeacherAudioEndpoint = https://audio-dev.pawgoo.app' \
+            || fail "normal Debug teacher-audio endpoint is incorrect"
     else
         EXPECTED_ICLOUD_ENVIRONMENT=Production
         EXPECTED_APP_ATTEST_ENVIRONMENT=production
+        if printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
+            | grep -Eq '^[[:space:]]*INFOPLIST_KEY_TadaWordsTeacherAudioEndpoint ='; then
+            fail "normal Release must not configure a teacher-audio endpoint before production verification"
+        fi
     fi
     printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
         | grep -q "ICLOUD_CONTAINER_ENVIRONMENT = $EXPECTED_ICLOUD_ENVIRONMENT" \
@@ -251,6 +258,10 @@ fi
 if printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
     | grep -Eq '^[[:space:]]*APP_ATTEST_ENVIRONMENT = [^[:space:]]+'; then
     fail "LocalQA must not inherit an App Attest environment build setting"
+fi
+if printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
+    | grep -Eq '^[[:space:]]*INFOPLIST_KEY_TadaWordsTeacherAudioEndpoint ='; then
+    fail "LocalQA must remain teacher-audio endpoint-free"
 fi
 printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
     | grep -q 'PRODUCT_NAME = Tada Words QA' \

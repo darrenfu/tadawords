@@ -58,6 +58,7 @@ targets:
           APP_ATTEST_ENVIRONMENT: development
           APS_ENVIRONMENT: development
           ICLOUD_CONTAINER_ENVIRONMENT: Development
+          INFOPLIST_KEY_TadaWordsTeacherAudioEndpoint: https://audio-dev.pawgoo.app
         Release:
           DEVELOPMENT_TEAM: 7R78Q4HP86
           APP_ATTEST_ENVIRONMENT: production
