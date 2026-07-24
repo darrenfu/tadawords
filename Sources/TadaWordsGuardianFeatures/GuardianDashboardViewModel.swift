@@ -365,6 +365,9 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func showVoiceprint(_ profile: KidProfile) {
+        guard VoiceprintReleasePolicy.shipsEnrollmentAndSpeakerMatching else {
+            return
+        }
         voiceprintPromptTask?.cancel()
         voiceprintProgress = nil
         currentVoiceprintSentence = nil
@@ -1071,6 +1074,10 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func beginVoiceprint(for profile: KidProfile) {
+        guard VoiceprintReleasePolicy.shipsEnrollmentAndSpeakerMatching else {
+            errorMessage = "Voice setup is not included in this release."
+            return
+        }
         guard let voiceprintEnrollmentService else {
             errorMessage = "Voice setup is unavailable on this device."
             return

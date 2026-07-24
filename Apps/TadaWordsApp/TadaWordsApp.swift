@@ -16,7 +16,6 @@ struct TadaWordsApp: App {
     private let profileMutationGate: ProfileScopedMutationGate
     private let voiceprintRepository: ProfileMutationGatedDeviceVoiceprintRepository
     private let speechRecognitionService: AppleSpeechRecognitionService
-    private let voiceprintEnrollmentService: AppleVoiceprintEnrollmentService
     private let pictureHintProvider: AppleWordPictureHintService
     private let familySyncTransport: (any FamilySyncTransport)?
     private let familySyncAccessManagement: (@MainActor (ProfileID) async throws -> Void)?
@@ -85,19 +84,11 @@ struct TadaWordsApp: App {
         profileMutationGate = mutationGate
         voiceprintRepository = voiceprints
         pictureHintProvider = AppleWordPictureHintService()
-        voiceprintEnrollmentService = AppleVoiceprintEnrollmentService(
-            repository: voiceprints,
-            audioExperienceService: experience
-        )
         audioPromptService = SystemAudioPromptService(
             audioExperienceService: experience,
             teacherWordAudioProvider: teacherPipeline
         )
-        speechRecognitionService = AppleSpeechRecognitionService(
-            voiceprintVerifier: AppleVoiceprintVerifier(
-                repository: voiceprints
-            )
-        )
+        speechRecognitionService = AppleSpeechRecognitionService()
     }
 
     var body: some Scene {
@@ -127,7 +118,7 @@ struct TadaWordsApp: App {
                     familySyncTransport: familySyncTransport,
                     familySyncAccessManagement: familySyncAccessManagement,
                     notificationScheduler: notificationScheduler,
-                    voiceprintEnrollmentService: voiceprintEnrollmentService,
+                    voiceprintEnrollmentService: nil,
                     voiceprintRepository: voiceprintRepository,
                     teacherAudioPreparer: teacherAudioPipeline,
                     profileMutationGate: profileMutationGate,
