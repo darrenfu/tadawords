@@ -150,9 +150,7 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         let support = element(label: "Support")
         let localDeletion = element(labelPrefix: "Delete a local profile.")
         let permissions = element(labelPrefix: "Manage iOS permissions.")
-        let appVersion = app.descendants(matching: .any)[
-            "guardian.app.version"
-        ]
+        let appVersion = element(label: "Version 0.7.40 (2026072414)")
 
         for _ in 0..<4 where !privacy.exists {
             app.scrollViews.firstMatch.swipeUp()
