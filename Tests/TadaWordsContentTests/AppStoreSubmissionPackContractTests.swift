@@ -93,6 +93,11 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "BLOCKED BY ISSUE #55",
             "SYSTEM_PERMISSION_INVENTORY_v0.7.8.md",
             "Child Read has no request capability",
+            "APP_STORE_RELEASE_DECISIONS_v0.7.27.md",
+            "Made for Kids, primary age band 6–8",
+            "United States only",
+            "Manually release this version",
+            "No IAP, subscription, advertising, or paid unlock in 1.0",
             "https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/",
         ]
         for claim in requiredClaims {
@@ -127,16 +132,27 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.23</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072302</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.28</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072402</string>"))
         }
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.23"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072302"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.28"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072402"))
+
+        for unresolvedDecision in [
+            "Price | **UNRESOLVED — #24**",
+            "Availability | **UNRESOLVED — #23/#24**",
+            "Do not select an age band",
+        ] {
+            XCTAssertFalse(
+                document.contains(unresolvedDecision),
+                "Resolved #24 decision regressed: \(unresolvedDecision)"
+            )
+        }
     }
 
     private var repositoryRoot: URL {
