@@ -43,8 +43,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tadawords.app
         PRODUCT_NAME: Tada Words
-        MARKETING_VERSION: 0.7.31
-        CURRENT_PROJECT_VERSION: 2026072405
+        MARKETING_VERSION: 0.7.34
+        CURRENT_PROJECT_VERSION: 2026072408
         TADA_GIT_COMMIT: unknown
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -71,12 +71,12 @@ targets:
       path: Apps/TadaWordsApp/Info.plist
       properties:
         CFBundleDisplayName: Tada Words
-        CFBundleShortVersionString: "0.7.31"
-        CFBundleVersion: "2026072405"
+        CFBundleShortVersionString: "0.7.34"
+        CFBundleVersion: "2026072408"
         TadaWordsGitCommit: "$(TADA_GIT_COMMIT)"
         CKSharingSupported: true
         ITSAppUsesNonExemptEncryption: false
-        NSMicrophoneUsageDescription: A parent enables microphone access for spoken Read Practice and voice setup. Tada Words analyzes short recordings on device; raw audio is not saved or uploaded.
+        NSMicrophoneUsageDescription: A parent enables microphone access for spoken Read Practice. Tada Words analyzes short recordings on device; raw audio is not saved or uploaded.
         NSFaceIDUsageDescription: Tada Words uses Face ID to protect sensitive parent actions such as sharing or deleting a profile.
         NSCameraUsageDescription: Tada Words uses the camera only when a parent chooses a profile photo or scans a word sheet for on-device text recognition.
         NSPhotoLibraryUsageDescription: Tada Words lets a parent choose a profile photo or a word-sheet photo for on-device text recognition.
