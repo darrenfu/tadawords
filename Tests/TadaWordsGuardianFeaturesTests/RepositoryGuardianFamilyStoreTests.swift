@@ -231,6 +231,29 @@ final class RepositoryGuardianFamilyStoreTests: XCTestCase {
         XCTAssertEqual(persistedProfiles, [fixture.firstProfile])
     }
 
+    func testEditRejectsAgesOutsideTheThreeThroughEightProductRange() async throws {
+        let fixture = try await makeFixture()
+
+        for invalidAge in [2, 9, ProfileAgePolicy.durableAges.upperBound] {
+            await assertThrowsErrorAsync {
+                _ = try await fixture.store.updateProfile(
+                    id: fixture.firstProfile.id,
+                    from: GuardianProfileDraft(
+                        displayName: "Mia",
+                        avatarAssetID: "hare",
+                        selectedWorld: .moonpetalKingdom,
+                        ageYears: invalidAge
+                    )
+                )
+            } verify: { error in
+                XCTAssertEqual(
+                    error as? GuardianFamilyStoreError,
+                    .invalidAge
+                )
+            }
+        }
+    }
+
     func testDependentStorageFailureCannotPartiallyCreateOrEditProfile() async throws {
         let profileRepository = InMemoryKidProfileRepository()
         let firstProfile = KidProfile(
