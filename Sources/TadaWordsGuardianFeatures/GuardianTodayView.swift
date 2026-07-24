@@ -528,7 +528,7 @@ enum GuardianDataControlCopy {
         + "This removes that child’s words, settings, quest history, rewards, and saved picture from this device."
 
     static let permissionManagement =
-        "Use Speech & Microphone above for first setup. To review or change access later, open the iOS Settings app, choose Apps, then Tada Words to review Camera, Photos, Microphone, Speech Recognition, and Notifications."
+        "Use Speech & Microphone above to review or finish setup. To change access later, open the iOS Settings app, choose Apps, then Tada Words to review Camera, Photos, Microphone, Speech Recognition, and Notifications."
 }
 
 private struct GuardianPrivacyAndSupportSection: View {

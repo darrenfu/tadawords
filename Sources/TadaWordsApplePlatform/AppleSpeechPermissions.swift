@@ -44,15 +44,32 @@ public struct SystemAppleSpeechPermissionChecker: AppleSpeechPermissionChecking 
     }
 }
 
-/// The app calls this controller from an explicit guardian/user action.
-/// Recognition services only inspect current authorization and never prompt.
-public struct AppleSpeechPermissionController: Sendable {
+/// Serializes Speech Recognition and Microphone prompts for both the contextual
+/// Read action and the optional guardian setup route.
+public actor AppleSpeechPermissionController {
     private let checker: any AppleSpeechPermissionChecking
+    private let speechRecognitionRequest: @Sendable () async -> ApplePermissionStatus
+    private let microphoneRequest: @Sendable () async -> ApplePermissionStatus
+    private var isRequesting = false
 
     public init(
         checker: any AppleSpeechPermissionChecking = SystemAppleSpeechPermissionChecker()
     ) {
         self.checker = checker
+        speechRecognitionRequest = Self.requestSpeechRecognitionPermission
+        microphoneRequest = Self.requestMicrophonePermission
+    }
+
+    init(
+        checker: any AppleSpeechPermissionChecking,
+        speechRecognitionRequest:
+            @escaping @Sendable () async -> ApplePermissionStatus,
+        microphoneRequest:
+            @escaping @Sendable () async -> ApplePermissionStatus
+    ) {
+        self.checker = checker
+        self.speechRecognitionRequest = speechRecognitionRequest
+        self.microphoneRequest = microphoneRequest
     }
 
     public func currentState() -> AppleSpeechPermissionState {
@@ -61,19 +78,32 @@ public struct AppleSpeechPermissionController: Sendable {
 
     public func requestPermissions() async -> AppleSpeechPermissionState {
         let current = checker.currentState()
+        guard !Task.isCancelled else { return current }
+
+        // Swift actors are reentrant across awaits. Keep an explicit in-flight
+        // gate so a rapid child tap or simultaneous guardian action cannot
+        // create overlapping Apple prompts.
+        guard !isRequesting else { return current }
+        isRequesting = true
+        defer { isRequesting = false }
+
         let plan = AppleSpeechPermissionRequestPlan(state: current)
 
         if plan.requestsSpeechRecognition {
-            _ = await requestSpeechRecognitionPermission()
+            _ = await speechRecognitionRequest()
         }
+        // A navigation/background cancellation cannot dismiss an Apple dialog
+        // already on screen, but it must prevent the next dialog in the
+        // sequence and any stale recording continuation.
+        guard !Task.isCancelled else { return checker.currentState() }
         if plan.requestsMicrophone {
-            _ = await requestMicrophonePermission()
+            _ = await microphoneRequest()
         }
 
         return checker.currentState()
     }
 
-    private func requestSpeechRecognitionPermission() async -> ApplePermissionStatus {
+    private static func requestSpeechRecognitionPermission() async -> ApplePermissionStatus {
         await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { status in
                 continuation.resume(returning: ApplePermissionStatus(status))
@@ -81,7 +111,7 @@ public struct AppleSpeechPermissionController: Sendable {
         }
     }
 
-    private func requestMicrophonePermission() async -> ApplePermissionStatus {
+    private static func requestMicrophonePermission() async -> ApplePermissionStatus {
         await withCheckedContinuation { continuation in
             AVCaptureDevice.requestAccess(for: .audio) { _ in
                 continuation.resume(

@@ -3,36 +3,39 @@ import XCTest
 @testable import TadaWordsFeatures
 
 final class ChildSpeechPermissionBoundaryTests: XCTestCase {
-    func testChildBoundaryOnlyChecksExistingAuthorization() async {
-        let recorder = SpeechAuthorizationCheckRecorder(result: true)
-        let actions = SpeechPermissionActions {
-            await recorder.check()
-        }
+    func testMicrophoneTapResolvesAuthorizationExactlyOnce() async {
+        let recorder = SpeechAuthorizationRecorder(result: true)
+        let actions = SpeechPermissionActions(
+            authorizeMicrophoneTap: {
+                await recorder.authorize()
+            }
+        )
 
-        let isAuthorized = await actions.isAuthorized()
-        let checkCount = await recorder.checkCount
+        let isAuthorized = await actions.authorizeMicrophoneTap()
+        let authorizationCount = await recorder.authorizationCount
 
         XCTAssertTrue(isAuthorized)
-        XCTAssertEqual(checkCount, 1)
+        XCTAssertEqual(authorizationCount, 1)
     }
 
-    func testUnavailableBoundaryFailsClosedWithoutAnAuthorizationRequestCapability() async {
-        let isAuthorized = await SpeechPermissionActions.unavailable.isAuthorized()
+    func testUnavailableBoundaryFailsClosed() async {
+        let isAuthorized =
+            await SpeechPermissionActions.unavailable.authorizeMicrophoneTap()
 
         XCTAssertFalse(isAuthorized)
     }
 }
 
-private actor SpeechAuthorizationCheckRecorder {
-    private(set) var checkCount = 0
+private actor SpeechAuthorizationRecorder {
+    private(set) var authorizationCount = 0
     private let result: Bool
 
     init(result: Bool) {
         self.result = result
     }
 
-    func check() -> Bool {
-        checkCount += 1
+    func authorize() -> Bool {
+        authorizationCount += 1
         return result
     }
 }
