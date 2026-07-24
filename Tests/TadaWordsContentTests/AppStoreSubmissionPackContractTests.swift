@@ -94,7 +94,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "SYSTEM_PERMISSION_INVENTORY_v0.7.8.md",
             "Child Read has no request capability",
             "APP_STORE_RELEASE_DECISIONS_v0.7.27.md",
-            "Made for Kids, primary age band 6–8",
+            "Made for Kids, product ages 3–8",
+            "Apple Kids Category supports one primary band",
             "United States only",
             "Manually release this version",
             "No IAP, subscription, advertising, or paid unlock in 1.0",
@@ -132,16 +133,16 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.30</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072404</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.32</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072406</string>"))
         }
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.30"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072404"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.32"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072406"))
 
         for unresolvedDecision in [
             "Price | **UNRESOLVED — #24**",

@@ -4,6 +4,17 @@ This is the single source of truth for work discovered after the original V1
 design. Product/design documents describe the current intended behavior; this
 log records why it changed, which version contains it, and how it was verified.
 
+## v0.7.32 — App Store release alignment
+
+- Standardized the product age range to 3–8 across profile creation, child
+  creation, Parent profile editing, release metadata, and public-site inputs.
+- Kept legacy snapshot decoding compatible while preventing new create/edit
+  writes from setting ages outside the supported product range.
+- Reconciled the release pack with the bundled offline Twemoji implementation,
+  parent-opted-in Family Sync boundary, and Apple's single Kids Category band
+  limitation.
+- Reserved version `0.7.32`, build `2026072406`.
+
 ## Versioning workflow
 
 - `main` contains the latest accepted baseline.
@@ -1244,12 +1255,13 @@ review notes, and exact-RC checklist.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
-| V0722-RELEASE-001 | P1 decision | App Store | Use Made for Kids 6–8, Free/no IAP or ads, United States-only availability, and manual release everywhere. | Owner-approved; source contract implemented | Exact source tests, generated-project identity, PR merge, and later #65 App Store Connect entry against the accepted RC. |
+| V0722-RELEASE-001 | P1 decision | App Store | Use Made for Kids, Free/no IAP or ads, United States-only availability, and manual release everywhere. | The former 6–8 product wording was superseded by the v0.7.32 product range of ages 3–8; Apple still requires one owner-selected band | Exact source tests, generated-project identity, PR merge, and later #65 App Store Connect entry against the accepted RC. |
 
 ### 2026-07-21 v0.7.27 notes
 
-- The owner deliberately selected Made for Kids with the primary 6–8 age band;
-  the post-approval lock-in is recorded as irreversible.
+- The original primary 6–8 band decision was superseded in v0.7.32 by the
+  product range of ages 3–8. App Store Connect still requires one band, and
+  the post-approval lock-in remains irreversible.
 - The first public release is Free, has no IAP/subscription/advertising/paid
   unlock, and is available only in the United States without pre-order.
 - The approved release option is manual. App Review approval must leave the
