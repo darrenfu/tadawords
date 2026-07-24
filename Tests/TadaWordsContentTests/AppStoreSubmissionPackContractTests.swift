@@ -193,6 +193,25 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
         }
     }
 
+    func testProductionDeviceInstallerPreservesExistingAppData() throws {
+        let installer = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Scripts/install-production-device.sh"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(
+            installer.contains("TADA_EXPECTED_BUNDLE_ID=app.tadawords.app")
+        )
+        XCTAssertTrue(
+            installer.contains("verify-localqa-device-persistence.sh")
+        )
+        XCTAssertFalse(
+            installer.contains("devicectl device uninstall")
+        )
+    }
+
     private var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
