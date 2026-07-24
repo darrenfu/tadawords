@@ -136,8 +136,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.34</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072408</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.37</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072411</string>"))
             XCTAssertFalse(plist.contains("voice setup"))
         }
 
@@ -145,8 +145,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.34"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072408"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.37"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072411"))
 
         let appComposition = try String(
             contentsOf: repositoryRoot.appendingPathComponent(
