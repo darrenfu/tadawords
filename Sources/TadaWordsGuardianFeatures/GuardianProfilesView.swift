@@ -379,8 +379,8 @@ struct GuardianProfileEditorView: View {
                     tint: GuardianSemanticTokens.primary
                 )
                 Text("Choose an age from 3 to 8. Changing age never changes the grade above.")
-                .font(.system(.caption, design: .rounded, weight: .medium))
-                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
             }
         }
     }
