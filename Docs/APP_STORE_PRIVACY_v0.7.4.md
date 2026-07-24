@@ -172,6 +172,13 @@ CloudKit must not win a conflict with a transported progress/report snapshot.
   ink/eraser state, and unfinished input.
 - Picture, teacher-audio, music, and sound-effect assets/caches.
 
+Remote teacher-audio cache entries use hashed request identities and matching
+SHA-256 sidecars. They contain no Profile or child identifier, persist in the
+app-private Application Support container so prepared Quest audio survives
+relaunch, are explicitly excluded from device backup, and never enter
+CloudKit. If persistent storage is unavailable, Parent preparation fails
+closed instead of using a temporary cache that could disappear before Quest.
+
 ### CloudKit operator boundary
 
 Production source constructs container `iCloud.com.tadawords.app`, uses a

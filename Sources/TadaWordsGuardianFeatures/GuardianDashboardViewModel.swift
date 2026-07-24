@@ -733,7 +733,7 @@ final class GuardianDashboardViewModel: ObservableObject {
                     """
             case .invalidResponse, .emptyAudio, .responseTooLarge,
                 .unsupportedContentType, .invalidAudioChecksum,
-                .mismatchedAudioContract:
+                .mismatchedAudioContract, .persistentCacheUnavailable:
                 return """
                     Teacher audio could not be verified, so no words were added. \
                     Please try again later.

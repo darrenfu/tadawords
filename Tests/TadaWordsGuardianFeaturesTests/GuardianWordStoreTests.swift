@@ -26,6 +26,10 @@ final class GuardianWordStoreTests: XCTestCase {
                 "not available in this build"
             ),
             (
+                TeacherWordAudioError.persistentCacheUnavailable,
+                "could not be verified"
+            ),
+            (
                 URLError(.notConnectedToInternet),
                 "Connect to the internet"
             ),

@@ -153,14 +153,15 @@ public struct RemoteTeacherWordAudioProvider: TeacherWordAudioProviding {
     }
 }
 
-/// Stores canonical MP3 responses in the app's private cache. The file name is
-/// a one-way hash of the pronunciation request and contains no profile data.
+/// Stores canonical MP3 responses in private Application Support. The
+/// directory is excluded from device backup; each file name is a one-way hash
+/// of the pronunciation request and contains no profile data.
 public actor FileTeacherWordAudioCache: TeacherWordAudioCaching {
-    private let directory: URL
+    private let directory: URL?
     private let fileManager: FileManager
 
     public init(
-        directory: URL,
+        directory: URL?,
         fileManager: FileManager = .default
     ) {
         self.directory = directory
@@ -170,6 +171,9 @@ public actor FileTeacherWordAudioCache: TeacherWordAudioCaching {
     public func clip(
         for request: TeacherWordAudioRequest
     ) async throws -> TeacherWordAudioClip? {
+        guard directory != nil else {
+            throw TeacherWordAudioError.persistentCacheUnavailable
+        }
         let fileURL = fileURL(for: request)
         let checksumURL = checksumURL(for: request)
         guard
@@ -202,10 +206,17 @@ public actor FileTeacherWordAudioCache: TeacherWordAudioCaching {
         _ clip: TeacherWordAudioClip,
         for request: TeacherWordAudioRequest
     ) async throws {
+        guard let directory else {
+            throw TeacherWordAudioError.persistentCacheUnavailable
+        }
         try fileManager.createDirectory(
             at: directory,
             withIntermediateDirectories: true
         )
+        var protectedDirectory = directory
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        try protectedDirectory.setResourceValues(resourceValues)
         let fileURL = fileURL(for: request)
         let checksumURL = checksumURL(for: request)
         let checksum = Self.checksum(clip.audioData)
@@ -235,6 +246,9 @@ public actor FileTeacherWordAudioCache: TeacherWordAudioCaching {
     }
 
     private func fileURL(for request: TeacherWordAudioRequest) -> URL {
+        guard let directory else {
+            preconditionFailure("A cache URL requires a persistent directory")
+        }
         let identity = [
             request.voiceContractVersion,
             request.spokenText,

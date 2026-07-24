@@ -14,7 +14,7 @@ public actor TeacherWordAudioPipeline:
 
     public init(
         endpoint: URL?,
-        cacheDirectory: URL,
+        cacheDirectory: URL?,
         bundled: BundledTeacherWordAudioProvider? =
             BundledTeacherWordAudioProvider.production()
     ) {

@@ -44,9 +44,7 @@ struct TadaWordsApp: App {
             mutationGate: mutationGate
         )
         let teacherAudioCacheDirectory =
-            ((try? Self.cachesDirectory())
-            ?? FileManager.default.temporaryDirectory)
-            .appendingPathComponent("TadaWords/teacher-audio", isDirectory: true)
+            try? Self.teacherAudioCacheDirectory()
         let teacherPipeline = TeacherWordAudioPipeline(
             endpoint: Self.teacherAudioEndpoint(),
             cacheDirectory: teacherAudioCacheDirectory
@@ -202,6 +200,18 @@ struct TadaWordsApp: App {
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
+        )
+    }
+
+    nonisolated private static func teacherAudioCacheDirectory() throws -> URL {
+        #if DEBUG && targetEnvironment(simulator) && !LOCAL_DEVICE_QA
+            let root = try cachesDirectory()
+        #else
+            let root = try applicationSupportDirectory()
+        #endif
+        return root.appendingPathComponent(
+            "TadaWords/teacher-audio",
+            isDirectory: true
         )
     }
 

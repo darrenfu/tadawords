@@ -123,7 +123,7 @@
     "Apps/TadaWordsApp/InfoLocalQA.plist",
     "Apps/TadaWordsApp/PrivacyInfo.xcprivacy",
     "Apps/TadaWordsApp/TadaWords.entitlements",
-    "Sources/TadaWordsApplePlatform/Resources/Audio/TeacherWords/Katie-500-v1/manifest.json",
+    "Sources/TadaWordsApplePlatform/Resources/Audio/TeacherWords/ElevenLabs-Teacher-500-v1/manifest.json",
     "Sources/TadaWordsApplePlatform/Resources/Audio/VoiceAccents/Aurora-v1/manifest.json",
     "Sources/TadaWordsContent/Resources/PresetWords.json"
   ],
@@ -132,9 +132,9 @@
     "Assets.car",
     "AppIcon*.png",
     "**/PresetWords.json",
-    "**/Katie-500-v1/manifest.json",
-    "**/Katie-500-v1/read-hint/*.m4a",
-    "**/Katie-500-v1/write-prompt/*.m4a",
+    "**/ElevenLabs-Teacher-500-v1/manifest.json",
+    "**/ElevenLabs-Teacher-500-v1/read-hint/*.mp3",
+    "**/ElevenLabs-Teacher-500-v1/write-prompt/*.mp3",
     "**/Aurora-v1/manifest.json",
     "**/Aurora-v1/*.m4a"
   ]

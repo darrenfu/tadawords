@@ -297,6 +297,28 @@ final class RemoteTeacherWordAudioProviderTests: XCTestCase {
         let cachedClip = try await cache.clip(for: request)
 
         XCTAssertEqual(cachedClip, clip)
+        let values = try directory.resourceValues(
+            forKeys: [.isExcludedFromBackupKey]
+        )
+        XCTAssertEqual(values.isExcludedFromBackup, true)
+    }
+
+    func testUnavailablePersistentDirectoryFailsInsteadOfUsingTemporaryStorage()
+        async throws
+    {
+        let cache = FileTeacherWordAudioCache(directory: nil)
+        let request = try TeacherWordAudioRequest(spokenText: "dog")
+        let clip = try TeacherWordAudioClip(audioData: Data([1, 2, 3]))
+
+        do {
+            try await cache.store(clip, for: request)
+            XCTFail("Expected persistent storage preparation to fail")
+        } catch {
+            XCTAssertEqual(
+                error as? TeacherWordAudioError,
+                .persistentCacheUnavailable
+            )
+        }
     }
 
     func testFileCacheSeparatesUsageAndRejectsMutatedBytes() async throws {
@@ -398,6 +420,19 @@ final class RemoteTeacherWordAudioProviderTests: XCTestCase {
 
         XCTAssertEqual(requestCount.value, 1)
         XCTAssertEqual(prepared.audioData, audioData)
+
+        let relaunchedOfflinePipeline = TeacherWordAudioPipeline(
+            bundled: nil,
+            remote: nil,
+            cache: FileTeacherWordAudioCache(directory: directory)
+        )
+        try await relaunchedOfflinePipeline.requirePrepared([prompt])
+        let relaunchedClip = try await relaunchedOfflinePipeline.audio(
+            for: request
+        )
+
+        XCTAssertEqual(relaunchedClip.audioData, audioData)
+        XCTAssertEqual(requestCount.value, 1)
     }
 }
 
