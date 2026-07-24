@@ -113,7 +113,7 @@ limits come from Apple's current App Store Connect reference.
 ### Description
 
 ```text
-Tada Words turns the exact sight words you choose into short, focused reading and writing practice.
+Made for children ages 3–8, Tada Words turns the exact sight words you choose into short, focused reading and writing practice.
 
 BUILD PERSONAL WORD LIBRARIES
 Type words one at a time or import a photo of a school list. Review every detected word before adding it to separate Read and Write libraries for each profile.
