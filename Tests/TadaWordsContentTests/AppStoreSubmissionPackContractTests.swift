@@ -136,8 +136,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.38</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072412</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.39</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072413</string>"))
             XCTAssertFalse(plist.contains("voice setup"))
         }
 
@@ -145,8 +145,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.38"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072412"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.39"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072413"))
 
         let appComposition = try String(
             contentsOf: repositoryRoot.appendingPathComponent(
@@ -191,6 +191,25 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 "Resolved #24 decision regressed: \(unresolvedDecision)"
             )
         }
+    }
+
+    func testProductionDeviceInstallerPreservesExistingAppData() throws {
+        let installer = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Scripts/install-production-device.sh"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(
+            installer.contains("TADA_EXPECTED_BUNDLE_ID=app.tadawords.app")
+        )
+        XCTAssertTrue(
+            installer.contains("verify-localqa-device-persistence.sh")
+        )
+        XCTAssertFalse(
+            installer.contains("devicectl device uninstall")
+        )
     }
 
     private var repositoryRoot: URL {

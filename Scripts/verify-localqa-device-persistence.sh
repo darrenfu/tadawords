@@ -6,9 +6,9 @@ usage() {
     cat <<'EOF'
 Usage: verify-localqa-device-persistence.sh DEVICE_ID APP_PATH
 
-Read-only preflight for an in-place Tada Words LocalQA install. It copies the
-existing snapshot directory to a private temporary folder and refuses an app
-whose bundled readers are older than any saved schema on the device.
+Read-only preflight for an in-place Tada Words install. It copies the existing
+snapshot directory to a private temporary folder and refuses an app whose
+bundled readers are older than any saved schema on the device.
 EOF
 }
 
@@ -21,7 +21,7 @@ DEVICE_ID=$1
 APP_PATH=$2
 INFO_PLIST="$APP_PATH/Info.plist"
 POLICY="$APP_PATH/PersistenceSchemaCompatibility.json"
-BUNDLE_ID="com.tadawords.app.localqa"
+BUNDLE_ID="${TADA_EXPECTED_BUNDLE_ID:-com.tadawords.app.localqa}"
 
 fail() {
     printf 'FAIL: %s\n' "$1" >&2
@@ -89,7 +89,7 @@ else
     if [[ "$APP_INVENTORY_STATUS" -eq 3 ]]; then
         exit 0
     fi
-    fail "could not verify whether the LocalQA bundle is already installed"
+    fail "could not verify whether the target bundle is already installed"
 fi
 
 if ! xcrun devicectl device copy from \
@@ -103,7 +103,7 @@ if ! xcrun devicectl device copy from \
     --timeout 120 \
     >/dev/null 2>&1
 then
-    fail "could not read existing LocalQA data; wake/unlock the device and retry"
+    fail "could not read existing app data; wake/unlock the device and retry"
 fi
 
 python3 - "$POLICY" "$TEMP_ROOT/TadaWords" <<'PY'
