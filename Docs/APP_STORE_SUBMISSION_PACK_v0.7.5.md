@@ -47,8 +47,9 @@ be replaced with exact signed-release evidence during submission preparation:
   repeat its exact-build, CloudKit, Pawgoo-access, support-retention, and traffic
   gates before entering answers in App Store Connect.
 - **Content-rights representation and copyright:** start from the merged
-  content-rights inventory. Do not attest the Cartesia entitlement or Pawgoo
-  ownership chain until issues #32 and #33 provide the human evidence.
+  content-rights inventory. Current Cartesia evidence covers only its recorded
+  pack; reconcile the exact retained audio/provider terms and obtain the Pawgoo
+  ownership-chain attestation in #33 before submitting a representation.
 - **Family Sync reviewer steps and public claim:** add only after #19/#41 pass
   against production CloudKit and the exact signed release candidate.
 - **Pawgoo wording:** issue #54 owns alignment and deployment evidence for the
@@ -77,7 +78,7 @@ execute.
 | Exact RC and device acceptance | **Unresolved.** Captures must come from the accepted signed RC, not this documentation branch by default. | [#22](https://github.com/darrenfu/tadawords/issues/22) |
 | Kids permission requests | **Source fixed; exact-device gate open.** Child Read has no request capability. The review path starts behind the Parent Gate at App & Family → Speech & Microphone, but first-install, denied, authorized, and revoked behavior still needs exact signed iPhone/iPad acceptance. | [#55](https://github.com/darrenfu/tadawords/issues/55), [permission inventory](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md) |
 | App Privacy answers | **Merged inventory; conditional answer set.** The source-backed inventory covers bundled picture hints, Family Sync, device-local data, support/export flows, the privacy manifest, and every configured or dormant network path. Exact signed-build and operating-practice gates remain. | [`APP_STORE_PRIVACY_v0.7.4.md`](APP_STORE_PRIVACY_v0.7.4.md), [#17](https://github.com/darrenfu/tadawords/issues/17), [#54](https://github.com/darrenfu/tadawords/issues/54) |
-| Shipped-content rights | **Merged inventory; human evidence blocked.** Twemoji provenance and in-app attribution are present. Cartesia account/tier evidence and Pawgoo authorship/rights-chain attestation remain open. | [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md), [#32](https://github.com/darrenfu/tadawords/issues/32), [#33](https://github.com/darrenfu/tadawords/issues/33) |
+| Shipped-content rights | **Merged inventory; final release evidence blocked.** Twemoji provenance and in-app attribution are present. Cartesia account/tier evidence is preserved only for the recorded current pack; every retained generated-audio asset must be reconciled at exact RC. Pawgoo authorship/rights-chain attestation remains open. | [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md), [#32](https://github.com/darrenfu/tadawords/issues/32), [#33](https://github.com/darrenfu/tadawords/issues/33) |
 
 Apple states that a Made for Kids selection cannot be changed after approval,
 and subsequent updates must continue to follow the Kids Category rules. This
@@ -356,9 +357,10 @@ content-consistency gate.
 - [ ] Confirm merged #15/#16 behavior on the exact RC, then reconcile the
       in-app links, product page, privacy policy, support page, review notes,
       bundled picture-hint claim, and offline wording.
-- [ ] Start from the merged content-rights inventory and resolve #32 and #33
-      for every asset visible in the app and screenshots. Do not enter the
-      provisional Pawgoo copyright until #33 passes.
+- [ ] Start from the merged content-rights inventory; reconcile #32 to every
+      retained generated-audio asset and resolve #33 for every asset visible in
+      the app and screenshots. Do not enter the provisional Pawgoo copyright
+      until #33 passes.
 - [ ] Resolve #19 with a final-Profile/delete-all route and production
       destructive evidence before claiming complete in-app or CloudKit erasure.
 - [ ] Complete #28's signed iPhone/iPad uninstall/reinstall proof for the
