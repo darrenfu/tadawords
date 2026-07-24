@@ -376,19 +376,13 @@ struct GuardianProfileEditorView: View {
                 .pickerStyle(.menu)
                 TadaAgePicker(
                     selection: $ageYears,
-                    ages: existingProfile == nil
-                        ? ProfileAgePolicy.supportedAges
-                        : ProfileAgePolicy.durableAges,
+                    ages: ProfileAgePolicy.supportedAges,
                     prompt: "Age",
                     tint: GuardianSemanticTokens.primary
                 )
-                Text(
-                    existingProfile == nil
-                        ? "Choose an age from 3 to 8. Changing age never changes the grade above."
-                        : "Changing age never changes the grade above. Legacy profiles may keep ages from 2 to 18."
-                )
-                .font(.system(.caption, design: .rounded, weight: .medium))
-                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                Text("Choose an age from 3 to 8. Changing age never changes the grade above.")
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
             }
         }
     }
@@ -479,7 +473,7 @@ struct GuardianProfileEditorView: View {
         guard !normalizedName.isEmpty,
             normalizedName.count
                 <= RepositoryGuardianFamilyStore.maximumDisplayNameCharacterCount,
-            existingProfile != nil || ageYears.map(ProfileAgePolicy.isSupported) == true
+            ageYears.map(ProfileAgePolicy.isSupported) == true
         else { return nil }
 
         return GuardianProfileDraft(
