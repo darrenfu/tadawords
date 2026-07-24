@@ -47,7 +47,7 @@ public struct AppleSpeechRecognitionConfiguration: Equatable, Sendable {
         localeIdentifier: String = "en-US",
         maximumAllowedRecordingDuration: ElapsedTime = ElapsedTime(seconds: 15),
         requiresOnDeviceRecognition: Bool = true,
-        partialResultStabilityDuration: Duration = .milliseconds(450),
+        partialResultStabilityDuration: Duration = .milliseconds(1_000),
         decisionThresholds: AppleRecognitionThresholds = .speech,
         speechActivityThresholds: AppleSpeechActivityThresholds = .childSightWord
     ) {
@@ -60,7 +60,7 @@ public struct AppleSpeechRecognitionConfiguration: Equatable, Sendable {
         self.partialResultStabilityDuration =
             partialResultStabilityDuration > .zero
             ? partialResultStabilityDuration
-            : .milliseconds(450)
+            : .milliseconds(1_000)
         self.decisionThresholds = decisionThresholds
         self.speechActivityThresholds = speechActivityThresholds
     }

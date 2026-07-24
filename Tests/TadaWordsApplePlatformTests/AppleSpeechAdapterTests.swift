@@ -89,7 +89,7 @@ final class AppleSpeechAdapterTests: XCTestCase {
         XCTAssertTrue(configuration.requiresOnDeviceRecognition)
         XCTAssertEqual(
             configuration.partialResultStabilityDuration,
-            .milliseconds(450)
+            .milliseconds(1_000)
         )
     }
 
