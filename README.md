@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.7.33%20Release%20Alignment-6D48D7" alt="v0.7.33 release alignment">
+  <img src="https://img.shields.io/badge/status-v0.7.34%20Family%20Sync%20Retry-6D48D7" alt="v0.7.34 Family Sync Profile erasure retry">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
@@ -21,7 +21,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.7.33` (build `2026072407`) keeps the conservative App Store 1.0 voiceprint fallback and aligns the public product range plus all profile create/edit choices to ages 3–8, while preserving read compatibility for older profile snapshots. Voiceprint enrollment and speaker matching are not shipped; the device-local repository remains composed only for existing-template cleanup. The App Store contract is Made for Kids with Apple's `6–8` primary band, while the product and in-app Profile range remain 3–8. The release is Free with no IAP or ads, United States only, and manual release. See the [1.0 fallback record](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md), [v0.7.33 release record](Docs/Releases/v0.7.33-release-alignment.md), [decision record](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md), v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), and [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md).
+> **Project status:** Version `0.7.34` (build `2026072408`) retains the conservative App Store 1.0 voiceprint fallback from v0.7.32: voiceprint enrollment and speaker matching are not shipped, while the device-local repository remains composed only for deletion and proven-fresh-install cleanup. It adds a Parent-triggered Profile-erasure retry that bypasses durable backoff only for exact nonterminal deletion tombstones needing attention. The release also retains the v0.7.28 on-device crop-and-mask editor, the v0.7.30 signed Keychain lifecycle proof, and the App Store 1.0 distribution contract: Made for Kids with Apple's `6–8` primary band, a public product range and in-app Profile range of ages 3–8, Free with no IAP or ads, United States only, and manual release. Deletion retry preserves deletion dominance, retry history, existing Profile data, PawGoo identity, CloudKit identifiers, and LocalQA data contracts, and never recreates deleted child data. See the [v0.7.34 release note](Docs/Releases/v0.7.34-family-sync-erasure-retry.md), [v0.7.33 release alignment](Docs/Releases/v0.7.33-release-alignment.md), [1.0 fallback record](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md), [voiceprint lifecycle record](Docs/VOICEPRINT_KEYCHAIN_LIFECYCLE_v0.7.30.md), [decision record](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md), v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), and [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -115,7 +115,7 @@ The iOS target depends on `TadaWordsAppShell`, `TadaWordsApplePlatform`, and `Ta
 - A free Apple Account for direct LocalQA installation on personal devices
 - A paid Apple Developer Program team for TestFlight and CloudKit acceptance
 
-The current v0.7.33 source candidate uses Xcode 26.6. Merged v0.7.2 passed
+The current v0.7.34 source candidate uses Xcode 26.6. Merged v0.7.2 passed
 the exact-HEAD iPhone/iPad simulator matrix, LocalQA install guard, and a data-
 preserving physical iPhone update; merged v0.7.3 added offline Parent notices
 and exact content verification. Family Sync production schema, signed cross-
@@ -149,7 +149,7 @@ build, commit, and bundle ID:
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.7.33 2026072407 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.7.34 2026072408 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 For the normal PawGoo Development artifact, use the stricter no-install gate:
@@ -157,7 +157,7 @@ For the normal PawGoo Development artifact, use the stricter no-install gate:
 ```sh
 ./Scripts/verify-pawgoo-development-app.py \
   '/path/to/Tada Words.app' \
-  0.7.33 2026072407 "$(git rev-parse HEAD)" \
+  0.7.34 2026072408 "$(git rev-parse HEAD)" \
   --device-udid 'APPROVED_IPHONE_HARDWARE_UDID' \
   --device-udid 'APPROVED_IPAD_HARDWARE_UDID'
 ```
@@ -207,8 +207,8 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Version and build | v0.7.33 (`2026072407`) in source Plists and generated project settings |
-| Swift tests | v0.7.33 ages 3–8 profile-write and App Store decision contracts plus v0.7.32 voiceprint release-policy, v0.7.30 lifecycle cleanup, v0.7.28 camera OCR editor, atomic Family Sync, Profile chooser, and content-rights coverage; full source gate is rerun at the immutable release HEAD |
+| Version and build | v0.7.34 (`2026072408`) in source Plists and generated project settings |
+| Swift tests | v0.7.34 combines ages 3–8 profile-write and App Store decision contracts, the v0.7.32 voiceprint release-policy and composition contracts, v0.7.30 lifecycle cleanup, v0.7.28 camera OCR editor, atomic Family Sync, Profile chooser, content-rights, and Profile-erasure manual-retry coverage; the full source gate is rerun at the immutable release HEAD |
 | Family Sync physical delta | Normal PawGoo v0.7.18 installed in place on the approved iPhone and iPad; an iPhone-created test Profile converged automatically to the untouched iPad without opening Family Sync, with one matching record and four Profiles total on each side |
 | Family Sync simulator E2E | Merged v0.7.2: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5 |
 | Critical XCUITest flows | Merged v0.7.2: full critical matrix passed on iPad; the single iPhone Photos-dismiss timing case passed 2/2 in isolated fresh reruns after the combined run, and every other flow passed |
