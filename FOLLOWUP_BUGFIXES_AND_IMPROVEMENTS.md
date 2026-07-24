@@ -1211,6 +1211,27 @@ transient `.syncing` snapshot when it opened during an existing reconciliation.
 - Focused concurrency tests and the complete 1129-test Swift suite pass.
   Exact-HEAD build and signed-device acceptance remain pending.
 
+## v0.7.30 — 2026-07-23
+
+Target release: `v0.7.30`
+
+Branch: `codex/voiceprint-lifecycle-proof-v0.7.30`
+
+### Voiceprint Keychain lifecycle proof
+
+- Added signed physical-device tests that exercise the production
+  `KeychainDeviceVoiceprintRepository` through Apple's Security framework.
+- The tests use UUID-scoped test services, not the production voiceprint
+  service, and require no uninstall or app-data reset.
+- Coverage proves retained items survive repository recreation until the
+  scoped fresh-install reset, which removes every item in that service while
+  preserving a neighboring service.
+- Coverage also verifies `WhenUnlockedThisDeviceOnly`, non-synchronizing
+  attributes and idempotent empty-service reset.
+- Added a durable lifecycle record and aligned the internal privacy and
+  submission-pack wording. Deployment of matching Pawgoo Privacy/Support copy
+  remains #54.
+
 ## v0.7.27 — 2026-07-21
 
 Target release: `v0.7.27`
