@@ -64,8 +64,34 @@ if [[ "$CANDIDATE_ONLY" != "true" ]]; then
     printf 'Shipping teacher voice requires explicit approval\n' >&2
     exit 1
   fi
+  if [[ "$(jq -r '.voice.id' "$MANIFEST")" != \
+    "hpp4J3VqNfWAUOO0d1Us" ]]
+  then
+    printf 'Shipping teacher voice must be the approved Bella identity\n' >&2
+    exit 1
+  fi
+  if [[ "$(jq -r '.pronunciation_dictionary.id' "$MANIFEST")" != \
+    "jlikgZytU86rmsPnDwrK" ]] ||
+    [[ "$(jq -r '.pronunciation_dictionary.version_id' "$MANIFEST")" != \
+      "E2NROj7X6ZT7VcK11GgH" ]]
+  then
+    printf 'Shipping teacher pack must use the approved dictionary version\n' >&2
+    exit 1
+  fi
+  if [[ "$(jq -r '.pronunciation_dictionary.rules_sha256' "$MANIFEST")" != \
+    "422ff6c9b6571fd4f3ab80a1a4d52411cc91effb946de476d668863fc747b537" ]]
+  then
+    printf 'Shipping dictionary rules digest is not approved\n' >&2
+    exit 1
+  fi
   if [[ "$(jq '.words | length' "$MANIFEST")" -ne 500 ]]; then
     printf 'Shipping teacher pack must contain exactly 500 words\n' >&2
+    exit 1
+  fi
+  if [[ "$(jq '[.words[]] | unique | length' "$MANIFEST")" -ne 500 ]] ||
+    jq -e '.words[] | select(test("^[a-z]+$") | not)' "$MANIFEST" >/dev/null
+  then
+    printf 'Shipping teacher words must be unique normalized alphabetic entries\n' >&2
     exit 1
   fi
   if jq -e 'has("tts_text_overrides")' "$MANIFEST" >/dev/null; then
@@ -74,6 +100,23 @@ if [[ "$CANDIDATE_ONLY" != "true" ]]; then
   fi
   if [[ "$SEED" != "20260725" ]]; then
     printf 'Shipping teacher pack must use canonical seed 20260725\n' >&2
+    exit 1
+  fi
+  if [[ "$(jq -r '.provider_tail_break_seconds' "$MANIFEST")" != "0" ]] ||
+    [[ -n "$(jq -r '.provider_sentence_boundary' "$MANIFEST")" ]]
+  then
+    printf \
+      'Shipping teacher provider input must contain only the isolated word\n' \
+      >&2
+    exit 1
+  fi
+  if [[ "$(jq -r '.release_post_processing.peak_dbfs' "$MANIFEST")" != "-3" ]] ||
+    [[ "$(jq -r '.release_post_processing.tail_padding_seconds' "$MANIFEST")" != \
+      "0.12" ]] ||
+    [[ "$(jq -r '.release_post_processing.encoder' "$MANIFEST")" != \
+      "libmp3lame" ]]
+  then
+    printf 'Shipping teacher pack release processing is not canonical\n' >&2
     exit 1
   fi
 fi
@@ -101,12 +144,14 @@ MINIMUM_DURATION=999
 MAXIMUM_DURATION=0
 MINIMUM_TAIL=999
 MAXIMUM_TAIL=0
+FAILURE_COUNT=0
 
 while IFS=$'\t' read -r word directory; do
   file="$PACK_ROOT/$directory/$word.$EXTENSION"
   if [[ ! -f "$file" ]]; then
     printf 'Missing teacher-audio clip: %s\n' "$file" >&2
-    exit 1
+    FAILURE_COUNT="$((FAILURE_COUNT + 1))"
+    continue
   fi
 
   codec="$(
@@ -135,8 +180,7 @@ while IFS=$'\t' read -r word directory; do
       awk '
         /silence_end:/ {last_end=$5; last_duration=$8}
         END {
-          if (last_end == "") exit 1
-          printf "%.6f", last_duration
+          if (last_end != "") printf "%.6f", last_duration
         }
       '
   )"
@@ -145,6 +189,7 @@ while IFS=$'\t' read -r word directory; do
       awk '/max_volume:/ {peak=$5} END {print peak}'
   )"
 
+  clip_failed=false
   if [[ "$codec" != "$CODEC" ||
     "$sample_rate" != "$SAMPLE_RATE" ||
     "$channels" != "$CHANNELS" ||
@@ -153,21 +198,28 @@ while IFS=$'\t' read -r word directory; do
     printf \
       'Unexpected audio format for %s: %s/%s/%s/%s\n' \
       "$file" "$codec" "$sample_rate" "$channels" "$bit_rate" >&2
-    exit 1
+    clip_failed=true
   fi
   if ! awk -v value="$duration" 'BEGIN {exit !(value >= 0.1 && value <= 5)}'; then
     printf 'Out-of-range duration for %s: %s\n' "$file" "$duration" >&2
-    exit 1
+    clip_failed=true
   fi
-  if ! awk -v value="$tail" -v minimum="$MINIMUM_TAIL_SECONDS" \
+  if [[ -z "$tail" ]] ||
+    ! awk -v value="$tail" -v minimum="$MINIMUM_TAIL_SECONDS" \
     'BEGIN {exit !(value >= minimum)}'
   then
-    printf 'Insufficient protected tail for %s: %s\n' "$file" "$tail" >&2
-    exit 1
+    printf \
+      'Insufficient protected tail for %s: %s\n' \
+      "$file" "${tail:-none}" >&2
+    clip_failed=true
   fi
   if ! awk -v value="$peak" 'BEGIN {exit !(value <= -1 && value >= -20)}'; then
     printf 'Unsafe or inaudible peak for %s: %s dB\n' "$file" "$peak" >&2
-    exit 1
+    clip_failed=true
+  fi
+  if [[ "$clip_failed" == true ]]; then
+    FAILURE_COUNT="$((FAILURE_COUNT + 1))"
+    continue
   fi
 
   MINIMUM_DURATION="$(
@@ -199,7 +251,7 @@ if [[ "$ACTUAL_COUNT" -ne "$EXPECTED_COUNT" ]]; then
   printf \
     'Teacher-audio clip count mismatch: expected=%s actual=%s\n' \
     "$EXPECTED_COUNT" "$ACTUAL_COUNT" >&2
-  exit 1
+  FAILURE_COUNT="$((FAILURE_COUNT + 1))"
 fi
 
 PACK_FILE_COUNT="$(
@@ -213,6 +265,12 @@ if [[ "$PACK_FILE_COUNT" -ne "$EXPECTED_COUNT" ]]; then
   printf \
     'Teacher-audio directory contains undeclared clips: expected=%s actual=%s\n' \
     "$EXPECTED_COUNT" "$PACK_FILE_COUNT" >&2
+  FAILURE_COUNT="$((FAILURE_COUNT + 1))"
+fi
+
+if [[ "$FAILURE_COUNT" -ne 0 ]]; then
+  printf 'Teacher-audio inspection failed. invalid_clips=%s\n' \
+    "$FAILURE_COUNT" >&2
   exit 1
 fi
 

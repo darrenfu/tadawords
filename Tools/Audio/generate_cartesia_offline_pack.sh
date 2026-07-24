@@ -5,7 +5,6 @@ set -euo pipefail
 
 REPOSITORY_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 AUDIO_ROOT="$REPOSITORY_ROOT/Sources/TadaWordsApplePlatform/Resources/Audio"
-TEACHER_ROOT="$AUDIO_ROOT/TeacherWords/Katie-500-v1"
 ACCENT_ROOT="$AUDIO_ROOT/VoiceAccents/Aurora-v1"
 CONCURRENCY="${CARTESIA_CONCURRENCY:-3}"
 API_VERSION="2026-03-01"
@@ -317,52 +316,16 @@ generate_accents() {
   generate_launch
 }
 
-generate_teacher_words() {
-  local manifest="$TEACHER_ROOT/manifest.json"
-  local word_filter="${CARTESIA_WORDS:-}"
-  jq -r --arg word_filter "$word_filter" '
-    . as $manifest |
-    .words[] as $word |
-    select(
-      $word_filter == "" or
-      (($word_filter | split(",") | index($word)) != null)
-    ) |
-    ($manifest.tts_text_overrides[$word] // $word) as $text |
-    $manifest.variants | to_entries[] as $variant |
-    {
-      text: $text,
-      speed: (
-        $manifest.speed_overrides[$word][$variant.key] // $variant.value.speed
-      ),
-      voice_id: (
-        $manifest.voice_overrides[$word].id // $manifest.voice.id
-      ),
-      dictionary_id: $manifest.pronunciation_dictionary_id,
-      tail_padding_seconds: $variant.value.tail_padding_seconds,
-      relative_path: (
-        "TeacherWords/Katie-500-v1/" + $variant.value.directory + "/" + $word + ".m4a"
-      )
-    } | @base64
-  ' "$manifest" |
-    xargs -n 1 -P "$CONCURRENCY" bash -c 'worker "$1"' _
-}
-
-case "${1:-all}" in
+case "${1:-accents}" in
   accents)
     generate_accents
     ;;
-  teacher)
-    generate_teacher_words
-    ;;
-  all)
-    generate_accents
-    generate_teacher_words
-    ;;
   *)
-    echo "Usage: $0 [all|teacher|accents]" >&2
+    echo "Usage: $0 accents" >&2
+    echo "Cartesia teacher-word generation retired with ElevenLabs-Teacher-500-v1." >&2
     exit 2
     ;;
 esac
 
-printf 'Cartesia offline generation complete. clips=%s\n' \
-  "$(find "$AUDIO_ROOT" -type f -name '*.m4a' | wc -l | tr -d ' ')"
+printf 'Cartesia accent generation complete. clips=%s\n' \
+  "$(find "$ACCENT_ROOT" -type f -name '*.m4a' | wc -l | tr -d ' ')"

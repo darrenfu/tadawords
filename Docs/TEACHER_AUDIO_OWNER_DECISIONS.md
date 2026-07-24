@@ -1,15 +1,19 @@
 # Teacher-audio owner decisions
 
-Status: pending explicit owner approval. None of the values below authorize an
-external deployment, DNS/account mutation, secret creation, or shipping voice.
+Status: owner-approved on 2026-07-23. The approval covers the exact voice,
+dictionary, runtime boundary, quotas, retention, outage policy, and reviewed
+vocabulary below. It does not substitute for exact-pack inspection, deployment
+verification, physical-device acceptance, or guarded merge.
 
-## Recommended frozen voice contract
+## Approved frozen voice contract
 
 - Voice: Bella — Professional, Bright, Warm
 - Voice ID: `hpp4J3VqNfWAUOO0d1Us`
 - Model: `eleven_multilingual_v2`
 - Seed: `20260725`
 - Provider speed: `0.70`
+- Provider input: the isolated normalized word only, with no text suffix
+- Release processing: fixed `-3 dBFS` peak target and `0.12` second PCM tail pad
 - Client playback rate: `20/21`
 - Effective cadence: `2/3`
 - Dictionary aliases: `a → ay`, `i → eye`, `come → kum`
@@ -21,9 +25,11 @@ Evidence:
   SpeechTranscriber checks across Read and Write.
 - All 18 clips pass exact format, duration, loudness, and protected-tail
   inspection.
-- Human listening on the approved iPhone and iPad remains mandatory.
+- The owner explicitly approved Bella and the three alias rules on 2026-07-23.
+- Exact shipping-pack listening on the approved iPhone and iPad remains
+  mandatory.
 
-## Recommended runtime boundary
+## Approved runtime boundary
 
 - Cloudflare Worker runtime in the owner-approved PawGoo account.
 - Production hostname: `audio.pawgoo.app`.
@@ -35,10 +41,12 @@ Evidence:
   R2, KV, and Durable Object state.
 - `workers.dev` remains disabled.
 
-The current Cloudflare session and active `pawgoo.app` zone are discovery
-evidence only. They are not deployment authority.
+The owner explicitly approved the current PawGoo Cloudflare account and active
+`pawgoo.app` zone on 2026-07-23. R2 subscription activation, Worker deployment,
+and DNS creation remain separate state-changing actions and require their own
+verified execution evidence.
 
-## Recommended cost and outage policy
+## Approved cost and outage policy
 
 - Global cache-miss ceiling: 500 generations and 8,000 characters per UTC day.
 - Per-App-Attest-key cache-miss ceiling: 50 generations and 800 characters per
@@ -51,10 +59,10 @@ evidence only. They are not deployment authority.
 
 ## Vocabulary and child-data decision
 
-Recommended P0 policy: allow only the 1,166 reviewed, normalized, non-personal
-catalog words. A directory-external word or non-null pronunciation key is
-rejected before ElevenLabs unless a reviewed KV entry explicitly authorizes
-that exact word/key pair.
+P0 policy: allow only the 1,166 owner-approved, reviewed, normalized,
+non-personal catalog words. A directory-external word or non-null pronunciation
+key is rejected before ElevenLabs unless a reviewed KV entry explicitly
+authorizes that exact word/key pair.
 
 This policy deliberately does not claim that every arbitrary Parent-entered
 name or word is supported. Supporting arbitrary text instead requires a
@@ -77,14 +85,17 @@ scheduled deletion behavior against these values.
 
 ## Approval record
 
-Approval must explicitly cover:
+On 2026-07-23 the owner explicitly approved:
 
-1. the voice, sample, model, seed, speed, and dictionary;
-2. the two hostnames/runtime/account and App Attest isolation;
-3. quotas, retention, outage behavior, and Creator default history;
-4. the reviewed-vocabulary limitation versus an expanded consent design.
+1. Bella, the reviewed sample, Multilingual v2, seed `20260725`, provider speed
+   `0.70`, client rate `20/21`, and `a → ay`, `i → eye`, `come → kum`;
+2. `audio.pawgoo.app`, `audio-dev.pawgoo.app`, the current PawGoo Cloudflare
+   account/zone, and strict production/development App Attest isolation;
+3. the quotas, retention windows, typed outage behavior, no fallback, and
+   ElevenLabs Creator default history;
+4. the 1,166-word reviewed-vocabulary boundary instead of arbitrary text.
 
-After approval, replace the pending Worker values with the exact provider
-dictionary/version and Cloudflare resource identifiers, provision independent
-secrets, deploy development first, and keep the Release endpoint disabled until
-production evidence passes.
+The exact dictionary is `jlikgZytU86rmsPnDwrK`, version
+`E2NROj7X6ZT7VcK11GgH`. Development must deploy and pass end-to-end verification
+before production. The Release endpoint stays disabled until production
+evidence passes.

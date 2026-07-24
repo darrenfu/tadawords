@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "pack_version": "2.0.0",
+  "created_on": "2026-07-23",
+  "locale": "en-US",
+  "vendor": "ElevenLabs",
+  "model": "eleven_multilingual_v2",
+  "voice": {
+    "name": "Bella - Professional, Bright, Warm",
+    "id": "hpp4J3VqNfWAUOO0d1Us",
+    "role": "Canonical Tada Words teacher pronunciation",
+    "approval": "approved"
+  },
+  "seed": 20260725,
+  "provider_speed": 0.7,
+  "provider_sentence_boundary": "",
+  "provider_tail_break_seconds": 0,
+  "release_post_processing": {
+    "peak_dbfs": -3,
+    "tail_padding_seconds": 0.12,
+    "encoder": "libmp3lame"
+  },
+  "client_playback_rate": 0.9523809523809523,
+  "effective_speed": 0.6666666666666666,
+  "pronunciation_dictionary": {
+    "id": "jlikgZytU86rmsPnDwrK",
+    "version_id": "E2NROj7X6ZT7VcK11GgH",
+    "rules_sha256": "422ff6c9b6571fd4f3ab80a1a4d52411cc91effb946de476d668863fc747b537"
+  },
+  "audio_format": {
+    "container": "mp3",
+    "provider_output_format": "mp3_44100_128",
+    "bitrate_kbps": 128,
+    "sample_rate_hz": 44100,
+    "channels": 1
+  },
+  "variants": {
+    "read_hint": {
+      "directory": "read-hint",
+      "purpose": "Slow isolated-word pronunciation shown only after two Read errors"
+    },
+    "write_prompt": {
+      "directory": "write-prompt",
+      "purpose": "Slow isolated-word prompt for Write practice"
+    }
+  },
+  "words": ["a","i","am","my","me","we","you","yes","no","go","stop","up","down","in","out","on","off","at","it","is","see","look","can","do","like","want","help","play","come","here","there","this","that","big","little","one","two","red","blue","the","and","are","be","he","she","they","was","have","has","with","for","from","to","of","all","some","more","said","say","what","where","who","how","when","why","not","now","went","get","make","good","new","first","three","four","under","over","into","our","your","again","also","always","another","around","because","before","both","could","does","were","each","every","found","give","goes","great","had","her","him","his","its","know","made","many","only","other","should","something","than","them","then","think","through","very","would","about","above","below","between","end","if","last","left","most","near","next","right","same","start","today","together","tomorrow","until","which","while","without","yesterday","yet","cat","bat","hat","mat","rat","sat","cap","map","nap","tap","bag","rag","tag","wag","jam","ham","ram","van","fan","man","pig","dig","fig","wig","fin","pin","win","sit","fit","hit","kit","lip","dip","rip","sip","tip","mix","fix","six","bed","led","fed","den","hen","pen","ten","web","leg","jet","net","pet","set","dog","log","fog","hog","cot","dot","hot","pot","top","mop","pop","box","fox","rod","nod","bug","dug","hug","jug","mug","sun","fun","run","bun","cup","pup","cut","nut","bus","tub","chat","chop","chin","chip","much","such","rich","lunch","ship","shop","shut","fish","dish","wish","bath","math","path","thin","thick","moth","whip","shell","shed","ring","king","sing","song","long","duck","rock","sock","back","neck","kick","clap","clip","clock","crab","crib","crop","drum","drop","flag","flat","flip","frog","glad","grin","plan","plum","sled","slip","slug","snap","spin","spot","swim","twin","black","brick","brush","chest","fresh","grass","green","snack","stand","truck","blend","frost","plant","skunk","twist","cake","bake","lake","game","name","late","gate","wave","bike","hike","time","five","nine","kite","ride","side","smile","home","bone","cone","hope","nose","note","rope","rose","stone","joke","cube","cute","dune","fume","huge","mule","rule","tube","tune","use","rain","mail","tail","sail","wait","day","stay","tray","gray","bee","feet","seed","tree","sleep","team","meat","seat","boat","coat","goat","road","soap","snow","grow","show","blow","float","clue","fruit","moon","food","room","book","boy","toy","car","far","jar","park","farm","star","arm","art","fern","term","germ","bird","girl","shirt","third","dirt","corn","fork","storm","horse","short","north","turn","burn","curl","hurt","nurse","purple","cats","dogs","jumps","runs","jumped","played","looking","wishes","boxes","faster","puppy","kitten","rabbit","hamster","gerbil","mouse","turtle","parrot","canary","pony","cow","calf","bull","piglet","sheep","lamb","chicken","chick","rooster","duckling","goose","donkey","llama","alpaca","turkey","ferret","lizard","snake","snail","worm","lion","tiger","leopard","cheetah","jaguar","panther","bear","panda","koala","kangaroo","elephant","giraffe","zebra","rhino","hippo","gorilla","monkey","chimpanzee","orangutan","baboon","wolf","coyote","deer","moose","elk","bison","buffalo","camel","hyena","meerkat","sloth","otter","beaver","raccoon","porcupine","hedgehog","antelope","gazelle","whale","dolphin","shark","orca","seal","walrus","manatee","dugong","octopus","squid","jellyfish","starfish","seahorse","eel","ray","lobster","shrimp","clam","oyster","mussel","scallop","coral","sponge","tuna","salmon","cod","marlin","swordfish"]
+}

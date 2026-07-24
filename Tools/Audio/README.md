@@ -22,6 +22,12 @@ Shipping manifests pin seed `20260725`. The seed is part of the immutable
 voice contract and PawGoo cache identity, so a regenerated cache miss makes the
 same best-effort deterministic provider request. Existing unseeded QA
 candidates remain listening-only evidence and cannot become the shipping pack.
+The shipping provider request contains only the isolated normalized word.
+Release preparation then applies one deterministic `-3 dBFS` peak target and
+120 ms PCM tail pad before the final MP3 encode. This protects the final
+consonant and bounds loudness without a per-word text, speed, or voice override.
+`finalize_elevenlabs_teacher_pack.sh` reproduces that release transform from a
+separate raw provider pack; it refuses to overwrite its own source.
 
 `TadaWords-Teacher-v1.pls` is the reviewable Multilingual v2 alias proposal for
 the sight-word letter names `a → ay`, `i → eye`, and the short-word
@@ -43,12 +49,13 @@ count, out-of-range duration, less than 60 ms of protected tail, or a clipped
 or inaudible peak. Human listening and speech-recognizer checks remain separate
 acceptance gates.
 
-The legacy Cartesia generator remains for the independently scoped Aurora
-celebration/launch assets. Set `CARTESIA_API_KEY` only in the active shell, then
-run:
+The Cartesia generator remains only for the independently scoped Aurora
+celebration/launch assets. Its former Katie teacher path is retired so a normal
+generator run cannot reintroduce an alternative teacher voice. Set
+`CARTESIA_API_KEY` only in the active shell, then run:
 
 ```bash
-Tools/Audio/generate_cartesia_offline_pack.sh all
+Tools/Audio/generate_cartesia_offline_pack.sh accents
 ```
 
 The generator is resumable. It skips valid AAC files, limits concurrency to
@@ -67,14 +74,6 @@ map to one unrepeated `da` vowel. `words` falls across three stages and joins
 through an 8 ms click-safe crossfade. FFmpeg must include the `rubberband`
 filter, and the Rubber Band CLI must be installed for dynamic pitch maps.
 Temporary component files are deleted and never enter the App bundle.
-
-After changing a pronunciation dictionary, regenerate only selected words with
-a comma-separated filter:
-
-```bash
-CARTESIA_WORDS=near,bun,chick \
-  Tools/Audio/generate_cartesia_offline_pack.sh teacher
-```
 
 Roles are intentionally separate:
 

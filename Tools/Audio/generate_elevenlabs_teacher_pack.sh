@@ -14,7 +14,7 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 2
 fi
 
-for command in curl ffprobe jq; do
+for command in curl ffmpeg ffprobe jq; do
   if ! command -v "$command" >/dev/null; then
     printf 'Required command is unavailable: %s\n' "$command" >&2
     exit 2
@@ -37,6 +37,21 @@ MODEL_ID="$(jq -er '.model' "$MANIFEST")"
 OUTPUT_FORMAT="$(jq -er '.audio_format.provider_output_format' "$MANIFEST")"
 SEED="$(jq -er '.seed' "$MANIFEST")"
 VENDOR_SPEED="$(jq -er '.provider_speed' "$MANIFEST")"
+TAIL_BREAK_SECONDS="$(
+  jq -er '.provider_tail_break_seconds // 0' "$MANIFEST"
+)"
+SENTENCE_BOUNDARY="$(
+  jq -er '.provider_sentence_boundary // ""' "$MANIFEST"
+)"
+RELEASE_PEAK_DBFS="$(
+  jq -er '.release_post_processing.peak_dbfs // empty' "$MANIFEST"
+)"
+RELEASE_TAIL_PADDING_SECONDS="$(
+  jq -er '.release_post_processing.tail_padding_seconds // empty' "$MANIFEST"
+)"
+RELEASE_ENCODER="$(
+  jq -er '.release_post_processing.encoder // empty' "$MANIFEST"
+)"
 DICTIONARY_ID="$(jq -er '.pronunciation_dictionary.id // "none"' "$MANIFEST")"
 DICTIONARY_VERSION_ID="$(
   jq -er '.pronunciation_dictionary.version_id // "none"' "$MANIFEST"
@@ -44,6 +59,24 @@ DICTIONARY_VERSION_ID="$(
 
 if [[ "$(jq -r '.vendor' "$MANIFEST")" != "ElevenLabs" ]]; then
   printf 'Manifest vendor must be ElevenLabs\n' >&2
+  exit 2
+fi
+if [[ "$(jq -r '.candidate_only // false' "$MANIFEST")" != "true" ]] &&
+  [[ "$(jq -r '.voice.approval' "$MANIFEST")" != "approved" ]]
+then
+  printf 'Shipping manifest voice must be explicitly approved\n' >&2
+  exit 2
+fi
+if [[ "$(jq -r '.candidate_only // false' "$MANIFEST")" != "true" ]] &&
+  { [[ "$TAIL_BREAK_SECONDS" != "0" ]] ||
+    [[ -n "$SENTENCE_BOUNDARY" ]] ||
+    [[ "$RELEASE_PEAK_DBFS" != "-3" ]] ||
+    [[ "$RELEASE_TAIL_PADDING_SECONDS" != "0.12" ]] ||
+    [[ "$RELEASE_ENCODER" != "libmp3lame" ]]; }
+then
+  printf \
+    'Shipping audio must use isolated-word input and canonical release processing\n' \
+    >&2
   exit 2
 fi
 if [[ "$VOICE_ID" == pending-* || "$VOICE_ID" == replace-* ]]; then
@@ -74,12 +107,44 @@ is_valid_mp3() {
       grep -q '^mp3,44100,1$'
 }
 
+prepare_release_mp3() {
+  local input="$1"
+  local output="$2"
+  local measured_peak gain
+
+  measured_peak="$(
+    ffmpeg -hide_banner -nostats \
+      -i "$input" \
+      -af volumedetect \
+      -f null /dev/null 2>&1 |
+      awk '/max_volume:/ {value=$5} END {print value}'
+  )"
+  if ! [[ "$measured_peak" =~ ^-?[0-9]+([.][0-9]+)?$ ]]; then
+    printf 'Unable to measure provider audio peak: %s\n' "$input" >&2
+    return 1
+  fi
+  gain="$(
+    awk \
+      -v target="$RELEASE_PEAK_DBFS" \
+      -v measured="$measured_peak" \
+      'BEGIN {printf "%.3f", target - measured}'
+  )"
+  ffmpeg -v error -y \
+    -i "$input" \
+    -af "volume=${gain}dB,apad=pad_dur=${RELEASE_TAIL_PADDING_SECONDS}" \
+    -ar 44100 \
+    -ac 1 \
+    -c:a "$RELEASE_ENCODER" \
+    -b:a 128k \
+    "$output"
+}
+
 generate_clip() {
   local text="$1"
   local relative_path="$2"
   local output="$PACK_ROOT/$relative_path"
   local temporary="${output%.mp3}.part.mp3"
-  local payload headers response status attempt
+  local payload headers response status attempt provider_text
 
   if is_valid_mp3 "$output"; then
     return 0
@@ -90,9 +155,13 @@ generate_clip() {
   headers="$(mktemp)"
   response="$(mktemp)"
   rm -f "$temporary"
+  provider_text="$text"
+  if [[ "$TAIL_BREAK_SECONDS" != "0" ]]; then
+    provider_text="$text$SENTENCE_BOUNDARY <break time=\"${TAIL_BREAK_SECONDS}s\" />"
+  fi
 
   jq -n \
-    --arg text "$text" \
+    --arg text "$provider_text" \
     --arg model "$MODEL_ID" \
     --arg dictionary "$DICTIONARY_ID" \
     --arg dictionary_version "$DICTIONARY_VERSION_ID" \
@@ -137,8 +206,10 @@ generate_clip() {
     if [[ "$status" == "200" ]] &&
       grep -Eiq '^content-type:[[:space:]]*audio/mpeg' "$headers"
     then
-      mv "$response" "$temporary"
-      if is_valid_mp3 "$temporary"; then
+      if is_valid_mp3 "$response" &&
+        prepare_release_mp3 "$response" "$temporary" &&
+        is_valid_mp3 "$temporary"
+      then
         mv "$temporary" "$output"
         rm -f "$payload" "$headers" "$response"
         return 0
@@ -170,8 +241,10 @@ worker() {
   generate_clip "$text" "$relative_path"
 }
 
-export -f is_valid_mp3 generate_clip worker
+export -f is_valid_mp3 prepare_release_mp3 generate_clip worker
 export ELEVENLABS_API_KEY VOICE_ID MODEL_ID OUTPUT_FORMAT SEED VENDOR_SPEED
+export TAIL_BREAK_SECONDS SENTENCE_BOUNDARY
+export RELEASE_PEAK_DBFS RELEASE_TAIL_PADDING_SECONDS RELEASE_ENCODER
 export DICTIONARY_ID DICTIONARY_VERSION_ID PACK_ROOT
 
 jq -r --arg word_filter "$WORD_FILTER" '

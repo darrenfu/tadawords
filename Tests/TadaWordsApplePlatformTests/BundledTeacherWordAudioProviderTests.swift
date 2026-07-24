@@ -66,6 +66,23 @@ final class BundledTeacherWordAudioProviderTests: XCTestCase {
         XCTAssertEqual(clip.audioData, Data([1, 2, 3]))
     }
 
+    func testCanonicalContractRejectsIncompleteOrUnapprovedManifest() throws {
+        let fixture = try Fixture(fileExtension: "mp3")
+        defer { fixture.remove() }
+
+        XCTAssertThrowsError(
+            try BundledTeacherWordAudioProvider(
+                resourceRoot: fixture.root,
+                requiresCanonicalContract: true
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? BundledTeacherWordAudioProviderError,
+                .invalidManifest
+            )
+        }
+    }
+
     func testUnknownWordOrPronunciationVariantMissesBundle() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

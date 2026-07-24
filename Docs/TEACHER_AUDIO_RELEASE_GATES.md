@@ -12,6 +12,8 @@ The final teacher contract must freeze these values together:
 - `eleven_multilingual_v2`;
 - one approved pronunciation-dictionary ID and version;
 - provider speed `0.70`;
+- isolated-word-only provider input with no sentence or SSML suffix;
+- deterministic `-3 dBFS` peak normalization and 120 ms PCM tail padding;
 - client playback rate `20/21`, for an effective practice cadence of `2/3`;
 - contract version `elevenlabs-teacher-v1`;
 - MP3 response and checksum validation;
@@ -32,9 +34,10 @@ or extra clips, pending approval, wrong provider/model/speed/playback values,
 local text overrides, bad encoding, unsafe duration/tail, clipping, and
 inaudible output.
 
-The repository's `Katie-500-v1` resources are the current compatibility
-baseline, not the replacement pack. They remain until the approved ElevenLabs
-pack is complete and the release change intentionally replaces them.
+The approved `ElevenLabs-Teacher-500-v1` pack replaces the former Katie
+compatibility resources. Its 1,000 declared MP3 clips must pass the exact
+manifest contract, full-pack acoustic inspection, representative
+SpeechTranscriber matrix, release inventory digest, and physical listening.
 
 ## Runtime preparation
 
@@ -59,19 +62,22 @@ or validated cache but never start a network request. A missing, corrupt, or
 mismatched clip fails visibly; it never substitutes Apple speech or another
 voice.
 
-## Open owner and deployment decisions
+## Owner decisions and remaining deployment actions
 
 The exact proposal and approval record are maintained in
 [`TEACHER_AUDIO_OWNER_DECISIONS.md`](TEACHER_AUDIO_OWNER_DECISIONS.md).
 
-- Human listening must select and approve the canonical voice.
-- The proposed `a → ay`, `i → eye`, and `come → kum` alias dictionary must be
-  approved and created as one versioned ElevenLabs dictionary.
-- The PawGoo Worker hostname and Cloudflare zone/account must be approved before
-  resource creation, DNS changes, secrets, or deployment.
+- Bella and the `a → ay`, `i → eye`, `come → kum` rules are owner-approved.
+- ElevenLabs dictionary `jlikgZytU86rmsPnDwrK`, version
+  `E2NROj7X6ZT7VcK11GgH`, contains the approved rules.
+- The owner approved `audio.pawgoo.app`, `audio-dev.pawgoo.app`, and the current
+  PawGoo Cloudflare account/zone.
+- D1 and KV resources are provisioned. R2 subscription/buckets, environment
+  secrets, development-first deployment, and end-to-end verification remain
+  pending.
 
-Until all three are resolved, the production plist must not configure
-`TadaWordsTeacherAudioEndpoint`.
+The production plist must not configure `TadaWordsTeacherAudioEndpoint` until
+the production deployment and App Attest path pass end to end.
 
 ## Acceptance
 
