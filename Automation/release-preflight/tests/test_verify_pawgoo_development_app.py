@@ -332,6 +332,44 @@ class PawGooDevelopmentAppVerifierTests(unittest.TestCase):
                         entitlements, self.policy
                     )
 
+    def test_profile_authorization_accepts_app_attest_development_authorization(self):
+        for value in (
+            "development",
+            ["development"],
+            ["development", "production"],
+        ):
+            with self.subTest(value=value):
+                entitlements = copy.deepcopy(
+                    self.fixture["profile"]["Entitlements"]
+                )
+                entitlements[
+                    "com.apple.developer.devicecheck.appattest-environment"
+                ] = value
+                verifier.validate_profile_authorization(
+                    entitlements, self.policy
+                )
+
+    def test_profile_authorization_rejects_invalid_app_attest_authorization(self):
+        for value in (
+            ["production"],
+            ["development", "staging"],
+            ["development", "development"],
+        ):
+            with self.subTest(value=value):
+                entitlements = copy.deepcopy(
+                    self.fixture["profile"]["Entitlements"]
+                )
+                entitlements[
+                    "com.apple.developer.devicecheck.appattest-environment"
+                ] = value
+                with self.assertRaisesRegex(
+                    verifier.VerificationError,
+                    "com.apple.developer.devicecheck.appattest-environment",
+                ):
+                    verifier.validate_profile_authorization(
+                        entitlements, self.policy
+                    )
+
     def test_signed_app_entitlements_must_be_authorized_by_profile(self):
         app_entitlements = copy.deepcopy(self.fixture["entitlements"])
         app_entitlements[

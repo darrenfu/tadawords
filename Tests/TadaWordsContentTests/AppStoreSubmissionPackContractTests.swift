@@ -139,6 +139,20 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             XCTAssertFalse(plist.contains("voice setup"))
         }
 
+        let debugPlist = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Apps/TadaWordsApp/InfoDebug.plist"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertTrue(
+            debugPlist.contains(
+                "<string>https://audio-dev.pawgoo.app</string>"
+            )
+        )
+        XCTAssertTrue(debugPlist.contains("<string>0.7.36</string>"))
+        XCTAssertTrue(debugPlist.contains("<string>2026072410</string>"))
+
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8

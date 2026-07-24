@@ -198,15 +198,14 @@ for configuration in Debug Release; do
         EXPECTED_ICLOUD_ENVIRONMENT=Development
         EXPECTED_APP_ATTEST_ENVIRONMENT=development
         printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
-            | grep -q 'INFOPLIST_KEY_TadaWordsTeacherAudioEndpoint = https://audio-dev.pawgoo.app' \
-            || fail "normal Debug teacher-audio endpoint is incorrect"
+            | grep -q 'INFOPLIST_FILE = Apps/TadaWordsApp/InfoDebug.plist' \
+            || fail "normal Debug teacher-audio Info.plist is incorrect"
     else
         EXPECTED_ICLOUD_ENVIRONMENT=Production
         EXPECTED_APP_ATTEST_ENVIRONMENT=production
-        if printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
-            | grep -Eq '^[[:space:]]*INFOPLIST_KEY_TadaWordsTeacherAudioEndpoint ='; then
-            fail "normal Release must not configure a teacher-audio endpoint before production verification"
-        fi
+        printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
+            | grep -q 'INFOPLIST_FILE = Apps/TadaWordsApp/Info.plist' \
+            || fail "normal Release teacher-audio Info.plist is incorrect"
     fi
     printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
         | grep -q "ICLOUD_CONTAINER_ENVIRONMENT = $EXPECTED_ICLOUD_ENVIRONMENT" \
@@ -308,6 +307,10 @@ done
 pass "Release builds succeeded for iPhone 17 Pro Max and iPad Pro 13-inch"
 
 BUILT_APP="$DERIVED_DATA/Build/Products/Release-iphonesimulator/Tada Words.app"
+if plutil -extract TadaWordsTeacherAudioEndpoint raw -o - "$BUILT_APP/Info.plist" \
+    >/dev/null 2>&1; then
+    fail "the normal Release app contains a teacher-audio endpoint before production verification"
+fi
 test "$(plutil -extract CFBundleIdentifier raw -o - "$BUILT_APP/Info.plist")" \
     = "$NORMAL_BUNDLE_ID" \
     || fail "the normal built app has the wrong PawGoo bundle identifier"

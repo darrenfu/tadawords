@@ -119,6 +119,7 @@
   },
   "required_source_files": [
     "Apps/TadaWordsApp/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png",
+    "Apps/TadaWordsApp/InfoDebug.plist",
     "Apps/TadaWordsApp/Info.plist",
     "Apps/TadaWordsApp/InfoLocalQA.plist",
     "Apps/TadaWordsApp/PrivacyInfo.xcprivacy",
