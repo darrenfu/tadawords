@@ -47,10 +47,11 @@ be replaced with exact signed-release evidence during submission preparation:
 - **Final App Privacy answers:** start from the merged privacy inventory, then
   repeat its exact-build, CloudKit, Pawgoo-access, support-retention, and traffic
   gates before entering answers in App Store Connect.
-- **Content-rights representation and copyright:** start from the merged
-  content-rights inventory. Current Cartesia evidence covers only its recorded
-  pack; reconcile the exact retained audio/provider terms and obtain the Pawgoo
-  ownership-chain attestation in #33 before submitting a representation.
+- **Content-rights representation and copyright:** start from the finalized
+  content-rights inventory. #32 and #33 preserve the Cartesia and Pawgoo owner
+  evidence for its exact enumerated content set; rerun the archive verifier and
+  reconcile any retained-audio, provider-term, or marketing-asset delta before
+  submitting a representation.
 - **Family Sync reviewer steps and public claim:** add only after #19/#41 pass
   against production CloudKit and the exact signed release candidate.
 - **Pawgoo wording:** issue #54 owns alignment and deployment evidence for the
@@ -79,7 +80,7 @@ execute.
 | Exact RC and device acceptance | **Unresolved.** Captures must come from the accepted signed RC, not this documentation branch by default. | [#22](https://github.com/darrenfu/tadawords/issues/22) |
 | Kids permission requests | **Source fixed; exact-device gate open.** Child Read has no request capability. The review path starts behind the Parent Gate at App & Family → Speech & Microphone, but first-install, denied, authorized, and revoked behavior still needs exact signed iPhone/iPad acceptance. | [#55](https://github.com/darrenfu/tadawords/issues/55), [permission inventory](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md) |
 | App Privacy answers | **Merged inventory; conditional answer set.** The source-backed inventory covers bundled picture hints, Family Sync, device-local data, support/export flows, the privacy manifest, and every configured or dormant network path. Exact signed-build and operating-practice gates remain. | [`APP_STORE_PRIVACY_v0.7.4.md`](APP_STORE_PRIVACY_v0.7.4.md), [#17](https://github.com/darrenfu/tadawords/issues/17), [#54](https://github.com/darrenfu/tadawords/issues/54) |
-| Shipped-content rights | **Merged inventory; final release evidence blocked.** Twemoji provenance and in-app attribution are present. Cartesia account/tier evidence is preserved only for the recorded current pack; every retained generated-audio asset must be reconciled at exact RC. Pawgoo authorship/rights-chain attestation remains open. | [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md), [#32](https://github.com/darrenfu/tadawords/issues/32), [#33](https://github.com/darrenfu/tadawords/issues/33) |
+| Shipped-content rights | **Finalized for the enumerated content set; exact-RC delta check remains.** Twemoji provenance and in-app attribution are present. #32 preserves Cartesia evidence for the recorded pack, and #33 preserves the Pawgoo owner attestation for original and generated content. | [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md), [#32](https://github.com/darrenfu/tadawords/issues/32), [#33](https://github.com/darrenfu/tadawords/issues/33) |
 
 Apple states that a Made for Kids selection cannot be changed after approval,
 and subsequent updates must continue to follow the Kids Category rules. The
@@ -103,7 +104,7 @@ limits come from Apple's current App Store Connect reference.
 | Marketing URL | `https://pawgoo.app/en/tadawords` | Live audit: HTTP 200 |
 | Support URL | `https://pawgoo.app/en/support` | Live audit: HTTP 200; legal-contact sufficiency remains part of #23 |
 | Privacy Policy URL | `https://pawgoo.app/en/tadawords/privacy` | Live audit: HTTP 200 |
-| Copyright | `2026 Pawgoo LLC` | **Provisional — do not enter until #33 confirms the Pawgoo ownership/rights chain.** Apple adds the copyright symbol automatically |
+| Copyright | `2026 Pawgoo LLC` | Owner attestation is preserved in #33; confirm the exact field against the accepted release candidate. Apple adds the copyright symbol automatically |
 | Price | `Free` | No IAP, subscription, advertising, or paid unlock in 1.0 |
 | Availability | `United States only` | Do not select all countries/regions, EU storefronts, or pre-order |
 | Release option | `Manually release this version` | Keep Pending Developer Release until #26 authorizes release |
@@ -313,9 +314,10 @@ final-Profile/delete-all, and human gates pass.
 - **Final App Privacy answers:** the merged inventory is the source of truth,
   but its exact signed-build, operating-practice, CloudKit, support-retention,
   Pawgoo-access, and public-copy gates must pass before submission.
-- **All shipped content is fully cleared for every storefront:** the merged
-  content-rights inventory is the source of truth, but Cartesia account/tier
-  evidence (#32) and Pawgoo authorship/rights-chain attestation (#33) remain.
+- **Unchanged content rights across later release candidates:** the finalized
+  inventory is the source of truth for its exact enumerated set. A later
+  archive, marketing asset, provider-term, or storefront delta must be
+  reconciled before reusing the representation.
 - **Complete Profile deletion or Delete All App Data:** the Parent area offers
   Profile deletion guidance, but it cannot delete the sole remaining Profile
   and has no complete delete-all reset. Issue #19 owns the required behavior
@@ -362,10 +364,11 @@ content-consistency gate.
 - [ ] Confirm merged #15/#16 behavior on the exact RC, then reconcile the
       in-app links, product page, privacy policy, support page, review notes,
       bundled picture-hint claim, and offline wording.
-- [ ] Start from the merged content-rights inventory; reconcile #32 to every
-      retained generated-audio asset and resolve #33 for every asset visible in
-      the app and screenshots. Do not enter the provisional Pawgoo copyright
-      until #33 passes.
+- [ ] Start from the finalized content-rights inventory; confirm the exact
+      archive retains the #32-reconciled generated-audio pack and the
+      #33-attested original/generated asset set. Re-open the evidence review for
+      any content, provider-term, screenshot, marketing-asset, or storefront
+      delta.
 - [ ] Resolve #19 with a final-Profile/delete-all route and production
       destructive evidence before claiming complete in-app or CloudKit erasure.
 - [ ] Confirm the #76 conservative 1.0 fallback remains enforced: no Parent
