@@ -52,13 +52,13 @@
 		3544B7A11CC6775BE2C8DC3F /* GuardianPhotoEditorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuardianPhotoEditorTests.swift; sourceTree = "<group>"; };
 		3CB801DBC532A0987AE32FE0 /* FamilySyncSimulatorTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilySyncSimulatorTestSupport.swift; sourceTree = "<group>"; };
 		48AC9F95D72A19D6CCCB9EDB /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		56F355F86D94B8B92CD41664 /* content-rights-inventory-v0.7.35 */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "content-rights-inventory-v0.7.35"; path = .; sourceTree = SOURCE_ROOT; };
 		5E2B0B9B2C6B662DF6B7A976 /* PersistenceSchemaCompatibility.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PersistenceSchemaCompatibility.json; sourceTree = "<group>"; };
 		5FC096A7EC9928A79B370330 /* TadaWordsLocalQA.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TadaWordsLocalQA.entitlements; sourceTree = "<group>"; };
 		7E606E231BC91D0F6148BB0C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		812EA8534B10F69E4E2169FF /* TadaWordsCriticalFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TadaWordsCriticalFlowUITests.swift; sourceTree = "<group>"; };
 		8C85BBB8B06DA261C62B5398 /* TadaWordsFamilySyncUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TadaWordsFamilySyncUITests.swift; sourceTree = "<group>"; };
 		8FC055EE962E853CEC0DFBEC /* TadaWords.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TadaWords.entitlements; sourceTree = "<group>"; };
-		ADF5058F6A89AE36C0B071D8 /* Tada Words */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "Tada Words"; path = .; sourceTree = SOURCE_ROOT; };
 		B08D5E6984A29CBBE4D69349 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		B328DA329096362FEE9C4A5A /* TadaWordsPhotoEditorTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = TadaWordsPhotoEditorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA0C975618AD883EE0E444E4 /* TadaWordsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TadaWordsApp.swift; sourceTree = "<group>"; };
@@ -151,7 +151,7 @@
 		80F2871A72E2C2076D0A5FF6 /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				ADF5058F6A89AE36C0B071D8 /* Tada Words */,
+				56F355F86D94B8B92CD41664 /* content-rights-inventory-v0.7.35 */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
