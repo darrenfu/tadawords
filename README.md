@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.7.38%20Contextual%20Read%20Permissions-6D48D7" alt="v0.7.38 contextual Read permissions">
+  <img src="https://img.shields.io/badge/status-v0.7.40%20App%20Version%20Diagnostics-6D48D7" alt="v0.7.40 app version diagnostics">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
@@ -26,7 +26,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.7.38` (build `2026072412`) requests still-undetermined Speech Recognition and Microphone access from the first Read microphone tap, in sequence, and continues that same tap into recording when both are granted. Denied, restricted, and revoked states retain Ask-a-Parent recovery. The release preserves the App Store 1.0 voiceprint fallback, Family Sync safeguards, distribution contract, and English-first bilingual repository documentation from the prior baseline. See the [v0.7.38 release note](Docs/Releases/v0.7.38-child-speech-permissions.md), [permission inventory](Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md), [1.0 fallback record](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md), [decision record](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md), v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md), and [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md).
+> **Project status:** Version `0.7.40` (build `2026072414`) shows the exact installed version/build at the bottom of Parent Home → App & Family → Privacy & Support and adds privacy-safe app version/build fields to Family Sync diagnostics schema 3. It preserves the v0.7.38 contextual Read permission flow, App Store 1.0 voiceprint fallback, Family Sync safeguards, distribution contract, and English-first bilingual repository documentation. See the [v0.7.40 release note](Docs/Releases/v0.7.40-app-version-diagnostics.md), [v0.7.38 permission release](Docs/Releases/v0.7.38-child-speech-permissions.md), [permission inventory](Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md), [1.0 fallback record](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md), [decision record](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md), v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md), and [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -120,7 +120,7 @@ The iOS target depends on `TadaWordsAppShell`, `TadaWordsApplePlatform`, and `Ta
 - A free Apple Account for direct LocalQA installation on personal devices
 - A paid Apple Developer Program team for TestFlight and CloudKit acceptance
 
-The current v0.7.38 source candidate uses Xcode 26.6. Merged v0.7.2 passed
+The current v0.7.40 source candidate uses Xcode 26.6. Merged v0.7.2 passed
 the exact-HEAD iPhone/iPad simulator matrix, LocalQA install guard, and a data-
 preserving physical iPhone update; merged v0.7.3 added offline Parent notices
 and exact content verification. Family Sync production schema, signed cross-
@@ -154,7 +154,7 @@ build, commit, and bundle ID:
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.7.38 2026072412 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.7.40 2026072414 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 For the normal PawGoo Development artifact, use the stricter no-install gate:
@@ -162,7 +162,7 @@ For the normal PawGoo Development artifact, use the stricter no-install gate:
 ```sh
 ./Scripts/verify-pawgoo-development-app.py \
   '/path/to/Tada Words.app' \
-  0.7.38 2026072412 "$(git rev-parse HEAD)" \
+  0.7.40 2026072414 "$(git rev-parse HEAD)" \
   --device-udid 'APPROVED_IPHONE_HARDWARE_UDID' \
   --device-udid 'APPROVED_IPAD_HARDWARE_UDID'
 ```
@@ -213,8 +213,8 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Version and build | v0.7.38 (`2026072412`) in source Plists and generated project settings |
-| Swift tests | v0.7.38 adds contextual child permission sequencing, overlap/cancellation protection, and updated privacy/release contracts to the retained baseline; the full source gate is rerun at the immutable release HEAD |
+| Version and build | v0.7.40 (`2026072414`) in source Plists and generated project settings |
+| Swift tests | v0.7.40 adds shared bundle-version presentation, Privacy & Support footer coverage, and schema 3 diagnostic privacy checks to the retained baseline; the full source gate is rerun at the immutable release HEAD |
 | Family Sync physical delta | Normal PawGoo v0.7.18 installed in place on the approved iPhone and iPad; an iPhone-created test Profile converged automatically to the untouched iPad without opening Family Sync, with one matching record and four Profiles total on each side |
 | Family Sync simulator E2E | Merged v0.7.2: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5 |
 | Critical XCUITest flows | Merged v0.7.2: full critical matrix passed on iPad; the single iPhone Photos-dismiss timing case passed 2/2 in isolated fresh reruns after the combined run, and every other flow passed |
@@ -283,7 +283,7 @@ The project source does not include an open-source license. Copyright remains wi
 <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
 <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
 <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-<img src="https://img.shields.io/badge/status-v0.7.38%20Contextual%20Read%20Permissions-6D48D7" alt="v0.7.38 contextual Read permissions">
+<img src="https://img.shields.io/badge/status-v0.7.40%20App%20Version%20Diagnostics-6D48D7" alt="v0.7.40 app version diagnostics">
 </p>
 
 Tada Words为孩子们提供了每天两个独立的视字任务：
@@ -294,7 +294,7 @@ Tada Words为孩子们提供了每天两个独立的视字任务：
 
 Parents通过键入、使用光学字符识别（OCR）扫描学校列表或从离线预设中选择单词来添加每个练习单词。Tada Words从不自动填充池。审查时间表根据回忆强度、错误、帮助使用、重播和每个孩子的反应速度将家长批准的单词带回。
 
-> **项目状态：**版本 `0.7.38`（构建 `2026072412`）会在孩子第一次点击 Read 麦克风时，依次请求尚未确定的 Speech Recognition 和 Microphone 权限；两项都允许后，同一次点击会直接继续录音。拒绝、受限或之后被撤销的状态继续显示 Ask a Parent 恢复路径。该版本保留 App Store 1.0 voiceprint fallback、Family Sync 防护、分发契约，以及英文优先的中英双语仓库文档。另见 [v0.7.38 发布说明](Docs/Releases/v0.7.38-child-speech-permissions.md)、[系统权限清单](Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md)、[1.0 fallback 记录](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md)、[App Store 决策记录](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md)和[隐私清单](Docs/APP_STORE_PRIVACY_v0.7.4.md)。
+> **项目状态：**版本 `0.7.40`（构建 `2026072414`）会在 Parent Home → App & Family → Privacy & Support 底部显示当前安装的准确版本/构建号，并在 Family Sync diagnostics schema 3 中加入隐私安全的 app version/build 字段。该版本保留 v0.7.38 的孩子场景权限流程、App Store 1.0 voiceprint fallback、Family Sync 防护、分发契约，以及英文优先的中英双语仓库文档。另见 [v0.7.40 发布说明](Docs/Releases/v0.7.40-app-version-diagnostics.md)、[v0.7.38 权限发布说明](Docs/Releases/v0.7.38-child-speech-permissions.md)、[系统权限清单](Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md)、[1.0 fallback 记录](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md)、[App Store 决策记录](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md)和[隐私清单](Docs/APP_STORE_PRIVACY_v0.7.4.md)。
 
 该应用程序包含八个独立的视觉世界：Moonpetal Kingdom、Build-It Bay、Paws & Pines、Dino Discovery、Firehouse Heroes、Brickwork City、Frostlight World和Coaster Carnival。每个世界都保留了自己的原创场景、吉祥物、音乐、声音线索和25个物品的奖励收藏。
 
@@ -385,7 +385,7 @@ iOS目标取决于`TadaWordsAppShell`、`TadaWordsApplePlatform`和`TadaWordsDom
 - 一个免费的Apple Account，用于直接LocalQA在个人设备上安装
 - 一个为 TestFlight 和 CloudKit 接受提供付费的 Apple Developer Program 团队
 
-当前 v0.7.38 源候选版本使用 Xcode 26.6。合并后的 v0.7.2 通过了 exact-HEAD iPhone/iPad 模拟器矩阵、LocalQA 安装保护和数据保留的实体 iPhone 更新；合并后的 v0.7.3 增加了离线 Parent 通知和精确内容验证。Family Sync 生产 schema、签名跨设备共享/删除、人工可访问性和精确发布隐私/网络验收仍未完成。
+当前 v0.7.40 源候选版本使用 Xcode 26.6。合并后的 v0.7.2 通过了 exact-HEAD iPhone/iPad 模拟器矩阵、LocalQA 安装保护和数据保留的实体 iPhone 更新；合并后的 v0.7.3 增加了离线 Parent 通知和精确内容验证。Family Sync 生产 schema、签名跨设备共享/删除、人工可访问性和精确发布隐私/网络验收仍未完成。
 
 ## 构建和测试
 
@@ -412,7 +412,7 @@ open TadaWords.xcodeproj
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.7.38 2026072412 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.7.40 2026072414 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 对于正常的PawGoo开发人工制品，请使用更严格的无安装门槛：
@@ -420,7 +420,7 @@ open TadaWords.xcodeproj
 ```sh
 ./Scripts/verify-pawgoo-development-app.py \
   '/path/to/Tada Words.app' \
-  0.7.38 2026072412 "$(git rev-parse HEAD)" \
+  0.7.40 2026072414 "$(git rev-parse HEAD)" \
   --device-udid 'APPROVED_IPHONE_HARDWARE_UDID' \
   --device-udid 'APPROVED_IPAD_HARDWARE_UDID'
 ```
@@ -461,8 +461,8 @@ open TadaWords.xcodeproj
 |检查|结果|
 |---|---|
 |严格Swift格式杂毛|通过|
-| 版本和构建 | 源 Plist 与生成项目设置中的 v0.7.38（`2026072412`） |
-| Swift 测试 | v0.7.38 增加孩子场景权限顺序、重叠/取消保护，以及更新后的隐私和发布契约；必须在不可变的发布 HEAD 上重跑完整 source gate |
+| 版本和构建 | 源 Plist 与生成项目设置中的 v0.7.40（`2026072414`） |
+| Swift 测试 | v0.7.40 增加共享 bundle 版本展示、Privacy & Support 页脚覆盖和 schema 3 diagnostics 隐私检查；必须在不可变的发布 HEAD 上重跑完整 source gate |
 | 家庭同步物理差分 | 正常 PawGoo v0.7.18 已安装在批准的 iPhone 和 iPad 上；一个 iPhone 创建的测试 Profile 自动收敛到未触碰的 iPad，无需打开家庭同步，每侧总共有一个匹配记录和四个 Profile |
 | 家庭同步模拟器E2E |合并v0.7.2：6/6在iPhone 17 Pro Max和6/6在iPad Pro 13英寸（M5），iOS 26.5 |
 | 关键 XCUITest 流程 | 合并 v0.7.2：完整的关键矩阵通过 iPad；单个 iPhone 照片-拒绝时间案例在合并运行后在孤立的新重播中通过了 2/2，其余每个流程都通过了 |
