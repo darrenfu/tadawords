@@ -4,7 +4,7 @@ This is the single source of truth for work discovered after the original V1
 design. Product/design documents describe the current intended behavior; this
 log records why it changed, which version contains it, and how it was verified.
 
-## v0.7.32 — App Store release alignment
+## v0.7.33 — App Store release alignment
 
 - Standardized the product age range to 3–8 across profile creation, child
   creation, Parent profile editing, release metadata, and public-site inputs.
@@ -13,7 +13,7 @@ log records why it changed, which version contains it, and how it was verified.
 - Reconciled the release pack with the bundled offline Twemoji implementation,
   parent-opted-in Family Sync boundary, and Apple's single Kids Category band
   limitation.
-- Reserved version `0.7.32`, build `2026072406`.
+- Reserved version `0.7.33`, build `2026072407`.
 
 ## Versioning workflow
 
@@ -1222,6 +1222,38 @@ transient `.syncing` snapshot when it opened during an existing reconciliation.
 - Focused concurrency tests and the complete 1129-test Swift suite pass.
   Exact-HEAD build and signed-device acceptance remain pending.
 
+## v0.7.32 — 2026-07-24
+
+Target release: `v0.7.32`
+
+Branch: `codex/privacy-support-alignment-v0.7.32`
+
+Build: `2026072406`
+
+Overall state: Issue #76's owner-approved conservative App Store 1.0 fallback
+removes every production enrollment and speaker-matching entry point while
+retaining only the existing Profile-deletion and proven-fresh-install cleanup
+paths for a dormant pre-release Keychain template.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0732-PRIVACY-001 | P0 release scope | Voiceprint/COPPA | Do not ship voiceprint enrollment or speaker matching in App Store 1.0 without a qualified written treatment; preserve deletion of any dormant pre-release template. | Automated pass; exact-artifact acceptance pending | Source contracts, complete regression gate, exact-HEAD iPhone and iPad simulator UI checks, signed in-place iPhone acceptance without deleting app data, and retained lifecycle cleanup tests |
+
+### 2026-07-24 v0.7.32 notes
+
+- Production composition no longer constructs an enrollment service or injects
+  a speaker verifier into Read Practice.
+- Parent Profile cards do not expose voice setup while the release policy is
+  disabled, and view-model guards fail closed if legacy code attempts to
+  navigate or begin enrollment.
+- Microphone permission copy now covers spoken Read Practice only.
+- Existing templates are not silently erased during update. The production
+  repository remains composed only so Profile deletion and proven-fresh-install
+  bootstrap can perform the previously verified scoped cleanup.
+- This is a release-scope fallback, not a legal conclusion. Issue #76 remains
+  open for qualified treatment of transient Read speech, Profile/photo data,
+  persistent identifiers, and optional CloudKit Family Sync.
+
 ## v0.7.30 — 2026-07-23
 
 Target release: `v0.7.30`
@@ -1255,11 +1287,11 @@ review notes, and exact-RC checklist.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
-| V0722-RELEASE-001 | P1 decision | App Store | Use Made for Kids, Free/no IAP or ads, United States-only availability, and manual release everywhere. | The former 6–8 product wording was superseded by the v0.7.32 product range of ages 3–8; Apple still requires one owner-selected band | Exact source tests, generated-project identity, PR merge, and later #65 App Store Connect entry against the accepted RC. |
+| V0722-RELEASE-001 | P1 decision | App Store | Use Made for Kids, Free/no IAP or ads, United States-only availability, and manual release everywhere. | The former 6–8 product wording was superseded by the v0.7.33 product range of ages 3–8; Apple still requires one owner-selected band | Exact source tests, generated-project identity, PR merge, and later #65 App Store Connect entry against the accepted RC. |
 
 ### 2026-07-21 v0.7.27 notes
 
-- The original primary 6–8 band decision was superseded in v0.7.32 by the
+- The original primary 6–8 band decision was superseded in v0.7.33 by the
   product range of ages 3–8. App Store Connect still requires one band, and
   the post-approval lock-in remains irreversible.
 - The first public release is Free, has no IAP/subscription/advertising/paid

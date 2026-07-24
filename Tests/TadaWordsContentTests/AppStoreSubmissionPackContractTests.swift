@@ -89,9 +89,11 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "#33",
             "#54",
             "#55",
+            "#76",
             "Provisional",
             "BLOCKED BY ISSUE #55",
             "SYSTEM_PERMISSION_INVENTORY_v0.7.8.md",
+            "VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md",
             "Child Read has no request capability",
             "APP_STORE_RELEASE_DECISIONS_v0.7.27.md",
             "Made for Kids, product ages 3–8",
@@ -133,16 +135,50 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.32</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072406</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.33</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072407</string>"))
+            XCTAssertFalse(plist.contains("voice setup"))
         }
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.32"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072406"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.33"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072407"))
+
+        let appComposition = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Apps/TadaWordsApp/TadaWordsApp.swift"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertFalse(
+            appComposition.contains("AppleVoiceprintEnrollmentService(")
+        )
+        XCTAssertFalse(
+            appComposition.contains(
+                "voiceprintVerifier: AppleVoiceprintVerifier("
+            )
+        )
+        XCTAssertTrue(
+            appComposition.contains("voiceprintEnrollmentService: nil")
+        )
+        XCTAssertTrue(
+            appComposition.contains("voiceprintRepository: voiceprintRepository")
+        )
+
+        let profilesView = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Sources/TadaWordsGuardianFeatures/GuardianProfilesView.swift"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertTrue(
+            profilesView.contains(
+                "if VoiceprintReleasePolicy.shipsEnrollmentAndSpeakerMatching"
+            )
+        )
 
         for unresolvedDecision in [
             "Price | **UNRESOLVED — #24**",
