@@ -33,7 +33,7 @@ final class SystemPermissionInventoryContractTests: XCTestCase {
         }
     }
 
-    func testKnownShippingRequestSurfacesStayAtAuditedAdultOwnedSites() throws {
+    func testKnownShippingRequestSurfacesStayAtAuditedPlatformSites() throws {
         let inventory = try permissionInventory()
         let shippingSources =
             try swiftSources(
@@ -114,12 +114,12 @@ final class SystemPermissionInventoryContractTests: XCTestCase {
             )
             XCTAssertTrue(
                 surface.expectedPaths.allSatisfy { !$0.contains("TadaWordsFeatures/") },
-                "A child feature owns \(surface.sourceToken)"
+                "A child feature directly owns \(surface.sourceToken)"
             )
         }
     }
 
-    func testInventoryLocksChildRoutesToCheckOnlyBehavior() throws {
+    func testInventoryLocksChildRoutesToContextualTapBehavior() throws {
         let inventory = try permissionInventory()
         let normalizedInventory =
             inventory
@@ -140,8 +140,10 @@ final class SystemPermissionInventoryContractTests: XCTestCase {
         }
 
         for contract in [
-            "cannot receive the Parents-only request closure",
-            "`isAuthorized()` only",
+            "Only an active microphone tap calls `authorizeMicrophoneTap()`",
+            "cannot call Apple permission APIs directly",
+            "Rapid repeated taps cannot overlap",
+            "cancellation after the first prompt prevents the second prompt",
             "one physical iPhone and one physical iPad",
         ] {
             XCTAssertTrue(

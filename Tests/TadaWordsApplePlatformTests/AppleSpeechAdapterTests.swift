@@ -79,6 +79,92 @@ final class AppleSpeechAdapterTests: XCTestCase {
         )
     }
 
+    func testPermissionControllerRequestsSpeechThenMicrophone() async {
+        let recorder = PermissionPromptRecorder()
+        let controller = AppleSpeechPermissionController(
+            checker: StubPermissionChecker(
+                state: AppleSpeechPermissionState(
+                    speechRecognition: .notDetermined,
+                    microphone: .notDetermined
+                )
+            ),
+            speechRecognitionRequest: {
+                await recorder.record("speech")
+                return .authorized
+            },
+            microphoneRequest: {
+                await recorder.record("microphone")
+                return .authorized
+            }
+        )
+
+        _ = await controller.requestPermissions()
+
+        let events = await recorder.events
+        XCTAssertEqual(events, ["speech", "microphone"])
+    }
+
+    func testPermissionControllerRejectsOverlappingRequestSequences() async {
+        let recorder = PermissionPromptRecorder(delay: .milliseconds(40))
+        let controller = AppleSpeechPermissionController(
+            checker: StubPermissionChecker(
+                state: AppleSpeechPermissionState(
+                    speechRecognition: .notDetermined,
+                    microphone: .notDetermined
+                )
+            ),
+            speechRecognitionRequest: {
+                await recorder.record("speech")
+                return .authorized
+            },
+            microphoneRequest: {
+                await recorder.record("microphone")
+                return .authorized
+            }
+        )
+
+        let first = Task { await controller.requestPermissions() }
+        while await recorder.events.isEmpty {
+            await Task.yield()
+        }
+        let overlapping = Task { await controller.requestPermissions() }
+        _ = await overlapping.value
+        _ = await first.value
+
+        let events = await recorder.events
+        XCTAssertEqual(events, ["speech", "microphone"])
+    }
+
+    func testCancellationAfterFirstPromptPreventsSecondPrompt() async {
+        let recorder = PermissionPromptRecorder(delay: .milliseconds(100))
+        let controller = AppleSpeechPermissionController(
+            checker: StubPermissionChecker(
+                state: AppleSpeechPermissionState(
+                    speechRecognition: .notDetermined,
+                    microphone: .notDetermined
+                )
+            ),
+            speechRecognitionRequest: {
+                await recorder.record("speech")
+                return .authorized
+            },
+            microphoneRequest: {
+                await recorder.record("microphone")
+                return .authorized
+            }
+        )
+
+        let request = Task { await controller.requestPermissions() }
+        while await recorder.events.isEmpty {
+            await Task.yield()
+        }
+        request.cancel()
+        _ = await request.value
+
+        let events = await recorder.events
+        XCTAssertEqual(events, ["speech"])
+    }
+
     func testSpeechConfigurationReplacesZeroMaximumDuration() {
         let configuration = AppleSpeechRecognitionConfiguration(
             maximumAllowedRecordingDuration: .zero,
@@ -575,6 +661,22 @@ final class AppleSpeechAdapterTests: XCTestCase {
         XCTAssertEqual(silenceResult.decision, .technicalFailure(.noUsableAudio))
         XCTAssertEqual(voicedResult.decision, .matched)
         XCTAssertEqual(voicedResult.recognizedText, "a")
+    }
+}
+
+private actor PermissionPromptRecorder {
+    private(set) var events: [String] = []
+    private let delay: Duration
+
+    init(delay: Duration = .zero) {
+        self.delay = delay
+    }
+
+    func record(_ event: String) async {
+        events.append(event)
+        if delay > .zero {
+            try? await Task.sleep(for: delay)
+        }
     }
 }
 
