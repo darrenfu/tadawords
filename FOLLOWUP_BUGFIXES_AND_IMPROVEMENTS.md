@@ -1287,13 +1287,13 @@ review notes, and exact-RC checklist.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
-| V0722-RELEASE-001 | P1 decision | App Store | Use Made for Kids, Free/no IAP or ads, United States-only availability, and manual release everywhere. | The former 6–8 product wording was superseded by the v0.7.33 product range of ages 3–8; Apple still requires one owner-selected band | Exact source tests, generated-project identity, PR merge, and later #65 App Store Connect entry against the accepted RC. |
+| V0722-RELEASE-001 | P1 decision | App Store | Use Made for Kids, Free/no IAP or ads, United States-only availability, and manual release everywhere. | Product and in-app Profile ages are 3–8; the owner selected Apple's `6–8` primary band because App Store Connect has no combined 3–8 value | Exact source tests, generated-project identity, PR merge, and later #65 App Store Connect entry against the accepted RC. |
 
 ### 2026-07-21 v0.7.27 notes
 
-- The original primary 6–8 band decision was superseded in v0.7.33 by the
-  product range of ages 3–8. App Store Connect still requires one band, and
-  the post-approval lock-in remains irreversible.
+- The product and in-app Profile range is ages 3–8. The owner selected Apple's
+  `6–8` primary band because App Store Connect has no combined 3–8 value; the
+  post-approval lock-in remains irreversible.
 - The first public release is Free, has no IAP/subscription/advertising/paid
   unlock, and is available only in the United States without pre-order.
 - The approved release option is manual. App Review approval must leave the

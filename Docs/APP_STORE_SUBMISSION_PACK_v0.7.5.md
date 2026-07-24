@@ -70,7 +70,7 @@ execute.
 
 | Decision | Current treatment in this draft | Human gate |
 |---|---|---|
-| Made for Kids and age range | **Resolved: Made for Kids, product ages 3–8.** Apple Kids Category supports one primary band rather than a combined 3–8 value; the owner must choose `5 and under` or `6–8` in issue #65 before approval. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24) |
+| Made for Kids and age range | **Resolved: Made for Kids, Apple primary band `6–8`, product and in-app Profile ages 3–8.** Apple Kids Category supports one primary band rather than a combined 3–8 value. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24) |
 | Price | **Resolved: Free, with no IAP, subscription, advertising, or paid unlock in 1.0.** | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24) |
 | Family Sync in 1.0 | **Resolved: required.** The source contract is present in the audited baseline, but public availability, sharing, convergence, revocation, and remote-erasure claims remain blocked until exact-RC production acceptance. | [#40](https://github.com/darrenfu/tadawords/issues/40), [#19](https://github.com/darrenfu/tadawords/issues/19), [#41](https://github.com/darrenfu/tadawords/issues/41) |
 | Storefronts | **Resolved for 1.0: United States only.** Do not select all countries or regions, EU storefronts, or pre-order. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24), [#23](https://github.com/darrenfu/tadawords/issues/23) |
@@ -79,7 +79,7 @@ execute.
 | Exact RC and device acceptance | **Unresolved.** Captures must come from the accepted signed RC, not this documentation branch by default. | [#22](https://github.com/darrenfu/tadawords/issues/22) |
 | Kids permission requests | **Source fixed; exact-device gate open.** Child Read has no request capability. The review path starts behind the Parent Gate at App & Family → Speech & Microphone, but first-install, denied, authorized, and revoked behavior still needs exact signed iPhone/iPad acceptance. | [#55](https://github.com/darrenfu/tadawords/issues/55), [permission inventory](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md) |
 | App Privacy answers | **Merged inventory; conditional answer set.** The source-backed inventory covers bundled picture hints, Family Sync, device-local data, support/export flows, the privacy manifest, and every configured or dormant network path. Exact signed-build and operating-practice gates remain. | [`APP_STORE_PRIVACY_v0.7.4.md`](APP_STORE_PRIVACY_v0.7.4.md), [#17](https://github.com/darrenfu/tadawords/issues/17), [#54](https://github.com/darrenfu/tadawords/issues/54) |
-| Shipped-content rights | **Merged inventory; final release evidence blocked.** Twemoji provenance and in-app attribution are present. Cartesia account/tier evidence is preserved only for the recorded current pack; every retained generated-audio asset must be reconciled at exact RC. Pawgoo authorship/rights-chain attestation remains open. | [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md), [#32](https://github.com/darrenfu/tadawords/issues/32), [#33](https://github.com/darrenfu/tadawords/issues/33) |
+| Shipped-content rights | **Owner-confirmed; exact-archive reconciliation required.** Twemoji provenance and in-app attribution are present. Cartesia account/tier evidence is preserved for the recorded current pack. The Pawgoo representative confirmed the original-content rights chain on 2026-07-23; the exact RC must still pass the archive verifier. | [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md), [#32](https://github.com/darrenfu/tadawords/issues/32), [#33](https://github.com/darrenfu/tadawords/issues/33) |
 
 Apple states that a Made for Kids selection cannot be changed after approval,
 and subsequent updates must continue to follow the Kids Category rules. Apple
@@ -99,13 +99,13 @@ limits come from Apple's current App Store Connect reference.
 | Secondary category | Leave blank | Draft; do not add Games merely for discoverability |
 | Kids Category | `Made for Kids` | Owner-approved; irreversible after App Review approval |
 | Product age range | `3–8` | Use consistently in product metadata and profile creation/edit surfaces |
-| Primary Kids age band | `5 and under` **or** `6–8` | Required owner choice because App Store Connect has no combined 3–8 value |
+| Primary Kids age band | `6–8` | Owner-selected on 2026-07-23; the product and in-app Profile range remain ages 3–8 |
 | Promotional text | `Turn school word lists into short Read and Write quests, with photo import, separate word libraries, and adaptive review for each learner.` | 138 characters; limit 170 |
 | Keywords | `sight words,reading,spelling,handwriting,vocabulary,school,practice,word lists,early literacy` | 93 UTF-8 bytes; limit 100 bytes |
 | Marketing URL | `https://pawgoo.app/en/tadawords` | Live audit: HTTP 200 |
 | Support URL | `https://pawgoo.app/en/support` | Live audit: HTTP 200; legal-contact sufficiency remains part of #23 |
 | Privacy Policy URL | `https://pawgoo.app/en/tadawords/privacy` | Live audit: HTTP 200 |
-| Copyright | `2026 Pawgoo LLC` | **Provisional — do not enter until #33 confirms the Pawgoo ownership/rights chain.** Apple adds the copyright symbol automatically |
+| Copyright | `2026 Pawgoo LLC` | Owner-confirmed on 2026-07-23. Apple adds the copyright symbol automatically |
 | Price | `Free` | No IAP, subscription, advertising, or paid unlock in 1.0 |
 | Availability | `United States only` | Do not select all countries/regions, EU storefronts, or pre-order |
 | Release option | `Manually release this version` | Keep Pending Developer Release until #26 authorizes release |
@@ -352,8 +352,8 @@ does not close the content-consistency gate.
 
 - [ ] Record the immutable PR/archive commit, version, build, bundle ID, and
       TeamIdentifier; replace the runtime baseline at the top of this pack.
-- [ ] Apply the resolved #24 values exactly: Made for Kids, product ages 3–8,
-      the owner-selected single Apple band (`5 and under` or `6–8`), Free with
+- [ ] Apply the resolved #24 values exactly: Made for Kids, product and in-app
+      Profile ages 3–8, Apple primary band `6–8`, Free with
       no IAP, United States only, no pre-order, and manual release.
 - [ ] Treat Family Sync as required 1.0 scope and complete #19/#41 production,
       physical-device, destructive test-only erasure, and human acceptance.

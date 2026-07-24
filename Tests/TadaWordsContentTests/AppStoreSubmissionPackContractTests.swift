@@ -97,6 +97,7 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "Child Read has no request capability",
             "APP_STORE_RELEASE_DECISIONS_v0.7.27.md",
             "Made for Kids, product ages 3–8",
+            "Primary Kids age band | `6–8`",
             "Apple Kids Category supports one primary band",
             "United States only",
             "Manually release this version",

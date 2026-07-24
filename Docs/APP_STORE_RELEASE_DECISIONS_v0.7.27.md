@@ -13,7 +13,7 @@ Tada Words 1.0 release:
 | --- | --- | --- |
 | Kids positioning | **Made for Kids** | This selection and the age band cannot be changed after App Review approval. All later updates must continue to satisfy the Kids Category rules. |
 | Product age range | **3–8** | Product copy and every profile creation/edit surface must use this complete range. |
-| Apple Kids Category band | **Owner selection required before approval: `5 and under` or `6–8`** | Apple Kids Category supports one primary band, not a combined 3–8 value. Do not misrepresent the product as an unsupported App Store Connect value. |
+| Apple Kids Category band | **`6–8`** | Owner-selected on 2026-07-23. Apple Kids Category supports one primary band, not a combined 3–8 value. The public product and in-app Profile range remain ages 3–8. |
 | Price | **Free** | Do not configure a paid price. |
 | Monetization | **No IAP, subscription, advertising, or paid unlock in 1.0** | A later monetization change requires a fresh Kids, privacy, metadata, and review audit. |
 | Initial availability | **United States only** | Do not select all countries or regions, any EU storefront, or a pre-order. Expansion is a later reviewed change. |
@@ -22,9 +22,9 @@ Tada Words 1.0 release:
 
 The age-rating questionnaire, metadata, screenshots, privacy plan, pricing and
 availability fields, and release checklist must describe product ages 3–8.
-The release owner must choose the closest single Apple Kids Category band
-before the irreversible post-approval lock. Issue #65 owns entry and
-exact-release reconciliation in App Store Connect. Issue #26 continues to own
+The release owner selected Apple's `6–8` Kids Category band on 2026-07-23.
+This does not change the product or in-app Profile range of ages 3–8. Issue #65
+owns entry and exact-release reconciliation in App Store Connect. Issue #26 continues to own
 Add for Review, Submit for Review, and the final manual release.
 
 ## Evidence boundary
