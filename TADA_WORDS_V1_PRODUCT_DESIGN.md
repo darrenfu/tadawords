@@ -1,3 +1,832 @@
+<!-- TADA_BILINGUAL_DOC: English is the default reading language. The original source text is preserved for verification. -->
+<a id="english-default"></a>
+
+> **Languages / 语言：** **English (default) / 英文（默认）** · [简体中文](#简体中文版)
+
+# Tada Words — V1 Product and Interaction Design
+
+> Status: v0.3.1 iPhone production Vision physical device testing, and iPad production/UI physical-device automation regression have been completed; children's handwriting, audio listening quality, layout and accessibility are still pending manual acceptance
+>
+> Project name: **Tada Words**
+>
+> Target version: private family beta / TestFlight V1
+
+## 1. Product definition
+
+Tada Words is an English sight-word learning app for preschool children. Each day, a Guardian enters or selects separate sets of words the child needs to read and write. The child practices them through two independent themed quests, with the goals of:
+
+- **Read**: After seeing the word, you can read it independently.
+- **Write**: After hearing only the canonical pronunciation, write the complete word independently.
+
+The first target user is a 4-year-old child who is about to enter Pre-K, is a native Chinese speaker, and is learning English in an American classroom. She already knows and can write uppercase and lowercase letters and is starting phonics and sight words.
+
+### V1 product commitments
+
+- Read and Write are two independent learning routes, and they are not merged into one round of tasks.
+- The interfaces of Kid and Guardian in V1 are only in English; this document uses Chinese only for convenience in design communication.
+- Kid Quest mainly relies on graphics, sound and animation guidance, and does not provide Chinese prompts.
+- Learning centers on genuine recall: Read requires speaking, and Write requires writing.
+- The app can identify and schedule practice, but it can't punish a child for an uncertain identification.
+- Game rewards enhance continuous practice, but do not replace learning goals.
+- Data remains consistent across multiple Kid Profiles, multiple Guardians, and multiple devices.
+
+### Out of scope for V1
+
+- Do not automatically populate a Read or Write Pool by grade. The offline V1 Preset Catalog supports sorting, browsing, and search, but a Guardian must explicitly select and submit words. An automatic curriculum mode belongs in V2.
+- Do not add extra mini-games such as Read matching or choosing a word from audio.
+- No social media, children's rankings, advertisements, card draws or random treasure chests.
+- Do not save or upload any original practice recordings.
+- No commitment to professional phoneme-level pronunciation scoring; V1 judges whether the child can read the target words independently.
+- Do not copy the melodies, sounds, character voiceovers, samples, and sound assets of Todo Math or other products.
+
+## 2. Users and permissions
+
+| Role | Ability |
+|---|---|
+| Owner Guardian | Create the family, invite Guardians, create and delete Kid Profiles, and manage all data |
+| Guardian | Type, scan with OCR, or select Preset words; adjust settings; view reports; manage voiceprints and themes |
+| Kid Profile | Choose an avatar, complete Quests, and view collections and Worlds |
+
+In V1, a Kid is an in-app Profile, not a CloudKit member who needs a separate Apple ID. The child uses devices where a Guardian is signed in to iCloud; invited Guardians can share the same Kid Profile.
+
+### Kid Profile Minimum information
+
+- nickname
+- avatar
+- current grade
+- Age; every new Profile must explicitly select an age from 3–8, while legacy Profiles with no age remain readable
+- child voiceprint template
+
+Do not collect real names, complete birthdays, school or teacher information.
+
+Avatar sources:
+
+- Selfie with front camera
+- Select existing photos from the album
+- built-in cute animal icons
+
+## 3. Platform and screen orientation
+
+V1 is Universal iOS App.
+
+### Required acceptance devices
+
+- iPad
+- iPhone 17 Pro Max
+
+Other iPhones receive a best-effort responsive layout but do not block the V1 release.
+
+### Current physical-device automation evidence
+
+On 2026-07-14, `Tada Words QA` v0.3.1 (`2026071403`), signed by Team `6S245NCUPQ`, was installed and launched on Darren's iPad Air 13-inch (M4) running iPadOS 26.5. Production DeviceTests passed 2/2, covering wrong-word rejection and `of/go` case variants. LocalQA Critical XCUITest passed 7/7, covering OCR Add All, Delete All/full restore, explicit Preset approval, repeated deletion/sorting, Photo picker/sorting, and dismissal of Read/Write completion feedback.
+
+This evidence verifies that the production recognition path and critical interactions run on a physical iPad. It does not replace acceptance with real child handwriting, pronunciation listening quality, supported orientations, Apple Pencil, VoiceOver, or Dynamic Type.
+
+### orientation rules
+
+- Profile Picker, World Lobby, Kid Quest, Results, and Collection support only `Landscape Left` and `Landscape Right`.
+- `Parents`, Parent Gate, Guardian management, and initial parent setup support portrait and landscape.
+- iPhone parent routes support Portrait and both Landscape orientations, but not Portrait Upside Down; iPad parent routes support all four orientations.
+- After leaving a parent route, the App must immediately restore landscape through a route-level geometry update; both child-route landscape orientations require acceptance.
+- iPhone Kid Quest will reduce background decoration and prioritize ensuring large words, microphones and complete writing areas.
+- Kid The large story decorations in Lobby are fixed to the seat belts at the bottom left and right. The coordinates of the foreground Quest cards and buttons do not move; the decoration animation can only float down from the seat belt baseline and cannot float up back to the card shadow. The Moonpetal unicorn in the iPhone most compact frame of the horizontal screen must also retain a visible background gap with the Write card, and any decorations in the World cannot be cropped at the bottom or sides.
+
+Write supports finger input. Apple Pencil is enabled only on compatible devices and uses palm rejection. Apple's current Pencil-compatible devices are iPads, so Write uses finger input on iPhone 17 Pro Max. [Apple Pencil compatibility](https://support.apple.com/en-am/108937)
+
+## 4. Information architecture
+
+```text
+App Launch
+├── Profile Picker
+│   ├── New Kid (unfold directly when Profile is not available; the child enters nickname and age)
+│   ├── Last time Profile (highlighted when Profile is available, the child clicks to confirm)
+│   └── World Lobby
+│       ├── Read Today’s Quest
+│       ├── Write Today’s Quest
+│       ├── Practice Again
+│       ├── Quest Calendar
+│       ├── My Collection (select the Theme / Icon that has been obtained)
+│       └── Treasure Collection
+└── Parent Gate
+    ├── Today
+    ├── Words
+    │   ├── Read Pool：Type / Camera / Photo / Select / Delete
+    │   └── Write Pool：Type / Camera / Photo / Select / Delete
+    ├── Preset Words (browse by age, grade and fine classification; only added after parents make a clear choice)
+    ├── Reports
+    ├── Profiles & Family
+    ├── Worlds
+    └── Settings
+```
+
+There are only three choices for the fixed mental model on the child's side:
+
+1. Who am I?
+2. Today Read or Write?
+3. Which unlocked world adventure are you in?
+
+The App only arranges New, Review, difficult words backflow and timing from the words that have been clearly approved to enter the Pool from Guardian. The source can be manual input, OCR, or words actively selected by parents in the built-in Preset Catalog; age and grade only change the recommended sorting, and no catalog or generation model can automatically add practice words.
+
+## 5. First setting
+
+The first launch must first process Profile, and no words are required to be entered first:
+
+1. There is already Profile: display the Picker and highlight the last used valid Profile; the child enters after clicking.
+2. No Profile: Display `New Kid` directly, enter nickname and age, and select avatar, grade and Starter World. V1 The new range is 3–8 years old, corresponding to Pre-K–Grade 3; the old Profile missing age can still be read.
+3. Read and agree to the rules for children voiceprint, synchronization and deletion.
+4. voiceprint Registration, word entry and notification can all be completed later in Parents without blocking the first entry into Kid Lobby.
+
+### One minute voiceprint registration
+
+- The app plays 8–10 very simple words in sequence.
+- The child just needs to read along, and does not require himself to recognize these words.
+- Collect multiple feature samples under quiet and slight background noise of the family.
+- The original registered audio is deleted immediately after the generation of features.
+- Only the encrypted voiceprint feature templates and model versions are saved.
+- Guardian It can be deleted or re-registered.
+- When you have a cold, grow up, or lose trust, the App reminds you to Guardian re-register, but it won't lock learning.
+
+voiceprint is only used to filter whether "is this child speaking now" and is not used as a secure login or identity authentication.
+
+## 6. Profile Picker
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│ Tada Words                                       Parents │
+│                                                          │
+│       ( Panda )        ( Bunny )        ( Photo )         │
+│         Mia              Leo              Addy            │
+│                                                          │
+│                    “Who’s playing?”                       │
+└──────────────────────────────────────────────────────────┘
+```
+
+- Use large avatar cards of 96 pt or more for each Profile.
+- The child should click on his own avatar first; the App does not rely on voiceprint to automatically switch to Profile.
+- The app remembers the last used valid Profile; next cold start highlights this Profile in the Picker, but the child still clicks to confirm. If this Profile no longer exists, the normal Picker is displayed, and no other identity is guessed.
+- Last time Profile used static 1.03× size to stand out with higher stacking levels; other Profile did not reduce transparency or use continuous animation.
+- Picker provides `New Kid` cards. The child enters nickname and clearly selects the age of 3-8 years old; the App gives current Grade recommendations based on age, and automatically assigns built-in animals avatar and Starter World. The complete editing is still completed by Guardian.
+- Read When recording, voiceprint filtering other speakers is only used when Profile is selected.
+- `Parents` The entrance is located in the stable upper right corner, and after a normal click, it immediately enters Random Arithmetic Parent Gate, not competing for attention with the main entrance of Quest.
+
+## 7. World Lobby
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│ (Mia)                                 My Collection Parents│
+│                                                          │
+│                 [Current World Interactive Scene]│
+│                                                          │
+│   ┌────────────────────┐  ┌────────────────────┐         │
+│   │  Read Today’s      │  │  Write Today’s     │         │
+│   │      Quest         │  │       Quest        │         │
+│   │   ☆  ☆  ☆          │  │    ☆  ☆  ☆         │         │
+│   └────────────────────┘  └────────────────────┘         │
+└──────────────────────────────────────────────────────────┘
+```
+
+Hard rules:
+
+- Two separate large entrances must always be displayed.
+- The "Comprehensive Today's Quest" that combines Read and Write is not provided.
+- Currently, World is full-screen background, but the Quest card position does not change with the theme.
+- Header doesn't repeat clickable World name capsules; it's easy to mistake them for buttons. The current theme is expressed by whole-page scenes and My Collection selection states.
+- The completed entrance displays the score and stars for the day and provides `Practice Again`.
+- Practice Again The memory model will be updated, but permanent collections issued on the same day will not be repeated, and will not be counted as the number of times the world is unlocked.
+- The Replay icon on the Results page must be a clickable button; clicking it will restart `Practice Again` of the same mode, without repeating permanent rewards or Theme / Icon unlocking.
+- `Quest Calendar` Displays the number of actual completed Quests per day for the current month; Read, Write, and Practice Again are counted by one-time completion records and strictly isolated according to Profile.
+
+### v0.2 Pre-K Visual Hierarchy
+
+- iPhone Horizontal screen Header retains the left side with text `Kids`; the right side `Worlds`, `Calendar`, `Badge` income semi-transparent icon dock. Each icon has a visual diameter of 48 pt, the actual touch box is 72 × 72 pt, and provides a complete VoiceOver label/hint.
+- iPad Header continues to display `Worlds`, `Calendar`, `Badge` text, without sacrificing the readability of the large screen in pursuit of uniformity.
+- The main mascot of Lobby is 72/104 pt in compact/standard layout.
+- Read The main mascot is 80/104 pt; the width of the standard layout word card is 560–760 pt, and the target word is 112 pt; iPhone The compact layout retains 78 pt of target words to avoid squeezing the microphone.
+- The main mascot of the Result is 68/104 pt, and the main visual of the reward/replay is 96/144 pt. The size change only enhances the sense of completion, and does not change the points, stars, rewards or Replay behavior.
+- The above sizes come from centralized child-scale component tokens; different Worlds continue to use their own palettes, scenes, mascots and rewards, and do not uniformly change them to princess pink.
+
+## 8. Word pool and daily arrangement
+
+Guardian Enter or select words into two independent pools every day:
+
+- `Read New Words Pool`
+- `Write New Words Pool`
+
+### Input rules
+
+- `Type one word` Only one word is received at a time; immediately add the current Pool after pressing Return, clear the input box, and display it at the front of the queue in real time.
+- `Take Photo` Use the built-in OCR to identify all English words in a photo at once with `Choose Photo`; first provide an editable duplicate removal preview, Guardian and then write it in after clicking `Add All`.
+- OCR The batch is placed before the old words as a whole, and the reading order in the photo is maintained within the batch; the identified pictures are not uploaded to the server.
+- Automatically remove leading and trailing spaces, unify Unicode format, and ignore case for deduplication.
+- It is displayed in lowercase by default; Guardian can retain the specified capitalization for individual words.
+- Read does not cross group deduplication between Write; the same word can have two sets of independent records.
+- When repeating input with the same pool, no copy is created, but the existing words are moved to the front of the queue and the learning history is retained.
+- `Preset Words` Sort by age and grade according to Profile, support tiered browsing, search, word-by-word selection or full selection; only click Add to write to Read, Write or Both.
+- Profile of the Preset import binding initiation operation must be completed. Both must be completed in full; if any Pool fails, is partially successful or returns an inconsistent result, only the membership inserted or reactivated this time shall be revoked, and the words that were already active before the import shall not be disabled.
+- Support single-item deletion, selection mode and bulk deletion; the first deletion confirmation and Undo status are isolated according to Profile.
+- Read supports `Delete all N words` respectively with Write; each time the quantity and Pool are clearly confirmed, the learning history and another Pool are retained, and it can be completely Undo.
+- Automatically generates standard American English pronunciation, allowing Guardian to listen to it.
+- There is no multiple pronunciation selection, and Guardian does not require you to record it yourself.
+- All new words must come from Guardian typing, OCR or explicitly approved Preset selection; when the Pool is insufficient, only practice existing words, and never automatically fill in words.
+
+### Default question volume
+
+| Route | New | Review | Emergency |
+|---|---:|---:|---:|
+| Read | 5 | 5 | 3 minutes |
+| Write | 3 | 3 | 5 minutes |
+
+The four quantities, New/Review order, and two time thresholds can all be configured according to Profile.
+
+### New selection order
+
+1. Prioritize the words just entered on the same day.
+2. When insufficient, fill in missing words from the Pool that have not yet been started.
+3. Words exceeding the daily limit will remain in the Pool and will be prioritized the next day.
+4. When the pool itself is not enough, practice the existing number of words, and do not copy words to make up for the number.
+
+### The relationship between New and Review
+
+- The default `New → Review`, Guardian can be changed to `Review → New`.
+- `New → Review` At this time, if you answer incorrectly just now, use Help, identify uncertain or obviously slow new words, you can replace the words with lower priority in Review; the total number of questions will not be increased.
+- `Review → New` At this time, the problematic words in New enter the next Review and are not added to Retry at the end of this round.
+- The completed definition is “The child has tried all the arrangements for the questions,” not “must all be correct.”
+
+## 9. Read Today’s Quest
+
+### Core state machine
+
+```text
+Show Word
+  → Tap Mic
+  → Listening
+  → Speaker Check
+  → Word Recognition
+      ├── Correct → score + micro reward
+      ├── Technical Retry → neutral retry
+      └── Valid Incorrect → retry, at most 2 retries
+```
+
+### interface
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│  01:42          ● ● ● ○ ○ ○ ○ ○ ○ ○             Pause  │
+│                                                          │
+│                         because                          │
+│                                                          │
+│                    ┌──────────────┐                      │
+│                    │      🎙      │                      │
+│                    │     Read     │                      │
+│                    └──────────────┘                      │
+│                                                          │
+│                         +100                             │
+└──────────────────────────────────────────────────────────┘
+```
+
+### behaviour
+
+- Only one large-sized word is displayed for each question.
+- New Profile, new words and entering Read Quest should remain quiet; never play the target pronunciation before the first independent answer.
+- Each World specifies the unique, complementary and high-contrast dark target word color by designing tokens; all Read words in the same World remain consistent, and only switching World changes the color. The color does not indicate correctness or incorrectness.
+- After two consecutive incorrect readings, the only Help button will be displayed: `Hear it` Play the standard pronunciation. Read No picture prompts will be displayed; technical retries will not unlock Help.
+- After using `Hear it`, subsequent attempts to record are recorded as guided evidence.
+- The child clicks the microphone once, and the app automatically starts and detects when it's done.
+- Perform noise reduction, echo cancellation, voice activity detection, silent cropping and voiceprint matching.
+- The original audio is only processed briefly on the local machine and deleted immediately after completion.
+- App identifies as Target Word but does not show the Professional Pronunciation score.
+- Text matching allows tested conservative phonetic equivalents, such as the target `come` being transcribed by children ASR as `kum/cum`; `come/some`, `cat/cap`, and other different words cannot be mistakenly judged as passing using an unbounded editing distance. This equivalence layer cannot bypass valid audio, voiceprint, or confidence gates.
+
+### Retry rules
+
+- First successful attempt + up to two successful retries, a total of 3 times.
+- No voice, too much noise, other people talking, multiple people overlapping, voiceprint insufficient or engine failure belong to `technicalRetry`.
+- `technicalRetry` Does not consume the number of retries, does not enter the correct rate, and does not affect the forgetting curve or speed.
+- Failed after three valid attempts: Play the standard American pronunciation, mark it as a problem word, and continue.
+
+### Time taken
+
+- It mainly records the effective waiting time from the appearance of words to the child's beginning to speak.
+- Deduct technical retries, system interruptions, and background waits.
+- It is only compared with the historical baseline of similar word length with the Profile and Read patterns.
+
+## 10. Write Today’s Quest
+
+### interface
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│  03:18          ● ● ○ ○ ○ ○                     Pause   │
+│                                                          │
+│                         🔊                               │
+│                                                          │
+│             _ _ _ _ _ _ _                               │
+│             ─────────────────────────                    │
+│             - - - - - - - - - - - -                    │
+│             ─────────────────────────                    │
+│                                                          │
+│   🔊  [?]   [✏️ Pencil / Chalk / Brush] [Eraser] Clear [Done]│
+└──────────────────────────────────────────────────────────┘
+```
+
+### behaviour
+
+- At the beginning of each word, only the pronunciation is played, and the full spelling is never displayed in advance; only when the child actively clicks `?` will the answer be displayed.
+- Read Use the same clear and coherent canonical teacher cadence as Write. The offline fallback uses a moderate speed, natural pitch, and a single uninterrupted utterance, and retains longer sentence-end releases in Write to ensure that the consonants at the end of short words such as `of`, `at`, and `look` can be heard.
+- Do not establish a compulsory progressive route of "spelling → description → copying → dictation".
+- The official title is only given to the light-colored spaces for pronunciation, the three-line handwriting practice area and the display according to the number of letters.
+- The pronunciation button can be replayed indefinitely; replay is not counted as Help, but the number of times it is recorded.
+- After clicking the separate `?` icon, the correct spelling will be displayed immediately, and there will be no three-choice menu; it can still be completed after use, but it will not be counted as independent success.
+- Support Apple Pencil on fingers and compatible devices.
+- The pencil case only provides three black pens: Pencil, Chalk, and Brush; it does not display color selection or Crayon. The pen type is saved as Profile, and the old version of color/Crayon settings are migrated to black Pencil.
+- Three pens have distinguishable but low-stimulating writing tones; they only play when you actually move your pen, and do not compete for attention during pronunciation or recording.
+- Undo is not available. The fixed Eraser performs local erasure, and the erased track is 4 times the current pen width; `Clear` Click to clear immediately without confirmation pop-up.
+- Keep the large size `Done`, and the stop will not be submitted automatically.
+
+### Identification results
+
+- `confidentCorrect`: Score and trigger rewards.
+- `confidentIncorrect`: Gentle prompts for rewriting; specific words can appear as clickable images, but spelling is not automatically displayed.
+- `uncertain`: Do not directly judge wrong or display the answer; as a technical retake, it is allowed to submit again.
+- It still cannot be confirmed the second time: marked as needing review and continuing, so that the recognition engine does not block Quest.
+- Matching ignores capitalization; Vision uses the lower/Initial-cap/ALL-CAPS vocabulary, language correction, and the first five candidates of the target word. Production recognition uses at most two independent bounded grids (default 26-point and 36-point fallback), and each pass must independently obtain a complete target without cross-pass splicing or voting. Only `0` → `o` is allowed when the complete target is aligned; `9` → `g` also must be explicitly given by candidates of the same length from the same Vision fragment in the same position. Fuzzy editing distance that accepts neighbors or numbers such as `if/on/or/off/do/no/90` without using it is acceptable.
+- Only the data required for stroke saving/recognition results is saved; Guardian The report does not display the child's original handwritten trajectory playback.
+
+### Time taken
+
+- It starts from the end of the last pronunciation playback.
+- Pronunciation playback, Help display, and technical recognition are not counted in the speed.
+- Corrected by word length, and compared only with the child's own Write history.
+
+PencilKit is used for finger/Pencil capture; the low-system version can use Vision's target word constraint recognition, and the system can be upgraded to PencilKit's native handwriting recognition in the future. [PencilKit drawing policy](https://developer.apple.com/documentation/pencilkit/pkcanvasviewdrawingpolicy/anyinput) · [Vision text recognition](https://developer.apple.com/documentation/vision/recognizing-text-in-images)
+
+## 11. Score and three stars
+
+The child can hold the number score, stars and story rewards at the same time.
+
+### Up to three stars per round.
+
+1. **Completion Star**: You can get it after trying all the arrangement questions.
+2. **Accuracy Star**: The strict first answer accuracy reaches the default 80%; or there is only one first answer error in the whole round, and the correct answer is immediately given in the next valid and non-assisted retry. Guardian The first answer accuracy reported still uses the strict value and is not rewarded for liberal rewriting.
+3. **Personal Pace Star**: The effective median time is located in the personal comfort zone; the slow side gives 25% allowance, and the fast side does not allow allowance. The first 3 effective Quest calibration periods will also be awarded this star as long as there is an effective timer.
+
+### Score default formula
+
+- Total score 0-100.
+- Accuracy is 80 points, and Personal Pace is 20 points.
+- If you answer correctly after Help, you can get the completion score, but it is not counted as independent correctness.
+- No reverse deduction, no negative scores, and no cross-child ranking.
+- Technical retests and model uncertainty are completely excluded from the denominator.
+- The first 3 valid Quests used to establish a personal speed baseline are displayed as `Learning your pace`; the calibration period will no longer lose the third star as a result.
+
+Speed Star does not directly use the whole round of emergency time, but uses the personal baseline corrected word by word and by word length to avoid encouraging rushing to answer or sloppy writing.
+
+## 12. Timer and emergency status
+
+- Timer is a positive countdown, not a countdown.
+- Complete the Quest by answering the questions, not by the end of the time.
+- After exceeding the default threshold, enter the narrative emergency state of the current World.
+- Only change the music, environment color and scene animation.
+- No deduction of points, no countdown failure, no increase in difficulty, no increase in prompts.
+- No flashing, no sudden volume increase.
+- `Reduce Motion` or `Calm Emergency` When turned on, only mild colors and rhythm changes are retained.
+
+## 13. World Pack and reward system
+
+### Content structure
+
+```text
+Theme Category
+└── World Pack
+    ├── Independent art direction
+    ├── Independent music and emergency status
+    ├── 20 small collections
+    └── 5 large-scale scene milestones
+```
+
+V1 currently implements eight complete World Packs:
+
+| World | Category | Art Direction | Example Reward |
+|---|---|---|---|
+| Moonpetal Kingdom | Princess | Warm Hand-painted Forest Fairy Tale | Crown, Dress, Pet, Castle Room |
+| Build-It Bay | Construction | Bright Three-dimensional Picture Book City | Construction Vehicles, Tools, Bridges, Urban Buildings |
+| Paws & Pines | Animals | Natural exploration and care | Animal companions, food, toys, habitats |
+| Dino Discovery | Dinosaurs | Jungle, Volcano and Fossil Exploration | Little Dinosaurs, Fossils, Exploration Equipment, Lost Valley |
+| Firehouse Heroes | Rescue | Friendly Fire Station and Urban Rescue | Fire Engine, Safety Equipment, Team Badge, Rescue Route |
+| Brickwork City | Building | Original colorful block building | Blocks, gears, vehicles, houses and city works |
+| Frostlight World | Winter | Ice crystals, snowfields and auroras | Snowflakes, ice crowns, winter companions, crystal mountains |
+| Coaster Carnival | Amusement | Roller coasters and night fairs | Tickets, rides, balloons, fireworks celebrations |
+
+In the same category, there may be multiple World Packs with completely different styles in the future, such as watercolor forest fairy tales, crystal music theater or starry night ball. The art only borrows abstract emotions and media language, and does not reproduce the characters, costumes, scenes and iconic styles of Disney, Ghibli and Frozen.
+
+### Reward rhythm
+
+- Each correct answer triggers a 1–2 second theme microanimation.
+- Complete one round of Today’s Quest to earn a clearly visible permanent collectible.
+- Promote large-scale scenes jointly in multiple rounds.
+- Points and stars advance the current World's achievement trajectory.
+- Do not use random treasure chests or probability rewards.
+- Only the rewards of the completed World will be obtained.
+
+### Unlock the world
+
+- For the first time, you can choose a Starter World from eight worlds.
+- Complete Read Today Quest and Write Today Quest on the same local natural day to form a `Double Quest Day`.
+- After the next local natural day, each unclaimed Double Quest Day will unlock a new World Theme and a new Profile Icon in the order of the stable catalog; it will not be unlocked in advance on the same day, and it will be reissued exponentially when you open the App again the next day.
+- Practice Again, Replay, and completing only Read or Write separately will not be counted as unlocking.
+- After all eight World Themes are obtained, no fictional new Themes will be created; the Icon catalog and future World Pack can be expanded.
+- Guardian Starter World can be replaced or unlocked directly.
+- The world is unlocked for preview, but not for entering Quest.
+- Kid Independence of Lobby `My Collection` The page simultaneously displays the Theme, Icon and Treasure obtained/not obtained. Each Treasure of 25 in a World shows relevant and non-repeating icons; when not unlocked, the gray icon is retained and the lock is superimposed, instead of being replaced with a general lock.
+- Children can choose the collected Treasures as Profile avatar, and the uncollected Treasures cannot be selected. Theme, animal Icon, and Treasure avatar are all preserved according to Profile, and the original photo data will not be deleted because of the selection of reward avatar.
+
+## 14. Guardian End
+
+### Today
+
+Each Kid Profile shows:
+
+- Read / Write The number of new inputs today
+- New words waiting in the pool
+- Current Expiration Review
+- Today's Quest completion status, score and stars
+- Current month Quest Calendar (number of accurate completion per day)
+- Words that need to be paid attention to
+- Synchronization status
+- `Manage Words`
+- `Choose preset words`
+
+### Words
+
+- Read / Write Two clear tabs.
+- Top word input bar: one word at a time, Return to add it immediately.
+- Local `Take Photo` / `Choose Photo` OCR, editable import preview and `Add All`.
+- The newest-first queue below, single-line deletion, selection mode, batch deletion confirmation and Undo; the first deletion confirmation and Undo status are isolated by Profile.
+- Read / Write Each provides `Delete all N words`; high-impact operations clearly confirm the quantity and target Pool each time, and can still be fully Undo after completion, without deleting the learning history or modifying another Pool.
+- The independent Preset Words browser offers recommendations for ages 3–8 / Pre-K–Grade 3; it first displays up to 6 sets of matching content, and then allows you to browse or search in layers by "basic words/phonics/noun topics/verbs/adjectives and concepts".
+- Each leaf phrase in the Preset Catalog consists of 30-50 original, arranged words; parents can select each word individually or Select all, and clearly add Read, Write or Both. Opening the list, age matching, or recommendation sorting will not automatically write to the Pool; duplicates are removed based on standardized spelling within the target Pool.
+- Preset import always writes the Profile that initiates the operation. Both import handles compensation transactions; if it fails, it only undoes the insertion or re-activation of the membership, retaining the existing active word.
+- The Parent horizontal and vertical screens in iPhone / iPad are all kept at a 44 pt touch target, and the keyboard does not obstruct operation.
+- Status: `Queued`, `Learning`, `Review Due`, `Strong`.
+- Word details: edit uppercase and lowercase, listen to it, view history, and delete.
+
+### Reports
+
+Overview:
+
+- 7 / 30 Day Completion Trend
+- Correct rate trend
+- Trend of personal effective usage time
+- Read / Write Comparison
+- Progress of stars and the world
+
+Word level report:
+
+- Current memory state
+- Independent accuracy rate and error rate
+- Average / Median effective time
+- Number of retries, Help and pronunciation playback times
+- Recent practice time
+- Expected next Review
+- “Why this word is due for review now”
+
+Guardian An obvious voice or handwritten misjudgment can be corrected once. The system corrects the AttemptEvent and recalculates the state, clearing the entire word history.
+
+### Profiles & Family
+
+- Create, edit, and delete Kid Profile.
+- All new entrances must collect the age of 3-8 years old; when the child builds it by himself, the age will give the grade recommendation within the current support range. When setting it for the first time and editing it with the Parent, the grade will still be clearly selected by the parent. Modifying the age will not silently override the parent's selection.
+- Invite or remove Guardian.
+- View the synchronization status, the number of pending modifications to be synchronized, and the last successful time; each device shows whether it needs to be re-registered voiceprint separately.
+- The voiceprint; voiceprint template cannot be copied across devices when re-registering or deleting the current device.
+- When deleting Profile, tombstones are propagated to all devices to prevent offline old devices from uploading data again.
+
+### Settings
+
+- Quest: four question quantities, New/Review order, emergency threshold
+- Audio & Voice: Microphone test, voiceprint re-registration, pronunciation preview
+- Worlds: Starter World, manual unlocking
+- Notifications: Set time and do not disturb according to Profile
+- Accessibility: Reduce Motion, Calm Emergency, left-hand layout
+- Family & Sync: Members, Permissions, Synchronization Status
+- Privacy & Data: Export, Delete, voiceprint Instructions
+
+## 15. Forgetting Curve and Review Scheduling
+
+Each `Kid Profile × Word × Mode` is maintained independently:
+
+- `difficulty`
+- `stabilityDays`
+- `lastIndependentSuccessAt`
+- `predictedRecall`
+- `nextDueAt`
+- `lapseCount`
+
+With the Ebbinghaus forgetting curve form as the core:
+
+```text
+R(t) = exp(-t / stability)
+```
+
+Correct, wrong, Help, effective response time and pronunciation replay times will change `stability` and `difficulty`; 1, 3, and 7 days will not be written as fixed calendar days.
+
+### Review sorting
+
+1. Words that have been passed over the expected forgetting point.
+2. Words with high effective error rate
+3. Words that are relatively obviously slower than the personal baseline.
+4. Use Help, Try Again, or Rephrase for words that are difficult to pronounce
+5. Words that have not been exposed enough times
+6. Words that have just appeared in the current New stage with problems
+
+`Mastered` is a display label, not a permanent graduation. The default requirement is at least three successful independent cross-day attempts, and the model is expected to maintain its target memory rate for the next 14 days; it will then re-enter Review based on predictions.
+
+## 16. Events, scoring and recalculable status
+
+Every valid or technical attempt to write to the immutable `AttemptEvent`:
+
+```text
+eventID, profileID, questID, wordID
+mode: read | write
+phase: new | review
+result: correct | incorrect | helped | technicalRetry
+technicalReason
+validRetryIndex
+promptAt, validInputAt, submittedAt
+technicalHoldMs, scoreEligibleMs
+speakerConfidence, recognitionConfidence
+modelVersion, schedulerVersion, deviceID
+```
+
+Hard constant:
+
+- `technicalRetry` No valid retries are consumed.
+- Do not enter the denominator of the correct rate or speed.
+- The forgetting curve is not updated.
+- No points or stars will be deducted.
+- Synchronization, algorithms and reports are recalculated from immutable events to avoid version upgrades from destroying history.
+
+## 17. Offline, synchronization and family sharing
+
+### Local priority
+
+- Quest always writes locally first, CloudKit Do not block children from answering questions.
+- All core functions can be completed offline.
+- After submitting locally, mark Profile to the persistent outbox; restore the network, App to the front page, or try again after parents click `Sync now`.
+- Attempt, QuestCompletion, RewardGrant use immutable UUID events.
+- Profile, Pool membership and Settings use persistent logic revision to make a definitive merge with device ID, and cannot rely only on the device clock.
+- After merging Attempt / Correction, WordProgress and the forgetting curve are recalculated from the event history; the progress snapshot of the competition is not authoritative data.
+- Today completion, Daily Plan and Reward use the stable business key of Profile + Mode/World + LocalDay. Offline dual device completion can only count for one Today reward at a time.
+- Repetitions of Word are merged by `Profile + Mode + normalized word` after synchronization; the homonyms of Read and Write are still two independent learning objects.
+- Synchronization status, number of pending tasks, last successful time and recoverable errors are still visible after restarting; the synchronization blocking box does not pop up on the child's question-solving page.
+
+v0.7.0 Keep a checkable local JSON snapshot as the running source, synchronizing `CKSyncEngine`, crash-resistant outbox/inbox persisted by private and shared libraries respectively with Profile-level apply transaction, without introducing Core Data or custom server. The complete record scope, merging rules, deletion and layering acceptance can be found in [ADR-0001](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md), [Data List](Docs/FAMILY-SYNC-DATA-MANIFEST.md) and [acceptance Matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md).
+
+The Family Sync page uses Apple `UICloudSharingController` to manage existing shares in production Release. The entry is first authenticated through Parent Gate with system-sensitive operations, and then the owner is routed to the private database and the participant is routed to the shared database through persistent binding; revoked, deleted or malformed bindings always fail closed and cannot silently create a private fallback. After the system page saves or stops sharing, the App is updated through the same reconciliation/receipt/UI refresh path as the background notification. LocalQA and ordinary simulators do not inject this entry.
+
+### The same Apple ID
+
+- Use CloudKit private database to automatically synchronize Profile data.
+- After each device is opted in separately, sync Profile/avatar, Read/Write Pool, Settings, Attempt/Correction, Calendar completion, and Reward.
+- Recently used Profile, system notification instances, voiceprint, picture prompts, and teacher pronunciation caches remain local on the device.
+
+### Different Apple ID
+
+- Clarify invitations and acceptances through `CKShare`; Apple Family membership does not automatically grant access to App data.
+- A Kid Profile corresponds to a shared object diagram.
+- Owner Guardian has root Profile; others Guardian obtain read and write permissions.
+- The native participant permissions of CloudKit are only read/write, so V1 does not include independent children Apple ID as writable participants. [CloudKit sharing](https://developer.apple.com/documentation/cloudkit/sharing-cloudkit-data-with-other-icloud-users)
+
+## 18. voiceprint Isolation from devices with downloadable assets
+
+- The original recording will not be preserved or uploaded.
+- voiceprint The template is only stored in the current device's Keychain; Profile Export when synchronizing `notEnrolled`, and retain the enrollment status of the receiving device when importing.
+- New iPhone/iPad needs to complete voiceprint registration separately for the same Kid Profile; voiceprint is not available and cannot block the synchronization of learning history.
+- Specific word pictures and future remote audio supplements are only written into App `Caches`, not CloudKit. Katie, who has 500 words in the first release, is distributed offline with the App bundle in bilingual speech audio format; parents who use custom words outside the bundle use the built-in Apple English female voice fallback. Neither audio type enters the family synchronization data.
+- The original Avatar image belongs to Profile data clearly selected by the parents, not cache; after Family Sync is turned on, it synchronizes independently with prepared JPEGs of up to 512 px and 256 KiB `CKAsset`. The general envelope only carries references and verification metadata. Damaged or mismatched assets are isolated and will not overwrite existing avatar.
+
+## 19. notify
+
+Guardian Can be opened according to Profile:
+
+- Daily learning reminder
+- Read / Write Pool is about to be empty
+- Quest completion status for the day
+- Synchronization failed
+- Weekly summary of long-term problem words
+
+Default rules:
+
+- Do not send reminder notices to Kid.
+- The lock screen does not display children's nickname, specific words, scores or voiceprint information.
+- Support do-not-disturb hours and full shutdown.
+
+## 20. Design system
+
+### Three-layer Token
+
+```text
+Primitive → Semantic → Component
+```
+
+- Primitive: color, spacing, font size, rounded corners, shadows, animation effect time.
+- Semantic: Read, Write, Success, Attention, Surface, Ink.
+- Components: Quest Card, Mic Button, Writing Canvas, Timer, Star Rail, Reward Card.
+- World Pack only covers theme semantic tokens and does not change the component structure and function colors.
+
+### Core visual Token
+
+| Token | Default purpose |
+|---|---|
+| `surface.canvas` | Warm light cream background |
+| `ink.primary` | Dark blue gray text |
+| `action.read` | Clear blue |
+| `action.write` | Soft purple |
+| `feedback.correct` | Light green |
+| `feedback.attention` | Amber color, no use of bright red |
+| `radius.child` | 24–32 pt large rounded corner |
+| `touch.child` | At least 72 × 72 pt |
+| `touch.guardian` | At least 44 × 44 pt |
+
+### Font and text
+
+- Kid UI uses clear, rounded but not overly cartoonish system fonts.
+- Target words use the highest contrast and stable fonts, and do not use decorative fonts.
+- iPad Read Word suggestions 96–128 pt; iPhone Landscape screen suggestions 64–88 pt.
+- Guardian Support Dynamic Type.
+
+### Dynamic effect
+
+- Click feedback: about 120–180 ms.
+- Correct answer animation: 1–2 seconds.
+- Permanent collection revealed: Skip it in less than 3 seconds.
+- Do not use flashing or strong screen shaking in emergency situations.
+- Support Reduce Motion.
+
+### Sound effects and background music
+
+Todo Math is only an interactive reference for "children can understand independently, game feedback is instant, and background music can be turned off by parents"; Tada Words's melody, tone combination, voiceover, sound effects and recording must be original. [Todo Math official introduction](https://todomath.com/) · [Todo Math background music settings](https://todomath.zendesk.com/hc/en-us/articles/360022343054-I-can-t-hear-any-sound)
+
+#### Startup sound indicator
+
+- Play the original sonic logo for about 1.5–2 seconds every time you start the device cold, and clearly shout **`Ta-dá↗ woooords↘!`** (approximately "It's here, Wal-Mart") with a continuous short sentence recorded offline with Aurora.
+- `da` It is slightly elongated and raised, and then there is no deliberate comma pause, and it is directly connected to the obviously elongated and falling `wor`; the overall excitement is energetic, and at the same time, there should be no mechanical seams of multiple queueing utterances.
+- The starting finished product does not rely on punctuation to let TTS guess the intonation: the first beat must be light, short, and approximately flat `/tə/` (listening quality is close to "he", and cannot be read as the "tower" with high and low tones); the second beat uses a non-repeating continuous `/dɑː/` vowel to lengthen the upward pitch map (listening quality is close to "da~"), and no additional `a` emphasis should be produced by copying vowels; then use the 8ms crossfade, which is only used to eliminate clicks, to directly access the step-by-step descending `words`. Any silence detectable between two words is considered a failure.
+- Start up normally and always use the Cartesia Aurora sound system to ensure that all devices have the same brand reading; use the definitive Apple American female voice return only when resources are damaged or missing, and cannot be muted or temporarily synthesized over the network.
+- The final arrangement and environmental tailing follow the current selected World Pack; use the neutral brand version when Starter World has not been selected.
+- Do not imitate the melody, rhythm, voice actor, or any real-life voice of Todo Math.
+- It does not play repeatedly when returning briefly from the background to avoid frequent disturbance.
+- Guardian The startup voice broadcast can be turned off.
+
+#### background music
+
+- Each World Pack has its own independent original music theme and instrument combination, and the reward sound colors are not mixed across World.
+- When a child switches to World, the music and ambient sounds in Lobby, Read, Write, the Settlement page, and Collection immediately switch to the sound skin of that World.
+- In normal use, it uses a light but low-density cycle, which does not compete for attention with TTS, children's reading or writing rhythms.
+- In emergency situations, use accelerated or layered versions of the same original theme for smooth switching; do not suddenly increase the volume or add alarm sounds.
+- Background music automatically ducks when playing TTS, Help, and standard pronunciation.
+- Read `Hear it`, Write Automatic prompts and Parent trial listening are prioritized for the 500-word offline package: Katie is a canonical teacher, Read and Write are generated at normal speaking speed `1/1.5 ≈ 0.67×`, and 120ms of safety padding is retained at the end of the file to ensure that playback ends only after the release of trailing consonants such as `/t/` in `at`. If the dual recognition audit confirms that the canonical output of a single isolated word is unclear, it is allowed to record a word-level voice/speed override in the manifest; Aurora is only used for `bun` in the first package. Two versions of each word are not interchangeable; words that are not covered use the same Apple American female voice fallback. During playback, switch to the spoken-audio session and simultaneously mute the app music and external audio, and then restore the mix after the end.
+- Read Quickly fade out the background music and unnecessary ambient sounds before starting the recording; smoothly restore them after the recording is over to avoid affecting noise reduction and recognition.
+
+#### Function sound effects
+
+- Click, correct, retry, stars and favorites use the same functional semantics, but the specific timbre and short melody follow the current World.
+- Click: Short, soft and low-stimulating touch sound.
+- Correct: First, play the original upward short sound type of the current World immediately, and then rotate five Aurora micro-celebration phrases (such as `Yes!`, `You did it!`, `Nice one!`) in order, avoiding continuous repetition of the same sentence; transition does not use exclamation words such as `Ta-da!`. Reduced Sound Only retain necessary non-verbal feedback and turn off these decorative voiceovers.
+- Valid Error: Gentle "Try Again" prompt, no beeping or failure horn.
+- `technicalRetry`: Neutral prompts must be clearly different from the child's incorrect responses when used.
+- Three stars: three segments of revealed sounds that can be distinguished but belong to the same sound family.
+- Quest settlement: The stars still use the exclusive sound effects of the current World. When completed, add Aurora's short sentences `Quest complete!`; no `Ta-da!` is added, and no random rare sound effects are made.
+- After answering each non-final word, you must wait for the current World short sound type and Aurora micro-celebration phrase to end completely, and then leave a clear breathing pause of 700ms before displaying and reading the next Write word; Read uses the same timing rules as Write. The last word does not wait for the inter-item pause in addition and directly enters the Quest settlement.
+- Three writing tools use original short friction/granular sounds and throttle down according to actual movement; Reduced Sound Turn off these decorative writing sounds, so that they are not superimposed when the pronunciation is played.
+
+#### The direction of the voice of World's debut
+
+| World | Sound Direction |
+|---|---|
+| Moonpetal Kingdom | A cheerful original loop of about 100 BPM; harp, bell, bass pulse, light drum, soft brush and magic flashing sound; scenes with rainbows, clouds and unicorns on both sides, and a clear learning safety zone in the center |
+| Build-It Bay | Wooden blocks, light percussion, soft mechanical rhythms and safe engineering completion sounds |
+| Paws & Pines | Marimba, original stringed instruments, bird calls and gentle natural environment sounds |
+| Dino Discovery | Jungle steps, marimba and gentle bass at about 80 BPM, without scary screams |
+| Firehouse Heroes | Cheerful parade rhythm of about 120 BPM, no use of sirens or piercing whistles |
+| Brickwork City | Wooden block rhythms and soundscapes at about 120 BPM, without borrowing sounds from commercial toy brands |
+| Frostlight World | Crystal clock chime waltz at about 75 BPM with light double subdivision |
+| Coaster Carnival | Elevating strings at about 150 BPM with park rhythms, maintaining safe peaks and vocal space |
+
+Standard American word pronunciations, Help narration, and necessary teaching tips do not change with the voice actor or pronunciation method of World, ensuring that children form a stable auditory reference.
+
+#### Control and safety
+
+- Guardian can be controlled separately `Voice`, `Music` and `Sound Effects`.
+- The default volume is normalized by loudness, so there are no sudden peaks.
+- Reduce Motion Does not affect necessary sound prompts; an independent Reduced Sound mode is also provided.
+- All audio assets are subject to source, author, license, and version records; purchased sound effects must have a clear App commercial license.
+
+### Accessibility
+
+- Feedback relies on sound, graphics and movement at the same time, not just on color.
+- Guardian Support VoiceOver and Dynamic Type.
+- Provide a left-handed layout to avoid buttons in the main palm area.
+- All control positions are fixed, and there is no layout jump when loading or feedback.
+
+## 21. General component status
+
+| Component | Core State |
+|---|---|
+| Quest Card | ready, inProgress, completed, syncPending, disabled |
+| Mic Button | idle, listening, checking, technicalRetry, disabled |
+| Writing Canvas | empty, drawing, checking, correct, uncertain, retry |
+| Timer | normal, emergency, paused |
+| Star Rail | calibrating, earned, unearned |
+| Reward Card | locked, revealed, collected |
+
+Disabling, loading, technical retries, and valid errors must have different visual and verbal feedback; they cannot be covered by the same "failure" state.
+
+## 22. Guardian Notice and Privacy Principles
+
+- The original audio never leaves the device.
+- voiceprint Templates are sensitive device local information; registration, re-registration, and deletion are Guardian operations, but do not enter Family Sync.
+- When Family Sync is enabled, Avatar photos are synced as Profile data; picture prompts are not synchronized with teacher pronunciation cache.
+- Does not access advertising SDKs or third-party child behavior tracking.
+- Guardian Learning data can be exported and completely deleted Profile.
+- Delete operations use the smallest tombstone that does not contain nickname, photos, words or learning content, and synchronize it to all devices and shared members; the tombstone unconditionally overwrites any old data with the same Profile ID, and other CloudKit records are physically erased.
+
+## 23. V1 acceptance Standards
+
+### Child
+
+- A 4-year-old child can choose Profile and enter two Quests without reading the instructions.
+- Cold start first displays Profile; if there is no Profile, it is created directly, and if there is Profile, the last selection is highlighted but the child's confirmation is not skipped.
+- Read The entry to Write will not be mistaken for the same task.
+- Read Keep quiet before the first independent answer; the only `Hear it` Help will appear after two valid errors.
+- When completing Read questions, technical noise will not be counted as a pronunciation error.
+- When completing Write questions, stopping writing will not trigger automatic submission.
+- The teacher of Write has clear and coherent pronunciation, and will not swallow the final consonants of short words due to excessive deceleration or too early audio recovery.
+- Kids can see their score, three loose stars, and theme rewards, and choose the Theme / Icon they earned from My Collection.
+- A normal click on Results Replay will actually start the mode Practice Again.
+- After exceeding the threshold, it can continue to be completed, and there will be no failure countdown.
+
+### Guardian
+
+- You can add words to any Pool and listen to them in 30 seconds through word-by-word typing, Camera / Photo OCR, or explicitly approved Preset selection.
+- New words appear immediately at the front of the queue; they can be deleted individually, selected in bulk, cleared as a whole group and Undo, and the deletion status will not cross Profile.
+- New Profile Must clearly select the age of 3–8 years old; age and Grade are only sorted by Preset recommendations.
+- The app does not automatically generate, add recommendations, or add words when the pool is empty or the quantity is insufficient.
+- Both Preset import either updates two Pools or only rolls back this change, without affecting existing active words or other Profile.
+- Automatic deduplication does not delete words with the same name on another route.
+- The report can explain why a word entered Review.
+- It can correct automatic recognition misjudgments.
+- Multiple Kid Profile and Guardian can be managed.
+
+### Data & Privacy
+
+- Offline completed Quests will not be lost or duplicated when the network is restored.
+- It can be synchronized with Apple ID and shared with cross Apple ID.
+- Original child recordings are not written to persistent storage or the cloud.
+- voiceprint The template maintains the independence of each device; new devices only synchronize learning materials and re-registervoiceprint.
+- Image prompts and teacher pronunciation cache are not copied across devices, and can be safely redownloaded if necessary.
+- Incorrect recognition, noise and incorrect speech do not affect the score, stars or forgetting model.
+- After deleting Profile, the offline old device cannot recreate it.
+
+### Technical Spikes before full build
+
+1. Word recognition, voiceprint filtering and local accuracy under household noise of 4-year-old children.
+2. The correct / incorrect / uncertain threshold values of three states of handwriting of 4-year-old children under the constraint of target words.
+3. Different Apple ID's `CKShare`, ProfileKey distribution, revocation and key rotation.
+4. 4-year-old children can write on the horizontal screen of iPhone 17 Pro Max and target iPad, listening quality, layout and accessibility usability; iPad automated links have been passed, but manual acceptance has not yet been completed.
+
+## 24. V2
+
+V2 Add `Grade Curriculum`:
+
+- Guardian Choose Pre-K, Kindergarten, Grade 1 and other levels.
+- The app automatically creates or recommends Read / Write Pools using authorized, traceable U.S. tiered vocabularies.
+- Share deduplication, forgetting models, learning records and rewards with Parent Words.
+- V1 data model reserved `source = parent | curriculum`.
+- Add World Packs of the same category and different art directions.
+
+V2 still needs to confirm the grading standards, vocabulary copyright and Read / Write classification rules separately; the generation model cannot arbitrarily create course standards.
+
+## 25. Confirmed sensitive operation authentication rules
+
+Use layered authentication:
+
+- Enter Guardian area for daily use and use "Normal Click `Parents`+Random Arithmetic Questions".
+- The following sensitive operations must be performed with additional authentication via Face ID, Touch ID, or device passcode; arithmetic problems cannot be used as a substitute for system authentication:
+  - Invite or remove Guardian
+  - Export children's data
+  - Delete Kid Profile or voiceprint
+  - Re-register voiceprint or rotate the encryption key
+
+If the device does not have available system authentication set up, access to normal Guardian reports and word entry is still allowed, but the above sensitive operations are blocked, and Guardian prompts the device password to be set first.
+<!-- TADA_BILINGUAL_ZH_START -->
+
+---
+
+<a id="简体中文版"></a>
+
+> **翻译说明：** 英文为默认阅读语言；本文同时保留原始语言文本。如中英文内容存在差异，请以原始语言文本为准。
+
 # Tada Words — V1 产品与交互设计
 
 > 状态：v0.3.1 已完成 iPhone production Vision 真机测试，以及 iPad production/UI 真机自动化回归；儿童手写、音频听感、布局与辅助功能仍待人工验收
