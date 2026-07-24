@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.7.33%20Bilingual%20Docs-6D48D7" alt="v0.7.33 bilingual documentation">
+  <img src="https://img.shields.io/badge/status-v0.7.34%20Family%20Sync%20Retry-6D48D7" alt="v0.7.34 Family Sync Profile erasure retry">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
@@ -26,7 +26,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.7.33` (build `2026072407`) is a documentation-only release that makes every repository-root Markdown file English-first bilingual. It preserves the v0.7.32 runtime baseline: the conservative App Store 1.0 fallback does not ship voiceprint enrollment or speaker matching, while retaining only dormant pre-release template cleanup for Profile deletion and proven fresh installation; v0.7.28 adds the on-device crop-and-mask editor before camera OCR; and v0.7.30 adds signed Keychain lifecycle proof. Captured and edited word-sheet photos remain on device and are not persisted. Existing Profile data, attempts, completion, rewards, PawGoo app identity, CloudKit identifiers, and LocalQA data contracts remain unchanged. Exact-HEAD simulator and signed-device acceptance remain separate gates. See the [1.0 fallback record](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md), [voiceprint lifecycle record](Docs/VOICEPRINT_KEYCHAIN_LIFECYCLE_v0.7.30.md), [decision record](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md), v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), and [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md).
+> **Project status:** Version `0.7.34` (build `2026072408`) adds the Parent-triggered Profile-erasure retry while retaining the v0.7.32 App Store 1.0 voiceprint fallback, the v0.7.28 crop-and-mask editor, and v0.7.30 Keychain lifecycle proof. Repository-root Markdown documentation is English-first bilingual. The release preserves deletion dominance, retry history, existing Profile data, PawGoo identity, CloudKit identifiers, and LocalQA data contracts, and never recreates deleted child data. See the [v0.7.34 release note](Docs/Releases/v0.7.34-family-sync-erasure-retry.md), [1.0 fallback record](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md), [voiceprint lifecycle record](Docs/VOICEPRINT_KEYCHAIN_LIFECYCLE_v0.7.30.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), and [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -120,7 +120,7 @@ The iOS target depends on `TadaWordsAppShell`, `TadaWordsApplePlatform`, and `Ta
 - A free Apple Account for direct LocalQA installation on personal devices
 - A paid Apple Developer Program team for TestFlight and CloudKit acceptance
 
-The current v0.7.33 source candidate uses Xcode 26.6. Merged v0.7.2 passed
+The current v0.7.34 source candidate uses Xcode 26.6. Merged v0.7.2 passed
 the exact-HEAD iPhone/iPad simulator matrix, LocalQA install guard, and a data-
 preserving physical iPhone update; merged v0.7.3 added offline Parent notices
 and exact content verification. Family Sync production schema, signed cross-
@@ -154,7 +154,7 @@ build, commit, and bundle ID:
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.7.33 2026072407 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.7.34 2026072408 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 For the normal PawGoo Development artifact, use the stricter no-install gate:
@@ -162,7 +162,7 @@ For the normal PawGoo Development artifact, use the stricter no-install gate:
 ```sh
 ./Scripts/verify-pawgoo-development-app.py \
   '/path/to/Tada Words.app' \
-  0.7.33 2026072407 "$(git rev-parse HEAD)" \
+  0.7.34 2026072408 "$(git rev-parse HEAD)" \
   --device-udid 'APPROVED_IPHONE_HARDWARE_UDID' \
   --device-udid 'APPROVED_IPAD_HARDWARE_UDID'
 ```
@@ -212,8 +212,8 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Version and build | v0.7.33 (`2026072407`) in source Plists and generated project settings |
-| Swift tests | The v0.7.32 voiceprint release-policy and composition contracts, v0.7.30 lifecycle cleanup, v0.7.28 camera OCR editor, atomic Family Sync, Profile chooser, and content-rights coverage; the full source gate must be rerun at the immutable v0.7.33 release HEAD |
+| Version and build | v0.7.34 (`2026072408`) in source Plists and generated project settings |
+| Swift tests | v0.7.34 combines the v0.7.32 voiceprint release-policy and composition contracts, v0.7.30 lifecycle cleanup, v0.7.28 camera OCR editor, atomic Family Sync, Profile chooser, content-rights, and Profile-erasure manual-retry coverage; the full source gate is rerun at the immutable release HEAD |
 | Family Sync physical delta | Normal PawGoo v0.7.18 installed in place on the approved iPhone and iPad; an iPhone-created test Profile converged automatically to the untouched iPad without opening Family Sync, with one matching record and four Profiles total on each side |
 | Family Sync simulator E2E | Merged v0.7.2: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5 |
 | Critical XCUITest flows | Merged v0.7.2: full critical matrix passed on iPad; the single iPhone Photos-dismiss timing case passed 2/2 in isolated fresh reruns after the combined run, and every other flow passed |
@@ -282,7 +282,7 @@ The project source does not include an open-source license. Copyright remains wi
 <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
 <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
 <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-<img src="https://img.shields.io/badge/status-v0.7.33%20Bilingual%20Docs-6D48D7" alt="v0.7.33 双语文档">
+<img src="https://img.shields.io/badge/status-v0.7.34%20Family%20Sync%20Retry-6D48D7" alt="v0.7.34 Family Sync Profile erasure retry">
 </p>
 
 Tada Words为孩子们提供了每天两个独立的视字任务：
@@ -293,7 +293,7 @@ Tada Words为孩子们提供了每天两个独立的视字任务：
 
 Parents通过键入、使用光学字符识别（OCR）扫描学校列表或从离线预设中选择单词来添加每个练习单词。Tada Words从不自动填充池。审查时间表根据回忆强度、错误、帮助使用、重播和每个孩子的反应速度将家长批准的单词带回。
 
-> **项目状态：**版本 `0.7.33`（构建 `2026072407`）是仅文档版本，将仓库根目录中的所有 Markdown 文件改为英文优先的中英双语文档。它保留 v0.7.32 的运行时基线：保守的 App Store 1.0 fallback 不会发布 voiceprint 注册或说话人匹配，仅保留用于 Profile 删除和已验证首次安装清理的预发布模板清理；v0.7.28 在相机 OCR 前提供设备端裁剪与遮罩编辑器；v0.7.30 提供签名 Keychain 生命周期验证。拍摄和编辑后的词表照片仅保留在设备上且不持久化。现有 Profile 数据、attempt、completion、reward、PawGoo App 身份、CloudKit 标识符和 LocalQA 数据契约均不变。exact-HEAD 模拟器验收与签名真机验收仍是独立门槛。另见 [1.0 fallback 记录](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md)、[voiceprint 生命周期记录](Docs/VOICEPRINT_KEYCHAIN_LIFECYCLE_v0.7.30.md)、[发布决策记录](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md)、v0.7.5 [提交包](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md)、[隐私清单](Docs/APP_STORE_PRIVACY_v0.7.4.md)、[内容权利清单](Docs/APP_STORE_CONTENT_RIGHTS.md)、[数据清单](Docs/FAMILY-SYNC-DATA-MANIFEST.md)和[后续日志](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md)。
+> **项目状态：**版本 `0.7.34`（构建 `2026072408`）加入由 Parent 触发的 Profile 删除重试，并保留 v0.7.32 App Store 1.0 voiceprint fallback、v0.7.28 裁剪与遮罩编辑器和 v0.7.30 Keychain 生命周期验证。仓库根目录 Markdown 文档为英文优先的中英双语版本。该版本保留删除主导性、重试历史、现有 Profile 数据、PawGoo 身份、CloudKit 标识符和 LocalQA 数据契约，并且绝不重新创建已删除的儿童数据。另见 [v0.7.34 发布说明](Docs/Releases/v0.7.34-family-sync-erasure-retry.md)、[1.0 fallback 记录](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md)、[voiceprint 生命周期记录](Docs/VOICEPRINT_KEYCHAIN_LIFECYCLE_v0.7.30.md)、[证据矩阵](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md)和[后续日志](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md)。
 
 该应用程序包含八个独立的视觉世界：Moonpetal Kingdom、Build-It Bay、Paws & Pines、Dino Discovery、Firehouse Heroes、Brickwork City、Frostlight World和Coaster Carnival。每个世界都保留了自己的原创场景、吉祥物、音乐、声音线索和25个物品的奖励收藏。
 
@@ -384,7 +384,7 @@ iOS目标取决于`TadaWordsAppShell`、`TadaWordsApplePlatform`和`TadaWordsDom
 - 一个免费的Apple Account，用于直接LocalQA在个人设备上安装
 - 一个为 TestFlight 和 CloudKit 接受提供付费的 Apple Developer Program 团队
 
-当前 v0.7.33 源候选版本使用 Xcode 26.6。合并后的 v0.7.2 通过了 exact-HEAD iPhone/iPad 模拟器矩阵、LocalQA 安装保护和数据保留的实体 iPhone 更新；合并后的 v0.7.3 增加了离线 Parent 通知和精确内容验证。Family Sync 生产 schema、签名跨设备共享/删除、人工可访问性和精确发布隐私/网络验收仍未完成。
+当前 v0.7.34 源候选版本使用 Xcode 26.6。合并后的 v0.7.2 通过了 exact-HEAD iPhone/iPad 模拟器矩阵、LocalQA 安装保护和数据保留的实体 iPhone 更新；合并后的 v0.7.3 增加了离线 Parent 通知和精确内容验证。Family Sync 生产 schema、签名跨设备共享/删除、人工可访问性和精确发布隐私/网络验收仍未完成。
 
 ## 构建和测试
 
@@ -411,7 +411,7 @@ open TadaWords.xcodeproj
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.7.33 2026072407 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.7.34 2026072408 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 对于正常的PawGoo开发人工制品，请使用更严格的无安装门槛：
@@ -419,7 +419,7 @@ open TadaWords.xcodeproj
 ```sh
 ./Scripts/verify-pawgoo-development-app.py \
   '/path/to/Tada Words.app' \
-  0.7.33 2026072407 "$(git rev-parse HEAD)" \
+  0.7.34 2026072408 "$(git rev-parse HEAD)" \
   --device-udid 'APPROVED_IPHONE_HARDWARE_UDID' \
   --device-udid 'APPROVED_IPAD_HARDWARE_UDID'
 ```
@@ -460,8 +460,8 @@ open TadaWords.xcodeproj
 |检查|结果|
 |---|---|
 |严格Swift格式杂毛|通过|
-| 版本和构建 | 源 Plist 与生成项目设置中的 v0.7.33（`2026072407`） |
-| Swift 测试 | v0.7.32 运行时基线包含 voiceprint 发布策略与组合契约、v0.7.30 生命周期清理、v0.7.28 相机 OCR 编辑器、原子 Family Sync、Profile chooser 与内容权利覆盖；必须在不可变的 v0.7.33 发布 HEAD 上重跑完整 source gate |
+| 版本和构建 | 源 Plist 与生成项目设置中的 v0.7.34（`2026072408`） |
+| Swift 测试 | v0.7.34 合并 v0.7.32 voiceprint 发布策略与组合契约、v0.7.30 生命周期清理、v0.7.28 相机 OCR 编辑器、原子 Family Sync、Profile chooser、内容权利和 Profile 删除手动重试覆盖；必须在不可变的 v0.7.34 发布 HEAD 上重跑完整 source gate |
 | 家庭同步物理差分 | 正常 PawGoo v0.7.18 已安装在批准的 iPhone 和 iPad 上；一个 iPhone 创建的测试 Profile 自动收敛到未触碰的 iPad，无需打开家庭同步，每侧总共有一个匹配记录和四个 Profile |
 | 家庭同步模拟器E2E |合并v0.7.2：6/6在iPhone 17 Pro Max和6/6在iPad Pro 13英寸（M5），iOS 26.5 |
 | 关键 XCUITest 流程 | 合并 v0.7.2：完整的关键矩阵通过 iPad；单个 iPhone 照片-拒绝时间案例在合并运行后在孤立的新重播中通过了 2/2，其余每个流程都通过了 |
