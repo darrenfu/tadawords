@@ -19,7 +19,7 @@ enum GuardianThirdPartyNoticesContent {
     static let wordCatalogAttribution =
         "Word-frequency ranking data © Robyn Speer and contributors."
     static let wordCatalogDescription =
-        "The 4,000-word Bella catalog is selected with wordfreq 3.1.1 data."
+        "The disjoint 2,000-word offline and 4,000-word online Bella tiers are selected with wordfreq 3.1.1 data."
     static let wordCatalogLicenseDescription =
         "wordfreq data is available under Creative Commons Attribution-ShareAlike 4.0."
     static let wordCatalogSourceURL = URL(

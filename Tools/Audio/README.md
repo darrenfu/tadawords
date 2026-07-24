@@ -14,9 +14,11 @@ python3 -m venv /private/tmp/tadawords-wordfreq
 ```
 
 `TeacherWordCatalog-4000-v1.json` keeps the existing 500 bundled words and all
-1,166 preset words, selects 2,000 for offline Bella clips, and authorizes 4,000
-for PawGoo Bella generation. wordfreq code is Apache 2.0 and its derived data is
-CC BY-SA 4.0; the Parent-gated Third-Party Notices screen carries attribution.
+1,166 preset words across two disjoint tiers: 2,000 offline Bella words and
+4,000 additional PawGoo Bella words. The union therefore covers 6,000 words;
+only words outside that union use Apple speech. wordfreq code is Apache 2.0 and
+its derived data is CC BY-SA 4.0; the Parent-gated Third-Party Notices screen
+carries attribution.
 
 For the approved ElevenLabs pack, store the restricted development key in the
 macOS Keychain service `app.tadawords.audio.elevenlabs` (or set

@@ -29,7 +29,8 @@ commercial-rights, or exact-release evidence.
 ## Offline pack
 
 The target shipping pack contains exactly 2,000 normalized words × two variants
-= 4,000 clips, selected from the pinned 4,000-word online catalog. The current
+= 4,000 clips. A separate, disjoint 4,000-word PawGoo tier brings total Bella
+coverage to 6,000 words. The current
 500-word pack remains the measured baseline until expansion completes.
 `Tools/Audio/generate_elevenlabs_teacher_pack.sh` generates only the manifest
 contract. `Tools/Audio/inspect_teacher_audio_pack.sh` rejects missing or extra

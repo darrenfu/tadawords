@@ -244,9 +244,15 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
         XCTAssertEqual(online.count, 4_000)
         XCTAssertEqual(Set(offline).count, offline.count)
         XCTAssertEqual(Set(online).count, online.count)
-        XCTAssertTrue(Set(offline).isSubset(of: Set(online)))
-        XCTAssertEqual(counts["twoVariantCharacters"], 50_136)
-        XCTAssertEqual(counts["newTwoVariantCharacters"], 45_902)
+        XCTAssertTrue(Set(offline).isDisjoint(with: Set(online)))
+        XCTAssertEqual(Set(offline).union(online).count, 6_000)
+        XCTAssertEqual(counts["totalBellaWords"], 6_000)
+        XCTAssertEqual(counts["offlineTwoVariantCharacters"], 22_532)
+        XCTAssertEqual(counts["onlineTwoVariantCharacters"], 56_262)
+        XCTAssertEqual(counts["twoVariantCharacters"], 78_794)
+        XCTAssertEqual(counts["newTwoVariantCharacters"], 74_560)
+        XCTAssertTrue(Set(offline).contains("as"))
+        XCTAssertTrue(Set(online).contains("albatross"))
 
         let manifestURL = repositoryRoot.appendingPathComponent(
             "Sources/TadaWordsApplePlatform/Resources/Audio/TeacherWords/"

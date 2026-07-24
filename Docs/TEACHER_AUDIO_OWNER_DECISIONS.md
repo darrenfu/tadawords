@@ -62,17 +62,17 @@ verified execution evidence.
 
 ## Vocabulary and child-data decision
 
-The Bella online catalog keeps the 1,166 owner-approved, reviewed,
-normalized, non-personal preset baseline and expands to 4,000 selected words.
-The most common 2,000 form the offline tier. Parents may nevertheless add any
-valid isolated English word accepted by the app's existing one-word validator.
-A word outside the catalog is rejected before ElevenLabs and played with
-on-device Apple speech; it is never sent to ElevenLabs. Phrases and arbitrary
-free text remain out of scope.
+The Bella catalog keeps the 1,166 owner-approved, reviewed, normalized,
+non-personal preset baseline across two disjoint tiers: the most common 2,000
+form the offline tier and an additional 4,000 form the PawGoo tier, for 6,000
+Bella words total. Parents may nevertheless add any valid isolated English word
+accepted by the app's existing one-word validator. A word outside both tiers is
+rejected before ElevenLabs and played with on-device Apple speech; it is never
+sent to ElevenLabs. Phrases and arbitrary free text remain out of scope.
 
 The pinned catalog is
 `Tools/Audio/Catalogs/TeacherWordCatalog-4000-v1.json`, SHA-256
-`cdefd533c299b5aef001d1d42020e0ca0f9645630992f583f5804763f7569499`.
+`679a2884c353bf6ffcefd798bbf0fa624a0b6d5e86647136ed781e2d0ca4480b`.
 It preserves the existing 500 bundled words and all 1,166 preset words, then
 fills by `wordfreq` 3.1.1 rank with a lowercase dictionary-membership filter and
 a reviewed Bella exclusion list. Its data attribution is CC BY-SA 4.0.
@@ -90,11 +90,13 @@ total 19,368,518 bytes, or 38,737 bytes per word on average. Linear estimates:
 | 8,000 | 16,000 | 309.90 MB | 295.54 MiB |
 
 Allow another 5–10% for manifests, signing, packaging, and filesystem overhead.
-The exact 4,000-word catalog contains 50,136 two-variant characters. After
-crediting the existing 500-word pack, completing every remaining Bella clip
-uses 45,902 Multilingual-v2 credits (official API list price: about USD 4.59).
-Only the offline 2,000 must be generated before shipping; online-only clips may
-remain lazy and consume credits on first Parent preparation.
+The exact disjoint tiers contain 78,794 two-variant characters: 22,532 offline
+and 56,262 online. After crediting the existing 500-word pack, generating the
+remaining offline clips uses 18,298 Multilingual-v2 credits. Materializing all
+4,000 online words uses at most another 56,262 credits, for 74,560 new credits
+total (official API list price: about USD 7.46). Only the offline 2,000 must be
+generated before shipping; online clips remain lazy and consume credits on
+their first Parent preparation.
 
 ## Retention and deletion
 

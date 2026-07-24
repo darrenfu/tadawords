@@ -18,6 +18,34 @@ EXPECTED_DICTIONARY_SHA256 = (
     "be41ad97963bf8dabedd5871d5d691596175269d540956b0f9965a885c2bbab9"
 )
 WORD_PATTERN = re.compile(r"^[a-z]+(?:['-][a-z]+)*$")
+COMMON_SHORT_WORDS = {
+    "a",
+    "am",
+    "an",
+    "as",
+    "at",
+    "be",
+    "by",
+    "do",
+    "go",
+    "he",
+    "i",
+    "if",
+    "in",
+    "is",
+    "it",
+    "me",
+    "my",
+    "no",
+    "of",
+    "on",
+    "or",
+    "so",
+    "to",
+    "up",
+    "us",
+    "we",
+}
 BLOCKED_BELLA_WORDS = {
     "ass",
     "asshole",
@@ -142,7 +170,12 @@ def main() -> int:
             word not in ranked_seen
             and word in dictionary_words
             and word not in BLOCKED_BELLA_WORDS
-            and (len(word) >= 3 or word in bundled or word in preset_words)
+            and (
+                len(word) >= 3
+                or word in COMMON_SHORT_WORDS
+                or word in bundled
+                or word in preset_words
+            )
             and len(word) <= 32
             and WORD_PATTERN.fullmatch(word)
         ):
@@ -154,19 +187,41 @@ def main() -> int:
     append_until(offline, sorted(bundled))
     append_until(offline, ranked, target_count=2_000)
 
-    online = list(offline)
-    append_until(online, [word for word in ranked if word in preset_words])
-    append_until(online, sorted(preset_words))
-    append_until(online, ranked, target_count=4_000)
+    offline_set = set(offline)
+    online: list[str] = []
+    append_until(
+        online,
+        [
+            word
+            for word in ranked
+            if word in preset_words and word not in offline_set
+        ],
+    )
+    append_until(
+        online,
+        [word for word in sorted(preset_words) if word not in offline_set],
+    )
+    append_until(
+        online,
+        [word for word in ranked if word not in offline_set],
+        target_count=4_000,
+    )
 
     if len(offline) != 2_000 or len(online) != 4_000:
         raise RuntimeError("catalog did not reach the frozen tier sizes")
-    if not bundled.issubset(offline) or not preset_words.issubset(online):
+    bella_words = offline_set.union(online)
+    if offline_set.intersection(online):
+        raise RuntimeError("offline and online tiers overlap")
+    if not bundled.issubset(offline_set) or not preset_words.issubset(bella_words):
         raise RuntimeError("catalog lost a shipping or preset word")
-    if BLOCKED_BELLA_WORDS.intersection(online):
-        raise RuntimeError("blocked Bella words entered the online catalog")
+    if BLOCKED_BELLA_WORDS.intersection(bella_words):
+        raise RuntimeError("blocked Bella words entered the Bella catalog")
 
-    two_variant_characters = 2 * sum(map(len, online))
+    offline_two_variant_characters = 2 * sum(map(len, offline))
+    online_two_variant_characters = 2 * sum(map(len, online))
+    two_variant_characters = (
+        offline_two_variant_characters + online_two_variant_characters
+    )
     existing_characters = 2 * sum(map(len, bundled))
     payload = {
         "schemaVersion": 1,
@@ -180,15 +235,19 @@ def main() -> int:
             "dictionarySHA256": EXPECTED_DICTIONARY_SHA256,
             "policy": (
                 "Preserve the existing 500 bundled words and all 1,166 preset "
-                "words, then fill by wordfreq rank after lowercase dictionary "
+                "words across disjoint 2,000-word offline and 4,000-word online "
+                "tiers, then fill by wordfreq rank after lowercase dictionary "
                 "membership and the reviewed Bella blocklist."
             ),
         },
         "counts": {
             "offlineWords": len(offline),
             "onlineWords": len(online),
+            "totalBellaWords": len(bella_words),
             "existingBundledWords": len(bundled),
             "presetWords": len(preset_words),
+            "offlineTwoVariantCharacters": offline_two_variant_characters,
+            "onlineTwoVariantCharacters": online_two_variant_characters,
             "twoVariantCharacters": two_variant_characters,
             "newTwoVariantCharacters": two_variant_characters
             - existing_characters,
@@ -202,7 +261,7 @@ def main() -> int:
         encoding="utf-8",
     )
     print(
-        f"wrote {len(offline)} offline / {len(online)} online words; "
+        f"wrote {len(offline)} offline + {len(online)} disjoint online words; "
         f"{two_variant_characters - existing_characters} new credits"
     )
     return 0
