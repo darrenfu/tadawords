@@ -13,7 +13,7 @@ python3 -m venv /private/tmp/tadawords-wordfreq
   Tools/Audio/build_teacher_word_catalog.py
 ```
 
-`TeacherWordCatalog-4000-v1.json` keeps the existing 500 bundled words and all
+`TeacherWordCatalog-4000-v1.json` preserves the frozen 500-word baseline and all
 1,166 preset words across two disjoint tiers: 2,000 offline Bella words and
 4,000 additional PawGoo Bella words. The union therefore covers 6,000 words;
 only words outside that union use Apple speech. wordfreq code is Apache 2.0 and
@@ -21,11 +21,12 @@ its derived data is CC BY-SA 4.0; the Parent-gated Third-Party Notices screen
 carries attribution.
 
 For the approved ElevenLabs pack, store the restricted development key in the
-macOS Keychain service `app.tadawords.audio.elevenlabs` (or set
+macOS Keychain service `app.tadawords.audio.elevenlabs.offline-2000` (or set
 `ELEVENLABS_API_KEY` only in the active shell), then run:
 
 ```bash
-Tools/Audio/generate_elevenlabs_teacher_pack.sh
+ELEVENLABS_KEYCHAIN_SERVICE=app.tadawords.audio.elevenlabs.offline-2000 \
+  Tools/Audio/generate_elevenlabs_teacher_pack.sh
 ```
 
 The ElevenLabs generator refuses a pending voice, any per-word voice/speed
@@ -57,8 +58,8 @@ generation. Shipping manifests may not use local `tts_text_overrides`.
 Inspect every manifest-declared clip before it can become a shipping pack:
 
 ```bash
-Tools/Audio/inspect_teacher_audio_pack.sh \
-  Sources/TadaWordsApplePlatform/Resources/Audio/TeacherWords/ElevenLabs-Teacher-500-v1/manifest.json
+  Tools/Audio/inspect_teacher_audio_pack.sh \
+  Sources/TadaWordsApplePlatform/Resources/Audio/TeacherWords/ElevenLabs-Teacher-2000-v1/manifest.json
 ```
 
 The inspection fails closed on a missing clip, wrong codec/sample rate/channel

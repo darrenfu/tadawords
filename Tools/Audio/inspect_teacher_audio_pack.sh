@@ -84,11 +84,11 @@ if [[ "$CANDIDATE_ONLY" != "true" ]]; then
     printf 'Shipping dictionary rules digest is not approved\n' >&2
     exit 1
   fi
-  if [[ "$(jq '.words | length' "$MANIFEST")" -ne 500 ]]; then
-    printf 'Shipping teacher pack must contain exactly 500 words\n' >&2
+  if [[ "$(jq '.words | length' "$MANIFEST")" -ne 2000 ]]; then
+    printf 'Shipping teacher pack must contain exactly 2000 words\n' >&2
     exit 1
   fi
-  if [[ "$(jq '[.words[]] | unique | length' "$MANIFEST")" -ne 500 ]] ||
+  if [[ "$(jq '[.words[]] | unique | length' "$MANIFEST")" -ne 2000 ]] ||
     jq -e '.words[] | select(test("^[a-z]+$") | not)' "$MANIFEST" >/dev/null
   then
     printf 'Shipping teacher words must be unique normalized alphabetic entries\n' >&2

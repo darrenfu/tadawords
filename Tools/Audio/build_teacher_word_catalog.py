@@ -136,8 +136,7 @@ def main() -> int:
 
     repository_root = Path(__file__).resolve().parents[2]
     existing_manifest_path = repository_root / (
-        "Sources/TadaWordsApplePlatform/Resources/Audio/TeacherWords/"
-        "ElevenLabs-Teacher-500-v1/manifest.json"
+        "Tools/Audio/Baselines/ElevenLabs-Teacher-500-v1-manifest.json"
     )
     presets_path = repository_root / (
         "Sources/TadaWordsContent/Resources/PresetWords.json"

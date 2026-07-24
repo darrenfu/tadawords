@@ -13,7 +13,7 @@ public enum BundledTeacherWordAudioProviderError: Error, Equatable, Sendable {
 /// prepare the exact same voice contract.
 public struct BundledTeacherWordAudioProvider: TeacherWordAudioProviding {
     private static let productionRelativePath =
-        "Audio/TeacherWords/ElevenLabs-Teacher-500-v1"
+        "Audio/TeacherWords/ElevenLabs-Teacher-2000-v1"
 
     private let resourceRoot: URL
     private let words: Set<String>

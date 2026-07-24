@@ -256,7 +256,7 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
 
         let manifestURL = repositoryRoot.appendingPathComponent(
             "Sources/TadaWordsApplePlatform/Resources/Audio/TeacherWords/"
-                + "ElevenLabs-Teacher-500-v1/manifest.json"
+                + "ElevenLabs-Teacher-2000-v1/manifest.json"
         )
         let manifest = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL))

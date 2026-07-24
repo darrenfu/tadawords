@@ -1,8 +1,8 @@
 # Teacher-audio release gates
 
-This document separates the existing bundled-audio baseline from the #74/#81
-replacement. Passing source tests or retaining the legacy Katie resources does
-not make the replacement ready to ship.
+This document separates the expanded bundled-audio artifact from the remaining
+#74/#81 deployment and physical-device gates. Passing source tests or retaining
+legacy QA resources does not make the replacement ready to ship.
 
 ## Frozen contract
 
@@ -28,19 +28,19 @@ commercial-rights, or exact-release evidence.
 
 ## Offline pack
 
-The target shipping pack contains exactly 2,000 normalized words × two variants
-= 4,000 clips. A separate, disjoint 4,000-word PawGoo tier brings total Bella
-coverage to 6,000 words. The current
-500-word pack remains the measured baseline until expansion completes.
+The shipping pack contains exactly 2,000 normalized words × two variants =
+4,000 clips. A separate, disjoint 4,000-word PawGoo tier brings total Bella
+coverage to 6,000 words. The frozen 500-word manifest remains only as a
+reproducibility baseline for rebuilding the disjoint catalog.
 `Tools/Audio/generate_elevenlabs_teacher_pack.sh` generates only the manifest
 contract. `Tools/Audio/inspect_teacher_audio_pack.sh` rejects missing or extra
 clips, pending approval, wrong provider/model/speed/playback values, local text
 overrides, bad encoding, unsafe duration/tail, clipping, and inaudible output.
 
-The expanded Bella pack replaces `ElevenLabs-Teacher-500-v1` only after all
-4,000 declared MP3 clips pass the exact manifest contract, full-pack acoustic
-inspection, representative SpeechTranscriber matrix, release inventory digest,
-and physical listening.
+`ElevenLabs-Teacher-2000-v1` passed the exact manifest contract, full-pack
+acoustic inspection, a 20/20 representative SpeechTranscriber matrix, and the
+source release-inventory digest on 2026-07-24. Physical listening on the exact
+signed candidate remains mandatory.
 
 ## Runtime preparation
 

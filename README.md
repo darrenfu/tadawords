@@ -65,7 +65,7 @@ The one-recovery rule changes only the child's reward display. Parent reports ke
 
 Parents only enter the school word. Every newly added word uses the canonical isolated teacher pronunciation; there is no pronunciation-context editor or pronunciation picker. Older saved prompts that contain contextual audio metadata still decode for data compatibility, but Parents cannot create or edit that metadata.
 
-The teacher-audio target is a 2,000-word offline Bella tier with separate Read and Write recordings plus a disjoint 4,000-word PawGoo Bella tier, for 6,000 Bella words total; valid misses outside both tiers use device-local Apple speech. The repository currently contains the approved 500-word Bella pack as the measured baseline. Expansion cannot ship until the generator and inspector pass all 4,000 offline clips and the exact resources are installed and accepted on both device classes. Aurora launch and celebration resources remain independently scoped. See the [teacher-audio release gates](Docs/TEACHER_AUDIO_RELEASE_GATES.md).
+The teacher-audio contract uses a 2,000-word offline Bella tier with separate Read and Write recordings plus a disjoint 4,000-word PawGoo Bella tier, for 6,000 Bella words total. Valid words outside both tiers use device-local Apple speech. The repository contains the expanded 4,000-clip Bella pack; shipping still requires exact-resource installation and acceptance on both approved device classes. Aurora launch and celebration resources remain independently scoped. See the [teacher-audio release gates](Docs/TEACHER_AUDIO_RELEASE_GATES.md).
 
 The scheduler uses an Ebbinghaus-style recall model. A word reaches Mastered after independent success on three local dates and a predicted 14-day recall rate above the configured threshold.
 
@@ -186,7 +186,7 @@ Follow [DEVICE_DEPLOYMENT.md](DEVICE_DEPLOYMENT.md) for signing, Developer Mode,
 - The app does not run an app-owned server database.
 - Speech audio buffers stay in memory. The app does not save or upload raw child recordings.
 - App Store 1.0 does not expose voiceprint enrollment or use a retained template for speaker matching. An existing pre-release template stays inaccessible to practice and remains device-only; Profile deletion and proven-fresh-install bootstrap retain their fail-closed cleanup paths.
-- Practice uses one canonical teacher-voice contract rather than a per-Profile style picker. The versioned release pack covers 500 words with separate Read and Write clips under the approved ElevenLabs Bella voice/model/dictionary contract and no per-word override. Other approved words must be prepared through PawGoo and atomically cached before becoming child-reachable; playback never falls back to an installed Apple or alternative provider voice. Provider credentials never enter the app. Aurora launch and transition clips remain independently bundled.
+- Practice uses one canonical teacher-voice contract rather than a per-Profile style picker. The versioned release pack covers 2,000 words with separate Read and Write clips under the approved ElevenLabs Bella voice/model/dictionary contract and no per-word override. The disjoint 4,000-word online tier must be prepared through PawGoo and atomically cached before becoming child-reachable. Valid words outside both Bella tiers use on-device Apple speech; authentication, integrity, quota, timeout, and provider failures do not. Provider credentials never enter the app. Aurora launch and transition clips remain independently bundled.
 - Pool import prefetches only the child-safe concrete-word picture catalog. All 74 unique Twemoji PNGs are bundled with the app, so a fresh offline install needs no CDN request. Abstract words have no picture mapping.
 - Parents can open offline Third-Party Notices behind the Parent Gate to review the exact Twemoji source, modification status, copyright attribution, and CC BY 4.0 license.
 - Release builds keep iCloud Family Sync off by default. Completing onboarding does not enable it; a parent must explicitly turn it on in Guardian settings.
@@ -305,9 +305,9 @@ Parents通过键入、使用光学字符识别（OCR）扫描学校列表或从�
 | Write Quest | 应用程序会说视觉单词 | 孩子选择手写或应用程序内的A-Z拼写键盘 | 视觉手写识别或精确大小写无区分的打字拼写；两者都完成相同的 Write Quest 同时速度保持独立 |
 | 复习 | 排程器选择应答和弱词 | 孩子再次检索单词 | 准确性、已过时间、帮助、重播和重试历史记录 |
 
-Read在孩子第一次独立反应之前从不说目标。在两次有效的错误读数后，它只显示由孩子触发的**听到它**；技术重试从不提前显示帮助。涵盖的单词使用捆绑的Katie Read提示录音，而其他由监护人输入的单词使用Apple语音。每个世界拥有一个协调的、高对比度的单词颜色，因此每个Read单词在视觉上保持一致，直到孩子切换世界。
+Read 在孩子第一次独立反应之前从不说目标。在两次有效的错误读数后，它只显示由孩子触发的**听到它**；技术重试从不提前显示帮助。2,000 个离线目录词使用捆绑的 Bella Read 提示，另外 4,000 个 Bella 词使用 Parent 阶段准备的 PawGoo 缓存，两个目录之外的有效词使用设备上的 Apple 语音。每个世界拥有一个协调的、高对比度的单词颜色，因此每个 Read 单词在视觉上保持一致，直到孩子切换世界。
 
-Write 会为首批 500 个覆盖词播放 0.67× 速度的 Katie 独立单词录音，并且不会预先显示拼写。单独的 Read 提示版本采用相同的 1.5 倍慢速节奏。两个版本都保留 120 毫秒的编码安全尾部填充，确保 `at` 中的 `/t/` 等末尾辅音在播放结束前完整发出。打包范围之外的单词离线回退到 Apple 语音，并保持中性音高和足够的释放时间，以保留末尾辅音。孩子先手动选择 **Write by Hand** 或 **Spell with Letters**；任一方式都会完成同一个 Daily Write Quest，并共享其 Pool、掌握度、复习计划、分数和奖励。打字速度记录在独立的输入方式区间中，因此快速按键不会让手写显得过慢。拼写界面是用 SwiftUI 构建的固定位置、主题配色 QWERTY A–Z 键盘，因此不会出现系统键盘、预测文本、数字或符号。比较时忽略大小写，撇号和连字符则作为提示的结构部分直接提供。聚焦 Replay 会保留所选输入方式。
+Write 会为 2,000 个离线词播放约 0.67× 有效速度的 Bella 独立单词录音，并且不会预先显示拼写。Read 提示使用同一份 Bella 合同。两个版本都保留 120 毫秒的编码安全尾部填充，确保 `at` 中的 `/t/` 等末尾辅音在播放结束前完整发出。另有不重复的 4,000 个 Bella 词由 PawGoo 在 Parent 准备阶段生成并原子缓存；两个 Bella 目录之外的有效单词才回退到设备上的 Apple 语音。孩子先手动选择 **Write by Hand** 或 **Spell with Letters**；任一方式都会完成同一个 Daily Write Quest，并共享其 Pool、掌握度、复习计划、分数和奖励。打字速度记录在独立的输入方式区间中，因此快速按键不会让手写显得过慢。拼写界面是用 SwiftUI 构建的固定位置、主题配色 QWERTY A–Z 键盘，因此不会出现系统键盘、预测文本、数字或符号。比较时忽略大小写，撇号和连字符则作为提示的结构部分直接提供。聚焦 Replay 会保留所选输入方式。
 
 对于手写，`?`控制可按需显示单词。在第一次真正的不匹配后，如`dog`等具体单词可以显示来自捆绑的Twemoji包的可触摸图片提示，包括在新的离线安装中；如`the`等抽象和功能单词不会收到图像。儿童可以选择铅笔、粉笔或画笔；墨水始终为黑色，所选工具会根据Profile保持不变。4×本地橡皮擦在轻点空白画布后恢复之前的笔迹。画布宽度增加10%，在反馈和单词切换期间保持固定坐标，并保留点、后续字母和连接的笔触。大多数单词保留两个懒散的Vision网格透视，每个观察包含五个候选词。仅视觉模糊的目标`of`在决定之前就收集了三个尺度和最多10个候选词：较低等级的准确拼写需要两个尺度的一致，而任何强烈的完整拼写`off`都拒绝匹配。混合大小写`oF`、连接的小写`of`和六种类似儿童形状的变体都获得这种精确的、特定目标的恢复。数字`0`只有当其对齐的目标位置正好为`o`时才可能代表`o`，因此`0f`和`0F`被接受，而`00`、`90`、`0t`、`0ff`、`+0`和`f0`则仍然被拒绝。技术语音或识别失败不会降低儿童的分数。
 
@@ -329,7 +329,7 @@ Write 会为首批 500 个覆盖词播放 0.67× 速度的 Katie 独立单词录
 
 Parents只输入学校单词。每个新添加的单词都使用规范的孤立教师发音；没有发音上下文编辑器或发音选择器。包含上下文音频元数据的旧保存提示仍然用于数据兼容性解码，但Parents无法创建或编辑该元数据。
 
-捆绑的音频包包含500个独特的幼儿园至1年级单词，分别有0.67倍的Read和Write录音。Katie是规范教师；在两个独立的语音识别器拒绝Katie的孤立渲染后，Manifest文件向Aurora进行了一个质量覆盖（`bun`）。其1000个AAC剪辑加上八个Aurora资源增加了约7.4 MB。正确的答案保留了所选世界的即时合成闪光，并旋转了五个简短的Aurora庆祝活动；既没有这些行也没有`Quest complete!`使用`Ta-da`作为过渡插话。Reduced Sound抑制了装饰性的口头过渡。
+捆绑的音频包包含 2,000 个独特单词，分别有 Bella 的 Read 和 Write MP3 录音；不存在逐词替代 voice。正确答案保留所选世界的即时合成闪光，并轮换五个简短的 Aurora 庆祝音频；这些内容与教师单词语音独立。Reduced Sound 会抑制装饰性的口头过渡。
 
 调度器使用Ebbinghaus风格的回忆模型。一个单词在三个本地日期的独立成功后达到熟练程度，并预测的14天回忆率高于配置的阈值。
 
@@ -357,7 +357,7 @@ Parents在创建Profile时记录3至8岁的年龄。Tada Words仅使用年龄和
 | 激励 | 8个原始世界，每个世界20个小奖励和5个里程碑，200个不同的宝藏图标，第二天双任务主题/图标解锁，我的收藏和一个月历 |
 | Guardian 工具 | 单击 `Parents` → 自动检查数学 Parent Gate，带有Profile卡的世界主题家长主页，单词和练习、进度和应用程序和家庭入口，单词管理器，报告，更正，设置，CSV导出，离线第三方通知和返回儿童导航 |
 | 辅助功能 | 景观儿童路线以及可旋转的家长路线，共享44点最低目标，VoiceOver 标签和公告，Reduce Motion，左撇子书写，Reduced Sound，以及Calm Rescue；物理辅助功能接受仍然开放 |
-|平台|带有官方Tada Words和Pawgoo标志的1.8秒品牌发布页面，带有Apple Speech备用功能的离线优先Katie教师音频，捆绑的Aurora发布/过渡，我之后重复的钥匙扣语音印记，基于目标的信息的Vision手写识别，本地通知，本地JSON快照，仅限设备LocalQA，并明确启用的CloudKit家庭同步|
+|平台|带有官方 Tada Words 和 Pawgoo 标志的 1.8 秒品牌启动页；离线优先的 Bella 教师音频、PawGoo Bella 缓存与明确的 Apple Speech 目录外 fallback；捆绑的 Aurora 启动/过渡；设备本地语音指纹；基于目标信息的 Vision 手写识别；本地通知；本地 JSON 快照；仅设备 LocalQA；明确启用的 CloudKit 家庭同步|
 
 ## 建筑物
 
@@ -437,7 +437,7 @@ open TadaWords.xcodeproj
 - 该应用程序不运行应用程序拥有的服务器数据库。
 - 语音和注册音频缓冲区会保留在内存中。该应用程序不会保存或上传原始子录音。
 - 语音设置随机打乱六句简短的幼儿园前段句子，供孩子听并重复。每个设备只在钥匙串中存储生成的语音指纹模板。CloudKit不同步模板，因此每个设备都需要单独注册。真正的全新安装会获得随机Profile身份，在创建任何本地数据之前，只清除Tada Words保留的语音指纹钥匙串服务；普通升级会保留注册的模板，失败的重置会失败，以安全重试。
-- 练习使用一个标准教师语音合同，而不是每个Profile风格选择器。一个版本的离线包涵盖了500个单词，Katie是标准语音，并为`bun`提供了一个明文记录的Aurora质量覆盖。其他单词使用已安装的最清晰的兼容的美国英语Apple语音。Aurora启动和过渡剪辑也随附。应用程序中不存在Cartesia API密钥或运行时Cartesia请求。
+- 练习使用一个标准教师语音合同，而不是每个 Profile 的风格选择器。离线包涵盖 2,000 个 Bella 词，另有不重复的 4,000 个 Bella 词由 PawGoo 在 Parent 准备阶段生成并原子缓存；两个目录之外的有效词使用设备上的 Apple 英语语音。网络、鉴权、配额或完整性失败不会触发 Apple fallback。应用中不存在 ElevenLabs 或 Cartesia API key。
 - Pool导入只预加载儿童安全的混凝土单词图片目录。所有74个独特的Twemoji PNG都与应用程序捆绑在一起，因此新的离线安装不需要CDN请求。抽象单词没有图片映射。
 - Parents可以在Parent Gate后打开离线第三方通知，以查看确切的Twemoji源代码、修改状态、版权归属和CC BY 4.0许可证。
 - 发布构建默认情况下保持iCloud家庭同步关闭。完成入职不会启用它；父组件必须在Guardian设置中明确打开它。

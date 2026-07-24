@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPOSITORY_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 AUDIO_ROOT="$REPOSITORY_ROOT/Sources/TadaWordsApplePlatform/Resources/Audio"
-MANIFEST="${1:-$AUDIO_ROOT/TeacherWords/ElevenLabs-Teacher-500-v1/manifest.json}"
+MANIFEST="${1:-$AUDIO_ROOT/TeacherWords/ElevenLabs-Teacher-2000-v1/manifest.json}"
 PACK_ROOT="$(dirname "$MANIFEST")"
 CONCURRENCY="${ELEVENLABS_CONCURRENCY:-1}"
 WORD_FILTER="${ELEVENLABS_WORDS:-}"

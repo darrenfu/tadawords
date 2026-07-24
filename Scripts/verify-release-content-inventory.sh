@@ -11,7 +11,7 @@ preset_relative="Sources/TadaWordsContent/Resources/PresetWords.json"
 compatibility_relative="Apps/TadaWordsApp/PersistenceSchemaCompatibility.json"
 guardian_notice_relative="Sources/TadaWordsGuardianFeatures/GuardianThirdPartyNoticesView.swift"
 
-expected_audio_digest="44b85c73a2da092e0634fb71792496b947245c76b55638d925de3855869cc6f4"
+expected_audio_digest="4c2f6768dedf79c541cc63e8038b34d45f33105391b3a664abc6e6cd53a9b662"
 expected_picture_digest="fbe89ce4496e0f50a59f93b3dc55f2e3e24eb1bcd463597c218a40e5f19d7a1a"
 
 fail() {
@@ -103,7 +103,7 @@ verify_picture_pack() {
 
 verify_audio_pack() {
     local audio_root="$1"
-    local teacher_root="$audio_root/TeacherWords/ElevenLabs-Teacher-500-v1"
+    local teacher_root="$audio_root/TeacherWords/ElevenLabs-Teacher-2000-v1"
     local aurora_root="$audio_root/VoiceAccents/Aurora-v1"
     local teacher_manifest="$teacher_root/manifest.json"
     local aurora_manifest="$aurora_root/manifest.json"
@@ -114,18 +114,18 @@ verify_audio_pack() {
     assert_equal "$(jq -r '.model' "$teacher_manifest")" "eleven_multilingual_v2" "teacher model"
     assert_equal "$(jq -r '.voice.id' "$teacher_manifest")" "hpp4J3VqNfWAUOO0d1Us" "teacher voice"
     assert_equal "$(jq -r '.voice.approval' "$teacher_manifest")" "approved" "teacher approval"
-    assert_equal "$(jq -r '.pack_version' "$teacher_manifest")" "2.0.0" "teacher pack version"
-    assert_equal "$(jq -r '.created_on' "$teacher_manifest")" "2026-07-23" "teacher creation date"
+    assert_equal "$(jq -r '.pack_version' "$teacher_manifest")" "3.0.0" "teacher pack version"
+    assert_equal "$(jq -r '.created_on' "$teacher_manifest")" "2026-07-24" "teacher creation date"
     assert_equal "$(jq -r '.seed' "$teacher_manifest")" "20260725" "teacher seed"
     assert_equal "$(jq -r '.pronunciation_dictionary.id' "$teacher_manifest")" "jlikgZytU86rmsPnDwrK" "teacher dictionary"
     assert_equal "$(jq -r '.pronunciation_dictionary.version_id' "$teacher_manifest")" "E2NROj7X6ZT7VcK11GgH" "teacher dictionary version"
     assert_equal "$(jq -r '.release_post_processing.peak_dbfs' "$teacher_manifest")" "-3" "teacher release peak"
     assert_equal "$(jq -r '.release_post_processing.tail_padding_seconds' "$teacher_manifest")" "0.12" "teacher release tail"
-    assert_equal "$(jq '.words | length' "$teacher_manifest")" "500" "teacher manifest words"
-    assert_equal "$(jq '[.words[]] | unique | length' "$teacher_manifest")" "500" "teacher unique words"
-    assert_equal "$(count_files "$teacher_root/read-hint" '*.mp3')" "500" "teacher Read clips"
-    assert_equal "$(count_files "$teacher_root/write-prompt" '*.mp3')" "500" "teacher Write clips"
-    assert_sha256 "$teacher_manifest" "8aacd3073ea2a9d99cd99b1f64eb35e330b64685a91e29782cf32a53b497ab18" "teacher manifest"
+    assert_equal "$(jq '.words | length' "$teacher_manifest")" "2000" "teacher manifest words"
+    assert_equal "$(jq '[.words[]] | unique | length' "$teacher_manifest")" "2000" "teacher unique words"
+    assert_equal "$(count_files "$teacher_root/read-hint" '*.mp3')" "2000" "teacher Read clips"
+    assert_equal "$(count_files "$teacher_root/write-prompt" '*.mp3')" "2000" "teacher Write clips"
+    assert_sha256 "$teacher_manifest" "6d973e4b40749af02bf3dee7ec2208443ae4a7ad686c8ac396be4cd73883d82b" "teacher manifest"
 
     while IFS= read -r word; do
         assert_file "$teacher_root/read-hint/$word.mp3" "Read clip for $word"
@@ -144,7 +144,7 @@ verify_audio_pack() {
         jq -r '[.launch.file, .launch.rendering.ta_da_source, .correct[].file, .quest_complete.file] | unique[]' "$aurora_manifest"
     )
     assert_equal "$(count_files "$aurora_root" '*.m4a')" "8" "Aurora clip count"
-    assert_equal "$(count_files "$audio_root" '*.mp3')" "1000" "total bundled MP3 clips"
+    assert_equal "$(count_files "$audio_root" '*.mp3')" "4000" "total bundled MP3 clips"
     assert_equal "$(count_files "$audio_root" '*.m4a')" "8" "total bundled M4A clips"
     assert_equal "$(stable_audio_tree_digest "$audio_root")" "$expected_audio_digest" "complete audio digest"
 }
@@ -299,7 +299,7 @@ if plutil -extract TadaWordsTeacherAudioEndpoint raw "$production_plist" >/dev/n
     fail "production plist configures a runtime teacher-audio endpoint"
 fi
 
-echo "source inventory verified: $expected_version ($expected_build), 1,000 teacher MP3 plus 8 accent M4A, 74 offline Twemoji PNGs, four package JSON files plus one app schema JSON, no custom fonts"
+echo "source inventory verified: $expected_version ($expected_build), 4,000 teacher MP3 plus 8 accent M4A, 74 offline Twemoji PNGs, four package JSON files plus one app schema JSON, no custom fonts"
 echo "in-app Twemoji attribution verified; rights readiness remains blocked by #32 and #33 because this verifier does not replace human evidence"
 
 if [[ "$#" -eq 0 ]]; then

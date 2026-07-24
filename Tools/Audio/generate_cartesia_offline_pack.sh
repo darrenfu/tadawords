@@ -322,7 +322,7 @@ case "${1:-accents}" in
     ;;
   *)
     echo "Usage: $0 accents" >&2
-    echo "Cartesia teacher-word generation retired with ElevenLabs-Teacher-500-v1." >&2
+    echo "Cartesia teacher-word generation retired with ElevenLabs-Teacher-2000-v1." >&2
     exit 2
     ;;
 esac

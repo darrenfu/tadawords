@@ -5,10 +5,10 @@ import XCTest
 @testable import TadaWordsApplePlatform
 
 final class BundledTeacherWordAudioProviderTests: XCTestCase {
-    func testProductionPackExposesFiveHundredWordsAndBothVariants() async throws {
+    func testProductionPackExposesTwoThousandWordsAndBothVariants() async throws {
         let provider = try XCTUnwrap(BundledTeacherWordAudioProvider.production())
 
-        XCTAssertEqual(provider.bundledWordCount, 500)
+        XCTAssertEqual(provider.bundledWordCount, 2_000)
         for word in [
             "a", "i", "at", "bun", "cat", "chick", "come", "near", "of",
             "swordfish",

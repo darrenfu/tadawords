@@ -79,24 +79,27 @@ a reviewed Bella exclusion list. Its data attribution is CC BY-SA 4.0.
 
 ## Measured offline-pack storage
 
-The current 500-word pack contains two MP3 variants per word. Its 1,000 clips
-total 19,368,518 bytes, or 38,737 bytes per word on average. Linear estimates:
+The frozen 500-word baseline contains 1,000 clips totaling 19,368,518 bytes.
+The expanded 2,000-word pack contains 4,000 clips totaling 82,943,086 bytes
+(82.94 MB / 79.10 MiB). The earlier linear estimates are retained for scale:
 
 | Words | MP3 clips | Audio bytes | Binary size |
 | ---: | ---: | ---: | ---: |
 | 1,000 | 2,000 | 38.74 MB | 36.94 MiB |
-| 2,000 | 4,000 | 77.47 MB | 73.89 MiB |
+| 2,000 | 4,000 | 82.94 MB measured | 79.10 MiB measured |
 | 4,000 | 8,000 | 154.95 MB | 147.77 MiB |
 | 8,000 | 16,000 | 309.90 MB | 295.54 MiB |
 
 Allow another 5–10% for manifests, signing, packaging, and filesystem overhead.
-The exact disjoint tiers contain 78,794 two-variant characters: 22,532 offline
-and 56,262 online. After crediting the existing 500-word pack, generating the
-remaining offline clips uses 18,298 Multilingual-v2 credits. Materializing all
-4,000 online words uses at most another 56,262 credits, for 74,560 new credits
-total (official API list price: about USD 7.46). Only the offline 2,000 must be
-generated before shipping; online clips remain lazy and consume credits on
-their first Parent preparation.
+The exact disjoint tiers contain 78,794 raw two-variant characters: 22,532
+offline and 56,262 online. ElevenLabs applies a 10-credit minimum to these short
+isolated-word requests. Under that observed rule, the 1,500 newly generated
+offline words require 30,126 credits and fully materializing the 4,000 online
+words requires about 81,174 credits, or 111,300 new credits total (about USD
+11.13 at the API list rate). Only the offline 2,000 must be generated before
+shipping; online clips remain lazy and consume credits on their first Parent
+preparation. No additional plan or credit purchase is authorized by this
+estimate.
 
 ## Retention and deletion
 
