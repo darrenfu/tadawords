@@ -1211,6 +1211,86 @@ transient `.syncing` snapshot when it opened during an existing reconciliation.
 - Focused concurrency tests and the complete 1129-test Swift suite pass.
   Exact-HEAD build and signed-device acceptance remain pending.
 
+## v0.7.32 — 2026-07-24
+
+Target release: `v0.7.32`
+
+Branch: `codex/privacy-support-alignment-v0.7.32`
+
+Build: `2026072406`
+
+Overall state: Issue #76's owner-approved conservative App Store 1.0 fallback
+removes every production enrollment and speaker-matching entry point while
+retaining only the existing Profile-deletion and proven-fresh-install cleanup
+paths for a dormant pre-release Keychain template.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0732-PRIVACY-001 | P0 release scope | Voiceprint/COPPA | Do not ship voiceprint enrollment or speaker matching in App Store 1.0 without a qualified written treatment; preserve deletion of any dormant pre-release template. | Automated pass; exact-artifact acceptance pending | Source contracts, complete regression gate, exact-HEAD iPhone and iPad simulator UI checks, signed in-place iPhone acceptance without deleting app data, and retained lifecycle cleanup tests |
+
+### 2026-07-24 v0.7.32 notes
+
+- Production composition no longer constructs an enrollment service or injects
+  a speaker verifier into Read Practice.
+- Parent Profile cards do not expose voice setup while the release policy is
+  disabled, and view-model guards fail closed if legacy code attempts to
+  navigate or begin enrollment.
+- Microphone permission copy now covers spoken Read Practice only.
+- Existing templates are not silently erased during update. The production
+  repository remains composed only so Profile deletion and proven-fresh-install
+  bootstrap can perform the previously verified scoped cleanup.
+- This is a release-scope fallback, not a legal conclusion. Issue #76 remains
+  open for qualified treatment of transient Read speech, Profile/photo data,
+  persistent identifiers, and optional CloudKit Family Sync.
+
+## v0.7.30 — 2026-07-23
+
+Target release: `v0.7.30`
+
+Branch: `codex/voiceprint-lifecycle-proof-v0.7.30`
+
+### Voiceprint Keychain lifecycle proof
+
+- Added signed physical-device tests that exercise the production
+  `KeychainDeviceVoiceprintRepository` through Apple's Security framework.
+- The tests use UUID-scoped test services, not the production voiceprint
+  service, and require no uninstall or app-data reset.
+- Coverage proves retained items survive repository recreation until the
+  scoped fresh-install reset, which removes every item in that service while
+  preserving a neighboring service.
+- Coverage also verifies `WhenUnlockedThisDeviceOnly`, non-synchronizing
+  attributes and idempotent empty-service reset.
+- Added a durable lifecycle record and aligned the internal privacy and
+  submission-pack wording. Deployment of matching Pawgoo Privacy/Support copy
+  remains #54.
+
+## v0.7.27 — 2026-07-21
+
+Target release: `v0.7.27`
+
+Branch: `codex/appstore-decisions-v0.7.27`
+
+Overall state: the App Store 1.0 distribution contract is explicit and
+consistent across the release-decision record, submission pack, privacy plan,
+review notes, and exact-RC checklist.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0722-RELEASE-001 | P1 decision | App Store | Use Made for Kids 6–8, Free/no IAP or ads, United States-only availability, and manual release everywhere. | Owner-approved; source contract implemented | Exact source tests, generated-project identity, PR merge, and later #65 App Store Connect entry against the accepted RC. |
+
+### 2026-07-21 v0.7.27 notes
+
+- The owner deliberately selected Made for Kids with the primary 6–8 age band;
+  the post-approval lock-in is recorded as irreversible.
+- The first public release is Free, has no IAP/subscription/advertising/paid
+  unlock, and is available only in the United States without pre-order.
+- The approved release option is manual. App Review approval must leave the
+  version in Pending Developer Release until #26 authorizes the final release.
+- The account-level EU DSA trader declaration remains #23 scope even though no
+  EU storefront is included in 1.0.
+- This documentation and release-identity batch does not enter App Store
+  Connect values, submit a build, or change runtime/data behavior.
+
 ## v0.7.19 — 2026-07-21
 
 Target release: `v0.7.19`
@@ -1339,3 +1419,32 @@ closed without publishing a partial child, Parent, or notification snapshot.
 - The release keeps the existing PawGoo bundle identity, CloudKit container,
   and in-place data contracts. Simulator and signed-device evidence remains
   exact-HEAD and is recorded separately from source tests.
+
+## v0.7.28 — 2026-07-24
+
+Target release: `v0.7.28`
+
+Branch: `codex/camera-ocr-editor-v0.7.15`
+
+Build: `2026072402`
+
+Overall state: Issue #96 adds an on-device crop-and-mask editor between camera
+capture and OCR review while retaining v0.7.21 atomic Family Sync visibility
+and all existing parent-approved word-pool rules.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0720-UX-001 | P1 improvement | Parent/Camera OCR | Let a parent crop a photographed word sheet and cover unrelated content before OCR, with undo, reset, retake, cancel, and an explicit Use Photo handoff. | Automated pass | Editor model/rendering tests, exact-HEAD iPhone and iPad simulator flows, signed LocalQA identity verification, and a data-preserving physical iPhone camera flow through OCR review |
+
+### 2026-07-24 v0.7.28 notes
+
+- The editor normalizes image orientation, preserves source resolution, and
+  applies black masks only inside the selected crop before OCR.
+- Camera and edited images remain device-local and are not persisted. Cancel
+  leaves the word pool unchanged; OCR results still require parent review and
+  explicit addition.
+- Crop and Mask use white text when inactive against the editor's black
+  background, while the active tool retains a white segment with black text.
+- The physical iPad and Apple Pencil lane is waived for this merge only by the
+  owner; iPad simulator coverage remains required. One physical iPhone camera
+  flow is still a mandatory release gate.

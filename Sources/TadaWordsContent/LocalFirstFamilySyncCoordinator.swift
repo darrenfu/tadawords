@@ -191,6 +191,54 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
         await synchronize(trigger: .foregroundActivation)
     }
 
+    public func retryProfileErasures() async -> FamilySyncStatus {
+        guard let profileDeletionRepository else {
+            return await synchronize(trigger: .parentSyncNow)
+        }
+        if reconciliationInProgress {
+            _ = await settledStatusAfterCurrentReconciliation()
+        }
+
+        let now = clock.now
+        do {
+            for lifecycle
+                in try await profileDeletionRepository.erasureLifecycles()
+            where lifecycle.state == .needsAttention {
+                switch try await journalRepository
+                    .profileDeletionDeliveryEvidence(for: lifecycle.profileID)
+                {
+                case .pending(let evidence):
+                    // A Parent-initiated retry is the authority to bypass the
+                    // durable backoff for this exact tombstone. Keep its
+                    // identity and retry history; never requeue child data.
+                    try await journalRepository.requeueProfileDeletion(
+                        for: lifecycle.profileID,
+                        errorCategory:
+                            lifecycle.errorCategory
+                            ?? evidence.errorCategory
+                            ?? .unknown,
+                        at: now
+                    )
+                case .acknowledged:
+                    // Lifecycle repair below either completes route-resolved
+                    // evidence or safely requeues a legacy unresolved ACK.
+                    continue
+                case .notQueued:
+                    // Reconciliation recreates the canonical tombstone from
+                    // the deletion repository. Never synthesize it here.
+                    continue
+                }
+            }
+        } catch {
+            currentStatus = .failed(
+                message: Self.privacySafeMessage(for: error),
+                pendingCount: await durablePendingCount()
+            )
+            return currentStatus
+        }
+        return await synchronize(trigger: .parentSyncNow)
+    }
+
     public func synchronize(trigger: FamilySyncTrigger) async -> FamilySyncStatus {
         _ = trigger
         guard !reconciliationInProgress else {

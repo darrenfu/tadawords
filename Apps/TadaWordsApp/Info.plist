@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.7.21</string>
+	<string>0.7.34</string>
 	<key>CFBundleVersion</key>
-	<string>2026072121</string>
+	<string>2026072408</string>
 	<key>CKSharingSupported</key>
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
@@ -29,7 +29,7 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>Tada Words uses Face ID to protect sensitive parent actions such as sharing or deleting a profile.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>A parent enables microphone access for spoken Read Practice and voice setup. Tada Words analyzes short recordings on device; raw audio is not saved or uploaded.</string>
+	<string>A parent enables microphone access for spoken Read Practice. Tada Words analyzes short recordings on device; raw audio is not saved or uploaded.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Tada Words lets a parent choose a profile photo or a word-sheet photo for on-device text recognition.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
