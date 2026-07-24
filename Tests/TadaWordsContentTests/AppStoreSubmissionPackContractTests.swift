@@ -132,16 +132,16 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.27</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072401</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.29</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072403</string>"))
         }
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.27"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072401"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.29"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072403"))
 
         for unresolvedDecision in [
             "Price | **UNRESOLVED — #24**",
@@ -153,6 +153,30 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 "Resolved #24 decision regressed: \(unresolvedDecision)"
             )
         }
+    }
+
+    func testQAArtifactsContainsNoChildDirectories() throws {
+        let artifacts = repositoryRoot.appendingPathComponent("QAArtifacts")
+        let children = try FileManager.default.contentsOfDirectory(
+            at: artifacts,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+        let directories = try children.filter {
+            try $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+        }
+
+        XCTAssertEqual(
+            Set(children.map(\.lastPathComponent)),
+            [
+                "DESIGN_AUDIT_2026-07-12.md",
+                "FULL_FEATURE_AUDIT_2026-07-12.md",
+            ]
+        )
+        XCTAssertTrue(
+            directories.isEmpty,
+            "QAArtifacts child directories must stay out of source control: \(directories)"
+        )
     }
 
     private var repositoryRoot: URL {

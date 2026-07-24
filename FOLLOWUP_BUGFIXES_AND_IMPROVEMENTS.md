@@ -264,10 +264,9 @@ Overall state: production fix, automated regression, signed iPhone and iPad inst
 - The same iPad passes the LocalQA critical XCUITest target 7/7: OCR Add All,
   Delete All/restore, explicit Preset approval, sequential deletes/sort, Photo
   picker/sort, and Read/Write completion dismissal.
-- The final [iPhone Moonpetal](QAArtifacts/v0.3.1-2026-07-14/iPhone17ProMax-moonpetal-clearance.jpg)
-  and [iPad Dino](QAArtifacts/v0.3.1-2026-07-14/iPadPro13-dino-clearance.jpg)
-  captures keep all lower story art visibly clear of the foreground Quest cards
-  after waiting through the ambient motion cycle.
+- Historical iPhone Moonpetal and iPad Dino captures confirmed that lower story
+  art remained clear of foreground Quest cards after the ambient motion cycle.
+  The temporary screenshot files were removed in the v0.7.29 repository cleanup.
 - Fresh LocalQA simulator builds pass for iPhone 17 Pro Max and iPad Pro 13-inch
   (M5). Signed `Tada Words QA` v0.3.1 (`2026071402`) was installed and launched on
   the connected iPhone.
@@ -1366,3 +1365,25 @@ closed without publishing a partial child, Parent, or notification snapshot.
 - The release keeps the existing PawGoo bundle identity, CloudKit container,
   and in-place data contracts. Simulator and signed-device evidence remains
   exact-HEAD and is recorded separately from source tests.
+
+## v0.7.29 — 2026-07-24
+
+Target release: `v0.7.29`
+
+Branch: `codex/qa-artifacts-cleanup-v0.7.29`
+
+Build: `2026072403`
+
+Overall state: Issue #114 removes obsolete child directories from
+`QAArtifacts/` while preserving every root-level audit and diagnostic file.
+No app behavior, stored child data, or runtime contract changes.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0729-REPO-001 | Repository cleanup | Release | Remove every tracked child directory below `QAArtifacts/`, including screenshot collections, `.xcresult` packages, and demo-media folders; keep root-level files and eliminate broken local references. | Implemented | Exact tree inventory, broken-reference scan, source checks, and release-policy gates for the reserved version/build |
+
+### 2026-07-24 v0.7.29 notes
+
+- Removed all five child directories tracked on the batch base.
+- Preserved the root-level design audit and full feature audit.
+- Reworded historical evidence notes so they no longer link to deleted images.
