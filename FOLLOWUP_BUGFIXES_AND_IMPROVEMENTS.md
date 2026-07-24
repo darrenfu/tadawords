@@ -1306,17 +1306,51 @@ pass; exact-HEAD simulator and physical-device acceptance remain separate.
 - Focused model, content-repository, and layout suites pass. Full source,
   automation, simulator, and signed-device gates are recorded separately.
 
+## v0.7.21 — 2026-07-21
+
+Target release: `v0.7.21`
+
+Branch: `codex/atomic-profile-visibility-v0.7.21`
+
+Build: `2026072121`
+
+Overall state: an accepted remote Family Sync Profile batch is visible as one
+committed generation across every canonical repository and compound UI reader.
+An interrupted apply retains the exact accepted payload for replay and fails
+closed without publishing a partial child, Parent, or notification snapshot.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0721-SYNC-001 | P0 bug | Family Sync/apply | Prevent any accepted cross-repository Profile generation from appearing half new and half old; preserve exact replay and deletion finality. | Automated pass | Failure injection after every apply boundary, exact receipt/replay assertions, complete source gate, exact-HEAD simulator Family Sync matrix, and signed iPhone plus iPad smoke without deleting app data. |
+
+### 2026-07-21 v0.7.21 notes
+
+- One process-wide committed-generation gate now serializes accepted Profile
+  applies with canonical repository reads and compound child, Parent, and
+  notification snapshots.
+- A partial accepted apply marks the affected Profile recovery-required. Public
+  reads fail closed until the durable transaction replays its exact bytes;
+  coordinator reconciliation performs replay before fingerprint or winner
+  calculation.
+- Apply receipts remain absent during interruption, appear once after the full
+  commit, and do not change during a no-op recovery pass.
+- Remote Profile deletion replays through tombstone, local-data erasure, and
+  durable commit without allowing stale Profile data to reappear.
+- The release keeps the existing PawGoo bundle identity, CloudKit container,
+  and in-place data contracts. Simulator and signed-device evidence remains
+  exact-HEAD and is recorded separately from source tests.
+
 ## v0.7.23 — 2026-07-21
 
 Target release: `v0.7.23`
 
 Branch: `codex/camera-ocr-editor-v0.7.15`
 
-Build: `2026072123`
+Build: `2026072302`
 
 Overall state: Issue #96 adds an on-device crop-and-mask editor between camera
-capture and OCR review while retaining the merged v0.7.17 Family Sync status
-repair and all existing parent-approved word-pool rules.
+capture and OCR review while retaining v0.7.21 atomic Family Sync visibility
+and all existing parent-approved word-pool rules.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|

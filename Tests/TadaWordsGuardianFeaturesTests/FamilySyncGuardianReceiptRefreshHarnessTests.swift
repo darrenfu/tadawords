@@ -7,6 +7,65 @@ import XCTest
 
 @MainActor
 final class FamilySyncGuardianReceiptRefreshHarnessTests: XCTestCase {
+    func testRecoveryRequiredKeepsLastCommittedParentGenerationVisible()
+        async throws
+    {
+        let now = Date(timeIntervalSince1970: 2_177_050_000)
+        let oldProfile = KidProfile(
+            displayName: "Committed Old",
+            avatar: .cartoonAnimal(assetID: "hare"),
+            selectedWorld: .moonpetalKingdom,
+            createdAt: now.addingTimeInterval(-100)
+        )
+        let remoteProfile = KidProfile(
+            id: oldProfile.id,
+            displayName: "Remote Complete",
+            avatar: .cartoonAnimal(assetID: "fox"),
+            selectedWorld: .pawsAndPines,
+            starterWorld: oldProfile.starterWorld,
+            createdAt: oldProfile.createdAt,
+            updatedAt: now
+        )
+        let profiles = InMemoryKidProfileRepository()
+        try await profiles.save(oldProfile)
+        let gate = ProfileScopedMutationGate()
+        let store = RepositoryGuardianFamilyStore(
+            profiles: [oldProfile],
+            selectedProfileID: oldProfile.id,
+            profileRepository: profiles,
+            wordPoolRepository: InMemoryWordPoolRepository(),
+            practiceSettingsRepository: InMemoryPracticeSettingsRepository(),
+            dailyQuestRepository: InMemoryDailyQuestRepository(),
+            mutationGate: gate,
+            clock: GuardianReceiptClock(now: now),
+            timeZone: .gmt
+        )
+        let model = GuardianDashboardViewModel(
+            store: store,
+            audioPromptService: GuardianReceiptSilentAudioPromptService()
+        )
+        await model.refreshAfterExternalSyncAndWait()
+        XCTAssertEqual(model.snapshot?.profile, oldProfile)
+
+        try await profiles.save(remoteProfile)
+        let transactionID = UUID()
+        await gate.requireRecovery(
+            oldProfile.id,
+            transactionID: transactionID
+        )
+        await model.refreshAfterExternalSyncAndWait()
+
+        XCTAssertEqual(model.snapshot?.profile, oldProfile)
+
+        await gate.clearRecovery(
+            oldProfile.id,
+            transactionID: transactionID
+        )
+        await model.refreshAfterExternalSyncAndWait()
+
+        XCTAssertEqual(model.snapshot?.profile, remoteProfile)
+    }
+
     func testCommittedReceiptRefreshesProfileWordsSettingsProgressAndRewards()
         async throws
     {

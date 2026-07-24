@@ -21,7 +21,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.7.23` (build `2026072123`) retains the merged Family Sync and compact Profile-grid behavior plus the twelve illustrated Chinese zodiac avatars from v0.7.20, and adds a local crop-and-mask editor before camera OCR. Existing Profile data and legacy starter IDs remain readable; attempts, completion, rewards, PawGoo app identity, CloudKit identifiers, and LocalQA data contracts remain unchanged. Captured and edited word-sheet photos remain on device and are not persisted. Exact-HEAD simulator and signed-device acceptance remain separate gates. The v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md) remains internal until it is regenerated from an accepted signed release. See the [zodiac asset provenance](DesignAssets/ZodiacAvatars/README.md), [shipping permission inventory](Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
+> **Project status:** Version `0.7.23` (build `2026072302`) retains v0.7.21's atomic visibility for every accepted remote Profile batch across Profile, Word Pool, settings, attempts, corrections, Daily Quest, and deletion repositories. It also adds an on-device crop-and-mask editor before camera OCR. Public reads still expose only complete committed generations; existing Profile data, legacy starter IDs, attempts, rewards, PawGoo identity, CloudKit identifiers, and LocalQA data contracts remain unchanged. Captured and edited word-sheet photos remain on device and are not persisted. Exact-HEAD simulator and signed-device acceptance remain separate gates. The v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md) remains internal until it is regenerated from an accepted signed release. See the [zodiac asset provenance](DesignAssets/ZodiacAvatars/README.md), [shipping permission inventory](Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md), [acceptance checklist](MVP_ACCEPTANCE.md), and [sync ADR](Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -149,7 +149,7 @@ build, commit, and bundle ID:
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.7.23 2026072123 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.7.23 2026072302 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 For the normal PawGoo Development artifact, use the stricter no-install gate:
@@ -157,7 +157,7 @@ For the normal PawGoo Development artifact, use the stricter no-install gate:
 ```sh
 ./Scripts/verify-pawgoo-development-app.py \
   '/path/to/Tada Words.app' \
-  0.7.23 2026072123 "$(git rev-parse HEAD)" \
+  0.7.23 2026072302 "$(git rev-parse HEAD)" \
   --device-udid 'APPROVED_IPHONE_HARDWARE_UDID' \
   --device-udid 'APPROVED_IPAD_HARDWARE_UDID'
 ```
@@ -207,8 +207,8 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Version and build | v0.7.23 (`2026072123`) in source Plists and generated project settings |
-| Swift tests | v0.7.23 focused source and simulator gates cover the camera OCR editor; exact-HEAD full regression and signed-artifact evidence are recorded in PR #99 |
+| Version and build | v0.7.23 (`2026072302`) in source Plists and generated project settings |
+| Swift tests | v0.7.23 preserves v0.7.21 accepted-batch interruption, replay, committed-read, child/Parent refresh, and notification fail-closed coverage; focused camera OCR editor and exact-HEAD full regression evidence are recorded in PR #99 |
 | Family Sync physical delta | Normal PawGoo v0.7.18 installed in place on the approved iPhone and iPad; an iPhone-created test Profile converged automatically to the untouched iPad without opening Family Sync, with one matching record and four Profiles total on each side |
 | Family Sync simulator E2E | Merged v0.7.2: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5 |
 | Critical XCUITest flows | Merged v0.7.2: full critical matrix passed on iPad; the single iPhone Photos-dismiss timing case passed 2/2 in isolated fresh reruns after the combined run, and every other flow passed |

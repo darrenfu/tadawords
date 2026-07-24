@@ -61,33 +61,41 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     }
 
     public func familySnapshot() async throws -> GuardianFamilySnapshot {
-        let profiles = try await profileRepository.profiles()
-        // External receipt refreshes cancel the superseded task. Do not let a
-        // repository that ignores cancellation resume later and mutate the
-        // shared selection behind the newer Parent snapshot.
-        try Task.checkCancellation()
-        guard !profiles.isEmpty else {
+        try await withAllProfilesCommittedRead(mutationGate) {
+            let profiles = try await self.profileRepository.profiles()
+            // External receipt refreshes cancel the superseded task. Do not
+            // let a repository that ignores cancellation resume later and
+            // mutate selection behind the newer Parent snapshot.
+            try Task.checkCancellation()
+            guard !profiles.isEmpty else {
+                return GuardianFamilySnapshot(
+                    profiles: [],
+                    selectedProfileID: nil
+                )
+            }
+            let selectedProfile = try self.resolveSelectedProfile(in: profiles)
             return GuardianFamilySnapshot(
-                profiles: [],
-                selectedProfileID: nil
+                profiles: profiles,
+                selectedProfileID: selectedProfile.id
             )
         }
-        let selectedProfile = try resolveSelectedProfile(in: profiles)
-        return GuardianFamilySnapshot(
-            profiles: profiles,
-            selectedProfileID: selectedProfile.id
-        )
     }
 
     public func selectProfile(
         id: ProfileID
     ) async throws -> GuardianDashboardSnapshot {
-        guard let profile = try await profileRepository.profile(id: id) else {
-            throw GuardianFamilyStoreError.profileNotFound(id)
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: id,
+            allowingTerminal: true
+        ) {
+            guard let profile = try await self.profileRepository.profile(id: id) else {
+                throw GuardianFamilyStoreError.profileNotFound(id)
+            }
+            try Task.checkCancellation()
+            self.selectedProfileID = id
+            return try await self.makeWordStore(for: profile).dashboardSnapshot()
         }
-        try Task.checkCancellation()
-        selectedProfileID = id
-        return try await makeWordStore(for: profile).dashboardSnapshot()
     }
 
     public func createProfile(
@@ -167,15 +175,22 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     }
 
     public func dashboardSnapshot() async throws -> GuardianDashboardSnapshot {
-        let profile = try await selectedProfile()
-        return try await makeWordStore(for: profile).dashboardSnapshot()
+        try await withSelectedProfileCommittedRead { profile in
+            try await self.makeWordStore(for: profile).dashboardSnapshot()
+        }
     }
 
     public func dashboardSnapshot(
         for profileID: ProfileID
     ) async throws -> GuardianDashboardSnapshot {
-        let profile = try await requiredProfile(id: profileID)
-        return try await makeWordStore(for: profile).dashboardSnapshot()
+        try await withProfileScopedMutationLease(
+            mutationGate,
+            for: profileID,
+            allowingTerminal: true
+        ) {
+            let profile = try await self.requiredProfile(id: profileID)
+            return try await self.makeWordStore(for: profile).dashboardSnapshot()
+        }
     }
 
     public func updateVoiceprintStatus(
@@ -296,8 +311,28 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     public func report(
         for period: GuardianReportPeriod
     ) async throws -> GuardianLearningReport {
-        let profile = try await selectedProfile()
-        return try await makeWordStore(for: profile).report(for: period)
+        try await withSelectedProfileCommittedRead { profile in
+            try await self.makeWordStore(for: profile).report(for: period)
+        }
+    }
+
+    private func withSelectedProfileCommittedRead<T: Sendable>(
+        _ operation: @Sendable (KidProfile) async throws -> T
+    ) async throws -> T {
+        if let selectedProfileID {
+            return try await withProfileScopedMutationLease(
+                mutationGate,
+                for: selectedProfileID,
+                allowingTerminal: true
+            ) {
+                let profile = try await self.selectedProfile()
+                return try await operation(profile)
+            }
+        }
+        return try await withAllProfilesCommittedRead(mutationGate) {
+            let profile = try await self.selectedProfile()
+            return try await operation(profile)
+        }
     }
 
     public func correctAttempt(

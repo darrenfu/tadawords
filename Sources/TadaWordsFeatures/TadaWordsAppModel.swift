@@ -36,6 +36,7 @@ final class TadaWordsAppModel: ObservableObject {
     private let childSessionRepository: (any ChildSessionRepository)?
     private let childProfileCreator: (any ChildProfileCreating)?
     private let profileRepository: (any KidProfileRepository)?
+    private let profileMutationGate: ProfileScopedMutationGate?
     private let onLearningDataChanged: @Sendable () async -> Void
 
     private var activeQuest: ActiveQuest?
@@ -75,6 +76,7 @@ final class TadaWordsAppModel: ObservableObject {
         childSessionRepository: (any ChildSessionRepository)? = nil,
         childProfileCreator: (any ChildProfileCreating)? = nil,
         profileRepository: (any KidProfileRepository)? = nil,
+        profileMutationGate: ProfileScopedMutationGate? = nil,
         progressReducer: WordProgressReducer = WordProgressReducer(),
         onLearningDataChanged: @escaping @Sendable () async -> Void = {},
         questTimerFactory: @escaping (TimeInterval) -> QuestTimerModel = {
@@ -94,6 +96,7 @@ final class TadaWordsAppModel: ObservableObject {
         self.childSessionRepository = childSessionRepository
         self.childProfileCreator = childProfileCreator
         self.profileRepository = profileRepository
+        self.profileMutationGate = profileMutationGate
         self.progressReducer = progressReducer
         self.onLearningDataChanged = onLearningDataChanged
         self.questTimerFactory = questTimerFactory
@@ -578,6 +581,17 @@ final class TadaWordsAppModel: ObservableObject {
     /// An in-flight quest keeps its session, timer, and current response. The
     /// only forced navigation is a remote deletion of the active Profile.
     func refreshAfterExternalSyncAndWait() async {
+        do {
+            try await withAllProfilesCommittedRead(profileMutationGate) {
+                await self.refreshAfterExternalSyncHoldingCommittedLease()
+            }
+        } catch {
+            // Keep the last fully committed child presentation visible while
+            // exact accepted bytes are waiting for deterministic replay.
+        }
+    }
+
+    private func refreshAfterExternalSyncHoldingCommittedLease() async {
         guard let profileRepository else { return }
         externalSyncRefreshGeneration &+= 1
         let refreshGeneration = externalSyncRefreshGeneration

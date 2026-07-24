@@ -1,6 +1,20 @@
 import Foundation
 import TadaWordsDomain
 
+public enum FamilySyncApplyBoundary: String, CaseIterable, Sendable {
+    case durableBegin
+    case profile
+    case wordPool
+    case promptAliases
+    case practiceSettings
+    case attempts
+    case corrections
+    case dailyQuest
+    case deletionTombstone
+    case deletionProfileData
+    case deletionCommitted
+}
+
 public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
     private let profileRepository: any KidProfileRepository
     private let wordPoolRepository: LocalJSONWordPoolRepository
@@ -14,6 +28,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
     private let excludedProfileIDs: @Sendable () async throws -> Set<ProfileID>
     private let deviceID: String
     private let clock: any AppClock
+    private let onApplyBoundary: @Sendable (FamilySyncApplyBoundary) async throws -> Void
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
@@ -34,7 +49,11 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
             []
         },
         deviceID: String,
-        clock: any AppClock = SystemAppClock()
+        clock: any AppClock = SystemAppClock(),
+        onApplyBoundary:
+            @escaping @Sendable (FamilySyncApplyBoundary) async throws -> Void = {
+                _ in
+            }
     ) {
         self.profileRepository = profileRepository
         self.wordPoolRepository = wordPoolRepository
@@ -57,6 +76,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         self.excludedProfileIDs = excludedProfileIDs
         self.deviceID = deviceID
         self.clock = clock
+        self.onApplyBoundary = onApplyBoundary
         encoder = InspectableSnapshotJSONCodec.makeEncoder()
         decoder = InspectableSnapshotJSONCodec.makeDecoder()
     }
@@ -115,7 +135,8 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
 
         try await mutationGate.acquire(
             profileID,
-            allowingTerminal: true
+            allowingTerminal: true,
+            allowingRecovery: true
         )
         do {
             let applied = try await ProfileScopedMutationLeaseContext.$profileID
@@ -146,6 +167,10 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         {
             try await replay(transaction)
         }
+    }
+
+    public func recoverPendingApplies() async throws {
+        try await replayPendingApplyTransactions()
     }
 
     public func records(
@@ -356,7 +381,8 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         }
         try await mutationGate.acquire(
             profileID,
-            allowingTerminal: true
+            allowingTerminal: true,
+            allowingRecovery: true
         )
         do {
             try await ProfileScopedMutationLeaseContext.$profileID.withValue(
@@ -387,8 +413,11 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
                     deletedAt: newest.updatedAt
                 )
             try await tombstoneRepository.save(tombstone)
+            try await onApplyBoundary(.deletionTombstone)
             try await deleteProfileData(profileID)
+            try await onApplyBoundary(.deletionProfileData)
             try await tombstoneRepository.markCommitted(for: profileID)
+            try await onApplyBoundary(.deletionCommitted)
             return
         }
 
@@ -399,7 +428,8 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
             return
         }
 
-        for record in records where record.kind == .profile {
+        let profileRecords = records.filter { $0.kind == .profile }
+        for record in profileRecords {
             let incoming = try decode(FamilySyncProfilePayload.self, from: record)
             let localVoiceprintStatus =
                 try await profileRepository.profile(
@@ -411,13 +441,21 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
                 )
             )
         }
-        for record in records where record.kind == .wordPoolEntry {
+        if !profileRecords.isEmpty {
+            try await onApplyBoundary(.profile)
+        }
+        let wordRecords = records.filter { $0.kind == .wordPoolEntry }
+        for record in wordRecords {
             try await wordPoolRepository.mergeSynced(
                 try decode(WordPoolEntry.self, from: record),
                 logicalRevision: record.logicalRevision
             )
         }
+        if !wordRecords.isEmpty {
+            try await onApplyBoundary(.wordPool)
+        }
         try await registerWordPromptAliases(for: profileID)
+        try await onApplyBoundary(.promptAliases)
         let settingsRecords =
             records
             .filter { $0.kind == .practiceSettings }
@@ -447,12 +485,22 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
                 try payload.applying(to: current)
             )
         }
-        for record in records where record.kind == .attempt {
+        if !settingsRecords.isEmpty {
+            try await onApplyBoundary(.practiceSettings)
+        }
+        let attemptRecords = records.filter { $0.kind == .attempt }
+        for record in attemptRecords {
             try await learningRepository.append(
                 try decode(AttemptEvent.self, from: record)
             )
         }
-        for record in records where record.kind == .attemptCorrection {
+        if !attemptRecords.isEmpty {
+            try await onApplyBoundary(.attempts)
+        }
+        let correctionRecords = records.filter {
+            $0.kind == .attemptCorrection
+        }
+        for record in correctionRecords {
             let correction = try decode(
                 AttemptCorrectionEvent.self,
                 from: record
@@ -468,6 +516,9 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
             } else {
                 try await learningRepository.append(correction)
             }
+        }
+        if !correctionRecords.isEmpty {
+            try await onApplyBoundary(.corrections)
         }
         // `WordProgress` is a rebuildable projection of immutable attempts and
         // corrections. Legacy remote snapshots are validated but never become
@@ -495,6 +546,7 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
             } else {
                 _ = try await dailyQuestRepository.mergeCanonical(dailyBatch)
             }
+            try await onApplyBoundary(.dailyQuest)
         }
     }
 
@@ -516,20 +568,37 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
             records: records,
             at: clock.now
         ) {
-        case .alreadyCommitted:
+        case .alreadyCommitted(let receipt):
+            await mutationGate?.clearRecovery(
+                profileID,
+                transactionID: receipt.transactionID
+            )
             return
         case .pending(let transaction):
             // Use the durable copy. If a previous attempt failed after some
             // repository writes, every mutation below is idempotent and the
             // exact accepted bytes remain the recovery authority.
-            try await applyValidated(
-                transaction.records,
-                for: transaction.profileID
-            )
-            _ = try await applyTransactionRepository.markCommitted(
-                transactionID: transaction.id,
-                at: clock.now
-            )
+            do {
+                try await onApplyBoundary(.durableBegin)
+                try await applyValidated(
+                    transaction.records,
+                    for: transaction.profileID
+                )
+                _ = try await applyTransactionRepository.markCommitted(
+                    transactionID: transaction.id,
+                    at: clock.now
+                )
+                await mutationGate?.clearRecovery(
+                    profileID,
+                    transactionID: transaction.id
+                )
+            } catch {
+                await mutationGate?.requireRecovery(
+                    profileID,
+                    transactionID: transaction.id
+                )
+                throw error
+            }
         }
     }
 
@@ -537,18 +606,30 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         _ transaction: FamilySyncPendingApplyTransaction
     ) async throws {
         let operation = {
-            try await self.validate(
-                transaction.records,
-                for: transaction.profileID
-            )
-            try await self.applyValidated(
-                transaction.records,
-                for: transaction.profileID
-            )
-            _ = try await self.applyTransactionRepository?.markCommitted(
-                transactionID: transaction.id,
-                at: self.clock.now
-            )
+            do {
+                try await self.validate(
+                    transaction.records,
+                    for: transaction.profileID
+                )
+                try await self.applyValidated(
+                    transaction.records,
+                    for: transaction.profileID
+                )
+                _ = try await self.applyTransactionRepository?.markCommitted(
+                    transactionID: transaction.id,
+                    at: self.clock.now
+                )
+                await self.mutationGate?.clearRecovery(
+                    transaction.profileID,
+                    transactionID: transaction.id
+                )
+            } catch {
+                await self.mutationGate?.requireRecovery(
+                    transaction.profileID,
+                    transactionID: transaction.id
+                )
+                throw error
+            }
         }
         guard let mutationGate else {
             try await operation()
@@ -557,7 +638,8 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
 
         try await mutationGate.acquire(
             transaction.profileID,
-            allowingTerminal: true
+            allowingTerminal: true,
+            allowingRecovery: true
         )
         do {
             try await ProfileScopedMutationLeaseContext.$profileID
@@ -578,21 +660,24 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         _ records: [FamilySyncRecord],
         for profileID: ProfileID
     ) async throws {
-        let persistedAttemptIDs = Set(
-            try await learningRepository.attempts(
-                for: profileID,
-                wordPromptID: nil
-            ).map(\.id)
-        )
-        var allowedAttemptIDs = persistedAttemptIDs
+        var allowedAttemptIDs = Set<AttemptID>()
         var attemptIDsOwnedByAnotherProfile = Set<AttemptID>()
-        for profile in try await profileRepository.profiles() where profile.id != profileID {
-            attemptIDsOwnedByAnotherProfile.formUnion(
+        if records.contains(where: { $0.kind == .attemptCorrection }) {
+            allowedAttemptIDs.formUnion(
                 try await learningRepository.attempts(
-                    for: profile.id,
+                    for: profileID,
                     wordPromptID: nil
                 ).map(\.id)
             )
+            for profile in try await profileRepository.profiles()
+            where profile.id != profileID {
+                attemptIDsOwnedByAnotherProfile.formUnion(
+                    try await learningRepository.attempts(
+                        for: profile.id,
+                        wordPromptID: nil
+                    ).map(\.id)
+                )
+            }
         }
 
         for record in records {

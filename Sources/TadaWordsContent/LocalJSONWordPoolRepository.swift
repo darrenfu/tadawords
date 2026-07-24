@@ -82,11 +82,17 @@ public actor LocalJSONWordPoolRepository: WordPoolRepository {
         learningMode: LearningMode,
         includingInactive: Bool = false
     ) async throws -> [WordPoolEntry] {
-        try loadedStorage().entries(
+        try await withProfileScopedMutationLease(
+            mutationGate,
             for: profileID,
-            learningMode: learningMode,
-            includingInactive: includingInactive
-        )
+            allowingTerminal: true
+        ) {
+            try loadedStorage().entries(
+                for: profileID,
+                learningMode: learningMode,
+                includingInactive: includingInactive
+            )
+        }
     }
 
     public func setActive(
@@ -170,7 +176,10 @@ public actor LocalJSONWordPoolRepository: WordPoolRepository {
         guard let mutationGate else { return try operation() }
         let ids =
             profileIDs
-            .filter { ProfileScopedMutationLeaseContext.profileID != $0 }
+            .filter {
+                !ProfileScopedMutationLeaseContext.holdsAllProfiles
+                    && ProfileScopedMutationLeaseContext.profileID != $0
+            }
             .sorted { $0.description < $1.description }
         var acquiredIDs: [ProfileID] = []
         do {

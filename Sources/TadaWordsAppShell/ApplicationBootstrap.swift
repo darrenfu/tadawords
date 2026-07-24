@@ -95,6 +95,7 @@ struct ProductionApplicationEnvironment: Sendable {
     let familySyncJournalRepository: LocalJSONFamilySyncJournalRepository
     let familySyncApplyTransactionRepository: LocalJSONFamilySyncApplyTransactionRepository
     let tombstoneRepository: LocalJSONProfileDeletionTombstoneRepository
+    let profileMutationGate: ProfileScopedMutationGate
     let notificationReconciler: ProductionLearningNotificationReconciler?
     let firstRunOnboardingRepository: LocalFirstRunOnboardingRepository
     let firstRunDiscoveryAdmissionGate: FirstRunDiscoveryAdmissionGate
@@ -424,6 +425,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
                 learningRecordRepository: learningRecordRepository,
                 dailyQuestRepository: dailyQuestRepository,
                 familySyncCoordinator: familySyncCoordinator,
+                profileMutationGate: profileMutationGate,
                 clock: clock,
                 timeZone: timeZone
             )
@@ -445,6 +447,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             familySyncApplyTransactionRepository:
                 familySyncApplyTransactionRepository,
             tombstoneRepository: tombstoneRepository,
+            profileMutationGate: profileMutationGate,
             notificationReconciler: notificationReconciler,
             firstRunOnboardingRepository: firstRunOnboardingRepository,
             firstRunDiscoveryAdmissionGate:
@@ -981,6 +984,7 @@ actor ProductionLearningNotificationReconciler {
     private let learningRecordRepository: (any AttemptEventRepository & WordProgressRepository)?
     private let dailyQuestRepository: any DailyQuestRepository
     private let familySyncCoordinator: any FamilySyncCoordinating
+    private let profileMutationGate: ProfileScopedMutationGate?
     private let clock: any AppClock
     private let timeZone: TimeZone
 
@@ -995,6 +999,7 @@ actor ProductionLearningNotificationReconciler {
             (any AttemptEventRepository & WordProgressRepository)? = nil,
         dailyQuestRepository: any DailyQuestRepository,
         familySyncCoordinator: any FamilySyncCoordinating,
+        profileMutationGate: ProfileScopedMutationGate? = nil,
         clock: any AppClock,
         timeZone: TimeZone
     ) {
@@ -1006,6 +1011,7 @@ actor ProductionLearningNotificationReconciler {
         self.learningRecordRepository = learningRecordRepository
         self.dailyQuestRepository = dailyQuestRepository
         self.familySyncCoordinator = familySyncCoordinator
+        self.profileMutationGate = profileMutationGate
         self.clock = clock
         self.timeZone = timeZone
     }
@@ -1013,6 +1019,12 @@ actor ProductionLearningNotificationReconciler {
     /// Runtime refreshes never prompt. Permission is requested only from the
     /// explicit Guardian settings save path.
     func reconcileAll() async {
+        try? await withAllProfilesCommittedRead(profileMutationGate) {
+            await reconcileCommittedGeneration()
+        }
+    }
+
+    private func reconcileCommittedGeneration() async {
         let deletedProfileIDs: Set<ProfileID>
         if let profileDeletionRepository {
             // Tombstones are the durable deletion authority. Clear scheduled

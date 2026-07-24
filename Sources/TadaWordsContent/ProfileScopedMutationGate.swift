@@ -8,30 +8,66 @@ import TadaWordsDomain
 public actor ProfileScopedMutationGate {
     private var heldProfiles = Set<ProfileID>()
     private var terminalProfiles = Set<ProfileID>()
-    private var waiters: [ProfileID: [CheckedContinuation<Void, Never>]] = [:]
+    private var recoveryTransactions: [ProfileID: UUID] = [:]
+    private var holdsAllProfiles = false
+    private var waiters: [Waiter] = []
+
+    private struct Waiter {
+        let profileID: ProfileID?
+        let continuation: CheckedContinuation<Void, Never>
+    }
 
     public init() {}
 
     public func acquire(
         _ profileID: ProfileID,
-        allowingTerminal: Bool = false
+        allowingTerminal: Bool = false,
+        allowingRecovery: Bool = false
     ) async throws {
-        guard heldProfiles.contains(profileID) else {
-            guard allowingTerminal || !terminalProfiles.contains(profileID) else {
-                throw ProfileScopedMutationGateError.terminalProfile(profileID)
-            }
+        if canAcquire(profileID), waiters.isEmpty {
             heldProfiles.insert(profileID)
-            return
-        }
-        await withCheckedContinuation { continuation in
-            waiters[profileID, default: []].append(continuation)
+        } else {
+            await withCheckedContinuation { continuation in
+                waiters.append(
+                    Waiter(
+                        profileID: profileID,
+                        continuation: continuation
+                    )
+                )
+            }
         }
         guard allowingTerminal || !terminalProfiles.contains(profileID) else {
-            // Ownership was transferred directly to this waiter. Pass it on
-            // before rejecting the mutation so a terminal-aware cleanup or
-            // sync reader behind it cannot deadlock.
             release(profileID)
             throw ProfileScopedMutationGateError.terminalProfile(profileID)
+        }
+        guard allowingRecovery || recoveryTransactions[profileID] == nil else {
+            release(profileID)
+            throw ProfileScopedMutationGateError.recoveryRequired(profileID)
+        }
+    }
+
+    /// Pins a compound all-Profile read to one committed process generation.
+    /// Profile-scoped writers wait until the snapshot finishes, and the
+    /// snapshot fails closed if any accepted remote apply needs exact replay.
+    public func acquireAll(allowingRecovery: Bool = false) async throws {
+        if canAcquireAll, waiters.isEmpty {
+            holdsAllProfiles = true
+        } else {
+            await withCheckedContinuation { continuation in
+                waiters.append(
+                    Waiter(
+                        profileID: nil,
+                        continuation: continuation
+                    )
+                )
+            }
+        }
+        guard allowingRecovery || recoveryTransactions.isEmpty else {
+            let profileID = recoveryTransactions.keys.sorted {
+                $0.description < $1.description
+            }[0]
+            releaseAll()
+            throw ProfileScopedMutationGateError.recoveryRequired(profileID)
         }
     }
 
@@ -47,31 +83,70 @@ public actor ProfileScopedMutationGate {
         terminalProfiles.contains(profileID)
     }
 
+    /// Closes ordinary reads and local writes after a partial accepted apply.
+    /// The durable transaction repository remains the restart authority; this
+    /// process-local state only prevents exposing its incomplete generation.
+    public func requireRecovery(
+        _ profileID: ProfileID,
+        transactionID: UUID
+    ) {
+        recoveryTransactions[profileID] = transactionID
+    }
+
+    public func clearRecovery(
+        _ profileID: ProfileID,
+        transactionID: UUID
+    ) {
+        guard recoveryTransactions[profileID] == transactionID else { return }
+        recoveryTransactions.removeValue(forKey: profileID)
+    }
+
+    public func recoveryTransactionID(for profileID: ProfileID) -> UUID? {
+        recoveryTransactions[profileID]
+    }
+
     public func release(_ profileID: ProfileID) {
-        guard var profileWaiters = waiters[profileID], !profileWaiters.isEmpty else {
-            heldProfiles.remove(profileID)
-            waiters.removeValue(forKey: profileID)
-            return
-        }
-        let next = profileWaiters.removeFirst()
-        if profileWaiters.isEmpty {
-            waiters.removeValue(forKey: profileID)
+        heldProfiles.remove(profileID)
+        resumeNextWaiterIfPossible()
+    }
+
+    public func releaseAll() {
+        holdsAllProfiles = false
+        resumeNextWaiterIfPossible()
+    }
+
+    private var canAcquireAll: Bool {
+        !holdsAllProfiles && heldProfiles.isEmpty
+    }
+
+    private func canAcquire(_ profileID: ProfileID) -> Bool {
+        !holdsAllProfiles && !heldProfiles.contains(profileID)
+    }
+
+    private func resumeNextWaiterIfPossible() {
+        guard let waiter = waiters.first else { return }
+        if let profileID = waiter.profileID {
+            guard canAcquire(profileID) else { return }
+            heldProfiles.insert(profileID)
         } else {
-            waiters[profileID] = profileWaiters
+            guard canAcquireAll else { return }
+            holdsAllProfiles = true
         }
-        // Ownership transfers directly; the profile remains in heldProfiles.
-        next.resume()
+        waiters.removeFirst()
+        waiter.continuation.resume()
     }
 }
 
 public enum ProfileScopedMutationGateError: Error, Equatable, Sendable {
     case terminalProfile(ProfileID)
+    case recoveryRequired(ProfileID)
 }
 
 /// Repository calls made by the remote store inherit this TaskLocal marker and
 /// do not reacquire the lease already held by `applyIfUnchanged`.
 enum ProfileScopedMutationLeaseContext {
     @TaskLocal static var profileID: ProfileID?
+    @TaskLocal static var holdsAllProfiles = false
 }
 
 /// Runs a complete Profile-scoped transaction under the same lease used by
@@ -81,11 +156,13 @@ public func withProfileScopedMutationLease<T>(
     _ mutationGate: ProfileScopedMutationGate?,
     for profileID: ProfileID,
     allowingTerminal: Bool = false,
+    allowingRecovery: Bool = false,
     isolation: isolated (any Actor) = #isolation,
     operation: () async throws -> T
 ) async throws -> T {
     _ = isolation
     guard let mutationGate,
+        !ProfileScopedMutationLeaseContext.holdsAllProfiles,
         ProfileScopedMutationLeaseContext.profileID != profileID
     else {
         return try await operation()
@@ -93,7 +170,8 @@ public func withProfileScopedMutationLease<T>(
 
     try await mutationGate.acquire(
         profileID,
-        allowingTerminal: allowingTerminal
+        allowingTerminal: allowingTerminal,
+        allowingRecovery: allowingRecovery
     )
     do {
         let result = try await ProfileScopedMutationLeaseContext.$profileID
@@ -104,6 +182,38 @@ public func withProfileScopedMutationLease<T>(
         return result
     } catch {
         await mutationGate.release(profileID)
+        throw error
+    }
+}
+
+/// Runs a compound cross-Profile read against one committed process
+/// generation. Nested repository reads inherit the TaskLocal marker and avoid
+/// reacquiring the global lease.
+public func withAllProfilesCommittedRead<T>(
+    _ mutationGate: ProfileScopedMutationGate?,
+    allowingRecovery: Bool = false,
+    isolation: isolated (any Actor) = #isolation,
+    operation: () async throws -> T
+) async throws -> T {
+    _ = isolation
+    guard let mutationGate,
+        !ProfileScopedMutationLeaseContext.holdsAllProfiles,
+        ProfileScopedMutationLeaseContext.profileID == nil
+    else {
+        return try await operation()
+    }
+
+    try await mutationGate.acquireAll(allowingRecovery: allowingRecovery)
+    do {
+        let result =
+            try await ProfileScopedMutationLeaseContext
+            .$holdsAllProfiles.withValue(true) {
+                try await operation()
+            }
+        await mutationGate.releaseAll()
+        return result
+    } catch {
+        await mutationGate.releaseAll()
         throw error
     }
 }
