@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 
 final class ChildSpeechPermissionRouteContractTests: XCTestCase {
-    func testChildFeatureModuleCannotCallSystemPermissionRequestAPIs() throws {
+    func testChildFeatureModuleCannotCallApplePermissionAPIsDirectly() throws {
         let featureSources = try swiftSources(
             under: repositoryRoot.appendingPathComponent(
                 "Sources/TadaWordsFeatures",
@@ -15,19 +15,19 @@ final class ChildSpeechPermissionRouteContractTests: XCTestCase {
             "SFSpeechRecognizer.requestAuthorization",
             "AVCaptureDevice.requestAccess",
             "requestSpeechAuthorization",
-            "requestSpeechPermissions",
             "requestAuthorization()",
-            ".requestPermissions()",
         ] {
             XCTAssertFalse(
                 combined.contains(forbiddenCapability),
                 "Child features regained prompting capability: \(forbiddenCapability)"
             )
         }
-        XCTAssertTrue(combined.contains("permissionActions.isAuthorized()"))
+        XCTAssertTrue(
+            combined.contains("permissionActions.authorizeMicrophoneTap()")
+        )
     }
 
-    func testProfileSwitchReadEntryReplayAndRelaunchUseOneCheckOnlyBoundary() throws {
+    func testProfileSwitchReadEntryReplayAndRelaunchUseOneContextualBoundary() throws {
         let root = try source(
             repositoryRoot.appendingPathComponent(
                 "Sources/TadaWordsFeatures/TadaWordsRootView.swift"
@@ -38,13 +38,13 @@ final class ChildSpeechPermissionRouteContractTests: XCTestCase {
             root.components(separatedBy: "permissionActions: speechPermissionActions")
                 .count - 1,
             1,
-            "Every Read presentation, including replay after profile changes or relaunch, must use the root's single child boundary."
+            "Every Read presentation, including replay after profile changes or relaunch, must use the root's single contextual boundary."
         )
         XCTAssertFalse(root.contains("requestSpeechPermissions"))
         XCTAssertFalse(root.contains("requestAuthorization"))
     }
 
-    func testDemoDeepLinkUsesAuthorizedCheckOnlyFixture() throws {
+    func testDemoDeepLinkUsesAuthorizedFixtureWithoutSystemCapability() throws {
         let root = try source(
             repositoryRoot.appendingPathComponent(
                 "Sources/TadaWordsFeatures/TadaWordsRootView.swift"
@@ -63,21 +63,23 @@ final class ChildSpeechPermissionRouteContractTests: XCTestCase {
         XCTAssertFalse(actions.contains("requestPermissions"))
     }
 
-    func testAuthorizedChildPathContinuesToRecognitionWithoutParentCapability() throws {
+    func testResolvedChildTapContinuesOriginalActionIntoRecognition() throws {
         let readQuest = try source(
             repositoryRoot.appendingPathComponent(
                 "Sources/TadaWordsFeatures/ReadQuestView.swift"
             )
         )
 
-        XCTAssertTrue(readQuest.contains("permissionActions.isAuthorized()"))
+        XCTAssertTrue(
+            readQuest.contains("permissionActions.authorizeMicrophoneTap()")
+        )
         XCTAssertTrue(readQuest.contains("guard isAuthorized else"))
         XCTAssertTrue(readQuest.contains("await listenForWord()"))
         XCTAssertFalse(readQuest.contains("requestSpeechPermissions"))
         XCTAssertFalse(readQuest.contains("requestAuthorization"))
     }
 
-    func testAppShellWiresPromptingOnlyIntoGuardianRoute() throws {
+    func testAppShellRequestsOnlyWhenContextualStatusIsUndetermined() throws {
         let appShell = try source(
             repositoryRoot.appendingPathComponent(
                 "Sources/TadaWordsAppShell/TadaWordsApplicationView.swift"
@@ -86,7 +88,12 @@ final class ChildSpeechPermissionRouteContractTests: XCTestCase {
 
         XCTAssertTrue(
             appShell.contains(
-                "speechPermissionActions = SpeechPermissionActions {\n            await currentSpeechPermissionState().isAuthorized"
+                "guard current.hasUndeterminedPermission else {\n                    return current.isAuthorized"
+            )
+        )
+        XCTAssertTrue(
+            appShell.contains(
+                "return await requestSpeechPermissions().isAuthorized"
             )
         )
         XCTAssertTrue(
@@ -94,10 +101,21 @@ final class ChildSpeechPermissionRouteContractTests: XCTestCase {
                 "requestSpeechPermissions: requestSpeechPermissions"
             )
         )
-        XCTAssertEqual(
-            appShell.components(separatedBy: "requestSpeechPermissions:").count - 1,
-            3,
-            "The prompting closure should exist only as stored parent capability, production initializer input, and GuardianRootView output."
+    }
+
+    func testReadCancelsPendingAuthorizationOnNavigationAndBackground() throws {
+        let readQuest = try source(
+            repositoryRoot.appendingPathComponent(
+                "Sources/TadaWordsFeatures/ReadQuestView.swift"
+            )
+        )
+
+        XCTAssertTrue(readQuest.contains(".onDisappear {"))
+        XCTAssertTrue(readQuest.contains("listeningTask?.cancel()"))
+        XCTAssertTrue(readQuest.contains("guard phase == .background else"))
+        XCTAssertTrue(readQuest.contains("cancelListeningForBackground()"))
+        XCTAssertTrue(
+            readQuest.contains("guard !Task.isCancelled, !isPaused else")
         )
     }
 

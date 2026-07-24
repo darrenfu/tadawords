@@ -88,13 +88,13 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "#32",
             "#33",
             "#54",
-            "#55",
+            "#125",
             "#76",
             "Owner-confirmed; exact-archive reconciliation required",
-            "BLOCKED BY ISSUE #55",
+            "first child microphone tap",
             "SYSTEM_PERMISSION_INVENTORY_v0.7.8.md",
             "VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md",
-            "Child Read has no request capability",
+            "request still-undetermined Speech Recognition and Microphone access in sequence",
             "APP_STORE_RELEASE_DECISIONS_v0.7.27.md",
             "Made for Kids, Apple primary band `6–8`, product and in-app Profile ages 3–8",
             "Primary Kids age band | `6–8`",
@@ -136,8 +136,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.36</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072410</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.39</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072413</string>"))
             XCTAssertFalse(plist.contains("voice setup"))
         }
 
@@ -152,15 +152,15 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 "<string>https://audio-dev.pawgoo.app</string>"
             )
         )
-        XCTAssertTrue(debugPlist.contains("<string>0.7.36</string>"))
-        XCTAssertTrue(debugPlist.contains("<string>2026072410</string>"))
+        XCTAssertTrue(debugPlist.contains("<string>0.7.39</string>"))
+        XCTAssertTrue(debugPlist.contains("<string>2026072413</string>"))
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.36"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072410"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.39"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072413"))
 
         let appComposition = try String(
             contentsOf: repositoryRoot.appendingPathComponent(
