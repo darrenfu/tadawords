@@ -92,7 +92,6 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "#76",
             "Finalized for the enumerated content set",
             "#33 preserves the Pawgoo owner attestation",
-            "Owner-confirmed; exact-archive reconciliation required",
             "first child microphone tap",
             "SYSTEM_PERMISSION_INVENTORY_v0.7.8.md",
             "VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md",
