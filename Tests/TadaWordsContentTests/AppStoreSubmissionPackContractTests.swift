@@ -90,7 +90,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "#54",
             "#125",
             "#76",
-            "Owner-confirmed; exact-archive reconciliation required",
+            "Finalized for the enumerated content set",
+            "#33 preserves the Pawgoo owner attestation",
             "first child microphone tap",
             "SYSTEM_PERMISSION_INVENTORY_v0.7.8.md",
             "VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md",
@@ -136,8 +137,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.40</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072414</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.41</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072415</string>"))
             XCTAssertFalse(plist.contains("voice setup"))
         }
 
@@ -145,8 +146,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.40"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072414"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.41"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072415"))
 
         let appComposition = try String(
             contentsOf: repositoryRoot.appendingPathComponent(
