@@ -943,6 +943,7 @@ final class TadaWordsAppModel: ObservableObject {
                 case .standard:
                     try await dailyQuestCoordinator.loadOrCreateToday(
                         candidate: candidate.plan,
+                        activeWordIDs: candidate.activeWordIDs,
                         on: clock.now
                     )
                 case .freestyleRecharge:
@@ -1040,9 +1041,17 @@ final class TadaWordsAppModel: ObservableObject {
                 )
                 prompts = prompts.filter { retainedWordIDs.contains($0.id) }
             }
+            // Word Pool reconciliation may legitimately remove a prompt after
+            // its immutable attempt evidence was recorded. Keep that history
+            // in storage, but exclude only now-inactive evidence from recovery.
+            // An attempt for an active, unplanned prompt still fails closed.
+            let recoveryAttempts = storedAttempts.filter { attempt in
+                attempt.questID != launch.questPlan.id
+                    || candidate.activeWordIDs.contains(attempt.wordPromptID)
+            }
             let recovery = try PersistedQuestRecoveryResolver().resolve(
                 plan: effectivePlan,
-                attempts: storedAttempts
+                attempts: recoveryAttempts
             )
             for completedPrompt in prompts.prefix(recovery.nextItemIndex) {
                 try await rebuildAndSaveProgress(

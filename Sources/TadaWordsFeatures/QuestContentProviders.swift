@@ -15,8 +15,8 @@ protocol QuestContentProviding: Sendable {
     ) async throws -> PreparedQuest
 
     /// Rehydrates a persisted Daily Quest plan without running New-word
-    /// selection again. Inactive pool entries remain available for the rest of
-    /// the day so a guardian edit cannot silently replace today's plan.
+    /// selection again. Only currently active pool entries are runnable; the
+    /// coordinator reconciles guardian edits before this hydration boundary.
     func prompts(
         for plan: QuestPlan,
         profile: KidProfile
@@ -55,6 +55,7 @@ struct PreparedQuest: Equatable, Sendable {
     let deviceClass: DeviceClass
     let personalPaceBands: [PersonalPaceBand]
     let interfacePreferences: PracticeInterfacePreferences
+    let activeWordIDs: Set<WordPromptID>
 
     init(
         plan: QuestPlan,
@@ -62,7 +63,8 @@ struct PreparedQuest: Equatable, Sendable {
         emergencyAfter: TimeInterval,
         deviceClass: DeviceClass = .tablet,
         personalPaceBands: [PersonalPaceBand] = [],
-        interfacePreferences: PracticeInterfacePreferences = .default
+        interfacePreferences: PracticeInterfacePreferences = .default,
+        activeWordIDs: Set<WordPromptID>? = nil
     ) {
         self.plan = plan
         self.orderedPrompts = orderedPrompts
@@ -70,6 +72,7 @@ struct PreparedQuest: Equatable, Sendable {
         self.deviceClass = deviceClass
         self.personalPaceBands = personalPaceBands
         self.interfacePreferences = interfacePreferences
+        self.activeWordIDs = activeWordIDs ?? Set(orderedPrompts.map(\.id))
     }
 
     func asFreestyle(prompts: [WordPrompt]) -> PreparedQuest {
@@ -90,7 +93,8 @@ struct PreparedQuest: Equatable, Sendable {
             emergencyAfter: emergencyAfter,
             deviceClass: deviceClass,
             personalPaceBands: personalPaceBands,
-            interfacePreferences: interfacePreferences
+            interfacePreferences: interfacePreferences,
+            activeWordIDs: activeWordIDs
         )
     }
 }
@@ -268,7 +272,8 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
             ),
             deviceClass: deviceClass,
             personalPaceBands: personalPaceBands,
-            interfacePreferences: settings.interface
+            interfacePreferences: settings.interface,
+            activeWordIDs: Set(entries.map(\.prompt.id))
         )
     }
 
@@ -283,7 +288,7 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         let entries = try await wordPoolRepository.entries(
             for: profile.id,
             learningMode: mode,
-            includingInactive: true
+            includingInactive: false
         )
         let promptsByID = try promptLookup(from: entries)
         return try plan.orderedItems.map { item in
@@ -344,7 +349,8 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
                 profileID: profile.id,
                 mode: mode
             ),
-            interfacePreferences: settings.interface
+            interfacePreferences: settings.interface,
+            activeWordIDs: Set(entries.map(\.prompt.id))
         )
     }
 

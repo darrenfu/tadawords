@@ -194,6 +194,178 @@ final class DailyQuestRepositoryTests: XCTestCase {
         XCTAssertEqual(restored, fullyExpanded)
     }
 
+    func testInactiveWordsAreRemovedAndReplacedForReadAndWriteWithoutRaisedLimits()
+        async throws
+    {
+        for (offset, mode) in [LearningMode.read, .write].enumerated() {
+            let repository = InMemoryDailyQuestRepository()
+            let coordinator = DailyQuestCoordinator(
+                repository: repository,
+                timeZone: Self.timeZone
+            )
+            let base = 100 + offset * 20
+            let initial = plan(
+                id: questID(base),
+                mode: mode,
+                newWordLimit: 2,
+                reviewWordLimit: 1,
+                reviewWordNumbers: [base + 1],
+                newWordNumbers: [base + 2, base + 3]
+            )
+            let initialState = try await coordinator.loadOrCreateToday(
+                candidate: initial,
+                on: Self.today
+            )
+
+            let candidate = plan(
+                id: questID(base + 10),
+                mode: mode,
+                newWordLimit: 2,
+                reviewWordLimit: 1,
+                reviewWordNumbers: [base + 4],
+                newWordNumbers: [base + 3, base + 5]
+            )
+            let reconciled = try await coordinator.loadOrCreateToday(
+                candidate: candidate,
+                activeWordIDs: [
+                    wordID(base + 3),
+                    wordID(base + 4),
+                    wordID(base + 5),
+                ],
+                on: Self.today.addingTimeInterval(60)
+            )
+
+            XCTAssertEqual(reconciled.plan?.id, initialState.plan?.id)
+            XCTAssertEqual(
+                reconciled.plan?.questPlan.reviewWordIDs,
+                [wordID(base + 4)]
+            )
+            XCTAssertEqual(
+                reconciled.plan?.questPlan.newWordIDs,
+                [wordID(base + 3), wordID(base + 5)]
+            )
+            XCTAssertFalse(
+                reconciled.plan?.questPlan.orderedItems.contains {
+                    $0.wordPromptID == wordID(base + 1)
+                        || $0.wordPromptID == wordID(base + 2)
+                } ?? true
+            )
+        }
+    }
+
+    func testCompletedTodayPracticeAgainExcludesInactiveWordAndPreservesHistory()
+        async throws
+    {
+        let snapshotURL = try makeSnapshotURL()
+        let repository = LocalJSONDailyQuestRepository(snapshotURL: snapshotURL)
+        let coordinator = DailyQuestCoordinator(
+            repository: repository,
+            timeZone: Self.timeZone,
+            practiceOrder: { $0 }
+        )
+        let initial = plan(
+            id: questID(150),
+            mode: .read,
+            newWordLimit: 2,
+            reviewWordLimit: 0,
+            newWordNumbers: [151, 152]
+        )
+        let initialState = try await coordinator.loadOrCreateToday(
+            candidate: initial,
+            on: Self.today
+        )
+        let completionID = DailyQuestCompletionID(rawValue: uuid(153))
+        let rewardID = RewardGrantID(rawValue: uuid(154))
+        let completed = try await coordinator.complete(
+            try XCTUnwrap(coordinator.todayLaunch(from: initialState)),
+            score: Self.score,
+            world: .moonpetalKingdom,
+            completionID: completionID,
+            rewardGrantID: rewardID,
+            completedAt: Self.today.addingTimeInterval(30)
+        )
+
+        let replacement = plan(
+            id: questID(155),
+            mode: .read,
+            newWordLimit: 2,
+            reviewWordLimit: 0,
+            newWordNumbers: [152, 156]
+        )
+        let reconciled = try await coordinator.loadOrCreateToday(
+            candidate: replacement,
+            activeWordIDs: [wordID(152), wordID(156)],
+            on: Self.today.addingTimeInterval(60)
+        )
+
+        XCTAssertEqual(reconciled.plan?.id, initial.id)
+        XCTAssertEqual(
+            reconciled.plan?.questPlan.newWordIDs,
+            [wordID(152), wordID(156)]
+        )
+        XCTAssertEqual(reconciled.todayCompletion?.id, completionID)
+        XCTAssertEqual(reconciled.rewardGrant?.id, rewardID)
+        let practice = try XCTUnwrap(
+            coordinator.practiceAgainLaunch(
+                from: reconciled,
+                startedAt: Self.today.addingTimeInterval(90)
+            )
+        )
+        XCTAssertEqual(
+            Set(practice.questPlan.reviewWordIDs),
+            [wordID(152), wordID(156)]
+        )
+        XCTAssertFalse(practice.questPlan.reviewWordIDs.contains(wordID(151)))
+        XCTAssertEqual(completed.completion.id, completionID)
+        XCTAssertEqual(completed.rewardGrant?.id, rewardID)
+
+        let restarted = DailyQuestCoordinator(
+            repository: LocalJSONDailyQuestRepository(snapshotURL: snapshotURL),
+            timeZone: Self.timeZone
+        )
+        let restored = try await restarted.state(
+            profileID: Self.profileID,
+            learningMode: .read,
+            on: Self.today
+        )
+        XCTAssertEqual(restored, reconciled)
+    }
+
+    func testRemovingOnlyRunnableWordMakesTodayUnavailable() async throws {
+        let coordinator = DailyQuestCoordinator(
+            repository: InMemoryDailyQuestRepository(),
+            timeZone: Self.timeZone
+        )
+        let initial = plan(
+            id: questID(170),
+            mode: .write,
+            newWordLimit: 1,
+            reviewWordLimit: 0,
+            newWordNumbers: [171]
+        )
+        _ = try await coordinator.loadOrCreateToday(
+            candidate: initial,
+            on: Self.today
+        )
+        let emptyCandidate = plan(
+            id: questID(172),
+            mode: .write,
+            newWordLimit: 1,
+            reviewWordLimit: 0,
+            newWordNumbers: []
+        )
+
+        let reconciled = try await coordinator.loadOrCreateToday(
+            candidate: emptyCandidate,
+            activeWordIDs: [],
+            on: Self.today.addingTimeInterval(60)
+        )
+
+        XCTAssertEqual(reconciled.plan?.id, initial.id)
+        XCTAssertTrue(reconciled.plan?.questPlan.orderedItems.isEmpty ?? false)
+        XCTAssertNil(coordinator.todayLaunch(from: reconciled))
+    }
+
     func testTodayCompletionAndRewardAreIdempotentAndPracticeAgainCannotRegrant()
         async throws
     {

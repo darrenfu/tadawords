@@ -34,32 +34,37 @@ public struct DailyQuestCoordinator: Sendable {
     }
 
     /// Persists the first candidate for Profile x Mode x Local Day. A later
-    /// candidate remains ignored unless a parent raised a word limit, in which
-    /// case eligible words are appended without changing the stable plan ID.
+    /// candidate removes prompts that are no longer active, refills eligible
+    /// replacements, and honors raised limits without changing the stable plan
+    /// ID. Callers that own the Word Pool should provide its complete active ID
+    /// set; nil retains the legacy expansion-only behavior for non-pool clients.
     public func loadOrCreateToday(
         candidate: QuestPlan,
+        activeWordIDs: Set<WordPromptID>? = nil,
         on date: Date
     ) async throws -> DailyQuestState {
         let localDay = LocalDay(date: date, timeZone: timeZone)
         let proposed = DailyQuestPlan(localDay: localDay, questPlan: candidate)
         let stored = try await repository.createPlanIfAbsent(proposed)
         guard
-            let expanded = Self.expandedPlan(
+            let updated = Self.reconciledPlan(
                 stored: stored,
-                candidate: proposed
+                candidate: proposed,
+                activeWordIDs: activeWordIDs
             ),
             let reconciling = repository
                 as? any DailyQuestPlanReconcilingRepository
         else {
             return try await repository.state(for: stored.key)
         }
-        let reconciled = try await reconciling.reconcileExpandedPlan(expanded)
+        let reconciled = try await reconciling.reconcilePlan(updated)
         return try await repository.state(for: reconciled.key)
     }
 
-    private static func expandedPlan(
+    private static func reconciledPlan(
         stored: DailyQuestPlan,
-        candidate: DailyQuestPlan
+        candidate: DailyQuestPlan,
+        activeWordIDs: Set<WordPromptID>?
     ) -> DailyQuestPlan? {
         let existing = stored.questPlan
         let proposed = candidate.questPlan
@@ -75,7 +80,6 @@ public struct DailyQuestCoordinator: Sendable {
         let raisedReviewLimit =
             proposed.configuration.reviewWordLimit
             > existing.configuration.reviewWordLimit
-        guard raisedNewLimit || raisedReviewLimit else { return nil }
 
         let newTarget = max(
             existing.configuration.newWordLimit,
@@ -85,34 +89,59 @@ public struct DailyQuestCoordinator: Sendable {
             existing.configuration.reviewWordLimit,
             proposed.configuration.reviewWordLimit
         )
+        let retainedNew =
+            activeWordIDs.map { activeWordIDs in
+                existing.newWordIDs.filter(activeWordIDs.contains)
+            } ?? existing.newWordIDs
+        let retainedReview =
+            activeWordIDs.map { activeWordIDs in
+                existing.reviewWordIDs.filter(activeWordIDs.contains)
+            } ?? existing.reviewWordIDs
+        let retainedDeferred =
+            activeWordIDs.map { activeWordIDs in
+                existing.deferredReviewWordIDs.filter(activeWordIDs.contains)
+            } ?? existing.deferredReviewWordIDs
+        let candidateNew =
+            activeWordIDs.map { activeWordIDs in
+                proposed.newWordIDs.filter(activeWordIDs.contains)
+            } ?? proposed.newWordIDs
+        let candidateReview =
+            activeWordIDs.map { activeWordIDs in
+                proposed.reviewWordIDs.filter(activeWordIDs.contains)
+            } ?? proposed.reviewWordIDs
+        let candidateDeferred =
+            activeWordIDs.map { activeWordIDs in
+                proposed.deferredReviewWordIDs.filter(activeWordIDs.contains)
+            } ?? proposed.deferredReviewWordIDs
         let additionalNew = additions(
-            from: proposed.newWordIDs,
+            from: candidateNew,
             excluding: Set(
-                existing.newWordIDs
-                    + existing.reviewWordIDs
-                    + existing.deferredReviewWordIDs
+                retainedNew
+                    + retainedReview
+                    + retainedDeferred
             ),
-            count: raisedNewLimit
-                ? max(0, newTarget - existing.newWordIDs.count) : 0
+            count: raisedNewLimit || activeWordIDs != nil
+                ? max(0, newTarget - retainedNew.count) : 0
         )
         let additionalReview = additions(
-            from: proposed.reviewWordIDs,
+            from: candidateReview,
             excluding: Set(
-                existing.reviewWordIDs
-                    + existing.newWordIDs
-                    + existing.deferredReviewWordIDs
+                retainedReview
+                    + retainedNew
+                    + retainedDeferred
             ).union(additionalNew),
-            count: raisedReviewLimit
-                ? max(0, reviewTarget - existing.reviewWordIDs.count) : 0
+            count: raisedReviewLimit || activeWordIDs != nil
+                ? max(0, reviewTarget - retainedReview.count) : 0
         )
         let selectedIDs = Set(
-            existing.newWordIDs
+            retainedNew
                 + additionalNew
-                + existing.reviewWordIDs
+                + retainedReview
                 + additionalReview
         )
         let deferredReviewWordIDs = uniqued(
-            existing.deferredReviewWordIDs + proposed.deferredReviewWordIDs
+            retainedDeferred
+                + (raisedNewLimit || raisedReviewLimit ? candidateDeferred : [])
         ).filter { !selectedIDs.contains($0) }
         let configuration = QuestConfiguration(
             learningMode: existing.configuration.learningMode,
@@ -125,8 +154,8 @@ public struct DailyQuestCoordinator: Sendable {
             id: existing.id,
             profileID: existing.profileID,
             configuration: configuration,
-            reviewWordIDs: existing.reviewWordIDs + additionalReview,
-            newWordIDs: existing.newWordIDs + additionalNew,
+            reviewWordIDs: retainedReview + additionalReview,
+            newWordIDs: retainedNew + additionalNew,
             deferredReviewWordIDs: deferredReviewWordIDs,
             createdAt: existing.createdAt
         )
@@ -170,7 +199,9 @@ public struct DailyQuestCoordinator: Sendable {
     /// Returns nil after Today is complete (the caller should present Practice
     /// Again instead). Today uses the persisted quest ID for attempt evidence.
     public func todayLaunch(from state: DailyQuestState) -> DailyQuestLaunch? {
-        guard let plan = state.plan, state.todayCompletion == nil else {
+        guard let plan = state.plan, state.todayCompletion == nil,
+            !plan.questPlan.orderedItems.isEmpty
+        else {
             return nil
         }
         return DailyQuestLaunch(
