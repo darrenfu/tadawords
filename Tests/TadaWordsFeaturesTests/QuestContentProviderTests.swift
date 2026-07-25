@@ -28,9 +28,54 @@ final class QuestContentProviderTests: XCTestCase {
             prepared.plan.newWordIDs,
             prepared.orderedPrompts.map(\.id)
         )
+        let activeEntries = try await fixture.wordPool.entries(
+            for: fixture.profile.id,
+            learningMode: .read,
+            includingInactive: false
+        )
+        XCTAssertEqual(
+            prepared.activeWordIDs,
+            Set(activeEntries.map(\.prompt.id))
+        )
+        XCTAssertEqual(prepared.activeWordIDs.count, 6)
         XCTAssertTrue(prepared.plan.reviewWordIDs.isEmpty)
         XCTAssertEqual(prepared.plan.configuration, .defaultRead)
         XCTAssertEqual(prepared.emergencyAfter, 180)
+    }
+
+    func testPersistedPlanHydrationFailsClosedWhenPromptBecomesInactive()
+        async throws
+    {
+        let fixture = ProviderFixture()
+        _ = try await ManualWordPoolImporter(repository: fixture.wordPool).importBatch(
+            "cat dog",
+            profileID: fixture.profile.id,
+            learningMode: .read,
+            addedAt: fixture.clock.now
+        )
+        let prepared = try await fixture.provider.prepareQuest(
+            for: .read,
+            profile: fixture.profile
+        )
+        let entries = try await fixture.wordPool.entries(
+            for: fixture.profile.id,
+            learningMode: .read,
+            includingInactive: false
+        )
+        _ = try await fixture.wordPool.setActive(
+            false,
+            entryID: try XCTUnwrap(entries.first).id
+        )
+
+        do {
+            _ = try await fixture.provider.prompts(
+                for: prepared.plan,
+                profile: fixture.profile
+            )
+            XCTFail("Inactive prompts must not hydrate a runnable quest.")
+        } catch let error as QuestContentError {
+            XCTAssertEqual(error, .inconsistentContent)
+        }
     }
 
     func testPreparedQuestCarriesProfilesInterfacePreferences() async throws {

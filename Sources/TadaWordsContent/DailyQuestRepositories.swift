@@ -1,12 +1,11 @@
 import Foundation
 import TadaWordsDomain
 
-/// Local repositories can atomically replace one canonical day plan when a
-/// parent raises its limits. The stable plan ID keeps attempts, completion,
-/// and reward references intact.
+/// Local repositories can atomically reconcile one canonical day plan after
+/// Word Pool eligibility or configured limits change. The stable plan ID keeps
+/// attempts, completion, and reward references intact.
 protocol DailyQuestPlanReconcilingRepository: DailyQuestRepository {
-    func reconcileExpandedPlan(_ plan: DailyQuestPlan) async throws
-        -> DailyQuestPlan
+    func reconcilePlan(_ plan: DailyQuestPlan) async throws -> DailyQuestPlan
 }
 
 public enum DailyQuestRepositoryError: Error, Equatable, Sendable {
@@ -179,10 +178,8 @@ public actor InMemoryDailyQuestRepository: DailyQuestHistoryRepository,
         try storage.createPlanIfAbsent(plan).plan
     }
 
-    func reconcileExpandedPlan(_ plan: DailyQuestPlan) async throws
-        -> DailyQuestPlan
-    {
-        try storage.reconcileExpandedPlan(plan).plan
+    func reconcilePlan(_ plan: DailyQuestPlan) async throws -> DailyQuestPlan {
+        try storage.reconcilePlan(plan).plan
     }
 
     public func completions(
@@ -307,12 +304,10 @@ public actor LocalJSONDailyQuestRepository: DailyQuestHistoryRepository,
         }
     }
 
-    func reconcileExpandedPlan(_ plan: DailyQuestPlan) async throws
-        -> DailyQuestPlan
-    {
+    func reconcilePlan(_ plan: DailyQuestPlan) async throws -> DailyQuestPlan {
         try await withMutationLeases(for: [plan.key.profileID]) {
             var candidate = try loadedStorage()
-            let result = try candidate.reconcileExpandedPlan(plan)
+            let result = try candidate.reconcilePlan(plan)
             guard result.didChange else { return result.plan }
             try persist(candidate)
             storage = candidate

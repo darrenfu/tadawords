@@ -1040,7 +1040,7 @@ final class TadaWordsAppModelTests: XCTestCase {
         fixture.model.showLobby()
     }
 
-    func testRestartReusesCompletedTodayPlanAsPracticeAgainWithoutNewReward()
+    func testRestartReconcilesDeletedCompletedWordBeforePracticeAgainWithoutNewReward()
         async throws
     {
         let directory = FileManager.default.temporaryDirectory
@@ -1122,7 +1122,8 @@ final class TadaWordsAppModelTests: XCTestCase {
             profiles: [profile],
             contentProvider: CatalogQuestContentProvider(
                 candidate: laterCandidate,
-                prompts: [cat, dog]
+                prompts: [cat, dog],
+                activeWordIDs: [dog.id]
             ),
             attemptEventRepository: records,
             wordProgressRepository: records,
@@ -1132,8 +1133,8 @@ final class TadaWordsAppModelTests: XCTestCase {
         restartedModel.selectProfile(profile)
         await restartedModel.prepareQuestAndWait(.read)
         let practiceSession = try questSession(from: restartedModel.destination)
-        XCTAssertEqual(practiceSession.prompt.id, cat.id)
-        XCTAssertNotEqual(practiceSession.prompt.id, dog.id)
+        XCTAssertEqual(practiceSession.prompt.id, dog.id)
+        XCTAssertNotEqual(practiceSession.prompt.id, cat.id)
         XCTAssertNotEqual(practiceSession.id, firstPlan.id)
         await restartedModel.finishItemAndWait(
             practiceSession,
@@ -1154,11 +1155,104 @@ final class TadaWordsAppModelTests: XCTestCase {
         )
         XCTAssertEqual(completions.map(\.runKind), [.today, .practiceAgain])
         let persistedState = try await restartedDailyRepository.state(for: key)
-        XCTAssertEqual(persistedState.plan?.questPlan, firstPlan)
+        XCTAssertEqual(persistedState.plan?.id, firstPlan.id)
+        XCTAssertEqual(persistedState.plan?.questPlan.newWordIDs, [dog.id])
+        XCTAssertFalse(
+            persistedState.plan?.questPlan.newWordIDs.contains(cat.id) ?? true
+        )
         XCTAssertEqual(
             persistedState.rewardGrant?.id,
             todayResult.rewardGrant?.id
         )
+    }
+
+    func testRestartIgnoresDeletedPromptAttemptWhilePreservingItsHistory()
+        async throws
+    {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let snapshotURL = directory.appendingPathComponent("daily-quests.json")
+        let profile = TestFixture.profile(name: "Mia", number: 72)
+        let cat = try TestFixture.prompt("cat", number: 72)
+        let dog = try TestFixture.prompt("dog", number: 73)
+        let firstPlan = QuestPlan(
+            id: QuestID(),
+            profileID: profile.id,
+            configuration: .defaultRead,
+            reviewWordIDs: [],
+            newWordIDs: [cat.id, dog.id],
+            createdAt: TestFixture.now
+        )
+        let replacement = QuestPlan(
+            id: QuestID(),
+            profileID: profile.id,
+            configuration: .defaultRead,
+            reviewWordIDs: [],
+            newWordIDs: [dog.id],
+            createdAt: TestFixture.now.addingTimeInterval(60)
+        )
+        let records = InMemoryLearningRecordRepository()
+        let firstModel = TadaWordsAppModel(
+            profiles: [profile],
+            contentProvider: CatalogQuestContentProvider(
+                candidate: firstPlan,
+                prompts: [cat, dog]
+            ),
+            attemptEventRepository: records,
+            wordProgressRepository: records,
+            dailyQuestCoordinator: DailyQuestCoordinator(
+                repository: LocalJSONDailyQuestRepository(snapshotURL: snapshotURL),
+                timeZone: .gmt
+            ),
+            clock: TestClock()
+        )
+        firstModel.selectProfile(profile)
+        await firstModel.prepareQuestAndWait(.read)
+        let catSession = try questSession(from: firstModel.destination)
+        XCTAssertEqual(catSession.prompt.id, cat.id)
+        await firstModel.finishItemAndWait(
+            catSession,
+            summary: try TestFixture.summary(decisions: [.matched])
+        )
+        XCTAssertEqual(
+            try questSession(from: firstModel.destination).prompt.id,
+            dog.id
+        )
+
+        let restartedModel = TadaWordsAppModel(
+            profiles: [profile],
+            contentProvider: CatalogQuestContentProvider(
+                candidate: replacement,
+                prompts: [cat, dog],
+                activeWordIDs: [dog.id]
+            ),
+            attemptEventRepository: records,
+            wordProgressRepository: records,
+            dailyQuestCoordinator: DailyQuestCoordinator(
+                repository: LocalJSONDailyQuestRepository(snapshotURL: snapshotURL),
+                timeZone: .gmt
+            ),
+            clock: TestClock()
+        )
+        restartedModel.selectProfile(profile)
+        await restartedModel.prepareQuestAndWait(.read)
+
+        let resumed = try questSession(from: restartedModel.destination)
+        XCTAssertEqual(resumed.prompt.id, dog.id)
+        XCTAssertEqual(resumed.totalItems, 1)
+        let preservedAttempts = try await records.attempts(
+            for: profile.id,
+            wordPromptID: cat.id
+        )
+        XCTAssertEqual(preservedAttempts.count, 1)
+        XCTAssertEqual(preservedAttempts.first?.questID, firstPlan.id)
     }
 
     func testCompletionStorageFailureBlocksThenRetryUsesSameIDsAndGrantsOnce()
@@ -1504,12 +1598,18 @@ private actor ProfileRecordingContentProvider: QuestContentProviding {
 private struct CatalogQuestContentProvider: QuestContentProviding {
     let candidate: QuestPlan
     let promptsByID: [WordPromptID: WordPrompt]
+    let activeWordIDs: Set<WordPromptID>
 
-    init(candidate: QuestPlan, prompts: [WordPrompt]) {
+    init(
+        candidate: QuestPlan,
+        prompts: [WordPrompt],
+        activeWordIDs: Set<WordPromptID>? = nil
+    ) {
         self.candidate = candidate
         promptsByID = Dictionary(
             uniqueKeysWithValues: prompts.map { ($0.id, $0) }
         )
+        self.activeWordIDs = activeWordIDs ?? Set(prompts.map(\.id))
     }
 
     func availability(
@@ -1533,7 +1633,8 @@ private struct CatalogQuestContentProvider: QuestContentProviding {
         return PreparedQuest(
             plan: candidate,
             orderedPrompts: try await prompts(for: candidate, profile: profile),
-            emergencyAfter: 60
+            emergencyAfter: 60,
+            activeWordIDs: activeWordIDs
         )
     }
 

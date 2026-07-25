@@ -1496,6 +1496,32 @@ trademark clearance or a legal opinion.
   without changing child data, Apple account state, App Store submission,
   CloudKit records, or runtime product behavior.
 
+## v0.7.43 — 2026-07-25
+
+Target release: `v0.7.43`
+
+Branch: `agent/batch-import-v0.7.43`
+
+Build: `2026072501`
+
+Overall state: Issue #127 reconciles persisted Read and Write daily plans with
+the authoritative active Word Pool before a new run. Deleted or inactive
+prompts no longer require the parent refresh control to disappear.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| QUEST-127-ACTIVE-POOL | Bug fix | Daily Quest / persistence | Exclude deleted and inactive prompts without rewriting completion, reward, attempt, or learning history. | Source implementation and regression coverage complete; exact-HEAD simulator and signed-device gates pending | Read and Write deletion flows on iPhone and iPad, including completed-Today Practice Again, replacement refill, exhausted-pool behavior, and preserved reward/history evidence |
+
+### 2026-07-25 v0.7.43 notes
+
+- Filters the persisted plan's selected and deferred IDs against the complete
+  active Word Pool at launch time.
+- Refills vacated New and Review capacity from the current planner candidate
+  without changing the daily plan ID or lowering configured limits.
+- Hydrates runnable prompts from active entries only, so a Family Sync deletion
+  arriving after planning fails closed.
+- Preserves raised-limit expansion and reward-free Practice Again semantics.
+
 <!-- TADA_BILINGUAL_ZH_START -->
 
 ---

@@ -194,7 +194,7 @@ struct DailyQuestStorage: Sendable {
         return (plan, true)
     }
 
-    mutating func reconcileExpandedPlan(_ plan: DailyQuestPlan) throws
+    mutating func reconcilePlan(_ plan: DailyQuestPlan) throws
         -> (plan: DailyQuestPlan, didChange: Bool)
     {
         guard let existingID = planIDByKey[plan.key],
@@ -206,10 +206,14 @@ struct DailyQuestStorage: Sendable {
         guard existing.id == plan.id else {
             throw DailyQuestRepositoryError.conflictingPlanID(plan.id)
         }
-        guard plan.questPlan.newWordIDs.starts(with: existing.questPlan.newWordIDs),
-            plan.questPlan.reviewWordIDs.starts(
-                with: existing.questPlan.reviewWordIDs
-            )
+        guard plan.key == existing.key,
+            plan.questPlan.createdAt == existing.questPlan.createdAt,
+            plan.questPlan.configuration.contentOrder
+                == existing.questPlan.configuration.contentOrder,
+            plan.questPlan.configuration.newWordLimit
+                >= existing.questPlan.configuration.newWordLimit,
+            plan.questPlan.configuration.reviewWordLimit
+                >= existing.questPlan.configuration.reviewWordLimit
         else {
             throw DailyQuestRepositoryError.conflictingCanonicalPlan(plan.key)
         }
