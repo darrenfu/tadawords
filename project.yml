@@ -30,6 +30,7 @@ targets:
       - path: Apps/TadaWordsApp
         excludes:
           - InfoLocalQA.plist
+          - Info 2.plist
     dependencies:
       - package: TadaWordsModules
         product: TadaWordsAppShell
@@ -77,6 +78,7 @@ targets:
         CFBundleShortVersionString: "0.7.39"
         CFBundleVersion: "2026072415"
         TadaWordsGitCommit: "$(TADA_GIT_COMMIT)"
+        TadaWordsTeacherAudioEndpoint: https://audio.pawgoo.app
         CKSharingSupported: true
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: Allow microphone access when starting spoken Read Practice. Tada Words analyzes short recordings on device; raw audio is not saved or uploaded.
