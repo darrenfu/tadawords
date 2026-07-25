@@ -79,12 +79,18 @@ The exact proposal and approval record are maintained in
   `E2NROj7X6ZT7VcK11GgH`, contains the approved rules.
 - The owner approved `audio.pawgoo.app`, `audio-dev.pawgoo.app`, and the current
   PawGoo Cloudflare account/zone.
-- D1 and KV resources are provisioned. R2 subscription/buckets, environment
-  secrets, development-first deployment, and end-to-end verification remain
-  pending.
+- D1, KV, R2, Durable Object, hostname, and environment-scoped secrets are
+  provisioned. Development Worker version
+  `f0a46b43-07f9-483f-9e98-a3c68832cc5c` and production Worker version
+  `cfd3b7e6-7922-472c-80aa-1d8b34b5399e` are deployed.
+- Production health returned `200`, a valid online-catalog word without App
+  Attest returned `401 attestation_required`, and the production KV contains
+  all 26 audited 4,000-word shards. An allowed production App Attest request
+  still requires the exact TestFlight candidate.
 
-The production plist must not configure `TadaWordsTeacherAudioEndpoint` until
-the production deployment and App Attest path pass end to end.
+Release configures `TadaWordsTeacherAudioEndpoint` only as
+`https://audio.pawgoo.app`. Debug uses only `https://audio-dev.pawgoo.app`;
+LocalQA remains endpoint-free.
 
 ## Acceptance
 

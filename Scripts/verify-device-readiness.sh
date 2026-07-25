@@ -18,6 +18,7 @@ LOCAL_DERIVED_DATA="$ROOT/.build/local-qa-readiness-derived-data"
 PAWGOO_TEAM="7R78Q4HP86"
 NORMAL_BUNDLE_ID="app.tadawords.app"
 NORMAL_UI_TEST_BUNDLE_ID="app.tadawords.app.uitests"
+PRODUCTION_TEACHER_AUDIO_ENDPOINT="https://audio.pawgoo.app"
 LOCAL_BUNDLE_ID="com.tadawords.app.localqa"
 LOCAL_UI_TEST_BUNDLE_ID="com.tadawords.app.uitests"
 STATUS=0
@@ -307,10 +308,9 @@ done
 pass "Release builds succeeded for iPhone 17 Pro Max and iPad Pro 13-inch"
 
 BUILT_APP="$DERIVED_DATA/Build/Products/Release-iphonesimulator/Tada Words.app"
-if plutil -extract TadaWordsTeacherAudioEndpoint raw -o - "$BUILT_APP/Info.plist" \
-    >/dev/null 2>&1; then
-    fail "the normal Release app contains a teacher-audio endpoint before production verification"
-fi
+test "$(plutil -extract TadaWordsTeacherAudioEndpoint raw -o - "$BUILT_APP/Info.plist")" \
+    = "$PRODUCTION_TEACHER_AUDIO_ENDPOINT" \
+    || fail "the normal Release app does not contain the verified production teacher-audio endpoint"
 test "$(plutil -extract CFBundleIdentifier raw -o - "$BUILT_APP/Info.plist")" \
     = "$NORMAL_BUNDLE_ID" \
     || fail "the normal built app has the wrong PawGoo bundle identifier"
@@ -320,7 +320,7 @@ test -f "$BUILT_APP/PrivacyInfo.xcprivacy" \
     || fail "the built app does not contain PrivacyInfo.xcprivacy"
 find "$BUILT_APP" -maxdepth 1 -type f -name 'AppIcon*.png' -print -quit | grep -q . \
     || fail "the asset compiler did not emit an app icon"
-pass "the built app contains its privacy manifest and compiled app icon"
+pass "the built app contains the verified production endpoint, privacy manifest, and compiled app icon"
 
 rm -rf "$LOCAL_DERIVED_DATA"
 xcodebuild \

@@ -36,6 +36,8 @@
 	<string>Allow on-device speech recognition when starting spoken Read Practice so Tada Words can compare a practice word and give immediate feedback.</string>
 	<key>TadaWordsGitCommit</key>
 	<string>$(TADA_GIT_COMMIT)</string>
+	<key>TadaWordsTeacherAudioEndpoint</key>
+	<string>https://audio.pawgoo.app</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

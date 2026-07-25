@@ -43,7 +43,7 @@ in-product attribution surface.
 | Fonts and text | SwiftUI system font APIs | No `.ttf` or `.otf` file ships | Apple system font APIs | Re-audit if a custom font is introduced. |
 | Bella teacher words | 2,000 manifest words with Read and Write variants: 4,000 MP3 files in `ElevenLabs-Teacher-2000-v1`; 82,943,086 audio bytes | Copied into the `TadaWordsApplePlatform` resource bundle | Manifest SHA-256 `6d973e4b40749af02bf3dee7ec2208443ae4a7ad686c8ac396be4cd73883d82b`; stable MP3 digest `6370c625ee6b908daac2456a4c9b35291606c7bdacab37887e9179664c352bbb`; ElevenLabs Multilingual v2; Bella voice `hpp4J3VqNfWAUOO0d1Us`; seed `20260725`; approved dictionary/version; pack `3.0.0`; full 4,000-clip inspection and 20/20 representative SpeechTranscriber matrix pass | ElevenLabs Creator subscription and Bella selection were owner-confirmed. Preserve the subscription evidence with the release record. Physical-device listening remains mandatory. |
 | Aurora launch and celebrations | Eight AAC-LC M4A files: launch, five positive transitions, quest complete, and the `ta-da` source | Copied into the same resource bundle | Manifest SHA-256 `4f49d4e97d0113419a78cee8b96cae252dfa9e2df230233151eae76c8bdca31b`; Cartesia Sonic 3.5; Aurora voice; pack `1.1.0`; created 2026-07-14 | Private evidence records Cartesia Pro entitlement during generation; see #32 pointer below. It applies only while these exact assets remain in the release candidate. |
-| Complete voice pack | 4,000 Bella MP3 teacher clips plus eight Aurora AAC-LC M4A accents | Bundled offline | Stable relative-path/checksum digest `4c2f6768dedf79c541cc63e8038b34d45f33105391b3a664abc6e6cd53a9b662` | No runtime teacher-audio endpoint is configured in the production plist until the PawGoo production deployment passes. |
+| Complete voice pack | 4,000 Bella MP3 teacher clips plus eight Aurora AAC-LC M4A accents | Bundled offline | Stable relative-path/checksum digest `4c2f6768dedf79c541cc63e8038b34d45f33105391b3a664abc6e6cd53a9b662` | The separate 4,000-word online tier uses only the verified PawGoo production endpoint and the same approved Bella contract. |
 | ElevenLabs teacher QA artifacts | 98 MP3 files across five `QAArtifacts/TeacherAudio-ElevenLabs-*` directories plus pronunciation-alias evaluation: seeded and exploratory Bella/Jessica Read/Write clips for the nine acceptance words and listening montages | QA-only; not copied into the app target | Candidate manifests record exact provider/model/voice/seed/speed/playback metadata. No provider credential is present. The approved shipping pack is recorded separately above | Failed exploratory candidates remain QA evidence and are never fallback voices. |
 | World music and functional effects | `ProceduralAudioDesign.swift` and `ProceduralAudioRenderer.swift` synthesize oscillator/noise output | Compiled code; generated PCM exists only at runtime | `DesignAssets/Audio/README.md` documents the method and absence of third-party samples | Pawgoo ownership confirmed by the 2026-07-23 owner attestation. |
 | Apple speech, handwriting, OCR, and recognition | Operating-system frameworks and services | Uses platform APIs; no Apple voice/model file is bundled | Apple platform APIs | Not represented as Pawgoo-owned recordings or models. |
@@ -63,7 +63,7 @@ in-product attribution surface.
 - `TadaWordsContent` processes its `Resources` directory.
 - `TadaWordsApplePlatform` copies both `Resources/Audio` and
   `Resources/PictureHints`.
-- The current source contains exactly 1,000 teacher MP3 files, eight accent M4A
+- The current source contains exactly 4,000 teacher MP3 files, eight accent M4A
   files, 74 bundled Twemoji PNGs, four Swift-package resource JSON files, one
   app-level persistence compatibility JSON file, and no custom font file under
   `Apps` or `Sources`.
@@ -73,9 +73,9 @@ in-product attribution surface.
   attribution, source/version, unmodified quantity, license, and offline-status
   text are local Swift constants; only the optional source and license links
   open a web browser.
-- `RemoteTeacherWordAudioProvider` compiles into the binary, but the production
-  plist has no `TadaWordsTeacherAudioEndpoint`; the bundled provider is the
-  current release path.
+- `RemoteTeacherWordAudioProvider` compiles into the binary. Release binds it
+  only to `https://audio.pawgoo.app`; Debug uses only the isolated development
+  hostname and LocalQA remains endpoint-free.
 - `QAArtifacts`, `DesignAssets`, `Tests`, and documentation are not application
   target resources. The archive verifier rejects their names, the child-speech
   fixture, WAV files, and custom font files.

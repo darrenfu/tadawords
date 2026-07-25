@@ -10,6 +10,7 @@ picture_relative="Sources/TadaWordsApplePlatform/Resources/PictureHints/Twemoji-
 preset_relative="Sources/TadaWordsContent/Resources/PresetWords.json"
 compatibility_relative="Apps/TadaWordsApp/PersistenceSchemaCompatibility.json"
 guardian_notice_relative="Sources/TadaWordsGuardianFeatures/GuardianThirdPartyNoticesView.swift"
+expected_teacher_audio_endpoint="https://audio.pawgoo.app"
 
 expected_audio_digest="4c2f6768dedf79c541cc63e8038b34d45f33105391b3a664abc6e6cd53a9b662"
 expected_picture_digest="fbe89ce4496e0f50a59f93b3dc55f2e3e24eb1bcd463597c218a40e5f19d7a1a"
@@ -295,9 +296,10 @@ if grep -Eiq 'https?://|URLSession|jsdelivr|cdn\.' "$picture_service"; then
     fail "picture service contains a runtime network/CDN path"
 fi
 
-if plutil -extract TadaWordsTeacherAudioEndpoint raw "$production_plist" >/dev/null 2>&1; then
-    fail "production plist configures a runtime teacher-audio endpoint"
-fi
+assert_equal \
+    "$(plutil -extract TadaWordsTeacherAudioEndpoint raw "$production_plist")" \
+    "$expected_teacher_audio_endpoint" \
+    "production teacher-audio endpoint"
 
 echo "source inventory verified: $expected_version ($expected_build), 4,000 teacher MP3 plus 8 accent M4A, 74 offline Twemoji PNGs, four package JSON files plus one app schema JSON, no custom fonts"
 echo "in-app Twemoji attribution verified; rights readiness remains blocked by #32 and #33 because this verifier does not replace human evidence"
@@ -322,9 +324,10 @@ assert_equal "$(plutil -extract CFBundleShortVersionString raw "$app_info")" "$e
 assert_equal "$(plutil -extract CFBundleVersion raw "$app_info")" "$expected_build" "archive build"
 assert_equal "$(plutil -extract CFBundleIdentifier raw "$app_info")" "$expected_bundle_id" "archive bundle ID"
 assert_equal "$(plutil -extract TadaWordsGitCommit raw "$app_info")" "$expected_commit" "archive embedded commit"
-if plutil -extract TadaWordsTeacherAudioEndpoint raw "$app_info" >/dev/null 2>&1; then
-    fail "archive configures a runtime teacher-audio endpoint"
-fi
+assert_equal \
+    "$(plutil -extract TadaWordsTeacherAudioEndpoint raw "$app_info")" \
+    "$expected_teacher_audio_endpoint" \
+    "archive teacher-audio endpoint"
 
 archive_audio_root="$(find "$app_path" -type d -path '*/Audio' -print -quit)"
 archive_picture_root="$(find "$app_path" -type d -path '*/PictureHints/Twemoji-17.0.3' -print -quit)"

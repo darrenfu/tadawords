@@ -127,10 +127,22 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             XCTAssertFalse(document.contains(claim), "Stale claim returned: \(claim)")
         }
 
-        for plistPath in [
-            "Apps/TadaWordsApp/Info.plist",
-            "Apps/TadaWordsApp/InfoLocalQA.plist",
-        ] {
+        let productionPlist = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Apps/TadaWordsApp/Info.plist"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertTrue(
+            productionPlist.contains(
+                "<string>https://audio.pawgoo.app</string>"
+            )
+        )
+        XCTAssertTrue(productionPlist.contains("<string>0.7.39</string>"))
+        XCTAssertTrue(productionPlist.contains("<string>2026072413</string>"))
+        XCTAssertFalse(productionPlist.contains("voice setup"))
+
+        for plistPath in ["Apps/TadaWordsApp/InfoLocalQA.plist"] {
             let plist = try String(
                 contentsOf: repositoryRoot.appendingPathComponent(plistPath),
                 encoding: .utf8
