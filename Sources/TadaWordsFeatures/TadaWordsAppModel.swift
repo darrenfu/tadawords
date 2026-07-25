@@ -879,6 +879,7 @@ final class TadaWordsAppModel: ObservableObject {
                 deviceClass: request.seed.deviceClass,
                 personalPaceBands: request.seed.personalPaceBands,
                 interfacePreferences: request.seed.interfacePreferences,
+                incorrectAttemptLimit: request.seed.incorrectAttemptLimit,
                 emergencyAfter: request.seed.emergencyAfter,
                 timer: timer
             )
@@ -1042,7 +1043,8 @@ final class TadaWordsAppModel: ObservableObject {
             }
             let recovery = try PersistedQuestRecoveryResolver().resolve(
                 plan: effectivePlan,
-                attempts: storedAttempts
+                attempts: storedAttempts,
+                incorrectAttemptLimit: candidate.incorrectAttemptLimit
             )
             for completedPrompt in prompts.prefix(recovery.nextItemIndex) {
                 try await rebuildAndSaveProgress(
@@ -1068,6 +1070,7 @@ final class TadaWordsAppModel: ObservableObject {
                 deviceClass: candidate.deviceClass,
                 personalPaceBands: candidate.personalPaceBands,
                 interfacePreferences: candidate.interfacePreferences,
+                incorrectAttemptLimit: candidate.incorrectAttemptLimit,
                 emergencyAfter: candidate.emergencyAfter,
                 timer: timer,
                 currentIndex: recovery.nextItemIndex,
@@ -1389,7 +1392,8 @@ final class TadaWordsAppModel: ObservableObject {
                 totalItems: quest.prompts.count,
                 earnedItemCount: earnedWordIDs.count,
                 timer: quest.timer,
-                interfacePreferences: quest.interfacePreferences
+                interfacePreferences: quest.interfacePreferences,
+                incorrectAttemptLimit: quest.incorrectAttemptLimit
             )
         )
     }
@@ -1437,6 +1441,7 @@ final class TadaWordsAppModel: ObservableObject {
                 deviceClass: quest.deviceClass,
                 personalPaceBands: quest.personalPaceBands,
                 interfacePreferences: quest.interfacePreferences,
+                incorrectAttemptLimit: quest.incorrectAttemptLimit,
                 emergencyAfter: quest.emergencyAfter,
                 writeInputMethod: quest.writeInputMethod
             )
@@ -1750,6 +1755,7 @@ private struct FocusedReplaySeed: Sendable {
     let deviceClass: DeviceClass
     let personalPaceBands: [PersonalPaceBand]
     let interfacePreferences: PracticeInterfacePreferences
+    let incorrectAttemptLimit: Int
     let emergencyAfter: TimeInterval
     let writeInputMethod: WriteQuestInputMethod
 }
@@ -1765,6 +1771,7 @@ private struct ActiveQuest {
     let deviceClass: DeviceClass
     let personalPaceBands: [PersonalPaceBand]
     let interfacePreferences: PracticeInterfacePreferences
+    let incorrectAttemptLimit: Int
     let emergencyAfter: TimeInterval
     let timer: QuestTimerModel
     var currentIndex = 0

@@ -19,7 +19,9 @@ struct PersistedQuestRecovery: Sendable {
 struct PersistedQuestRecoveryResolver: Sendable {
     func resolve(
         plan: QuestPlan,
-        attempts: [AttemptEvent]
+        attempts: [AttemptEvent],
+        incorrectAttemptLimit: Int =
+            LearningRouteSettings.defaultIncorrectAttemptLimit
     ) throws -> PersistedQuestRecovery {
         let plannedItems = plan.orderedItems
         let plannedWordIDs = Set(plannedItems.map(\.wordPromptID))
@@ -57,7 +59,8 @@ struct PersistedQuestRecoveryResolver: Sendable {
 
             if try isTerminalCheckpoint(
                 events,
-                policy: plan.configuration.learningMode == .write ? .write : .read
+                policy: plan.configuration.learningMode == .write ? .write : .read,
+                incorrectAttemptLimit: incorrectAttemptLimit
             ) {
                 completedWordIDs.insert(item.wordPromptID)
                 nextItemIndex = index + 1
@@ -77,10 +80,24 @@ struct PersistedQuestRecoveryResolver: Sendable {
 
     private func isTerminalCheckpoint(
         _ events: [AttemptEvent],
-        policy: QuestAttemptPolicy
+        policy: QuestAttemptPolicy,
+        incorrectAttemptLimit: Int
     ) throws -> Bool {
         var submissionCount = 0
         var consecutiveTechnicalIssueCount = 0
+        let usesLegacyWriteAnswerExposure =
+            policy == .write
+            && events.contains(where: { $0.evidence == .feedbackExposed })
+        let effectiveIncorrectAttemptLimit =
+            usesLegacyWriteAnswerExposure
+            ? 2
+            : min(
+                LearningRouteSettings.incorrectAttemptLimitRange.upperBound,
+                max(
+                    LearningRouteSettings.incorrectAttemptLimitRange.lowerBound,
+                    incorrectAttemptLimit
+                )
+            )
 
         for event in events {
             switch (event.evidence, event.outcome) {
@@ -113,7 +130,7 @@ struct PersistedQuestRecoveryResolver: Sendable {
                 ):
                 submissionCount += 1
                 consecutiveTechnicalIssueCount = 0
-                if submissionCount >= policy.maximumSubmissionCount {
+                if submissionCount >= effectiveIncorrectAttemptLimit {
                     return true
                 }
 
@@ -126,18 +143,17 @@ struct PersistedQuestRecoveryResolver: Sendable {
                 }
 
             case (.recognitionUncertain, .recognitionUncertain):
-                switch policy {
-                case .read:
+                if usesLegacyWriteAnswerExposure {
+                    submissionCount += 1
+                    consecutiveTechnicalIssueCount = 0
+                    if submissionCount >= effectiveIncorrectAttemptLimit {
+                        return true
+                    }
+                } else {
                     consecutiveTechnicalIssueCount += 1
                     if consecutiveTechnicalIssueCount
                         >= QuestAttemptStateMachine.technicalIssueSkipThreshold
                     {
-                        return true
-                    }
-                case .write:
-                    submissionCount += 1
-                    consecutiveTechnicalIssueCount = 0
-                    if submissionCount >= policy.maximumSubmissionCount {
                         return true
                     }
                 }

@@ -790,7 +790,7 @@ final class FamilySyncDataManifestCoverageHarnessTests: XCTestCase {
             case .read, .write:
                 expected["value.value"] = [
                     "newWordLimit", "reviewWordLimit", "contentOrder",
-                    "emergencyAfterSeconds",
+                    "emergencyAfterSeconds", "incorrectAttemptLimit",
                 ]
             case .audio:
                 expected["value.value"] = [
@@ -830,7 +830,7 @@ final class FamilySyncDataManifestCoverageHarnessTests: XCTestCase {
             of: route,
             equal: [
                 "newWordLimit", "reviewWordLimit", "contentOrder",
-                "emergencyAfterSeconds",
+                "emergencyAfterSeconds", "incorrectAttemptLimit",
             ],
             contract: "practiceSettings.read/write.value"
         )

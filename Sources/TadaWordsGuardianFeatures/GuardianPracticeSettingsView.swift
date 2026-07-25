@@ -87,7 +87,7 @@ struct GuardianPracticeSettingsView: View {
                 Text("Plan each practice route")
                     .font(.system(.title3, design: .rounded, weight: .bold))
                 Text(
-                    "Choose how many new and review words appear, their order, and when Rescue time begins."
+                    "Choose word counts, order, wrong answers allowed per word, and when Rescue time begins."
                 )
                 .font(.system(.body, design: .rounded, weight: .medium))
                 .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
@@ -395,6 +395,35 @@ private struct GuardianRouteSettingsCard: View {
 
                 Divider()
 
+                Stepper(
+                    value: $draft.incorrectAttemptLimit,
+                    in: LearningRouteSettings.incorrectAttemptLimitRange
+                ) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Wrong answers per word")
+                            .font(.system(.headline, design: .rounded, weight: .bold))
+                        Text(
+                            "\(draft.incorrectAttemptLimit) "
+                                + (draft.incorrectAttemptLimit == 1
+                                    ? "wrong answer" : "wrong answers")
+                        )
+                        .font(.system(.subheadline, design: .rounded, weight: .medium))
+                        .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                        .monospacedDigit()
+                    }
+                }
+                .accessibilityLabel(
+                    "\(mode.guardianTitle) wrong answers allowed per word"
+                )
+                .accessibilityValue(
+                    "\(mode.guardianTitle), \(draft.incorrectAttemptLimit)"
+                )
+                .accessibilityIdentifier(
+                    "parent.practice.\(mode.rawValue).incorrect-attempt-limit"
+                )
+
+                Divider()
+
                 VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.small) {
                     Text("Quest order")
                         .font(.system(.headline, design: .rounded, weight: .bold))
@@ -468,12 +497,14 @@ private struct GuardianRouteSettingsDraft {
     var reviewWordLimit: Int
     var contentOrder: QuestContentOrder
     var emergencyMinutes: Int
+    var incorrectAttemptLimit: Int
 
     init(settings: LearningRouteSettings) {
         newWordLimit = settings.newWordLimit
         reviewWordLimit = settings.reviewWordLimit
         contentOrder = settings.contentOrder
         emergencyMinutes = settings.emergencyAfterSeconds / 60
+        incorrectAttemptLimit = settings.incorrectAttemptLimit
     }
 
     var settings: LearningRouteSettings {
@@ -481,7 +512,8 @@ private struct GuardianRouteSettingsDraft {
             newWordLimit: newWordLimit,
             reviewWordLimit: reviewWordLimit,
             contentOrder: contentOrder,
-            emergencyAfterSeconds: emergencyMinutes * 60
+            emergencyAfterSeconds: emergencyMinutes * 60,
+            incorrectAttemptLimit: incorrectAttemptLimit
         )
     }
 

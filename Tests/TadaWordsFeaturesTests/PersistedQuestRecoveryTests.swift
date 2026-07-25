@@ -77,6 +77,50 @@ final class PersistedQuestRecoveryTests: XCTestCase {
         XCTAssertEqual(recovery.nextItemIndex, 1)
     }
 
+    func testConfiguredIncorrectAttemptLimitControlsRecoveryCheckpoint() throws {
+        let fixture = try Fixture(mode: .write)
+        let firstTwo = [
+            fixture.incorrectAttempt(number: 1, evidence: .firstIndependentAttempt),
+            fixture.incorrectAttempt(number: 2, evidence: .unaidedRetry),
+        ]
+
+        let partial = try PersistedQuestRecoveryResolver().resolve(
+            plan: fixture.plan,
+            attempts: firstTwo,
+            incorrectAttemptLimit: 3
+        )
+        let complete = try PersistedQuestRecoveryResolver().resolve(
+            plan: fixture.plan,
+            attempts: firstTwo + [
+                fixture.incorrectAttempt(number: 3, evidence: .unaidedRetry)
+            ],
+            incorrectAttemptLimit: 3
+        )
+
+        XCTAssertEqual(partial.nextItemIndex, 0)
+        XCTAssertEqual(complete.nextItemIndex, 1)
+    }
+
+    func testNewWriteUncertainEventsRemainTechnicalUntilThirdIssue() throws {
+        let fixture = try Fixture(mode: .write)
+        let firstTwo = [
+            fixture.uncertainAttempt(number: 1),
+            fixture.uncertainAttempt(number: 2),
+        ]
+
+        let partial = try PersistedQuestRecoveryResolver().resolve(
+            plan: fixture.plan,
+            attempts: firstTwo
+        )
+        let complete = try PersistedQuestRecoveryResolver().resolve(
+            plan: fixture.plan,
+            attempts: firstTwo + [fixture.uncertainAttempt(number: 3)]
+        )
+
+        XCTAssertEqual(partial.nextItemIndex, 0)
+        XCTAssertEqual(complete.nextItemIndex, 1)
+    }
+
     private struct Fixture {
         let profileID = ProfileID(
             rawValue: UUID(uuidString: "91000000-0000-0000-0000-000000000001")!

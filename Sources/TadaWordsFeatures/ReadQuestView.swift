@@ -65,6 +65,12 @@ struct ReadQuestView: View {
         _questTimer = ObservedObject(
             wrappedValue: questTimer
         )
+        _attemptState = State(
+            initialValue: QuestAttemptStateMachine(
+                policy: .read,
+                incorrectAttemptLimit: session.incorrectAttemptLimit
+            )
+        )
         _responseClock = State(
             initialValue: AttemptResponseClock(
                 startingAt: questTimer.elapsedSeconds
@@ -434,12 +440,6 @@ struct ReadQuestView: View {
                 symbol: "arrow.clockwise.circle.fill",
                 kind: .tryAgain
             )
-        case .rewriteAfterAnswer:
-            return ReadFeedback(
-                message: "Listen, then try once more.",
-                symbol: "speaker.wave.2.fill",
-                kind: .tryAgain
-            )
         case .recognitionUncertain:
             return ReadFeedback(
                 message: "I’m not sure I heard that. Please try again.",
@@ -561,13 +561,10 @@ struct ReadQuestView: View {
             announceForAccessibility(message)
         }
         if let summary = attemptState.completedSummary {
-            if summary.completion == .needsPractice,
-                summary.records.contains(where: { $0.outcome == .incorrect })
-            {
-                playAnswerThenComplete(summary, after: feedbackPlayback)
-            } else {
-                showCompletion(summary, after: feedbackPlayback)
-            }
+            playPronunciationThenComplete(
+                summary,
+                after: feedbackPlayback
+            )
         } else {
             // Every retry starts a fresh response-time window. Recognition,
             // permission, and prior speaking time must not leak into the next
@@ -618,7 +615,7 @@ struct ReadQuestView: View {
         return task
     }
 
-    private func playAnswerThenComplete(
+    private func playPronunciationThenComplete(
         _ summary: QuestAttemptSummary,
         after feedbackPlayback: Task<Void, Never>
     ) {
@@ -790,15 +787,20 @@ struct ReadQuestView: View {
 
         listeningTask?.cancel()
         completionTask?.cancel()
+        feedbackPlaybackTask?.cancel()
         answerPlaybackTask?.cancel()
         hintPlaybackTask?.cancel()
         listeningTask = nil
         completionTask = nil
+        feedbackPlaybackTask = nil
         answerPlaybackTask = nil
         hintPlaybackTask = nil
         starFeedbackEvent = nil
 
-        attemptState = QuestAttemptStateMachine(policy: .read)
+        attemptState = QuestAttemptStateMachine(
+            policy: .read,
+            incorrectAttemptLimit: session.incorrectAttemptLimit
+        )
         isListening = false
         isPaused = false
         isCheckingPermission = false

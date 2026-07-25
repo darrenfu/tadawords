@@ -22,7 +22,7 @@ final class QuestAttemptStateMachineTests: XCTestCase {
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.notMatched))
-        XCTAssertEqual(machine.phase, .feedback(.tryAgain(remainingAttempts: 2)))
+        XCTAssertEqual(machine.phase, .feedback(.tryAgain(remainingAttempts: 1)))
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.matched))
@@ -36,10 +36,28 @@ final class QuestAttemptStateMachineTests: XCTestCase {
         )
     }
 
-    func testInitialAttemptPlusTwoRetriesIsHardLimit() throws {
+    func testDefaultTwoIncorrectAnswersIsHardLimit() throws {
         var machine = QuestAttemptStateMachine()
 
-        for remainingAttempts in [2, 1] {
+        XCTAssertTrue(machine.beginAttempt())
+        machine.receive(result(.notMatched))
+        XCTAssertEqual(machine.phase, .feedback(.tryAgain(remainingAttempts: 1)))
+
+        XCTAssertTrue(machine.beginAttempt())
+        machine.receive(result(.notMatched))
+
+        let summary = try XCTUnwrap(machine.completedSummary)
+        XCTAssertEqual(summary.completion, .needsPractice)
+        XCTAssertEqual(summary.validAttemptCount, 2)
+        XCTAssertEqual(machine.incorrectAttemptCount, 2)
+        XCTAssertEqual(machine.remainingIncorrectAttemptCount, 0)
+        XCTAssertFalse(machine.beginAttempt())
+    }
+
+    func testCustomFiveIncorrectAnswerLimitIsHonored() throws {
+        var machine = QuestAttemptStateMachine(incorrectAttemptLimit: 5)
+
+        for remainingAttempts in [4, 3, 2, 1] {
             XCTAssertTrue(machine.beginAttempt())
             machine.receive(result(.notMatched))
             XCTAssertEqual(
@@ -50,12 +68,21 @@ final class QuestAttemptStateMachineTests: XCTestCase {
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.notMatched))
+        XCTAssertEqual(machine.completedSummary?.completion, .needsPractice)
+        XCTAssertEqual(machine.incorrectAttemptCount, 5)
+    }
 
-        let summary = try XCTUnwrap(machine.completedSummary)
-        XCTAssertEqual(summary.completion, .needsPractice)
-        XCTAssertEqual(summary.validAttemptCount, 3)
-        XCTAssertEqual(machine.remainingValidAttemptCount, 0)
-        XCTAssertFalse(machine.beginAttempt())
+    func testIncorrectAnswerLimitClampsToParentRange() {
+        XCTAssertEqual(
+            QuestAttemptStateMachine(incorrectAttemptLimit: 0)
+                .incorrectAttemptLimit,
+            1
+        )
+        XCTAssertEqual(
+            QuestAttemptStateMachine(incorrectAttemptLimit: 99)
+                .incorrectAttemptLimit,
+            5
+        )
     }
 
     func testTechnicalAndUncertainResultsDoNotConsumeAttemptsOrBecomeWrongEvidence() throws {
@@ -64,12 +91,12 @@ final class QuestAttemptStateMachineTests: XCTestCase {
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.technicalFailure(.permissionDenied)))
         XCTAssertEqual(machine.validAttemptCount, 0)
-        XCTAssertEqual(machine.remainingValidAttemptCount, 3)
+        XCTAssertEqual(machine.remainingIncorrectAttemptCount, 2)
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.uncertain))
         XCTAssertEqual(machine.validAttemptCount, 0)
-        XCTAssertEqual(machine.remainingValidAttemptCount, 3)
+        XCTAssertEqual(machine.remainingIncorrectAttemptCount, 2)
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.matched))
@@ -118,7 +145,7 @@ final class QuestAttemptStateMachineTests: XCTestCase {
         )
 
         XCTAssertEqual(machine.validAttemptCount, 0)
-        XCTAssertEqual(machine.remainingValidAttemptCount, 3)
+        XCTAssertEqual(machine.remainingIncorrectAttemptCount, 2)
         XCTAssertEqual(machine.phase, .feedback(.technicalRetry(.wrongSpeaker)))
         XCTAssertEqual(machine.records.map(\.evidence), [.technicalRetry])
         XCTAssertEqual(machine.records.map(\.outcome), [.technicalFailure(.wrongSpeaker)])
@@ -208,20 +235,17 @@ final class QuestAttemptStateMachineTests: XCTestCase {
         XCTAssertFalse(machine.canSkipAfterTechnicalIssues)
     }
 
-    func testWriteIncorrectImmediatelyExposesAnswerAndAllowsOneRewrite() throws {
+    func testWriteDoesNotExposeAnswerBeforeFinalIncorrectResponse() throws {
         var machine = QuestAttemptStateMachine(policy: .write)
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.notMatched))
 
-        XCTAssertEqual(machine.phase, .feedback(.rewriteAfterAnswer))
+        XCTAssertEqual(machine.phase, .feedback(.tryAgain(remainingAttempts: 1)))
         XCTAssertEqual(machine.submissionCount, 1)
-        XCTAssertEqual(machine.remainingValidAttemptCount, 1)
-        XCTAssertEqual(
-            machine.records.map(\.evidence),
-            [.firstIndependentAttempt, .feedbackExposed]
-        )
-        XCTAssertTrue(machine.usedGuidance)
+        XCTAssertEqual(machine.remainingIncorrectAttemptCount, 1)
+        XCTAssertEqual(machine.records.map(\.evidence), [.firstIndependentAttempt])
+        XCTAssertFalse(machine.usedGuidance)
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.notMatched))
@@ -232,30 +256,28 @@ final class QuestAttemptStateMachineTests: XCTestCase {
         XCTAssertFalse(machine.beginAttempt())
     }
 
-    func testWriteUncertainExposesAnswerWithoutCountingWrongThenEndsAfterRewrite() throws {
+    func testWriteUncertainDoesNotExposeAnswerOrConsumeWrongAttempt() throws {
         var machine = QuestAttemptStateMachine(policy: .write)
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.uncertain))
 
-        XCTAssertEqual(machine.phase, .feedback(.rewriteAfterAnswer))
+        XCTAssertEqual(machine.phase, .feedback(.recognitionUncertain))
         XCTAssertEqual(machine.validAttemptCount, 0)
-        XCTAssertEqual(machine.submissionCount, 1)
-        XCTAssertEqual(
-            machine.records.map(\.evidence),
-            [.recognitionUncertain, .feedbackExposed]
-        )
+        XCTAssertEqual(machine.submissionCount, 0)
+        XCTAssertEqual(machine.incorrectAttemptCount, 0)
+        XCTAssertEqual(machine.records.map(\.evidence), [.recognitionUncertain])
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.matched))
 
         let summary = try XCTUnwrap(machine.completedSummary)
-        XCTAssertEqual(summary.completion, .completedWithGuidance)
+        XCTAssertEqual(summary.completion, .independentSuccess)
         XCTAssertEqual(summary.validAttemptCount, 1)
-        XCTAssertEqual(summary.records.last?.evidence, .guidedRetry)
+        XCTAssertEqual(summary.records.last?.evidence, .firstIndependentAttempt)
     }
 
-    func testWriteTechnicalRetryDoesNotConsumeTheSingleRewrite() throws {
+    func testWriteTechnicalRetryDoesNotConsumeIncorrectAttemptLimit() throws {
         var machine = QuestAttemptStateMachine(policy: .write)
 
         XCTAssertTrue(machine.beginAttempt())
@@ -264,11 +286,12 @@ final class QuestAttemptStateMachineTests: XCTestCase {
         machine.receive(result(.technicalFailure(.serviceUnavailable)))
 
         XCTAssertEqual(machine.submissionCount, 1)
+        XCTAssertEqual(machine.incorrectAttemptCount, 1)
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.matched))
 
         let summary = try XCTUnwrap(machine.completedSummary)
-        XCTAssertEqual(summary.completion, .completedWithGuidance)
+        XCTAssertEqual(summary.completion, .completedAfterRetry)
         XCTAssertEqual(summary.validAttemptCount, 2)
     }
 

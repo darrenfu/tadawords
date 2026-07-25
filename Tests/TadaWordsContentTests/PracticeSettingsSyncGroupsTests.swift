@@ -76,13 +76,15 @@ final class PracticeSettingsSyncGroupsTests: XCTestCase {
                 newWordLimit: 2,
                 reviewWordLimit: 3,
                 contentOrder: .reviewThenNew,
-                emergencyAfterSeconds: 121
+                emergencyAfterSeconds: 121,
+                incorrectAttemptLimit: 1
             ),
             write: LearningRouteSettings(
                 newWordLimit: 7,
                 reviewWordLimit: 8,
                 contentOrder: .newThenReview,
-                emergencyAfterSeconds: 321
+                emergencyAfterSeconds: 321,
+                incorrectAttemptLimit: 5
             ),
             audio: AudioPreferences(
                 voiceEnabled: false,

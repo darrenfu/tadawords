@@ -156,6 +156,7 @@ struct QuestSession: Identifiable {
     let earnedItemCount: Int
     let timer: QuestTimerModel
     let interfacePreferences: PracticeInterfacePreferences
+    let incorrectAttemptLimit: Int
 
     init(
         id: QuestID,
@@ -168,7 +169,9 @@ struct QuestSession: Identifiable {
         totalItems: Int,
         earnedItemCount: Int = 0,
         timer: QuestTimerModel,
-        interfacePreferences: PracticeInterfacePreferences
+        interfacePreferences: PracticeInterfacePreferences,
+        incorrectAttemptLimit: Int =
+            LearningRouteSettings.defaultIncorrectAttemptLimit
     ) {
         self.id = id
         self.profileID = profileID
@@ -181,6 +184,13 @@ struct QuestSession: Identifiable {
         self.earnedItemCount = max(0, min(earnedItemCount, totalItems))
         self.timer = timer
         self.interfacePreferences = interfacePreferences
+        self.incorrectAttemptLimit = min(
+            LearningRouteSettings.incorrectAttemptLimitRange.upperBound,
+            max(
+                LearningRouteSettings.incorrectAttemptLimitRange.lowerBound,
+                incorrectAttemptLimit
+            )
+        )
     }
 }
 

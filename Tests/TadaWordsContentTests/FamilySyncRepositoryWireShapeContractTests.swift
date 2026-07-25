@@ -426,7 +426,7 @@ final class FamilySyncRepositoryWireShapeContractTests: XCTestCase {
                 $.schemaVersion\tnumber
                 $.value\tobject{group,value}
                 $.value.group\tstring
-                $.value.value\tobject{calmEmergencyEnabled,musicEnabled,reducedSoundEnabled,soundEffectsEnabled,voiceEnabled} | object{contentOrder,emergencyAfterSeconds,newWordLimit,reviewWordLimit} | object{dailyReminderEnabled,dailyReminderTime,poolLowEnabled,questCompletionEnabled,quietHours,syncFailureEnabled,weeklySummaryEnabled} | object{leftHandedLayoutEnabled,selectedHandwritingTool} | string
+                $.value.value\tobject{calmEmergencyEnabled,musicEnabled,reducedSoundEnabled,soundEffectsEnabled,voiceEnabled} | object{contentOrder,emergencyAfterSeconds,incorrectAttemptLimit,newWordLimit,reviewWordLimit} | object{dailyReminderEnabled,dailyReminderTime,poolLowEnabled,questCompletionEnabled,quietHours,syncFailureEnabled,weeklySummaryEnabled} | object{leftHandedLayoutEnabled,selectedHandwritingTool} | string
                 $.value.value.calmEmergencyEnabled\tboolean
                 $.value.value.contentOrder\tstring
                 $.value.value.dailyReminderEnabled\tboolean
@@ -434,6 +434,7 @@ final class FamilySyncRepositoryWireShapeContractTests: XCTestCase {
                 $.value.value.dailyReminderTime.hour\tnumber
                 $.value.value.dailyReminderTime.minute\tnumber
                 $.value.value.emergencyAfterSeconds\tnumber
+                $.value.value.incorrectAttemptLimit\tnumber
                 $.value.value.leftHandedLayoutEnabled\tboolean
                 $.value.value.musicEnabled\tboolean
                 $.value.value.newWordLimit\tnumber

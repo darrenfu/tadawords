@@ -84,6 +84,8 @@ final class PracticeSettingsTests: XCTestCase {
         XCTAssertEqual(settings.write, .defaultWrite)
         XCTAssertEqual(settings.write.newWordLimit, 5)
         XCTAssertEqual(settings.write.reviewWordLimit, 5)
+        XCTAssertEqual(settings.read.incorrectAttemptLimit, 2)
+        XCTAssertEqual(settings.write.incorrectAttemptLimit, 2)
         XCTAssertEqual(
             settings.configuration(for: .read),
             PracticeModeConfiguration(
@@ -105,13 +107,15 @@ final class PracticeSettingsTests: XCTestCase {
             newWordLimit: 7,
             reviewWordLimit: 4,
             contentOrder: .reviewThenNew,
-            emergencyAfterSeconds: 90
+            emergencyAfterSeconds: 90,
+            incorrectAttemptLimit: 1
         )
         let write = LearningRouteSettings(
             newWordLimit: 2,
             reviewWordLimit: 8,
             contentOrder: .newThenReview,
-            emergencyAfterSeconds: 420
+            emergencyAfterSeconds: 420,
+            incorrectAttemptLimit: 5
         )
         let settings = ProfilePracticeSettings(
             profileID: Self.profileID,
@@ -130,7 +134,8 @@ final class PracticeSettingsTests: XCTestCase {
                     attentionBudget: 11,
                     contentOrder: .reviewThenNew
                 ),
-                emergencyAfterSeconds: 90
+                emergencyAfterSeconds: 90,
+                incorrectAttemptLimit: 1
             )
         )
         XCTAssertEqual(settings.route(for: .write), write)
@@ -144,7 +149,8 @@ final class PracticeSettingsTests: XCTestCase {
                     attentionBudget: 10,
                     contentOrder: .newThenReview
                 ),
-                emergencyAfterSeconds: 420
+                emergencyAfterSeconds: 420,
+                incorrectAttemptLimit: 5
             )
         )
     }
@@ -155,16 +161,22 @@ final class PracticeSettingsTests: XCTestCase {
             LearningRouteSettings.emergencyAfterSecondsRange,
             60...3_600
         )
+        XCTAssertEqual(
+            LearningRouteSettings.incorrectAttemptLimitRange,
+            1...5
+        )
 
         let initialized = LearningRouteSettings(
             newWordLimit: -5,
             reviewWordLimit: -2,
             contentOrder: .reviewThenNew,
-            emergencyAfterSeconds: -60
+            emergencyAfterSeconds: -60,
+            incorrectAttemptLimit: -10
         )
         XCTAssertEqual(initialized.newWordLimit, 0)
         XCTAssertEqual(initialized.reviewWordLimit, 0)
         XCTAssertEqual(initialized.emergencyAfterSeconds, 60)
+        XCTAssertEqual(initialized.incorrectAttemptLimit, 1)
 
         let invalidJSON = Data(
             """
@@ -189,12 +201,14 @@ final class PracticeSettingsTests: XCTestCase {
                 emergencyAfterSeconds: 60
             )
         )
+        XCTAssertEqual(decoded.incorrectAttemptLimit, 2)
 
         let saturated = LearningRouteSettings(
             newWordLimit: Int.max,
             reviewWordLimit: Int.max,
             contentOrder: .newThenReview,
-            emergencyAfterSeconds: Int.max
+            emergencyAfterSeconds: Int.max,
+            incorrectAttemptLimit: Int.max
         )
         let configuration = ProfilePracticeSettings(
             profileID: Self.profileID,
@@ -203,8 +217,10 @@ final class PracticeSettingsTests: XCTestCase {
         XCTAssertEqual(saturated.newWordLimit, 20)
         XCTAssertEqual(saturated.reviewWordLimit, 20)
         XCTAssertEqual(saturated.emergencyAfterSeconds, 3_600)
+        XCTAssertEqual(saturated.incorrectAttemptLimit, 5)
         XCTAssertEqual(configuration.questConfiguration.attentionBudget, 40)
         XCTAssertEqual(configuration.emergencyAfterSeconds, 3_600)
+        XCTAssertEqual(configuration.incorrectAttemptLimit, 5)
     }
 
     func testProfileSettingsCodableRoundTripPreservesIdentityAndRoutes()
@@ -216,7 +232,8 @@ final class PracticeSettingsTests: XCTestCase {
                 newWordLimit: 6,
                 reviewWordLimit: 9,
                 contentOrder: .reviewThenNew,
-                emergencyAfterSeconds: 240
+                emergencyAfterSeconds: 240,
+                incorrectAttemptLimit: 4
             )
         )
 

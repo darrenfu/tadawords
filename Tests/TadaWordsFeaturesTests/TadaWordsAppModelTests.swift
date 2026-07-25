@@ -429,13 +429,15 @@ final class TadaWordsAppModelTests: XCTestCase {
             wordCount: 1,
             interfacePreferences: PracticeInterfacePreferences(
                 leftHandedLayoutEnabled: true
-            )
+            ),
+            incorrectAttemptLimit: 4
         )
 
         await fixture.model.prepareQuestAndWait(.read)
 
         let session = try questSession(from: fixture.model.destination)
         XCTAssertTrue(session.interfacePreferences.leftHandedLayoutEnabled)
+        XCTAssertEqual(session.incorrectAttemptLimit, 4)
     }
 
     func testPersistedItemAdvancesUntilOneActualFinalScore() async throws {
@@ -1281,6 +1283,8 @@ private struct ModelFixture {
         deviceClass: DeviceClass = .tablet,
         personalPaceBands: [PersonalPaceBand] = [],
         interfacePreferences: PracticeInterfacePreferences = .default,
+        incorrectAttemptLimit: Int =
+            LearningRouteSettings.defaultIncorrectAttemptLimit,
         questTimerFactory: @escaping (TimeInterval) -> QuestTimerModel = {
             QuestTimerModel(emergencyAfter: $0)
         }
@@ -1312,7 +1316,8 @@ private struct ModelFixture {
                     emergencyAfter: 91,
                     deviceClass: deviceClass,
                     personalPaceBands: personalPaceBands,
-                    interfacePreferences: interfacePreferences
+                    interfacePreferences: interfacePreferences,
+                    incorrectAttemptLimit: incorrectAttemptLimit
                 )
             ),
             attemptEventRepository: records,

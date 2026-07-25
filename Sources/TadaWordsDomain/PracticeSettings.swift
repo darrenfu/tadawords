@@ -1,17 +1,21 @@
 public struct LearningRouteSettings: Codable, Hashable, Sendable {
     public static let wordLimitRange: ClosedRange<Int> = 0...20
     public static let emergencyAfterSecondsRange: ClosedRange<Int> = 60...3_600
+    public static let incorrectAttemptLimitRange: ClosedRange<Int> = 1...5
+    public static let defaultIncorrectAttemptLimit = 2
 
     public let newWordLimit: Int
     public let reviewWordLimit: Int
     public let contentOrder: QuestContentOrder
     public let emergencyAfterSeconds: Int
+    public let incorrectAttemptLimit: Int
 
     public init(
         newWordLimit: Int,
         reviewWordLimit: Int,
         contentOrder: QuestContentOrder,
-        emergencyAfterSeconds: Int
+        emergencyAfterSeconds: Int,
+        incorrectAttemptLimit: Int = Self.defaultIncorrectAttemptLimit
     ) {
         self.newWordLimit = Self.clamp(
             newWordLimit,
@@ -25,6 +29,10 @@ public struct LearningRouteSettings: Codable, Hashable, Sendable {
         self.emergencyAfterSeconds = Self.clamp(
             emergencyAfterSeconds,
             to: Self.emergencyAfterSecondsRange
+        )
+        self.incorrectAttemptLimit = Self.clamp(
+            incorrectAttemptLimit,
+            to: Self.incorrectAttemptLimitRange
         )
     }
 
@@ -68,6 +76,7 @@ public struct LearningRouteSettings: Codable, Hashable, Sendable {
         case reviewWordLimit
         case contentOrder
         case emergencyAfterSeconds
+        case incorrectAttemptLimit
     }
 
     public init(from decoder: Decoder) throws {
@@ -85,7 +94,11 @@ public struct LearningRouteSettings: Codable, Hashable, Sendable {
             emergencyAfterSeconds: try container.decode(
                 Int.self,
                 forKey: .emergencyAfterSeconds
-            )
+            ),
+            incorrectAttemptLimit: try container.decodeIfPresent(
+                Int.self,
+                forKey: .incorrectAttemptLimit
+            ) ?? Self.defaultIncorrectAttemptLimit
         )
     }
 
@@ -98,16 +111,23 @@ public struct LearningRouteSettings: Codable, Hashable, Sendable {
             emergencyAfterSeconds,
             forKey: .emergencyAfterSeconds
         )
+        try container.encode(
+            incorrectAttemptLimit,
+            forKey: .incorrectAttemptLimit
+        )
     }
 }
 
 public struct PracticeModeConfiguration: Hashable, Sendable {
     public let questConfiguration: QuestConfiguration
     public let emergencyAfterSeconds: Int
+    public let incorrectAttemptLimit: Int
 
     public init(
         questConfiguration: QuestConfiguration,
-        emergencyAfterSeconds: Int
+        emergencyAfterSeconds: Int,
+        incorrectAttemptLimit: Int =
+            LearningRouteSettings.defaultIncorrectAttemptLimit
     ) {
         self.questConfiguration = questConfiguration
         self.emergencyAfterSeconds = min(
@@ -115,6 +135,13 @@ public struct PracticeModeConfiguration: Hashable, Sendable {
             max(
                 LearningRouteSettings.emergencyAfterSecondsRange.lowerBound,
                 emergencyAfterSeconds
+            )
+        )
+        self.incorrectAttemptLimit = min(
+            LearningRouteSettings.incorrectAttemptLimitRange.upperBound,
+            max(
+                LearningRouteSettings.incorrectAttemptLimitRange.lowerBound,
+                incorrectAttemptLimit
             )
         )
     }
@@ -221,7 +248,8 @@ public struct ProfilePracticeSettings: Codable, Hashable, Sendable {
         let route = route(for: learningMode)
         return PracticeModeConfiguration(
             questConfiguration: route.questConfiguration(for: learningMode),
-            emergencyAfterSeconds: route.emergencyAfterSeconds
+            emergencyAfterSeconds: route.emergencyAfterSeconds,
+            incorrectAttemptLimit: route.incorrectAttemptLimit
         )
     }
 

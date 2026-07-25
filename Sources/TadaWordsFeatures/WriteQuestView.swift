@@ -178,7 +178,10 @@ struct WriteQuestView: View {
             wrappedValue: questTimer
         )
         _attemptState = State(
-            initialValue: QuestAttemptStateMachine(policy: .write)
+            initialValue: QuestAttemptStateMachine(
+                policy: .write,
+                incorrectAttemptLimit: session.incorrectAttemptLimit
+            )
         )
         _completionFeedbackLifecycle = State(
             initialValue: QuestItemFeedbackLifecycle(
@@ -599,12 +602,6 @@ struct WriteQuestView: View {
                 symbol: "pencil.and.scribble",
                 kind: .tryAgain
             )
-        case .rewriteAfterAnswer:
-            return WriteFeedback(
-                message: "Try writing it one more time.",
-                symbol: "textformat.abc",
-                kind: .tryAgain
-            )
         case .recognitionUncertain:
             return WriteFeedback(
                 message: "I’m not sure about that writing. You can try again.",
@@ -791,7 +788,7 @@ struct WriteQuestView: View {
         if let summary = attemptState.completedSummary {
             showCompletion(summary, after: feedbackPlayback)
         } else {
-            if case .feedback(.rewriteAfterAnswer) = attemptState.phase {
+            if case .feedback(.tryAgain) = attemptState.phase {
                 showGuidedWord = false
                 if shouldOfferPictureHint {
                     loadPictureHint()
@@ -907,7 +904,7 @@ struct WriteQuestView: View {
         let completedItemID = session.prompt.id
         let announcement =
             summary.completion == .needsPractice
-            ? "We’ll practice this one again."
+            ? "The correct spelling is \(session.prompt.displayText)."
             : "You got it!"
         var didPresent = false
         withAnimation(
@@ -950,7 +947,7 @@ struct WriteQuestView: View {
             kind: isSuccess ? .success : .tryAgain,
             message: isSuccess
                 ? "Beautiful writing!"
-                : "We’ll practice this one again."
+                : "Correct spelling: \(session.prompt.displayText)"
         )
     }
 
@@ -975,12 +972,17 @@ struct WriteQuestView: View {
         recognitionTask?.cancel()
         pictureHintTask?.cancel()
         completionTask?.cancel()
+        feedbackPlaybackTask?.cancel()
         promptPlaybackTask = nil
         recognitionTask = nil
         pictureHintTask = nil
         completionTask = nil
+        feedbackPlaybackTask = nil
 
-        attemptState = QuestAttemptStateMachine(policy: .write)
+        attemptState = QuestAttemptStateMachine(
+            policy: .write,
+            incorrectAttemptLimit: session.incorrectAttemptLimit
+        )
         strokes.removeAll(keepingCapacity: true)
         isPaused = false
         isChecking = false

@@ -529,7 +529,8 @@ final class QuestContentProviderTests: XCTestCase {
             newWordLimit: 2,
             reviewWordLimit: 1,
             contentOrder: .reviewThenNew,
-            emergencyAfterSeconds: 75
+            emergencyAfterSeconds: 75,
+            incorrectAttemptLimit: 4
         )
         try await fixture.settings.save(
             ProfilePracticeSettings(
@@ -567,6 +568,7 @@ final class QuestContentProviderTests: XCTestCase {
             [entries[0].prompt.id] + entries[3...4].map(\.prompt.id)
         )
         XCTAssertEqual(prepared.emergencyAfter, 75)
+        XCTAssertEqual(prepared.incorrectAttemptLimit, 4)
     }
 
     func testZeroReviewLimitDefersDueWordsAndKeepsConfiguredNewCapacity() async throws {
