@@ -139,7 +139,12 @@ struct QuestChrome: View {
             accent: modeTokens.accent,
             surface: theme.surface
         )
-        .accessibilityHint("Item \(currentItem) of \(totalItems)")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Quest progress")
+        .accessibilityValue(
+            "Item \(currentItem) of \(totalItems). "
+                + "\(earnedStars) of \(totalItems) stars"
+        )
     }
 
     @ViewBuilder
