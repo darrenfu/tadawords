@@ -6,7 +6,7 @@ import XCTest
 @testable import TadaWordsFeatures
 
 final class QuestContentProviderTests: XCTestCase {
-    func testUnpreparedSyncedWordCannotEnterChildQuest() async throws {
+    func testUnpreparedSyncedWordDoesNotBlockChildQuest() async throws {
         let fixture = ProviderFixture()
         _ = try await ManualWordPoolImporter(
             repository: fixture.wordPool
@@ -27,18 +27,12 @@ final class QuestContentProviderTests: XCTestCase {
             timeZone: TestFixture.utc
         )
 
-        do {
-            _ = try await provider.prepareQuest(
-                for: .read,
-                profile: fixture.profile
-            )
-            XCTFail("Expected the unprepared word to be blocked")
-        } catch {
-            XCTAssertEqual(
-                error as? TeacherWordAudioError,
-                .unavailableOfflineClip
-            )
-        }
+        let prepared = try await provider.prepareQuest(
+            for: .read,
+            profile: fixture.profile
+        )
+
+        XCTAssertEqual(prepared.orderedPrompts.map(\.normalizedText), ["cat"])
     }
 
     func testGuardianEnteredPoolBecomesDefaultOrderedDailyNewWords() async throws {

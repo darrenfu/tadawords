@@ -201,9 +201,6 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         guard !entries.isEmpty else {
             throw QuestContentError.emptyPool
         }
-        try await teacherAudioPreparer?.requirePrepared(
-            entries.map(\.prompt)
-        )
 
         let progressByWordID = try await loadProgress(
             for: entries,
@@ -322,9 +319,6 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         )
         let entries = try await activeEntries(for: profile.id, mode: mode)
         guard !entries.isEmpty else { throw QuestContentError.emptyPool }
-        try await teacherAudioPreparer?.requirePrepared(
-            entries.map(\.prompt)
-        )
         let batchSize = max(
             1,
             modeConfiguration.questConfiguration.attentionBudget
