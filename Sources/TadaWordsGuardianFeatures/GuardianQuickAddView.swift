@@ -45,6 +45,8 @@ struct GuardianWordManagerView: View {
         @State private var selectedPhotoItems: [PhotosPickerItem] = []
         @State private var additionalPhotoItems: [PhotosPickerItem] = []
         @State private var isCameraPresented = false
+        @State private var isPhotoEditorPresented = false
+        @State private var capturedCameraPhotoData: Data?
         @State private var appendsNextCameraPhoto = false
     #endif
 
@@ -111,6 +113,13 @@ struct GuardianWordManagerView: View {
         return arguments.contains("--demo-mode")
             && arguments.contains("--ui-testing")
             && arguments.contains("--ui-testing-ocr-fixture")
+    }
+
+    private var isDebugCameraEditorFixtureEnabled: Bool {
+        let arguments = ProcessInfo.processInfo.arguments
+        return arguments.contains("--demo-mode")
+            && arguments.contains("--ui-testing")
+            && arguments.contains("--ui-testing-camera-editor-fixture")
     }
 
     var body: some View {
@@ -184,15 +193,29 @@ struct GuardianWordManagerView: View {
             .fullScreenCover(isPresented: $isCameraPresented) {
                 GuardianWordSheetCameraPicker { data in
                     isCameraPresented = false
-                    let appending = appendsNextCameraPhoto
-                    appendsNextCameraPhoto = false
-                    Task { await recognizeWords(in: [data], appending: appending) }
+                    presentEditor(afterCapturing: data)
                 } onCancel: {
                     isCameraPresented = false
                     if appendsNextCameraPhoto {
                         appendsNextCameraPhoto = false
                         showsOCRPreview = true
                     }
+                }
+            }
+            .fullScreenCover(isPresented: $isPhotoEditorPresented) {
+                if let capturedCameraPhotoData,
+                    let editor = GuardianPhotoEditorView(
+                        imageData: capturedCameraPhotoData,
+                        onCancel: cancelCameraPhotoEditing,
+                        onRetake: retakeCameraPhoto,
+                        onUsePhoto: useEditedCameraPhoto
+                    )
+                {
+                    editor
+                } else {
+                    Color.black
+                    .ignoresSafeArea()
+                    .onAppear(perform: cancelCameraPhotoEditing)
                 }
             }
         #endif
@@ -354,7 +377,13 @@ struct GuardianWordManagerView: View {
         private var cameraButton: some View {
             Button {
                 appendsNextCameraPhoto = false
-                isCameraPresented = true
+                if isDebugCameraEditorFixtureEnabled,
+                    let fixture = GuardianPhotoEditorRenderer.uiTestingFixtureData()
+                {
+                    presentEditor(afterCapturing: fixture, delay: false)
+                } else {
+                    isCameraPresented = true
+                }
             } label: {
                 Label("Take Photo", systemImage: "camera.fill")
                     .frame(maxWidth: .infinity, minHeight: 44)
@@ -362,7 +391,8 @@ struct GuardianWordManagerView: View {
             .buttonStyle(.bordered)
             .disabled(
                 isRecognizing
-                    || !UIImagePickerController.isSourceTypeAvailable(.camera)
+                    || (!isDebugCameraEditorFixtureEnabled
+                        && !UIImagePickerController.isSourceTypeAvailable(.camera))
             )
         }
     #endif
@@ -690,9 +720,15 @@ struct GuardianWordManagerView: View {
         do {
             var additions: [GuardianEditableOCRWord] = []
             for (photoIndex, data) in imageData.enumerated() {
-                let fragments = try await imageTextRecognitionService.recognizeText(
-                    in: data
-                )
+                #if os(iOS)
+                    let fragments = try await GuardianEditedPhotoOCRHandoff(
+                        recognizer: imageTextRecognitionService
+                    ).recognize(editedData: data)
+                #else
+                    let fragments = try await imageTextRecognitionService.recognizeText(
+                        in: data
+                    )
+                #endif
                 let parseResult = RecognizedEnglishWordParser().parseResult(fragments)
                 do {
                     try GuardianOCRPhotoWordLimitPolicy().validate(
@@ -762,6 +798,12 @@ struct GuardianWordManagerView: View {
             guard !isRecognizing else { return }
             appendsNextCameraPhoto = true
             showsOCRPreview = false
+            if isDebugCameraEditorFixtureEnabled,
+                let fixture = GuardianPhotoEditorRenderer.uiTestingFixtureData()
+            {
+                presentEditor(afterCapturing: fixture)
+                return
+            }
             Task { @MainActor in
                 // Let the review sheet finish dismissing before presenting the camera again.
                 // Presenting two sheets in the same run-loop turn is unreliable on device.
@@ -770,6 +812,52 @@ struct GuardianWordManagerView: View {
             }
         #endif
     }
+
+    #if os(iOS)
+        private func presentEditor(afterCapturing data: Data, delay: Bool = true) {
+            capturedCameraPhotoData = data
+            Task { @MainActor in
+                if delay {
+                    // The camera must finish dismissing before the editor is presented.
+                    try? await Task.sleep(for: .milliseconds(350))
+                }
+                guard capturedCameraPhotoData != nil else { return }
+                isPhotoEditorPresented = true
+            }
+        }
+
+        private func cancelCameraPhotoEditing() {
+            isPhotoEditorPresented = false
+            capturedCameraPhotoData = nil
+            if appendsNextCameraPhoto {
+                appendsNextCameraPhoto = false
+                showsOCRPreview = true
+            }
+        }
+
+        private func retakeCameraPhoto() {
+            isPhotoEditorPresented = false
+            capturedCameraPhotoData = nil
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                if isDebugCameraEditorFixtureEnabled,
+                    let fixture = GuardianPhotoEditorRenderer.uiTestingFixtureData()
+                {
+                    presentEditor(afterCapturing: fixture, delay: false)
+                } else {
+                    isCameraPresented = true
+                }
+            }
+        }
+
+        private func useEditedCameraPhoto(_ data: Data) {
+            let appending = appendsNextCameraPhoto
+            appendsNextCameraPhoto = false
+            isPhotoEditorPresented = false
+            capturedCameraPhotoData = nil
+            Task { await recognizeWords(in: [data], appending: appending) }
+        }
+    #endif
 
     @MainActor
     private func addOCRWords(_ words: [String]) async -> Bool {
@@ -1235,52 +1323,18 @@ private enum GuardianWordManagerFeedback: Equatable {
 
 #if os(iOS)
     @MainActor
-    private struct GuardianWordSheetCameraPicker: UIViewControllerRepresentable {
+    private struct GuardianWordSheetCameraPicker: View {
         let onImage: (Data) -> Void
         let onCancel: () -> Void
 
-        func makeCoordinator() -> Coordinator {
-            Coordinator(onImage: onImage, onCancel: onCancel)
-        }
-
-        func makeUIViewController(context: Context) -> UIImagePickerController {
-            let controller = UIImagePickerController()
-            controller.sourceType = .camera
-            controller.cameraCaptureMode = .photo
-            controller.delegate = context.coordinator
-            return controller
-        }
-
-        func updateUIViewController(
-            _ uiViewController: UIImagePickerController,
-            context: Context
-        ) {}
-
-        final class Coordinator: NSObject, UINavigationControllerDelegate,
-            UIImagePickerControllerDelegate
-        {
-            let onImage: (Data) -> Void
-            let onCancel: () -> Void
-
-            init(onImage: @escaping (Data) -> Void, onCancel: @escaping () -> Void) {
-                self.onImage = onImage
-                self.onCancel = onCancel
-            }
-
-            func imagePickerController(
-                _ picker: UIImagePickerController,
-                didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
-            ) {
-                guard let image = info[.originalImage] as? UIImage,
-                    let data = image.jpegData(compressionQuality: 0.92)
-                else {
+        var body: some View {
+            GuardianSystemCameraPicker { image in
+                guard let data = image.jpegData(compressionQuality: 0.92) else {
                     onCancel()
                     return
                 }
                 onImage(data)
-            }
-
-            func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            } onCancel: {
                 onCancel()
             }
         }

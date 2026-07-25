@@ -1,3 +1,350 @@
+<!-- TADA_BILINGUAL_DOC: English is the default reading language. The original source text is preserved for verification. -->
+<a id="english-default"></a>
+
+> **Languages / 语言：** **English (default) / 英文（默认）** · [简体中文](#简体中文版)
+
+---
+title: How to Accept Tada Words V1
+navLabel: V1 acceptance
+contentType: How-to
+category: Delivery
+---
+
+# How to Accept Tada Words V1
+
+Use this checklist to accept the current V1. First run the automated checks and both simulators; then use real iPhone and iPad devices to accept microphone behavior, child speech, handwriting, accessibility, audio, CloudKit, and notifications.
+
+## Understand the acceptance states
+
+Each item uses one of the following states:
+
+- **Code complete**: the production path and automated tests exist.
+- **Simulator checked**: navigation, layout, state, and local persistence can be verified.
+- **Physical-device acceptance required**: the item depends on real hardware, child samples, Apple accounts, or human listening.
+
+Passing code or simulator checks does not prove child-recognition accuracy, mix quality, or CloudKit family-sharing acceptance.
+
+## Run automated checks
+
+Run from the repository root:
+
+```sh
+cd /path/to/tadawords
+make generate
+make check
+./Scripts/verify-device-readiness.sh
+```
+
+Pass criteria: formatting, unit and integration tests, the iPhone 17 Pro Max LocalQA simulator build, and the iPad Pro 13-inch (M5) LocalQA simulator build all pass. The device-readiness script may report a signing blocker when no Team is configured.
+
+PR #2 v0.3 has been merged into `main` in merge commit `cc42e17`. The current v0.3.1 repair evidence on 2026-07-14 is as follows. 367 tests of V1, 480 tests of v0.2 and 548 tests of v0.3 are retained as historical baselines; the full v0.3.1 is 595/595:
+
+| Inspection | Results |
+|---|---|
+| Swift formatter strictly checks | passes |
+| Swift unit and integration tests | v0.3.1 full suite passed 595/595 with 0 failures; the focused actual-Vision handwriting-recognition suite passed 15/15, and the focused World-layout suite passed 5/5 |
+| Critical XCUITest | iPhone 17 Pro Max simulator 7/7 Passed: Read/Write Continuous feedback, two deletions/Undo, Delete All/Full recovery, Preset Only added after clear approval, Photos sorted after exiting, OCR Review → Add All → Pool → Sort |
+| iPhone 17 Pro Max production Vision physical device test | iOS 26.5.1 Above 2/2 XCTest passed: `of/go` Six uppercase and lowercase positive examples 6/6, wrong words and literal `90` Negative examples 4/4; use anonymous synthetic vector and real production service, no mock/demo |
+| iPad Air 13-inch (M4) production Vision physical device test | iPadOS 26.5 above 2/2 DeviceTests passed: wrong-word rejection and `of/go` case variants; use real production service and anonymous synthetic vector |
+| iPad Air 13-inch (M4) Critical XCUITest | LocalQA Configuration below 7/7 Passed: OCR Add All, Delete All/Full Recovery, Preset Clearly Approved, Continuous Delete/Sort, Photo picker/Sort, Read With Write Complete feedback disappearance |
+| iPhone 17 Pro Max LocalQA simulator build | v0.3.1 fresh build passed |
+| iPad Pro 13-inch (M5) LocalQA simulator build | v0.3.1 fresh build passed |
+| iPhone 17 Pro Max physical device Installation | `Tada Words QA` v0.3.1 (`2026071402`) signed build has been covered for installation and launch; children's real writing and pronunciation listening quality and accessibility still need manual acceptance |
+| iPad Air 13-inch (M4) physical device Installation | Darren iPad, iPadOS 26.5; Team `6S245NCUPQ` signing's `Tada Words QA` v0.3.1 (`2026071403`) has been installed and started; children's real writing, pronunciation listening quality, layout, rotation and accessibility still need manual acceptance |
+| Direction statements for two built products | v0.2 baseline: iPhone for Portrait + two Landscapes; iPad for four directions; `UIRequiresFullScreen` for true; runtime Parents can be rotated, and child route is only allowed for landscape screen |
+| simulator Direction evidence | v0.2 Baseline: iPad's Parent and child window morphology conforms to the routing strategy; iPhone raw framebuffer screenshot direction is unreliable, and physical device rotation confirmation is still required |
+| Release CloudKit Share statement | v0.2 Baseline: iPhone and `CKSharingSupported` of iPad Release built product are true |
+| LocalQA Isolation statement | v0.2 Baseline: `Tada Words QA` Use an independent bundle ID, empty iCloud entitlement, and `CKSharingSupported` is false |
+| Child voice fixture | v0.2 Baseline: SHA-256 passed, Apple transcribed as `Bye.`, App policy judged the target `bye` as matching |
+
+### Current v0.7.0 Family Sync evidence
+
+The table above retains the historical delivery records of v0.3.1. The current v0.7.0 (`2026071806`) has the following additional evidence:
+
+| Inspection | Results |
+|---|---|
+| Swift formatter strictly checks | passes |
+| Swift unit and integration tests | 814/814 passed with 0 failures; Issue Agent passed 14/14 |
+| Family Sync XCUITest | source batch: iPhone 17 Pro Max 6/6, iPad Pro 13-inch (M5) 6/6, iOS 26.5; before merge, exact committed HEAD must be rerun |
+| Critical XCUITest | source batch: iPhone 17 Pro Max 10/10, iPad Pro 13-inch (M5) 10/10, iOS 26.5; exact committed HEAD Retesting is the delivery threshold |
+| Production CloudKit | Source contract has been completed; schema, signingphysical device private/share, background push, owner/participant access management, remote deletion and manual recovery copywriting are still pending acceptance |
+
+`CKSharingSupported` is a build statement and does not represent that simulator is running CloudKit. simulator deliberately uses local/device-only transport; real CloudKit transport can only be used on the signingphysical device of the configuration Team, container and iCloud.
+
+The DeviceTests and Critical XCUITest of iPad prove that the production identification link and seven key interactions can run in physical device. They do not replace the child's real handwriting, standard pronunciation listening quality, layout in all directions Apple Pencil, VoiceOver or Dynamic Type manual acceptance.
+
+The copy of `.xcodeproj` numbered has been deleted. Only open `TadaWords.xcodeproj`, and do not use Derived Data before the direction or ability change.
+
+## Check the key requirements
+
+| Demand | Current Status | manual acceptance Key Points |
+|---|---|---|
+| Read Two independent routes | Code completed | Two Today Quest buttons are not merged, and data and settings do not overlap |
+| Parent Word Manager | v0.2 The foundation has been merged; v0.3/v0.3.1 enhancement has been completed, waiting for physical device to return | Word Return is added immediately; multiple photos Camera/Photo OCR; word numbering; single picture 500 word limit; added/A-Z/most practiced sorting; frequency; type-ahead search; Hear/Delete; single deletion/batch deletion/empty whole group; deletion confirmation and Undo button Profile isolation; two independent groups of deduplication |
+| Only use the parent-approved words | v0.3.1 code to complete | No automatic smart fill / Grade addition; typing, OCR or Preset must be clearly submitted by the parent, and words will not be added when the pool is insufficient |
+| Preset Words by age/grade | v0.3.1 code and content audit completed, waiting for physical device layout to return | 3-8 years old / Pre-K–Grade 3; 34 groups, 40-45 words per group; up to 6 groups recommended, then browse by level; search, word by word/full selection, Read/Write/Both; opening or recommending will never be automatically added |
+| The order of New and Review can be exchanged | The code has been completed | Each route is saved in an independent order |
+| Ebbinghaus Review and strengthen | Code completed | Expiration, errors, relative slowness, replay and Help affect sorting and memory parameters |
+| Write No preview of the answer and one guided rewrite | v0.3 code completed, waiting for physical device to return | Only the pronunciation is broadcast at the beginning of each word, and the spelling is not displayed; only the dot `?` shows the answer; the first real wrong answer may appear specific word picture buttons |
+| Read Quiet first answer and Help after two wrong answers | v0.3 code completed, waiting for physical device to return | No answer is broadcast before the first answer; only Hear it appears after two valid wrong answers; no picture prompts; technical failure does not unlock or consume times |
+| True Mastered determination | Code completed | Three different local dates independently succeeded, and the recall rate is expected to meet the standard in the next 14 days |
+| Score, loose three stars, strict Guardian Evidence | v0.3 Code completion | Accuracy threshold 75%; immediate recovery without assistance once; calibration Pace; 50% allowance for slow side; perfect first answer fixed 100 points/3 stars; technical Move On display Not scored |
+| Eight independent theme worlds | v0.2 Code completed, waiting for physical device audiovisual return | Princess, construction vehicle, animals, dinosaurs, firefighting and rescue, original blocks, ice and snow and roller coaster scenes/rewards are not mixed |
+| 20 small rewards and 5 milestones in each world | v0.2 code completed, waiting for physical device visual return | A total of 200 different icons; permanent collections are not reposted due to Practice Again |
+| Double Quest the next day Theme / Icon | v0.2 code completed, waiting for physical device to return | the same day Read+Write's Today run unlocks the next day; partial/replay is not counted; My Collection can choose the items obtained |
+| Multi Kid Profile, age and last Profile | v0.3.1 code completed, waiting for physical device to return | cold startup first to Picker and highlight the last Profile; the first/Kid/Parent new creation collects 3-8 years old age; each Profile data, voiceprint, settings and cosmetics isolation |
+| Profile-first first process | v0.3.1 code completed, waiting for physical device layout re-examination | none Profile directly New Kid; first record nickname and age, no word input in the first process |
+| Pre-K child-friendly visual hierarchy | v0.2 simulator Checked, waiting for children to interact with accessibilityacceptance | last time Profile Static highlights; iPhone Lobby icon dock retains 72 pt touch area; Read Pronouns and Result rewards are more prominent; iPad Text tool entry retains |
+| Selfies, photos, animals avatar | Codes completed | physical device Check Camera and Photo Library permissions |
+| Monthly punch-in Calendar | The code has been completed | Displays the accurate number of Quest attempts per day, Practice Again and counts |
+| 7-day and 30-day reports | Codes completed | Check trends, word details, identify corrections and export to CSV |
+| Crash-resumable Profile Delete | Code completed | Delete local data, words, history, rewards, reminders and native voiceprint |
+| Local notifications and quiet hours | Code completed | Daily, Pool low, completed, synchronization failure, weekly report and time setting |
+| CloudKit Synchronization and family invitation | v0.7.0 source: versioning CKSyncEngine, complete Profile data, event recomputation, crash-resistant apply and remote deletion semantics have been implemented; production acceptance is not completed | with paid Developer Team, production schema, two devices and two Apple accounts acceptance private/share, background push, offline merge and test-only remote wipe; this ability cannot be released before the previous |
+| 1 minutevoiceprintRegistration and Read Matching | v0.3 Follow-up process is completed, and children's sample calibration is required | Random short sentences are played one by one, children's follow-up, and rejected samples can be repeated; voiceprint Only the local Keychain is saved, and the original recording is not saved or synchronized |
+| Apple Pencil With palm touch filtering | The code has been completed, and physical-device acceptance | iPhone needs to use fingers, iPad test fingers and Pencil | separately.
+| VoiceOver、Reduce Motion、Dynamic font | The code has been completed, and physical-device acceptance | complete walk check feedback broadcasting, focus, horizontal screen compact height | is needed.
+| Single teacher contract and theme music | Katie/Aurora offline package has been implemented and passed bundle/transcription check; requires physical device manual listening quality approval | Does not provide Profile voice style; 500 words are canonical as Katie Read 0.90× / Write 0.82× dual versions; Aurora quality exception recorded in manifest is used, and off-package words use Apple fallback; Aurora is responsible for continuous startup of short sentences `Ta-dá↗ woooords↘!`, six correct answers to micro celebrations and Quest completion; the client does not store provider key; Moonpetal rainbow/unicorn and cheerful music |
+| Eight original World | v0.2 code completed, waiting for physical device audiovisual return | New Dino, Firehouse, Brickwork, Frostlight, Coaster added; each with isolated scenes, mascots, colors, rewards and music |
+| Write Pencil case and stable canvas | v0.2 The foundation of the pencil case has been merged; v0.3 Enhancement is completed, waiting for physical device handwriting to return | Pencil/Chalk/Brush Three black pens, each Profile Durability, smooth brushstroke sound effect, 4× local erasure, blank click restores the original pen, canvas width increases by 10%; root Quest transition identity maintains stability, and the coordinates do not move when cutting words/feedback |
+| Specific word picture prompts | v0.3 Code completed, waiting for physical device network/offline regression | Asynchronous caching of fixed Twemoji resources after entering the Pool; Write The first real wrong answer shows that you can click the picture; `the` Abstract/functional words do not request pictures |
+| Parent Gate Completed with Lock | v0.3 code, automatically judges the result after physical device returns | enters the complete number of digits; immediately resets when there is an error, but the feedback is retained until the next input; Lock of Parents directly returns to Kids page |
+| Treasure icon and avatar | v0.2 code are completed, waiting for physical device to return | 8×25 related icons; locked retains the gray icon with lock; collected treasure can be optional avatar and retains the original photo |
+
+## Understand the score and word pronunciation
+
+The following rules are used for children's result pages. Guardian The report still shows the strict first independent answer, and the supplementary answer is not rewritten as the first answer is correct.
+
+| Project | Rules |
+|---|---|
+| Completion Star | Complete all the words in the plan |
+| Accuracy Star | The accuracy of the first independent answer reaches 75%, or only one word is wrong in the whole round and then answer correctly without prompts |
+| Personal Pace Star | Accuracy has been achieved, and the speed falls within the personal range, is still within the valid calibration period, or the first answer of the whole round is perfect |
+| Points | The correct rate is up to 80 points, and the speed is up to 20 points |
+| Perfect first try | Whether there is a speed baseline or not, fixed 100 points and 3 stars |
+
+Parents can manually enter, import photos in bulk, or select words explicitly from the local Preset Catalog. All new words are uniformly used with canonical isolated teacher pronunciation; the Parent UI does not provide context sentences or multiple pronunciation editing interfaces. Age/grade recommendations are only sorted and will not be automatically added. Contextual audio metadata saved in the old version can still be read to avoid data loss during the upgrade.
+
+## acceptance Kid Profile and Guardian
+
+1. Start after clearing LocalQA data; the first screen must be `New Kid`, and there should be no word input.
+2. Read and accept the versionized privacy statement, create nickname, age 3–8 years old, animal avatar, Grade and starting World
+3. Forced exit and restart; Profile Picker The last valid Profile must be highlighted, and the child will not enter the Lobby until they click it.
+4. Create a new Profile, enter different words and settings for both, and then verify the Picker and isolation.
+5. Simply click **Parents** to confirm that the random arithmetic Parent Gate will appear immediately; after entering the complete number of digits, there is no need to click Unlock to automatically judge the answer. The wrong answer will be automatically cleared, but the wrong prompt will remain visible until the parent begins to enter the next answer.
+6. Let the child build a second Profile in Picker, enter nickname and age; confirm that the suggested Grade is reasonable. Then enter Parents to edit Profile, verify that parents' age changes will not silently override the clearly selected Grade, and test avatar source from Camera selfie, Photo Library and animal icons each time.
+7. From the Parent dashboard, click **Lock** to confirm immediate locking and return to Kids Profile Picker.
+8. Delete the non-unique Profile used last time; after restarting, you must return to the legitimate Picker, do not guess the identity or resurrect the data.
+
+Pass criteria: Each Profile isolates words, settings, learning records, calendars, rewards and voiceprint. All new Profile save valid ages; old versions without age Profile can still be read. Sensitive operations require system device authentication. The App must retain at least one Profile. Onboarding does not request microphone, Speech, Camera, Photo Library or notification permissions; relevant permissions are only requested when the corresponding functions are first used.
+
+## acceptance Parent Word Manager
+
+1. Cut to Read Tab, enter `the` and press Return; confirm to save immediately, clear the input box and `the` will appear at the top.
+2. Enter `look`, `play` in turn; confirm that it is always newest-first. Enter `the` again with the same Pool to move forward instead of copying the history.
+3. Cut to Write Tab and enter `the`; confirm that the two groups Read/Write can have the same nouns.
+4. Select at least two school list from Photo Library at one time; then add pictures with **Add photos** and **Take another** to merge the results into the same preview.
+5. Verify that each OCR word is numbered starting with 1; edit or delete misidentified items and switch between Added order, A-Z, and Most practiced.
+6. Prepare a single image with more than 500 recognition words to confirm that the image has been clearly rejected and prompt the replacement of the image; the results of other images that do not exceed the limit will not be lost.
+7. Scroll through the long preview to verify that the top return/top button and the bottom button return; click **Add all N to Read/Write** to confirm that the buttons will not be blocked by the keyboard, will be submitted only once, and that the saving progress will be displayed or an error will be clearly shown.
+8. In Pool, switch to Added order, A-Z, Most practiced, and check the frequency number of each line; search with type-ahead and directly click the Hear and Delete of the line.
+9. The confirmation pop-up window appears when deleting for the first time; after confirmation, continue to delete individually and batch delete. After confirmation, the pop-up window for this Parent session will no longer appear repeatedly, and Undo will still be available.
+10. Separately at Read and Write point `Delete all N words`: cancel once, and confirm again; check the clear quantity/mode, the other Pool remains unchanged, the learning history is not deleted, and restore it completely with Undo.
+11. Switch to Profile B after deleting or clearing Profile A; confirm that B does not inherit A's initial deletion confirmation state or Undo, and that B's operation cannot restore or modify A's Pool.
+12. Open Preset Words from Today; check up to 6 age/grade matching recommendations, and then browse Sight Words, Phonics, animals/dinosaurs/vehicles/cities/countries, actions and Emotions layer by layer. When opening the list, Pool remains unchanged; select words one by one or Select all, submit them to Read, Write, Both respectively, and check for duplicates.
+13. Check the transaction boundaries for both imports: When normal, both pools are updated; if any pool fails to save, is partially successful, or the number of returns does not match, only the membership inserted or re-enabled this time is rolled back, and both the active word and the other Profile remain unchanged.
+14. Enter text in the typing, search and OCR text editing boxes, and then click the blank space; confirm that the keyboard is closed; the pronunciation/context section does not appear in the whole process.
+15. Clear or shrink the Pool, restart and prepare the Quest; confirm that there will be no catalog or smart-fill new words that have not been clicked by the parents.
+
+Pass criteria: All new additions to the Pool can be traced back to typing, OCR or Preset selection explicitly approved by parents; the original school-list images are only recognized on the local machine and are not saved. Each image executes the 500-word limit independently. The Preset and delete operations are bound to the Profile that initiates them, and both imports will not leave a half-finished state. The keyboard, OCR sheet, sticky Add All, Preset layers, and selection toolbar are not cropped in the iPhone/iPad horizontal and vertical Parent route.
+
+## acceptance Read Quest
+
+1. Click the independent **Read Today's Quest**
+2. Enter with the new Profile/new words; confirm that the pronunciation is not played at all when the target appears.
+3. When you first click on Mic, you can allow Microphone to work with Speech Recognition; the permission waiting time is not counted as the child's speed.
+4. Read out the target words, confirm the correctness, give feedback and record the results.
+5. After reading it wrong for the first time, confirm that **Hear it** is hidden; after reading it wrong for the second time, confirm that only **Hear it** appears and there is no picture button.
+6. Tap **Hear it** to confirm that playback is only triggered by the child's button press; the pronunciation must be clear, continuous, and without trailing consonants. After switching to the next word, help it to hide again.
+7. Create silent, noise, technical failure, confirm that it does not consume valid attempts, does not deduct the accuracy rate, and does not unlock Help in advance; if there are three consecutive technical failures, you can neutralize Move On.
+8. Test `a`, `I`, `go`, `look`, `bye` (including Apple punctuation transcription at the end of sentences) and 0.8-second natural pause
+9. The children's near-tone `kum/cum` of the test target `come` can pass, while `some`, `home`, `came` and `cat/cap` are not mistakenly relaxed.
+10. After establishing voiceprint, let the target children and another speaker test separately.
+11. Continuously switch between multiple words to confirm that uppercase letters always use the same dark color as the current World; only switching between Worlds changes the color, and it is always clear and readable.
+12. Complete one round, in which you deliberately answer incorrectly or use help; at the Result point Replay, confirm that you only review the tricky words of this round. The Perfect Round does not display the empty Replay button.
+
+Pass criteria: Technical failure does not enter the learning evidence. voiceprint If it does not match, go for a technical retry, and do not record the other speaker as a child answering incorrectly. The accuracy of real family noise, automatic recording stop, echo cancellation and recognition can only be in physical-device acceptance.
+
+## acceptance Write Quest
+
+1. Click the independent **Write Today's Quest**
+2. Confirm that only the pronunciation is played for both New and Review words, and no spelling is displayed in advance; the target word is only displayed after clicking `?`.
+3. Listen to Katie Write version `of`, `at`, `cat`, `come`, `look` to confirm that the offline recording is 0.82× and still a continuous and clear pronunciation; the trailing consonants `f`, `t`, `k`, etc. are not swallowed by the background music, external audio, or audio session, and the music returns smoothly after playback. Enter another word outside the 500-word manifest to confirm that Apple fallback is available.
+4. Write the entire word independently in the expanded horizontal line area, then press **Done**; confirm that the app will not submit automatically due to stopping typing.
+5. Write the dots of `i`, the last letter of the three-letter word, and the connected `vv`/`w` separately; confirm that the short dots, subsequent strokes and connected strokes are all left.
+6. Write the same word in uppercase, all uppercase and all lowercase; confirm that the difference in capitalization does not cause failure.
+7. Test **Hear**, separate **?**, **Clear** and **Done**; `?` must display the word immediately and there is no multiple choice. Clear does not pop up for confirmation.
+8. For the first time, I wrote `dog` incorrectly in real life. I confirmed that there is a clickable picture button to confirm the occurrence, and the spelling will not be displayed automatically. After clicking the picture, the dog will be displayed. When `the` is written incorrectly, the picture will not be displayed, and no picture request will be initiated.
+9. Manufacturing recognition uncertainty and technical failure, confirmation does not count as the child answering incorrectly, and will not trigger the picture incorrectly.
+10. Write iPad and Apple Pencil separately with your fingers, and put your palms on the screen.
+11. Turn on Left-handed writing and confirm that the main toolbar is switched to the other side.
+12. Open the pencil case and confirm that only Pencil, Chalk, Brush and Eraser are available; there are no Crayons or color selection, and all new strokes are black.
+13. Switch to a Profile select pen type, restart and switch to Profile; confirm that each Profile retains its own selection until it is modified again; the old version of Crayon/color setting safe migration is black Pencil.
+14. Write each word individually and try to hear the three short writing sounds; confirm that there are no popping, stuttering or frequent restarting sounds when moving quickly and continuously, and that the pronunciation playback and Reduced Sound are not superimposed.
+15. Confirm that there is no Undo on the confirmation page; use Eraser to erase the local area of each pen, and the erasing width is about 4 times the width of the current pen. After erasing, click the blank next to it to confirm that the previous pen will be automatically restored.
+16. If you don't use Help, write `of`, `Of`, `OF`, `go`, `Go`, `GO` respectively, repeat each writing twice and require 12/12 to pass; then confirm that `if`, `on`, `or`, `ot`, `off`, `do`, `no` and the number `90` cannot be missed.
+17. Record the screen when the error feedback appears and switch to the next word, and confirm the size, center and coordinates of the writing area do not move frame by frame; confirm that the root transition identity of the whole round of Quest does not change with the prompt; complete the feedback for at least 830 ms and no longer flash.
+18. Complete one round and deliberately leave tricky words; at the Result point Replay, confirm that only this word will be retrained.
+
+Pass criteria: Hear, `?`, the identification of waiting and technical retry time does not affect the independent response speed. The visual and sound of the three pens can be distinguished but do not cover the pronunciation. The picture only serves specific words and uses private caching. iPhone Only prompts the finger, iPad Can distinguish between Pencil and finger, and filters obvious palm touches. The production Vision of synthesized strokes physical device test only proves the repair link with known characters, and cannot replace the above child's 12 real writing.
+
+## acceptance Review, Mastered and Today's Plan
+
+1. Set New first and Review first separately.
+2. On the New-first route, deliberately answer the new words incorrectly to confirm that it replaces the lowest priority Review and retains the Review debt.
+3. Confirm that the Review will fill in the expired words, and also fill in the words that are not expired but obviously weak.
+4. Repeat entering a learned word to confirm it moves forward in Review
+5. Answer the same word independently on three different dates.
+6. Confirm that Mastered is only displayed after the 3-day success threshold and the 14-day estimated recall threshold are met.
+
+Pass criteria: Repeated success on the same day cannot meet the three-day condition. Help, replay, errors and relative personal slow will reduce stability or increase difficulty.
+
+## acceptance Rewards, World and Calendar
+
+1. Complete Read and Write Today Quest separately.
+2. Complete a Quest where all words are answered correctly for the first time; confirm the result as 100 points and 3 stars, even if Profile does not yet have a speed baseline.
+3. Manufacture 75% first independent correct rate, confirm that there is still an Accuracy Star; manufacture the whole round with only one wrong answer and immediately no prompt to answer correctly, confirm that children's rewards can be relaxed, and Guardian still shows the original first answer correct rate.
+4. After the existing personal speed range, the verification of the slow side is limited by up to 50% of the allowance; if you are too fast or exceed the allowance, you will not receive a Pace Star.
+5. The confirmation result page shows the score, stars, accuracy rate, personal speed and current world rewards.
+6. Complete Practice Again, confirm the increase in the number of Calendars, but do not issue the permanent reward on the same day as the duplicate.
+7. On the first day, only Read is completed, and it is confirmed that Theme/Icon will not be unlocked on both the same day and the next day.
+8. Complete Read and Write Today Quest on the same local day; they will still be locked on that day, and unlock one unobtained Theme and Icon after moving to the next day or restarting with a controllable clock.
+9. Complete Practice Again and repeat completion, confirming that it does not trigger or repeat unlocking; test across days from the end of the month to the next month.
+10. Open My Collection, select the Theme and Icon you have obtained separately, and keep them after restarting; the locked item can only be previewed.
+11. Check the 20 small rewards and 5 milestones of each World of 8; each icon is relevant and not repeated with the same World, and the original gray icon is still displayed and overlaid when locked.
+12. Select a Treasure that has been collected as Profile avatar to confirm that Picker/Lobby is consistent; clicking on an uncollected Treasure will not take effect.
+13. If Profile the original avatar is a photo, switch the animal Icon, Treasure avatar and the original photo in turn, and confirm that the photo data can always be retained and restored.
+14. Complete multiple Quests on the same day and confirm that the child's Calendar shows the same number as Guardian Today.
+
+Pass criteria: Each World only appears its own rewards. The unlocking and collection progress of the World are isolated according to Profile and retained after restarting.
+
+## acceptance Guardian Reporting and correction
+
+1. Open the **Reports** of Guardian
+2. Switch between 7 days and 30 days.
+3. Number of completed checks, accuracy rate, personal speed trend and word details
+4. Change a recognition result from incorrect to correct, and then back to incorrect.
+5. Confirm learning progress from event history reconstruction, and update reports and Needs Attention in sync.
+6. Export CSV after system authentication and check fields and Profile scope
+
+Pass criteria: Corrects the case where the summary snapshot is not directly covered. The app reconstructs the current progress using the original attempt and correction event.
+
+## acceptanceNotice
+
+1. Turn on daily reminders, Pool low, completion, synchronization failure and weekly reports in Practice settings.
+2. Modify the start and end times of daily reminder time and quiet hours.
+3. Allow system notification permissions
+4. Confirm that the reminder moves to the allowed time during quiet hours.
+5. Close all notifications and confirm that the pending notifications for Profile have been cleared.
+
+Pass criteria: Notification texts do not include children's words, scores or sensitive learning details. Different Profile notifications use stable and non-overlapping identifiers.
+
+## acceptance CloudKit Home synchronization
+
+This section must use the Apple Developer Team configured in `iCloud.com.tadawords.app`. Prepare two devices logged in to different Apple ID.
+
+The default of Family Sync in Release is turned off and saved persistently. The privacy confirmation in Onboarding will not activate CloudKit; only when parents explicitly activate it in Guardian, can access to CloudKit. The shutdown switch will stop future synchronization, but it will not delete the already uploaded records as designed; Profile deletion will first write to the minimum deletion ledger, and then erase Profile zone, children, assets, root and share. The source semantics cannot replace the production CloudKit evidence; this section only uses test-only Profile, and Family Sync cannot be considered as a fully functional feature until all physical device access control is passed.
+
+1. After the first launch and completion of onboarding, confirm that **Family sync** is shown as off and there are no CloudKit requests.
+2. Create Profile, words, settings, and learning records on device A
+3. Open Family Sync clearly through parent authentication, and then click **Sync now**.
+4. Create a family invite and send it to device B via the system Share Sheet.
+5. On device B, turn it on and accept the invitation, then sync.
+6. As the owner and participant respectively open the system Family access management page; the owner removes the participant, participant Leave, and then revokes it, confirming that the App returns to the terminal state and never silently creates a private fallback.
+7. Confirm that Profile/avatar, two Pools, six group settings, attempt/correction, Ebbinghaus progress, daily plan, completion, Calendar, World, Badge, Collection and rewards are consistent; voiceprint of both devices are kept separately from cache.
+8. Close Family Sync, confirm that subsequent launches, front-end and back-end switching, manual buttons, invitations, and access management will no longer call CloudKit, and local Quest will continue to be available.
+9. After restarting, the two devices will modify different records offline and then synchronize online.
+10. Delete a test-only Profile to confirm that another offline device receives the ledger first, clears the local data and cannot be revived; confirm in CloudKit Dashboard/Test Tools that records, assets, shares and zones other than the minimum ledger have been wiped.
+11. Forcefully exit and restart in the middle of push, fetch or apply to confirm that the exact pending batch has been restored once, the UI is automatically refreshed and completion/reward will not be repeated.
+12. Complete the Quest after the network is disconnected to confirm that local learning is not affected by synchronization failure; the Parent page still accurately displays the pending number, connection/account status, retry and last successful time after restarting.
+
+Pass criteria: Quest submission does not wait CloudKit; the same canonical facts converge consistently and are not duplicated in different arrival orders. Synchronization failure displays the true recoverable state and retains local data. Deletion is non-recoverable. voiceprint Templates do not enter CloudKit; each device is registered separately voiceprint. Record exact commit, version/build, Team/container, schema environment, device/system, account role and evidence path.
+
+## acceptance Voice setup
+
+1. Open **Voice setup** in a Kid Profile, confirm that a short English sentence appears and plays automatically. The child can click Hear again.
+2. Let the child read along and record; confirm the successful sample to increase the progress, and then use silence, too short and obvious noise to create rejection. Confirm that the reason for the display can be retried and that the progress has been accepted without loss.
+3. Complete at least six valid clips with the minimum valid audio duration; confirm that **Finish setup** is only available when the conditions are met and can be saved and exited.
+4. Return after interrupting the recording, locking the screen, or switching to the background; confirm that there will be no permanent gray Finish, zero sampling rate, or general error loop.
+5. Open a new setup to confirm that the order of sentences will be shuffled; complete the second Profile independently and confirm that the two voiceprint do not overlap.
+6. Check that the App sandbox is synchronized with the data and that it does not save the original recordings or sentences, but only the voiceprint template in the local Keychain.
+
+Pass criteria: It must be completed with the real voice of a child in physical device. The local audio session should first configure and re-read the input format, and enable available voice processing and noise reduction during recording; rejected samples will not be included in the template.
+
+## acceptanceSound and accessibility
+
+1. Preview Lobby, Read, Write, results and Collection in each of the eight Worlds; complete at least one round for each, focusing on two rounds of Quests for five new Worlds.
+2. Cold start listen to Aurora's single continuous offline short phrase `Ta-dá↗ woooords↘!` (approximately "It arrives, Walzi"): `da` Slightly lengthened upward and directly connected to the obviously lengthened and falling `wor`, no deliberate comma pause or synthetic seam; the background briefly returns without retransmission, and no dialogue is broadcast when Voice is turned off. The automatic transcription and connection timing have passed, and the pitch and listening quality still need physical device manual approval.
+3. Confirm that Parent settings no longer have a voice style picker; all Profile use the same canonical teacher contract.
+4. Test on devices without configured remote endpoints and without optional high-quality voice to confirm that the app chooses the installed clear-compatible fallback instead of mute; neither the client nor the logs should contain the provider API key.
+5. In Write, listen to Katie's `of`, `at`, `cat`, `come`, `look` at 0.82×; after two mistakes in Read, click Hear to listen to the 0.90× version of Katie. Also listen to the `bun` Aurora quality override recorded in the manifest. Confirm that each word forms only one continuous clip, the pitch is natural, the speed is not too slow, and the trailing consonants in `f`, `t`, `k`, `n` are clear.
+6. Answer at least seven words correctly in a row to confirm that there is an immediate correct sound effect for the current World every time. Aurora's six short celebrations will not repeat continuously; only the seventh time will it cycle. After completing the Quest, only one `Quest complete! Ta-da!` will be added, and any unfinished voiceovers will stop when entering the recording.
+7. Check the two sides of the rainbow/unicorn in Moonpetal; check the dinosaur, fire and rescue, original blocks, ice and snow aurora and roller coaster elements in World separately when adding them; confirm that the central mission safe area is clear and that the elements do not cross theme leaks.
+8. The music is lowered when the voice prompt is confirmed, Read The music and unnecessary sound effects are stopped when recording.
+9. Test Voice, Music, Sound effects, Reduced Sound and Calm Rescue separately.
+10. Test speakers, headphones, call interruption, background recovery, and volume changes
+11. Open VoiceOver, walk through Profile, Lobby, Read, Write, results and Guardian
+12. Turn on Reduce Motion with larger dynamic fonts to check the compact layout of the horizontal screen.
+
+Pass criteria: Reduced Sound Retain necessary correct, retry and technical non-verbal prompts, but turn off decorative click, star, reward and Aurora transition voiceovers; Voice controls Katie/Aurora/Apple voiceovers separately. Calm Rescue Do not play emergency rhythm layers. Artificial approval of volume, fatigue, burst sound and female voice color.
+
+## acceptanceDirection switching and local data
+
+1. In iPhone 17 Pro Max and iPad's Profile, Lobby, Quest, Results and Collection tests Landscape Left and Landscape Right
+2. Try rotating these child routes to Portrait and confirm that the full-screen landscape remains intact.
+3. Enter Parents and set up the first parent: iPhone Verify Portrait + two Landscapes and refuse Upside Down; iPad Verify four directions
+4. After holding the device vertically on the parent page, exit and confirm Profile/Lobby to immediately restore the landscape screen, without retaining the portrait screen.
+5. Force exit after completing the file creation, word addition, setting and Quest.
+6. Reopen and confirm that all data has been restored to the last Profile.
+
+Historical simulator evidence recorded a tall/portrait iPad Parents page and a
+landscape child Read page. The temporary screenshots were removed from source
+control in v0.7.43; their recorded observations remain informational only and
+do not replace current device acceptance. iPhone and iPad rotation still follow
+the acceptance steps above.
+
+`Contents.json` Only describe Xcode assets. Running data is located in the Application Support directory of the App sandbox. The App does not have its own server database. `TadaWordsLocalQA` Installed as an independent **Tada Words QA**, without iCloud capabilities and data does not cross devices; normal releases will only be synchronized when parents explicitly enable it.
+
+The specific word images use a fixed version of Twemoji 17.0.3 PNG and cache them in the App's private directory. The request only contains the Unicode asset filename of the built-in catalog, not the child's name, Profile ID, learning records, or the original words entered by parents. Words such as `the`, `come`, `kind`, etc., that are not in the specific word catalog must be returned directly without images and without network connection. The license and source records are recorded in `THIRD_PARTY_NOTICES.md`.
+
+## Complete physical device Release acceptance
+
+Before final release, it must pass the following items on a iPhone 17 Pro Max and a iPad:
+
+- signingInstallation, cold start, background recovery and two horizontal screen directions
+- Real children's voice, family noise, automatic recording stop, voiceprint fan fiction and non-fan fiction samples
+- Finger, Apple Pencil, palm touch and four-year-old children's handwriting
+- Camera and Photo Library permissions
+- avatar of Camera / Photo Library and two uses of multi-picture word-sheet OCR, including a single picture 500 word limit, numbering and sticky Add All.
+- VoiceOver, Reduce Motion and dynamic fonts
+- Single canonical teacher voice/fallback, music for each World, ducking, volume and fatigue feeling
+- Random sentence reading, refusal samples, completion of saving and voiceprint for each device independently in Voice setup
+- Write's short dot/continuous stroke/follow-up stroke, 4× eraser, blank click to restore the pen, canvas fixed coordinates and no lag brush sound
+- `FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md` All device evidence in v0.3, and retain the unfinished physical device evidence that has been merged into v0.2.
+- Two Apple ID CloudKit invitations, conflicts, offline recovery and deletion of broadcasts
+- Family Sync is turned off by default, parental opt-in is persistent, and future synchronization is stopped after it is turned off.
+- CloudKit Remote records erasure
+- Local notification authorization, quiet hours and actual delivery
+
+Only after these device items are approved can Device Alpha and the family be marked as acceptance.
+<!-- TADA_BILINGUAL_ZH_START -->
+
+---
+
+<a id="简体中文版"></a>
+
+> **翻译说明：** 英文为默认阅读语言；本文同时保留原始语言文本。如中英文内容存在差异，请以原始语言文本为准。
+
 ---
 title: 如何验收 Tada Words V1
 navLabel: V1 验收

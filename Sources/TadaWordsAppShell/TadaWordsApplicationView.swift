@@ -192,9 +192,16 @@ public struct TadaWordsApplicationView: View {
         self.pictureHintProvider = pictureHintProvider
         self.currentSpeechPermissionState = currentSpeechPermissionState
         self.requestSpeechPermissions = requestSpeechPermissions
-        speechPermissionActions = SpeechPermissionActions {
-            await currentSpeechPermissionState().isAuthorized
-        }
+        speechPermissionActions = SpeechPermissionActions(
+            authorizeMicrophoneTap: {
+                let current = await currentSpeechPermissionState()
+                guard current.hasUndeterminedPermission else {
+                    return current.isAuthorized
+                }
+                guard !Task.isCancelled else { return false }
+                return await requestSpeechPermissions().isAuthorized
+            }
+        )
         self.notificationScheduler = notificationScheduler
         self.voiceprintEnrollmentService = voiceprintEnrollmentService
         self.voiceprintRepository = voiceprintRepository

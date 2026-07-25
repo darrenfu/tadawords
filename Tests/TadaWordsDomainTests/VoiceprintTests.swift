@@ -4,6 +4,12 @@ import XCTest
 @testable import TadaWordsDomain
 
 final class VoiceprintTests: XCTestCase {
+    func testAppStoreOnePointZeroDoesNotShipEnrollmentOrSpeakerMatching() {
+        XCTAssertFalse(
+            VoiceprintReleasePolicy.shipsEnrollmentAndSpeakerMatching
+        )
+    }
+
     func testMatchPolicyUsesConservativeUncertainMiddleBand() {
         let policy = VoiceprintMatchPolicy(
             likelyMatchThreshold: 0.8,

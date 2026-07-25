@@ -10,7 +10,8 @@ handwriting-recognition, network, or persistent-data dependencies:
 - two consecutive Read words advance after the transient `You got it!` card;
 - Parent Home back navigation returns to Kid selection and restores the gate;
 - parent-only Privacy Policy, Support, profile deletion, and iOS permission
-  guidance remain discoverable on compact and regular-width layouts;
+  guidance remain discoverable on compact and regular-width layouts, with the
+  installed app version and build visible at the bottom of the section;
 - parent-only offline Third-Party Notices expose the exact Twemoji attribution,
   pinned source, and CC BY 4.0 license behind the Parent Gate;
 - two consecutive parent deletions retain Undo, skip the second confirmation,

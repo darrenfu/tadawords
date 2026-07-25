@@ -78,8 +78,11 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
 
         XCTAssertEqual(model.profileErasurePresentation?.state, .complete)
         let synchronizeCallCount = await coordinator.synchronizeCallCount
+        let retryProfileErasuresCallCount =
+            await coordinator.retryProfileErasuresCallCount
         let lifecycleReadCount = await coordinator.lifecycleReadCount
-        XCTAssertEqual(synchronizeCallCount, 1)
+        XCTAssertEqual(synchronizeCallCount, 0)
+        XCTAssertEqual(retryProfileErasuresCallCount, 1)
         XCTAssertGreaterThanOrEqual(lifecycleReadCount, 2)
     }
 
@@ -234,9 +237,16 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
                 category: .connectivity,
                 at: Date(timeIntervalSince1970: 1_735_689_700)
             ),
+            appVersion: GuardianAppVersionPresentation(
+                marketingVersion: "0.7.40",
+                buildNumber: "2026072414"
+            ),
             generatedAt: Date(timeIntervalSince1970: 1_735_689_600)
         ).text
 
+        XCTAssertTrue(report.contains("Schema: 3"))
+        XCTAssertTrue(report.contains("App version: 0.7.40"))
+        XCTAssertTrue(report.contains("App build: 2026072414"))
         XCTAssertTrue(report.contains("State: waiting_for_connection"))
         XCTAssertTrue(report.contains("Pending changes: 3"))
         XCTAssertTrue(report.contains("Retry count: 2"))
@@ -252,6 +262,8 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
             "payloadChecksum",
             "device token",
             "private details",
+            "app.tadawords.app",
+            "TadaWordsGitCommit",
         ] {
             XCTAssertFalse(report.contains(childPayload))
         }
@@ -580,6 +592,7 @@ private actor GuardianFamilySyncCoordinatorStub: FamilySyncCoordinating {
     private var lifecycles: [ProfileErasureLifecycle]
     private var lifecycleReadShouldFail: Bool
     private(set) var synchronizeCallCount = 0
+    private(set) var retryProfileErasuresCallCount = 0
     private(set) var lifecycleReadCount = 0
 
     init(
@@ -603,6 +616,11 @@ private actor GuardianFamilySyncCoordinatorStub: FamilySyncCoordinating {
 
     func synchronize() async -> FamilySyncStatus {
         synchronizeCallCount += 1
+        return .synced(at: Date(timeIntervalSince1970: 1_735_689_600))
+    }
+
+    func retryProfileErasures() async -> FamilySyncStatus {
+        retryProfileErasuresCallCount += 1
         return .synced(at: Date(timeIntervalSince1970: 1_735_689_600))
     }
 

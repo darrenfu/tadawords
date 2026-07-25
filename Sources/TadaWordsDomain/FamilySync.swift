@@ -1328,6 +1328,11 @@ public protocol FamilySyncCoordinating: Sendable {
 
     func synchronize() async -> FamilySyncStatus
 
+    /// Explicitly retries nonterminal Profile erasures that require Parent
+    /// attention. Production coordinators may clear durable backoff for only
+    /// those terminal deletion records before reconciling.
+    func retryProfileErasures() async -> FamilySyncStatus
+
     func status() async -> FamilySyncStatus
 
     /// Returns privacy-minimal Profile-erasure evidence for Parent UI. A
@@ -1341,6 +1346,10 @@ public protocol FamilySyncCoordinating: Sendable {
 }
 
 extension FamilySyncCoordinating {
+    public func retryProfileErasures() async -> FamilySyncStatus {
+        await synchronize()
+    }
+
     public func disableAndAwaitQuiescence() async throws -> FamilySyncStatus {
         try await setEnabled(false)
     }

@@ -1,27 +1,32 @@
 import TadaWordsDomain
 
 public struct SpeechPermissionActions: Sendable {
-    private let authorizationCheck: @Sendable () async -> Bool
+    private let microphoneTapAuthorization: @Sendable () async -> Bool
 
     public init(
-        checkAuthorization: @escaping @Sendable () async -> Bool
+        authorizeMicrophoneTap: @escaping @Sendable () async -> Bool
     ) {
-        authorizationCheck = checkAuthorization
+        microphoneTapAuthorization = authorizeMicrophoneTap
     }
 
-    /// Child features can inspect existing authorization, but deliberately
-    /// have no capability that can display an iOS permission prompt.
-    public func isAuthorized() async -> Bool {
-        await authorizationCheck()
+    /// Resolves the original microphone tap. Production composition checks
+    /// current status, requests only still-undetermined permissions, and
+    /// returns true only when recording may start.
+    public func authorizeMicrophoneTap() async -> Bool {
+        await microphoneTapAuthorization()
     }
 
-    public static let unavailable = SpeechPermissionActions {
-        false
-    }
+    public static let unavailable = SpeechPermissionActions(
+        authorizeMicrophoneTap: {
+            false
+        }
+    )
 
-    static let demoAuthorized = SpeechPermissionActions {
-        true
-    }
+    static let demoAuthorized = SpeechPermissionActions(
+        authorizeMicrophoneTap: {
+            true
+        }
+    )
 }
 
 struct UnavailableSpeechRecognitionService: SpeechRecognitionService {

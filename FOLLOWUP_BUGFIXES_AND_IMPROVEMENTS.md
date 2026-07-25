@@ -1,8 +1,42 @@
+<!-- TADA_BILINGUAL_DOC: English is the default reading language. The original source text is preserved for verification. -->
+<a id="english-default"></a>
+
+> **Languages / 语言：** **English (default) / 英文（默认）** · [简体中文](#简体中文版)
+
 # Tada Words — Follow-up Bug Fixes & Improvements
 
 This is the single source of truth for work discovered after the original V1
 design. Product/design documents describe the current intended behavior; this
 log records why it changed, which version contains it, and how it was verified.
+
+## v0.7.43 — 2026-07-25
+
+Target release: `v0.7.43`
+
+Branch: `codex/qa-artifacts-cleanup-v0.7.29`
+
+Build: `2026072417`
+
+Overall state: Issue #114 removes obsolete tracked QA screenshot and result
+directories while retaining the root-level audit records. Source, simulator, and
+signed-device gates must be collected again for this exact package metadata.
+
+- Removed every tracked child directory below `QAArtifacts/`.
+- Retained the two root-level audit Markdown files.
+- Replaced stale screenshot links with durable historical descriptions.
+- Added a contract test that prevents future child directories under
+  `QAArtifacts/`.
+
+## v0.7.33 — App Store release alignment
+
+- Standardized the product age range to 3–8 across profile creation, child
+  creation, Parent profile editing, release metadata, and public-site inputs.
+- Kept legacy snapshot decoding compatible while preventing new create/edit
+  writes from setting ages outside the supported product range.
+- Reconciled the release pack with the bundled offline Twemoji implementation,
+  parent-opted-in Family Sync boundary, and Apple's single Kids Category band
+  limitation.
+- Reserved version `0.7.33`, build `2026072407`.
 
 ## Versioning workflow
 
@@ -266,7 +300,7 @@ Overall state: production fix, automated regression, signed iPhone and iPad inst
   picker/sort, and Read/Write completion dismissal.
 - Historical iPhone Moonpetal and iPad Dino captures confirmed that lower story
   art remained clear of foreground Quest cards after the ambient motion cycle.
-  The temporary screenshot files were removed in the v0.7.29 repository cleanup.
+  The temporary screenshot files were removed in the v0.7.43 repository cleanup.
 - Fresh LocalQA simulator builds pass for iPhone 17 Pro Max and iPad Pro 13-inch
   (M5). Signed `Tada Words QA` v0.3.1 (`2026071402`) was installed and launched on
   the connected iPhone.
@@ -1210,6 +1244,59 @@ transient `.syncing` snapshot when it opened during an existing reconciliation.
 - Focused concurrency tests and the complete 1129-test Swift suite pass.
   Exact-HEAD build and signed-device acceptance remain pending.
 
+## v0.7.32 — 2026-07-24
+
+Target release: `v0.7.32`
+
+Branch: `codex/privacy-support-alignment-v0.7.32`
+
+Build: `2026072406`
+
+Overall state: Issue #76's owner-approved conservative App Store 1.0 fallback
+removes every production enrollment and speaker-matching entry point while
+retaining only the existing Profile-deletion and proven-fresh-install cleanup
+paths for a dormant pre-release Keychain template.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| V0732-PRIVACY-001 | P0 release scope | Voiceprint/COPPA | Do not ship voiceprint enrollment or speaker matching in App Store 1.0 without a qualified written treatment; preserve deletion of any dormant pre-release template. | Automated pass; exact-artifact acceptance pending | Source contracts, complete regression gate, exact-HEAD iPhone and iPad simulator UI checks, signed in-place iPhone acceptance without deleting app data, and retained lifecycle cleanup tests |
+
+### 2026-07-24 v0.7.32 notes
+
+- Production composition no longer constructs an enrollment service or injects
+  a speaker verifier into Read Practice.
+- Parent Profile cards do not expose voice setup while the release policy is
+  disabled, and view-model guards fail closed if legacy code attempts to
+  navigate or begin enrollment.
+- Microphone permission copy now covers spoken Read Practice only.
+- Existing templates are not silently erased during update. The production
+  repository remains composed only so Profile deletion and proven-fresh-install
+  bootstrap can perform the previously verified scoped cleanup.
+- This is a release-scope fallback, not a legal conclusion. Issue #76 remains
+  open for qualified treatment of transient Read speech, Profile/photo data,
+  persistent identifiers, and optional CloudKit Family Sync.
+
+## v0.7.30 — 2026-07-23
+
+Target release: `v0.7.30`
+
+Branch: `codex/voiceprint-lifecycle-proof-v0.7.30`
+
+### Voiceprint Keychain lifecycle proof
+
+- Added signed physical-device tests that exercise the production
+  `KeychainDeviceVoiceprintRepository` through Apple's Security framework.
+- The tests use UUID-scoped test services, not the production voiceprint
+  service, and require no uninstall or app-data reset.
+- Coverage proves retained items survive repository recreation until the
+  scoped fresh-install reset, which removes every item in that service while
+  preserving a neighboring service.
+- Coverage also verifies `WhenUnlockedThisDeviceOnly`, non-synchronizing
+  attributes and idempotent empty-service reset.
+- Added a durable lifecycle record and aligned the internal privacy and
+  submission-pack wording. Deployment of matching Pawgoo Privacy/Support copy
+  remains #54.
+
 ## v0.7.27 — 2026-07-21
 
 Target release: `v0.7.27`
@@ -1222,12 +1309,13 @@ review notes, and exact-RC checklist.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
-| V0722-RELEASE-001 | P1 decision | App Store | Use Made for Kids 6–8, Free/no IAP or ads, United States-only availability, and manual release everywhere. | Owner-approved; source contract implemented | Exact source tests, generated-project identity, PR merge, and later #65 App Store Connect entry against the accepted RC. |
+| V0722-RELEASE-001 | P1 decision | App Store | Use Made for Kids, Free/no IAP or ads, United States-only availability, and manual release everywhere. | Product and in-app Profile ages are 3–8; the owner selected Apple's `6–8` primary band because App Store Connect has no combined 3–8 value | Exact source tests, generated-project identity, PR merge, and later #65 App Store Connect entry against the accepted RC. |
 
 ### 2026-07-21 v0.7.27 notes
 
-- The owner deliberately selected Made for Kids with the primary 6–8 age band;
-  the post-approval lock-in is recorded as irreversible.
+- The product and in-app Profile range is ages 3–8. The owner selected Apple's
+  `6–8` primary band because App Store Connect has no combined 3–8 value; the
+  post-approval lock-in remains irreversible.
 - The first public release is Free, has no IAP/subscription/advertising/paid
   unlock, and is available only in the United States without pre-order.
 - The approved release option is manual. App Review approval must leave the
@@ -1366,24 +1454,1181 @@ closed without publishing a partial child, Parent, or notification snapshot.
   and in-place data contracts. Simulator and signed-device evidence remains
   exact-HEAD and is recorded separately from source tests.
 
-## v0.7.29 — 2026-07-24
+## v0.7.28 — 2026-07-24
 
-Target release: `v0.7.29`
+Target release: `v0.7.28`
 
-Branch: `codex/qa-artifacts-cleanup-v0.7.29`
+Branch: `codex/camera-ocr-editor-v0.7.15`
 
-Build: `2026072403`
+Build: `2026072402`
 
-Overall state: Issue #114 removes obsolete child directories from
-`QAArtifacts/` while preserving every root-level audit and diagnostic file.
-No app behavior, stored child data, or runtime contract changes.
+Overall state: Issue #96 adds an on-device crop-and-mask editor between camera
+capture and OCR review while retaining v0.7.21 atomic Family Sync visibility
+and all existing parent-approved word-pool rules.
 
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
-| V0729-REPO-001 | Repository cleanup | Release | Remove every tracked child directory below `QAArtifacts/`, including screenshot collections, `.xcresult` packages, and demo-media folders; keep root-level files and eliminate broken local references. | Implemented | Exact tree inventory, broken-reference scan, source checks, and release-policy gates for the reserved version/build |
+| V0720-UX-001 | P1 improvement | Parent/Camera OCR | Let a parent crop a photographed word sheet and cover unrelated content before OCR, with undo, reset, retake, cancel, and an explicit Use Photo handoff. | Automated pass | Editor model/rendering tests, exact-HEAD iPhone and iPad simulator flows, signed LocalQA identity verification, and a data-preserving physical iPhone camera flow through OCR review |
 
-### 2026-07-24 v0.7.29 notes
+### 2026-07-24 v0.7.28 notes
 
-- Removed all five child directories tracked on the batch base.
-- Preserved the root-level design audit and full feature audit.
-- Reworded historical evidence notes so they no longer link to deleted images.
+- The editor normalizes image orientation, preserves source resolution, and
+  applies black masks only inside the selected crop before OCR.
+- Camera and edited images remain device-local and are not persisted. Cancel
+  leaves the word pool unchanged; OCR results still require parent review and
+  explicit addition.
+- Crop and Mask use white text when inactive against the editor's black
+  background, while the active tool retains a white segment with black text.
+- The physical iPad and Apple Pencil lane is waived for this merge only by the
+  owner; iPad simulator coverage remains required. One physical iPhone camera
+  flow is still a mandatory release gate.
+
+<!-- TADA_BILINGUAL_ZH_START -->
+
+---
+
+<a id="简体中文版"></a>
+
+> **翻译说明：** 英文为默认阅读语言；本文同时保留原始语言文本。如中英文内容存在差异，请以原始语言文本为准。
+
+# Tada Words — 后续错误修复和改进
+
+这是在原始 V1 设计之后发现的唯一唯一事实来源作品。产品/设计文档描述了当前的预期行为；该日志记录了更改的原因、包含该更改的版本以及验证方式。
+
+## 版本控制工作流程
+
+- `main` 包含最新接受的基线。
+- 每个产品迭代都使用语义版本分支，例如`v0.2`、`v0.3`。
+- 日常工作按当地日期分组如下 (`America/Los_Angeles`)。
+- 仅修复后续版本使用补丁版本，例如`v0.2.1`。
+- 仅在自动检查、全新LocalQA安装后才标记版本，
+并且列出的物理设备检查通过。
+- Replay，屏幕截图、模拟器结果和自动化测试可能支持
+项目，但儿童语音/手写和可听韵律需要人工设备 QA。
+
+## 状态词汇
+
+- `Planned`：已接受，尚未实施。
+- `In progress`：实施正在进行中。
+- `Automated pass`：有针对性的自动检查通过；设备 QA 仍然存在。
+- `Device QA pending`：包含在设备构建中并等待人工检查。
+- `Accepted`：经过物理验证并包含在可接受的版本中。
+
+## v0.2 — 2026-07-12
+
+目标发布：`v0.2.0`
+
+Branch: `v0.2`
+总体状态：在合并提交 `7728f28` 时由 PR #1 合并到 `main`；物理设备的接受仍然开放。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V02-BUG-001 | Bug | 导航 | 正常点击`Parents` 必须打开数学Parent Gate。 | 自动通行证 | 点击iPhone 和iPad；门打开一次。 |
+| V02-BUG-002 | Bug | 结果 | Replay 图标必须是再次启动相同模式的真实按钮。 |自动通行证|完成两种模式，点击Replay，验证`Practice Again`启动并不会授予重复的永久奖励。 |
+| V02-BUG-003 | Bug | Read 识别 | 录音不得永远失败或在没有可用的儿童语音的情况下立即成功。权限、语音活动、端点和 Apple 回调竞争必须正常失败。 | 自动通过 | 静音、背景音频、短视单词、正常儿童声音以及在物理设备上重试两次。 |
+| V02-IMP-001 | 改进 | Read | 新的Profile/新词在第一次独立响应之前不得听到目标。 | 自动传球 | 输入新的Profile Read 并确认保持安静，直到孩子行动。 |
+| V02-IMP-002 | 改进 | 奖励 | 必须达到三颗星：允许立即独立恢复，校准可以赢得配速，慢速一方获得 25% 的宽限。 Guardian 准确性仍然严格。 | 自动通过 | 运行第一次尝试、一次恢复、校准、慢速、太快和帮助案例。 |
+| V02-IMP-003 | 改进 | 启动 | 启动为 Profile-优先。没有Profile打开`New Kid`；返回的启动会突出显示最后一个有效的 Profile 以进行子确认。首次运行设置中不会出现任何单词条目。 | 自动通过| 全新安装、一个Profile、多个配置文件、最后删除Profile 和重新启动检查。 |
+| V02-IMP-004 | 改进 | 父词 | 用 Read/Write 选项卡、单字返回添加、最新第一实时队列、本地相机/照片 OCR 预览、同池重复数据删除、单个/批量删除、确认和撤消替换旧的快速添加。 | 自动传递 | 键入/返回、来自两个来源的多字 OCR、重复导入、批量排序、单个删除、批量删除/撤消 iPhone 和 iPad。 |
+| V02-IMP-005 | 改进 | 单词来源 | V1 不得添加等级/目录/智能填充单词。每个池条目均来自家长输入或OCR;尺寸过小的泳池仍然尺寸过小。 |自动通行证|空的和尺寸过小的池在启动和任务准备过程中保持不变。 |
+| V02-IMP-006 | 改进 | Write 音频 | Write 参考发音较慢，并保持最终辅音可听，包括 `at` 中的 `t`。 | 自动传递 | 在目标手机/平板电脑上收听 `at`、`cat`、`look`、`go` 和 `I`。 |
+| V02-IMP-007 | 改进 | Read 帮助 | 仅在两次有效的错误读数后，才显示 `Hear it` 和 `See it`。 `Hear it`是儿童触发的标准发音； `See it` 在已知单词旁边显示了本地图片。未知的单词一定不能收到猜测的图片。 |自动通行证|确认0/1错时隐藏，2错时可见，技术重试未解锁，`dog`显示狗，未知单词失败关闭。 |
+| V02-IMP-008 | 改进 | 语音 | 更喜欢可用的年轻美式英语女性系统语音，具有确定性的自然语音后备。 | 自动传递 | 在目标设备上监听；确认没有丢失/下载的语音导致静音。 |
+| V02-IMP-009 | 改进 | 声波标志 | Launch 是一个自然的短语，`Ta-dá↗ woooords↘!`（所有者近似：`它达，沃尔子`）：`da` 略微上升，直接通向明显加长、下降的 `wor`，没有故意的逗号停顿或机器人的话语接缝。 |已实施；设备监听待处理 | 通过语音开/关和三个世界主题，根据所有者参考进行冷启动监听检查。 |
+| V02-IMP-010 | 改进 | 公主主题 | Moonpetal 添加了原始的彩虹/独角兽细节和更乐观、多样化的类似游戏的乐谱，而不涵盖学习控制或泄漏到其他主题。 | 自动通过 | 两个横向方向的目视检查，Reduce Motion，音乐闪避和录音淡出。 |
+| V02-IMP-011 | 改进 | 外观 | 在当地某一天完成 Read 和 Write 今日任务可在第二天解锁一个不劳而获的主题和图标。 Replay 和部分天数不计算在内；延迟启动可以幂等地赶上。 |自动通行证|当日锁定、次日解锁、部分日、重播、重复完成、跨月、重启、每Profile隔离。 |
+| V02-IMP-012 | 改进 | 我的收藏 | Kid 获得一个单独的屏幕来查看和选择获得的主题和图标。锁定的项目仅供预览；保留原始照片头像数据。 | 自动通过 | 选择、重启、切换 Profile、选择照片/图标/主题，并验证持久性/隔离。 |
+| V02-IMP-013 | 改进 | Read 匹配 | 稍微放宽普通话-L1 接近形式的发音等效性，例如将目标 `come` 识别为 `kum/cum`，而不接受不同的单词，例如 `some`、`home`、`came`、`cat/cap`，或绕过音频/说话人置信门。 | 自动通过 | 精心策划的正面/负面政策测试以及针对 `come` 和其他代表性词语的目标儿童设备试验。 |
+| V02-IMP-014 | 改进 | 大厅 | 从右上角标题中删除非交互式当前主题文本药丸，因为它看起来可以点击。主题标识保留在场景和“我的收藏”选择中。 | 自动通过 | 验证标头在 iPhone/iPad 景观上保持平衡，并且不包含死角控制。 |
+| V02-IMP-015 | 改进 | 世界 | 将原来的三个世界扩展到八个，包含五个独立的原创主题：恐龙探索、消防站英雄、砖砌城市、霜光世界和过山车嘉年华。每个都需要自己的调色板、边缘安全场景、吉祥物、奖励和音乐特性。 | 自动通行证 | 在手机/平板电脑上预览全部八个，横向、Quest 调光、Reduce Motion、音乐闪避和次日解锁顺序。 |
+| V02-IMP-016 | 改进 | 宝藏 | 每个世界都有 25 个相关的、视觉上不同的宝藏图标。上锁的宝藏保留了带有锁徽章的灰色艺术品，而不是成为通用锁。 | 自动通行证 | 检查 200 个目录条目、每个世界的唯一性、符号可用性、锁定/赢得/当前状态以及紧凑网格。 |
+| V02-IMP-017 | 改进 | Profile 头像 | 可以选择收集的宝藏作为子头像；上锁的宝藏不能。在宝藏、获得的动物图标和原始照片之间切换会保留源照片和同步元数据。 |自动传递|选择/重启/切换Profile/同步，拒绝锁定的宝藏，并确认所有面向儿童的头像表面匹配。 |
+| V02-IMP-018 | 改进 | 吉祥物 | 将共享的两点线占位符面孔替换为友好的、世界特定的、姿势感知的表情，用于休息、欢呼、鼓励和救援状态。 |自动通行证|检查所有八个吉祥物和四个姿势，Reduce Motion开/关；情感在紧凑的尺寸中保持友好和清晰。 |
+| V02-IMP-019 | 改进 | Write 控制 | `Clear` 立即删除所有写入内容，无需确认。单个`?`图标立即显示单词并记录指导；没有保留任何帮助文本或三项选择表。 |自动通过|测试非空/空清除，VoiceOver反馈，一键显示，重复显示，计时器行为和指导评分。 |
+| V02-IMP-020 | 改进 | Write 工具 | 添加铅笔、蜡笔、粉笔和画笔工具以及 12 种独立可选的基本颜色，具有持久的独特笔画风格和柔和的每笔画移动声音。将 Undo 替换为本地橡皮擦，其路径为活动笔宽度的 2.5 倍；保留一键清除。 |自动传递|用手指和铅笔绘制/切换工具/颜色/擦除部分笔划；验证旧笔画保留样式/颜色、识别输入、声音节流、降低声音策略、紧凑布局和无提示音频掩蔽。 |
+| V02-IMP-021 | 改进 | Read 呈现 | Read 单词每次尝试都使用从活动世界调色板中选择的稳定、高对比度颜色，单词之间有足够的变化，并且没有重绘闪烁。 | 自动传递| 验证所有八个世界调色板、确定性重画/旋转、WCAG 对比度以及任务中的可见变化。 |
+| V02-IMP-022 | 改进 | 家长导航 | 将面向儿童的条目重命名为 `Parents`。家长设置/管理路线支持iPhone/iPad上的纵向和横向；所有子路线仅保持景观，并在出口处立即恢复景观。 | 自动通过 | 策略测试和 iPad 模拟器窗口形状通过。在物理设备上旋转每条父路线，通过Parent Gate返回，并确认Profile/大厅/任务/徽章在两个横向方向上保持横向； iPhone 原始模拟器帧缓冲区捕获不是验收证据。 |
+| V02-IMP-023 | 改进 | 儿童视觉风格 | 完善面向儿童的排版、缩微、形状和装饰节奏，让学前儿童感觉更可爱、更有吸引力，同时保留大触摸目标、阅读对比度和独特的世界身份。 | 自动通行证 | 新手机/平板电脑 Profile、大厅、Read 和结果捕获通行证。完成Dynamic Type、VoiceOver，以及在物理设备上的简短目标儿童导航/吸引力观察。 |
+| V02-IMP-024 | 改进 | 大厅 | 将前 `Collection — See your world treasures` 条移至右上方标题中，作为紧凑的 `Badge` 按钮，打开相同的赢得化妆品屏幕。 |自动传递|iPhone横向捕获显示四项标题适合并且底部条消失了；物理点击手机/平板电脑上的徽章以确认导航。 |
+
+## 每日笔记
+
+### 2026-07-12
+
+- 根据已接受的 `main` 基线 `ca76fcf` 创建`v0.2`。
+- 物理iPhone首次通过反馈定义`V02-BUG-001`通过
+`V02-IMP-005`。
+- 添加了语音、提示、语音、主题/音频和次日外观要求。
+- 将声音徽标从三个排队的语音片段重新设计为一个 SSML
+与所有者参考文献 `tā-'dá, wòrds!` 相匹配的短语。
+- 为 Read 添加了保守的普通话-L1 发音等效调整。
+- 从大厅标题中删除了误导性的非交互式主题标签。
+- 将世界目录从三个扩展到八个，而不改变第一个
+三个解锁位置，并添加了独特的程序场景/音乐。
+- 每个世界添加了 25 个稳定的宝藏图标、锁定图标预览并收集
+珍藏头像选择，同时保留源照片。
+- 将占位吉祥物面孔替换为姿势感知表情。
+- 简化了Write清除和帮助，然后添加了四工具书写/橡皮擦设计。
+- 添加了 12 种独立的笔颜色和主题感知的 Read 单词颜色变化。
+- 重命名了父条目，将纵向支持范围限定为父路由，并保留
+每个孩子的路线仅限横向。
+- 将收藏从大厅主体移至紧凑的右上方`Badge`入口。
+- 开启了专注学前班视觉风格的细化通行证；新鲜的屏幕截图和
+在接受之前仍需要对目标儿童进行观察。
+- 完成了全分支机构的 Swift 套件：479/479 通过，零失败
+在添加重点第一阶段演示测试之前。
+- 成功为 iPhone 17 Pro Max 和 iPad Pro 13 英寸构建了 LocalQA 应用程序
+(M5) 模拟器。新签名的物理设备安装仍然开放。
+
+### 2026-07-13
+
+- 在定向政策覆盖后，将`V02-IMP-022`提升为自动通行证
+iPad模拟器父/子窗口形状证据。 iPhone 原始帧缓冲区方向仍然不确定，因此仍然需要实际设备旋转。
+- 在 iPhone 景观捕捉后将 `V02-IMP-024` 提升为自动通行证
+显示了四项标题配件，没有以前的底部收集条。仍然需要物理徽章直通。
+- 第一阶段视觉效果获得批准后，晋升为`V02-IMP-023` 至自动通过
+细化：静态强调记住的Profile； iPhone 大厅在 72 点触摸框架内使用 48 点图标底座，而 iPad 保留标签；大厅/Read/结果吉祥物、iPadRead卡片和单词以及结果奖励/重播重点通过集中式儿童规模代币变得更大。
+- 审查了 iPhone 17 Pro Max 上的最新 Profile、大厅、Read 和结果捕获
+和 iPad Pro 13 英寸 (M5)。没有观察到剪切、重叠或世界身份泄漏；身体Dynamic Type、VoiceOver和目标儿童吸引力仍然存在。
+- 完成后细化分支范围套件：480/480 通过零
+失败，并且两个LocalQA模拟器构建都通过了。
+- 将启动语音目标更新为连续的`Ta-dá↗ woooords↘!`
+短语：`da`上升并直接连接成更长的、下降的`wor`，匹配`它达，沃尔子`；设备监听批准仍然开放。
+
+## 设备验收记录
+
+在最终`v0.2.0`候选人就任后填写。
+
+| 日期 | 设备 | 版本/版本 | 测试仪 | 结果 | 注释/证据 |
+|---|---|---|---|---|---|
+| 待定 | iPhone 17 Pro Max | `v0.2.0` 候选人 | 家长+子女 | 待定 | 以上完整清单。 |
+| 待定 | iPad Pro 13 英寸 (M5) | `v0.2.0` 候选者 | 家长+儿童 | 待定 | 以上完整清单。 |
+
+## v0.3 — 2026-07-13
+
+目标发布：`v0.3.0`
+
+Branch: `v0.3`
+Baseline: `main` 和 `7728f28`，合并了 v0.2 至 PR #1。
+总体状态：在合并提交 `cc42e17` 时由 PR #2 合并到 `main`；人类物理设备的接受度仍然开放。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V03-BUG-001 | Bug | OCR 导入 | `Add all N to Read/Write` 在识别后必须保持可点击状态，并且在保存时必须显示进度或可操作的错误。 | 自动传递| 识别照片，关闭键盘，点击一次粘性“添加全部”操作，并验证池更改一次。 |
+| V03-BUG-002 | Bug | 语音设置 | 语音设置必须记录可用的注册示例，而不是显示一般错误或禁用“完成”。在读取输入格式之前配置音频会话，并在样本被拒绝时保留接受的进度。 | 自动通过 | 在物理设备上完成设置，包括一个拒绝的样本、中断、重试和最终保存。 |
+| V03-BUG-003 | Bug | Write 画布 | 短点、后面的字母和连接的笔画必须保留在绘图中。写入声音必须使用缓存、节流播放，不得出现卡顿。 |自动传递|Write`i`，一个三个字母的单词，并与每个工具连接`vv`/`w`；聆听间隙、削波或重复的启动噪音。 |
+| V03-BUG-004 | Bug | Parent Gate | 错误的完整答案必须自动清除，且不会使其错误反馈闪烁并消失。保持消息可见，直到家长开始下一个答案。 | 自动通过 | 输入错误答案，观察清除的字段和持久消息，然后键入下一个数字并确认消息消失。 |
+| V03-BUG-005 | Bug | 任务转换 | 前进到下一个单词不得重建根任务 shell 或更改其转换标识。 | 自动传递 | 逐帧记录多字 Write Quest 并确认画布坐标空间在每次前进期间保持固定。 |
+| V03-BUG-006 | Bug | 任务反馈 | Read `You got it!` 和 Write 完成反馈必须驳回一次并提前；旧的延迟回调绝不能覆盖或推进较新的单词。 | 自动通过 | 关键 XCUITest 在每种模式下完成两个连续的单词，并确认两张瞬态卡消失。 |
+| V03-BUG-007 | Bug | 家长互动 | 键盘关闭不得吞并添加全部、排序或删除点击。每个确认的删除都会保留“撤消”，而只有父会话中的第一个删除才会要求确认。 | 自动传递 | 关键 XCUITest 执行两次删除、撤消曝光、照片选择器关闭、OCR 添加全部、池刷新和 A-Z 排序。 |
+| V03-BUG-008 | Bug | Write 识别 | 短词 `of` 必须在 Vision 返回排名较低的候选者中的准确拼写、拆分字母、改变大小写或混淆手写的 `o` 与 `0` 时通过；不相关的邻居必须继续被拒绝。 | 自动通行证；儿童笔迹保持开放|通过真实解析器验证`of`、`Of`、`OF`、`O`+`F`和安全`0f`规范化；拒绝`if`、`on`、`or`、`ot`和`off`，然后让孩子重复目标iPhone。 |
+| V03-IMP-001 | 改进 | OCR 审核 | 选择多张图库照片或在一次导入中拍摄额外的相机照片。从 1 开始对识别的单词进行编号，强制每个图像最多包含 500 个单词，进行重复数据删除，并按源顺序、A-Z 或练习频率进行排序。在长时间查看期间保持顶部/后退和底部跳跃控件可用。 | 自动传递| 导入多张照片、触发每张图像 500 字错误、编辑编号行、更改所有排序顺序以及使用两个滚动控件。 |
+| V03-IMP-002 | 改进 | 父词 | 按添加顺序、A-Z 或最常用的顺序对池进行排序；显示练习频率；并支持通过“收听”和“删除”操作进行预输入搜索。 | 自动传递 | 搜索部分单词，使用两个行操作，并将所有排序顺序与已知频率进行比较。 |
+| V03-IMP-003 | 改进 | 父级输入 | 在任何父级输入外部点击都会关闭其键盘。家长会议中删除第一个单词需要确认；该会话中的后续删除直接执行并保留撤消。 | 自动通过 | 练习输入、搜索、OCR 复习和门字段；然后删除一个、几个、以及稍后的一个单词。 |
+| V03-IMP-004 | 改进 | 家长导航 | Parent Gate 一旦出现预期的数字位数，就会进行检查。错误的完整答案将重置以重试。点击Parents中的`Lock`可锁定路线并返回Kid选择。 | 自动通过 | 输入正确和错误的一位数和两位数答案，然后输入 Parents 并点击仪表板上的“锁定”。 |
+| V03-IMP-005 | 改进 | 图片提示 | 将完整审阅的图片目录与应用程序捆绑在一起。在第一个真正的 Write 不匹配时，无需网络请求即可显示已编目具体单词的可点击图片图标。功能词和抽象词如`the`、`come`和`kind`没有图像。丢失、损坏或规模过大的资产无法关闭，但不会阻碍实践。 |自动传递|验证所有74个清单资产在大小限制内解码，添加`dog`和`the`，强制一个Write不匹配，并确认新的离线安装在练习继续时仅显示捆绑的狗提示。 |
+| V03-IMP-006 | 改进 | 语音设置 | 用六个打乱顺序的短 Pre-K 句子替换通用样本录音。孩子听到并重复每个句子；接受/拒绝的进度保持可见，并且原始音频不会保留。 | 自动通过 | 完成目标儿童的注册，重试拒绝的语音/噪声样本，重新启动，并确认仅保留设备本地模板。 |
+| V03-IMP-007 | 改进 | 语音 | 每 Profile 使用一种规范的教师语音；删除六种样式选择器并在下次保存时放弃其旧版首选项。客户端只能调用已配置的 HTTPS 教师音频端点，并且绝不能包含提供者 API 密钥。如果没有该端点，它会使用一种确定性清晰度排名的 Apple 后备方案。 | 自动通行证；远程端点和监听保持打开状态 | 确认没有样式 UI 或持久样式保留，不存在凭证，并且丢失的网络/端点仍然会产生一个清晰的后备语音。单独配置和验证受限服务器端点。 |
+| V03-IMP-008 | 改进 | 学习音频 | 优先考虑清晰、流畅的 Read `Hear it` 和 Write 参考语音，而不是精确的减速乘数。离线后备选择最清晰的已安装自然美式英语语音，避免辅音涂抹超低速率和人为音调，添加一个无声终端边界，并在较长的发布过程中保持音乐的隐藏。远程合同仍然是其支持的最慢速度的规范教师之一。 | 自动合成过程；物理设备聆听保持开放| A/B 合成和转录`of`、`at`、`cat`、`come` 和 `look`；然后使用纯压缩语音和可选的高级/增强语音收听目标iPhone。验证一个不间断的单词、一个独特的结尾辅音以及单词中间没有间隙。 |
+| V03-IMP-009 | 改进 | Read 帮助 | 两次有效的错误读数后，仅显示儿童触发的`Hear it`；删除Read图片按钮。技术重试永远无法解锁帮助。 |自动通过|确认0/1错时隐藏，2错时可见，技术重试后消失，并重置下一个单词。 |
+| V03-IMP-010 | 改进 | 结果 | Replay 仅在完整运行中遗漏或有帮助的单词。完美的跑步没有空的Replay动作。 | 自动通行证 | 用一个棘手的单词完成两种模式，点击Replay，仅验证该单词返回，并确认没有重复的永久奖励。 |
+| V03-IMP-011 | 改进 | 评分 | 首次独立正确性达到 75% 或符合资格的立即无辅助恢复时获得准确度。个人配速接受校准和 50% 慢侧宽限。分数最多使用 80 个准确度点加上 20 个速度点；完美的第一次尝试总是可以获得 100 分和全部三颗星。 Guardian 证据仍然严格。 | 自动通过 | 将完美、75%、恢复、帮助、校准、过快和慢速带外运行与 Guardian 报告进行比较。 |
+| V03-IMP-012 | 改进 | Write 控制 | 单词开始时切勿预先显示拼写。 `Clear` 未经确认而采取行动； `?` 单独揭示了这个词。接受首字母大写、大写和小写手写。保持完成反馈可见 830 毫秒，比 v0.2 长 400 毫秒。 | 自动通过| 测试新词/复习单词、所有支持的案例表格、一键帮助/清除、计时和指导评分。 |
+| V03-IMP-013 | 改进 | Write 工具 | 仅提供带有黑色墨水的铅笔、粉笔和画笔；隐藏颜色选择器并从可选工具中删除 Crayon。按照 Profile 保留所选工具。将旧的蜡笔或彩色设置迁移到黑色铅笔。使用4×橡皮擦；擦除后点击空白画布即可恢复之前的笔。 |自动传递|切换所有三个工具，重新启动和更改配置文件，加载旧工具/颜色数据，擦除部分笔划，点击空白画布，并验证保留的工具和识别输入。 |
+| V03-IMP-014 | 改进 | Write 布局 | 将书写区域加宽 10%，并在出现反馈时保持其框架固定。保持根 Quest 过渡标识在单词更改时保持稳定，这样动画就不会移动手写坐标空间。 | 自动传递| 在手机/平板电脑上记录错误反馈和单词到单词的转换；比较画布边界和根转换键。 |
+| V03-IMP-015 | 改进 | 规范发音 | 从每个家长输入和 OCR 路径中删除发音上下文编辑。每个新单词都使用独立的规范老师发音；遗留上下文元数据仅保持解码兼容。 |自动传递|通过打字和全部添加添加普通、同音、异义词示例；验证没有编辑器出现，并且每个新提示都有一个独立的音频提示。 |
+| V03-IMP-016 | 改进 | Read 演示 | 用每个世界一个固定、协调、高对比度的设计标记替换每个单词的颜色变化。活跃世界中的每个 Read 单词都使用该标记；仅当子级改变世界时颜色才会改变。 |自动通过|验证所有八个世界标记在视觉上是不同的，满足Read卡上的WCAG对比度，在单词/重试中保持固定，并且仅在世界切换后改变。 |
+| V03-FEAT-001 | 功能 | 跨设备同步 | 同步配置文件、Read/Write 池、Profile 设置、不可变的尝试/更正、事件衍生进度、日历完成以及通过家长选择的奖励 CloudKit，同时每个任务仍然完全本地优先。声纹保留在每台设备上；图片和规范的教师音频缓存重新下载。 | v0.7.0 源代码实现和确定性模拟器 E2E 完成；生产CloudKit和物理/人类接受保持开放|保持精确HEAD模拟器工件绿色，然后在付费团队发布版本上验证一个Apple-ID私人同步和两个Apple-ID`CKShare`同步。当另一台设备离线时删除仅测试的Profile，并证明墓碑可以防止复活，同时非墓碑CloudKit数据被删除。参见`Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md`。 |
+
+## v0.3 日常笔记
+
+### 2026-07-13
+
+- 在 PR #1 将 v0.2 合并到 `main` 后，从合并提交 `7728f28` 创建了`v0.3`。
+- 围绕粘性“添加全部”、编号多照片OCR审查、严格的每张图像 500 个单词限制、排序/搜索/频率工具、会话范围的删除确认和键盘解除重建了家长单词管理。
+- 使Parent Gate按预期位数自动提交，通过自动清除保留错误答案反馈，并使父`Lock`直接返回Kid选择。
+- 用随机重复的句子取代了语音注册。现在的实践揭露了一种规范的教师语音合同；以前的六种风格选择器和存储的偏好被删除，清晰度排名的苹果语音是离线后备。
+- 围绕清晰度重新设计了Read和Write后备语音：自然质量第一的美式英语语音、适度的`0.40`AVS语音速率、中性音调、一个终端边界和延长的释放。 `of`、`at`、`cat`、`come` 和 `look` 的渲染 A/B 样本均在本地转录检查中返回了预期单词；仍然需要物理设备监听。
+- 两次有效失误后，将Read帮助减少至`Hear it`。结果Replay现在只包含棘手的单词；完美的运行不会显示空的Replay动作。
+- 将儿童奖励放宽至 75% 的准确度阈值、50% 的慢速宽限，并保证首次尝试完美获得 100 分/三颗星，而无需更改严格的 Guardian 证据。
+- 强化手写捕捉点、后续字母和连接笔画；缓存/节流写入音频；将橡皮擦改为4×；并在空白橡皮擦敲击后恢复了之前的笔。
+- 将Write设置为从不预先显示答案，接受大写变体，仅在`?`之后显示帮助，并在第一次真正错过之后提供具体的单词图片。工具箱现在只保留铅笔、粉笔和黑色墨水画笔；所选工具按照Profile 保留。
+- 加宽了 Write 画布并稳定了其本地布局和根 Quest 过渡标识，因此反馈和单词更改不会移动其坐标。将完成反馈从 430 毫秒延长至 830 毫秒。
+- 将每个单词的Read颜色变化替换为每个世界一个独特的、高对比度的设计标记，因此单词在视觉上保持一致，直到世界发生变化。
+- 在第 `THIRD_PARTY_NOTICES.md` 中添加了固定的 Twemoji 17.0.3 具体单词提示、私有设备上缓存、抽象单词失败关闭行为和存储库归属。
+- 在 v0.3 检查点，审核了现有的本地优先/CloudKit 基础，并在`Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md` 中记录了跨设备Profile + Progress Sync 合约。该设计让家长选择加入，使声纹设备本地化和缓存可重新下载，并确定持久发件箱、事件派生进度、业务密钥融合、无条件墓碑、CloudKit 擦除和付费团队两设备接受作为下一步工作。源码端项目在v0.7.0中实现；生产CloudKit和物理/人类接受仍然开放。
+- 完成了 v0.3 分支范围的 Swift 套件：548/548 通过，零失败。
+- 添加了五个关键的 XCUITest 流程；所有 5/5 在 iPhone 17 Pro Max 模拟器上通过，包括 OCR 审核 → 添加全部 → 池 → 排序和连续的 Read/Write 反馈驳回。
+- 为 iPhone 17 Pro Max 和 iPad Pro 13 英寸构建了全新的 v0.3 LocalQA 应用程序
+(M5) 零构建失败的模拟器。
+
+### 2026-07-14
+
+- 从输入、OCR、池显示、导入请求、复制和文档中删除了家长发音帮助部分。旧的上下文元数据仍然只能解码，并且永远不会出现或阻止导入。
+- 通过将反馈绑定到当前提示并使下一个单词之前的延迟回调无效，修复了 P0 Read/Write 完成覆盖。
+- 修复了吞噬父添加、排序和稍后删除操作的手势竞争；将会话撤消状态移至长期存在的仪表板模型中，并使演示存储初始化一次性完成。
+- 通过向 Vision 提供 `of`/`Of`/`OF`，评估其五个最佳候选者和分割片段，并仅允许目标对齐的 `0` → `o` 字形标准化，修复了`of`手写识别问题。相邻的单词仍然完全不匹配。
+- 重新设计了离线教师后备，以实现清晰、流畅的短单词：质量第一的美式英语语音选择、不间断的发声、适中的语速、中性音调、终端边界和更长的释放。本地合成/转录认可`of`、`at`、`cat`、`come`和`look` 5/5；仍然需要人类说话者的聆听。
+- 重新生成了Xcode项目，通过了548/548Swift测试和5/5关键XCUITests，为两个目标模拟器构建了新的LocalQA应用程序，签署了物理设备版本，并将其安装在连接的iPhone17 Pro Max上。
+
+## v0.3 设备验收记录
+
+安装证据记录在这里；人类儿童/父母的接受程度仍然是分开的。
+
+| 日期 | 设备 | 版本/版本 | 测试仪 | 结果 | 注释/证据 |
+|---|---|---|---|---|---|
+| 2026-07-14 | iPhone 17 Pro Max | `v0.3.0` (`2026071401`) LocalQA | Codex 安装；父级 + 子级接受待定 | 已安装 | 签名版本已成功安装。人类`of`、发音、语音、手写、旋转和可访问性检查仍然存在。 |
+| 待定 | iPad Pro 13 英寸 (M5) | `v0.3.0` 候选 | 家长+儿童 | 待定 | 以上完整 v0.3 清单。 |
+
+## v0.3.1 — 2026-07-14
+
+目标发布：`v0.3.1`
+
+Branch: `v0.3.1`
+Baseline: `main` 和 `cc42e17`，合并了 v0.3 至 PR #2。
+总体状态：生产修复、自动回归、签名iPhone和iPad安装、物理设备生产视觉测试、物理iPad关键UI通过、离线教师音频候选以及模拟器验证的世界艺术许可。儿童手写、音频收听、旋转和无障碍接受仍然开放。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V031-BUG-001 | Bug | Write 识别 | 真正的手写识别必须接受 `of` 和 `go`，独立于小写、首字母大写或全大写输入。测试必须运用生产渲染器和视觉服务，而不是制造的OCR候选者或演示识别器。字面 `90` 和相邻单词不得作为 `go` 或 `of` 传递。 |自动物理iPhone和iPad合成通行证；儿童笔迹待定 | 实体生产服务测试已通过 iPhone 和 iPad。接下来，让孩子在没有帮助的情况下分别写下`of`、`Of`、`OF`、`go`、`Go`和`GO`两次；需要 12/12 或捕获隐私安全的故障诊断。 |
+| V031-IMP-001 | 改进 | 学习音频 | Read `Hear it` 和 Write 参考语音使用一份规范的离线教师合同。 500 字的 Katie 包提供单独的 0.90× Read 和 0.82× Write 剪辑；记录在案的`bun`语音/速度覆盖修复了客观上不清楚的渲染。包丢失失败，无法关闭 Apple en-US TTS。语音提示使用语音音频播放会话，回避应用程序音乐和外部音频，然后在不中断录音的情况下恢复正常混音。 | 自动解码、捆绑和转录过程；物理监听待定 | 在目标 iPhone 和 iPad 上，监听 `of`、`at`、`cat`、`come`、`look`、`bun` 和一个包丢失单词。确认预期的声音、清晰的话语、可听见的最终辅音、没有剪辑的开始/结束以及流畅的音乐闪避/恢复。 |
+| V031-FEAT-001 | 功能 | 配置文件和预设词 | 每个新的 Profile 路径都需要从 3 到 8 的明确年龄。家长设置保留明确的成绩控制； Kid self-create 根据年龄得出当前支持的等级建议。 Parents可以浏览按年龄/年级排名的离线版本化目录，搜索或导航其层次结构，选择单个/所有单词，并明确添加到Read、Write或两者。没有推荐自动添加。每次导入仍受发起它的Profile的约束。如果池失败、返回部分结果或返回不匹配的成员资格 ID，则“两者”导入都会进行补偿。补偿仅撤销由该请求插入或重新激活的成员资格，并保留已激活的单词。 | 自动通行证；物理iPad明确批准流程；手动布局待处理 | 通过首次运行创建配置文件、Kid 自行创建和 Parents；验证保存的年龄和年级。浏览所有根，搜索一个单词，打开一个没有任何池突变的列表，然后显式添加到每个目的地并确认标准化重复数据删除。练习失败、部分结果、不匹配、刷新失败、并发激活以及两者的交叉Profile情况。 |
+| V031-FEAT-002 | 功能 | 预设目录内容 | 交付独立策划的 3–8 / Pre-K–Grade 3 目录，其中包含 34 个叶预设、1,365 个单词参考和 1,166 个标准化唯一单词。每页包含 40-45 个有效的单词，涉及视觉词汇、语音/拼写、精细名词主题、动词、情感和概念。使生成的 Obsidian Markdown 目录与 App JSON 保持一致并公开方法源。 | 自动内容审核通过 | 运行捆绑目录审核器，验证每个叶子都在 30-50 个单词内，并且每个源 ID 都解析，然后抽样审查年龄/年级适合度、儿童安全、拼写、类别相关性和生成的黑曜石注释。 |
+| V031-FEAT-003 | 功能 | 父词删除 | Read 和 Write 各自公开了 `Delete all N words`。该操作始终确认确切的计数/模式，停用池而不擦除学习历史记录，保持其他模式不变，并提供完全撤消。根据Profile，首次删除确认和撤消状态保持隔离。快照故障会在报告故障之前补偿成员资格突变。 | 自动通行证；物理 iPad 全部删除/恢复和顺序删除流程；手动布局待处理 | 清除具有混合历史记录的每种模式，取消一次，确认一次，撤消一次，然后切换配置文件。验证其他模式/Profile加上历史报告是否未更改，并且失败的突变后快照不会留下隐藏的池更改。 |
+| V031-NIT-001 | UI 优化 | 世界场景 | 将城堡、独角兽、车辆、动物和扩展世界故事艺术进一步移动到下边带，而不移动前景控件。环境艺术可能只会从其安全基线向下漂移。 Moonpetal 的独角兽必须完全保持在画布上，并且在每个动画帧上都与 Write 卡片和阴影明显分离。 |已实施；聚焦几何 5/5 和 iPhone/iPad 模拟器视觉通行证 | 在 iPhone 17 Pro Max 和 iPad 景观上，等待 Moonpetal 和一个扩展世界中的完整环境循环。要求每张任务卡周围有可见的背景间隙，并且底部/侧面没有剪裁。 |
+
+### 2026-07-14 v0.3.1 笔记
+
+- 添加了离线 3-8/Pre-K-Grade 3 预设目录、明确的年龄捕获和生成的黑曜石目录。年龄和年级排名建议，但切勿添加文字。
+- 将预设导入绑定到启动Profile。现在，这两种导入都会在失败、部分成功、不匹配结果或刷新错误后补偿精确插入/重新激活的成员资格，同时保留已激活的单词。
+- 添加了按池删除全部并具有精确确认和完整撤消功能。确认和撤消状态现在按照 Profile 保持隔离，并且快照故障补偿池突变。
+- 将回归覆盖范围扩大到 595 Swift 测试。 1,008 个捆绑音频文件干净地解码为单声道 44.1 kHz AAC-LC，并且新的 iPhone/iPad 应用程序捆绑包包含字节相同的资源树，没有凭证形状的令牌。
+- 将世界故事艺术转移到安全地带。 Moonpetal 还缩短并右移了独角兽，足以在整个环境循环中在Write卡下方保留可见的间隙。 iPhone 月瓣和全屏 iPad 恐龙模拟器捕获通道，没有剪切或前景重叠。
+
+### 早期测试遗漏了什么
+
+- 早期的案例测试在 Vision 之后开始，通过注入 `of` 等字符串，
+`Of`和`OF`。仅当 OCR 已经发出正确的字母时，他们才证明了大小写标准化。
+- 关键的Write XCUITest 有意使用确定性演示
+识别器。它证明了反馈消除和导航，而不是手写准确性。
+- 在 v0.3.1 之前，没有断言测试通过生产发送非空笔划
+渲染器、Apple Vision、转录解析器和最终决策一起。
+
+### 根本原因和有限修复
+
+- 实际生产链探针显示小写`of`未产生任何愿景
+以默认 26 点光栅宽度进行观察。 36 点回退栅格返回精确的 `of`。
+- 小写`go`产生最高候选`90`加上较低候选`g0`；一个
+单独绘制的文字`90`不包含任何证实的`g`候选者。
+- 生产现在最多运行两个独立的光栅通道（26 和 36 点），
+启用目标词语言校正，并提供小写、首字母大写和全部大写词汇。每一遍必须独立解决完整的目标。
+- 案例标准化后匹配仍然准确。 `0` 只能标准化为 `o`
+在完整的目标匹配中。仅当另一个相同长度的 Vision 候选者在该位置明确包含 `g` 时，`9` 才可以标准化为 `g`。没有编辑距离或接受任何墨水回退，并且文字 `90` 仍被拒绝。
+
+### 确认
+
+- 严格的Swift格式和完整的Swift套件通过：595/595，零失败。
+- 重点关注的macOS实际视觉套件通过了15/15，其中包括六项`of`/`go`
+大小写变体和真实呈现的否定`on`、`if`、`off`、`do`、`no`和文字`90`。
+- iOS 26.5.1 上连接的 iPhone 17 Pro Max 通过了新的生产服务
+设备目标：2/2 XCTest 案例，涵盖 6/6 阳性变异和 4/4 阴性对照。赛程是匿名合成载体；不会存储或提交任何子中风。
+- 七个关键 UI 流程在 iPhone17 Pro Max 模拟器上通过了 7/7。他们
+保留生命周期/导航证据，不计为视觉准确性。
+- iPadOS 26.5 上的 Darren iPad Air 13 英寸 (M4) 通过了生产物理测试
+DeviceTests 2/2：错误词拒绝和`of/go`大小写变体。
+- 相同的iPad通过了LocalQA关键XCUITest目标7/7：OCR添加全部，
+全部删除/恢复、明确预设批准、顺序删除/排序、照片选择器/排序以及Read/Write完成解雇。
+- 历史 iPhone 月瓣和 iPad 恐龙截图确认：等待环境动画周期后，底层场景艺术仍明显避开前景任务卡。
+  临时截图文件已在 v0.7.43 仓库清理中移除。
+- 适用于 iPhone 17 Pro Max 和 iPad Pro 13 英寸的全新LocalQA 模拟器构建通行证
+（M5）。已签名的 `Tada Words QA` v0.3.1 (`2026071402`) 已在连接的 iPhone 上安装并启动。
+- 团队 `6S245NCUPQ` 签署了 `Tada Words QA` v0.3.1 (`2026071403`) 已安装并
+在连接的iPad上启动。儿童手写、音频、布局、旋转、Apple Pencil 和辅助功能接受仍然开放。
+
+## v0.3.1 设备验收记录
+
+| 日期 | 设备 | 版本/版本 | 测试仪 | 结果 | 注释/证据 |
+|---|---|---|---|---|---|
+| 2026-07-14 | iPhone 17 Pro Max、iOS 26.5.1 | `v0.3.1` (`2026071402`) LocalQA | Codex 自动化设备测试；父母+孩子接受等待|已安装；合成生产 Vision 通过 | 6/6 个阳性病例变体和 4/4 个阴性对照通过生产服务。儿童手册第 `of`/`go` 12 次尝试门仍然存在。 |
+| 2026-07-14 | Darren iPad Air 13 英寸 (M4)、iPadOS 26.5 | `v0.3.1` (`2026071403`) LocalQA、团队 `6S245NCUPQ` | Codex 自动化设备和 UI 测试；父母+孩子接受等待|安装并启动；设备测试 2/2；关键 XCUITest 7/7 | 生产测试通过了错误词拒绝和 `of/go` 案例变体。 UI 测试通过了OCR添加全部、删除全部/恢复、显式预设批准、顺序删除/排序、照片选择器/排序和Read/Write完成解雇。儿童手写、音频、布局、旋转、Apple Pencil 和辅助功能仍然保留。 |
+
+## v0.4 — 2026-07-14
+
+目标发布：`v0.4`
+
+Branch: `agent/v0.4-offline-audio`
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| AUDIO-FEAT-001 | 功能 | 教师单词音频 | 使用 Katie 主导的 500 字离线包，其中包含单独的 0.90× Read 提示和 0.82× Write 提示。当客观 QA 拒绝规范渲染时，清单可以记录单词级语音或速度覆盖。捆绑包未命中必须无法关闭至 Apple en-US TTS；可能不会传送提供程序密钥或运行时依赖项。第 16 条已实施；自动传递| 在iPhone和iPad上，比较两种模式下的`a`、`i`、`at`、`come`、`of`、`the`、`said`、`bun`以及两个长动物词。确认正确的发音、完成最终辅音、平滑闪避以及清单外一个单词的 Apple 后备功能。 |
+| AUDIO-FEAT-002 | 功能 | 启动和转换 | 使用 Aurora 进行批准的连续 `Ta-dá↗ woooords↘!` 冷启动标记、六个不重复的正确答案微庆祝和一条 Quest 完整线路。在下面保留即时的世界特定综合反馈； Reduced Sound 抑制装饰性言论。 |已实施；自动化结构传递；设备侦听待|冷发射两次，确认上升`da`，无故意间隙，加长下降`wor`，然后完成一项Read和一项Write Quest。切换语音/音效/Reduced Sound，确认录音无重叠、无重复冷启动痕迹、响度舒适、无疲劳感。 |
+
+### 音频实施证据
+
+- 生成并检查了 1,000 个 Katie 文字剪辑以及 8 个 Aurora 剪辑。
+- 所有 1,008 个文件均解码为单声道 44.1 kHz AAC-LC；合并的音频大小为 6,807,998 字节。教师包持续时间为 674.80 秒，Aurora 持续时间为 8.74 秒。
+- 完整的 1,000 个 Apple Speech 剪辑审核已通过第二次 Whisper 审核，以找出真正的嫌疑人。同音字拼写差异被忽略； `near` 和 `chick` 已通过 IPA 进行纠正，并且在两个识别器均拒绝 Katie 后，`bun` 现在使用清单记录的 Aurora 覆盖。最终的目标剪辑通过两个识别器。
+- 所有者拒绝了第一个直接 TTS 启动渲染，因为`da` 没有上升并且连接听起来太长，然后拒绝了分阶段替换，因为第一个音节听起来像降调“塔”而不是浅色“他”，并且重复的源切片在`da`之后产生了额外的重读`a`。 Aurora pack 1.0.2 仅在短暂的`/tə/`（大约 332→334 Hz）内保留自然水平到上升的起始，将一个不重复的连续`/dɑː/`窗口延伸到大约 380→394→459 Hz，并且仅使用 8 毫秒的点击安全连接到`words`。静音检测未发现内部暂停。准确的特征和自然度仍然是所有者设备收听质量检查的一部分。
+- Swift6 软件包套件通过了 594/594 测试，包括捆绑清单、变体路由、后备和 Aurora 资源检查。演讲者的身体疲劳、混音和儿童反应仍然是手动验收项目。
+
+## v0.4.1 — 2026-07-14
+
+目标发布：`v0.4.1`
+
+Branch: `agent/v0.4.1-slower-teacher-audio`
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| AUDIO-FIX-003 | 改进 | 教师单词音频 | 在 `1/1.5 ≈ 0.67×` 处生成 Read 和 Write 独立单词；保留末端辅音，例如`at`中的`/t/`。第 18 条已实施；自动声音和识别通过| 在iPhone和iPad上，在两种模式下收听`at`、`cat`、`sit`、`dog`、`help`、`look`和`with`。确认 Pre-K 的节奏是舒适的，并且最终辅音没有被扬声器响应或音乐恢复所掩盖。 |
+| AUDIO-FIX-004 | 改进 | 语音转换 | 从任务完成行中删除作为正确答案感叹词的 `Ta-da!`。 `Tada Words` 冷启动品牌名称保持独立。 |已实施；自动清单和识别通过| 完成足够的单词以轮流浏览每个正确答案短语，然后完成一个任务。确认没有转换如`Ta-da`；冷启动还是得说产品名称。 |
+
+### v0.4.1 实施证据
+
+- 以 0.67 倍的分辨率从清单版本 1.1.0 重新生成了所有 1,000 个 Katie/Aurora 覆盖教师剪辑。每个剪辑在 AAC 编码之前接收 120 ms 的波形后填充；播放已经等待完整的`AVAudioPlayer`完成回调。
+- 所有 1,000 个教师文件均解码为单声道 44.1 kHz AAC-LC。教师时长为863.12秒；所有 1,008 个音频资源总计 7,428,104 字节。
+- 新的 `at` 剪辑为 0.68–0.76 秒，而更改前为 0.48–0.56 秒。静音/能量检查显示停止关闭，随后的`/t/`释放，然后是受保护的尾部。
+- Whisper 独立转录了 Read 和 Write 的 `at`、`it`、`cat`、`hat`、`sit`、`hit`、`get`、`cut`、`hot`、`not`、`dog`、`big`、`red`、`stop`、`help`、`look`、`fish`、 `duck`、`back`、`off`和`with`，其末端辅音完好无损。在 50 个可用的精选剪辑中，43 个是准确的单词；七个仅在元音或开头辅音方面有所不同，同时保留了预期的结尾辅音。三个请求的审核词不属于家长批准的 500 字清单的成员，因此被排除而不是默默添加。
+- 正确答案清单现在显示五行，并且不再显示`Ta-da!`。重新生成的任务完成剪辑仅包含`Quest complete!`； Whisper 将其转录为 `Quest complete.` 私有 `correct/ta-da.m4a` 资源仍然仅作为单独冷启动品牌标记的可复制源组件，并且无法通过过渡轮换访问。
+- 在发布前集成当前的`origin/main`（`02e23aa`），因此 v0.3.1/v0.3.2 世界艺术、设备 QA、视觉、UI 复制和项目设置更改仍然是基线。只有较新的 v0.4.1 音频资源和音频合同才能取代早期版本。
+- 严格的Swift格式和完整的集成后595测试包套件通过。早期的通用iOS模拟器版本包含所有1,008个资源，其捆绑的`at`哈希与审查的源资产相匹配；合并之前需要一个新的合并树iOS构建。
+
+## v0.4.2 — 2026-07-14
+
+目标发布：`v0.4.2`
+
+Branch: `agent/v0.4.2-transition-pause`
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| AUDIO-FIX-005 | 改进 | 字间音频计时 | 新字绝不能直接附加到正确答案转换音频的末尾。等待完成转换，将现有的可见反馈保持在最低限度，然后在前进到任何非最终Read/Write项目之前留下 700 毫秒的沉默。不要在任务结果之前添加项目间暂停。 |已实施； 600/600 预合并测试和模拟器构建已通过 | 完成连续的 Write 项目，包括语音打开、语音关闭、Reduced Sound 和正常音效。确认每个下一个提示在明显的暂停后开始，并且没有过渡被截断；重复Read以确认其字卡没有提前推进。 |
+
+## v0.5 — 2026-07-14
+
+目标发布：`v0.5.0`
+
+Branch: `v0.5`
+
+Baseline: 合并`v0.4.2`，包括恢复的 v0.3.2 设备 QA 修复和
+v0.4.1 离线教师音频包。总体状态：集成自动化验证通过； iPad 儿童/家长的身体接受仍然开放。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V05-UX-001 | UX 重新设计 | 家长导航 | 用一个紧凑的 `Parent Home` 替换长家长仪表板：单个 `Kids` Profile 入口、`Words & Practice`、`Progress & Performance`、`App & Family` 和 `Lock`。言语管理和孩子的表现绝不能属于同一类别。删除重复的池/管理/预设入口，并将每个详细信息页面返回到其所属的类别中心。 | 自动通行证；视觉设备 QA 待定| 在两个父方向的 iPhone 和 iPad 上，仅一次达到每个现有的父功能，验证返回到所属中心，并确认在支持的 Dynamic Type 尺寸下没有卡片文本换行或剪辑。 |
+| V05-FEAT-001 | 特征 | Write 拼写 | 开头 Write 要求孩子选择 `Write by Hand` 或 `Spell with Letters`。任一选择都完成相同的每日Write Quest（规则 B），使用相同的Write池/掌握/复习时间表，并且仅获得一次完成/奖励。拼写检查使用完全采用 SwiftUI 构建的主题色、固定位置 QWERTY A–Z 键盘；它永远不会打开iOS键盘。大小写被忽略，撇号/连字符是结构性的，打字速度永远不会与手写速度进行比较。 Focused Replay 保留所选的输入法。 | 自动通行证；物理儿童 QA 等待| 完成两项选择，验证一个每日Write 完成/奖励，检查每个世界中的所有 26 个字母键以及删除/Done，断言没有系统键盘、测试用例和标点符号、错误答案引导重试、Replay、重新启动恢复、VoiceOver 顺序和两个横向方向。 |
+| V05-IMP-001 | 改进 | 实践默认值 | 新配置文件默认为 5 个新词和 5 个评论 Write 单词，而不是 3 个和 3 个。现有配置文件保留每个已保存的自定义值；没有任何迁移会覆盖父级的选择。 |自动传递|创建一个新的Profile并参见5/5；重新打开具有自定义 Write 限制的现有 Profile 并确认保存的值未更改。 |
+
+### 2026-07-14 v0.5 笔记
+
+- 将家长工具重组为三个类别中心，同时保留每个单词，
+报告、日历、Profile、通知、音频、辅助功能和同步功能。
+- 将原来的一体化设置页面拆分为练习计划、声音和
+辅助功能和通知。每次保存都会针对最新的Profile设置执行范围合并，因此隐藏值不会被覆盖。
+- 添加了面向儿童的 Write 输入选择器和主题匹配的 A–Z 键盘。
+手写和打字拼写共享Write学习契约，而尝试速度仍然因输入法而分开。
+- 仅将新创建的Profile设置的默认值提高到5/5；坚持
+Profile 设置仍然具有权威性。
+- 与个人团队注册并签署新连接的iPad
+`6S245NCUPQ`; v0.3.2 (`2026071406`) 已成功安装并启动。
+- 通过 PR #7 恢复了经过设备测试的 v0.3.2 QA 修复，然后将它们合并
+在将生成的 `main` 基线引入 v0.5 之前，将其引入 v0.4.2 PR #6。
+- 集成的 v0.5 树通过了 619/619 Swift 测试、严格格式 lint、a
+全新通用iOS模拟器构建，以及所有8/8关键模拟器UI流程。它的大厅 → Write → 拼写流程确认了所有 26 个自定义键，没有本地键盘、第一个单词输入和项目前进。
+- Exact v0.3.2 (`2026071406`) 已成功在连接的设备上重新安装
+阅读iPad。 Mac 端自动启动被拒绝只是因为 iPad 仍处于锁定状态；安装的应用程序解锁后即可直接打开。
+
+## v0.5.1 — 2026-07-15
+
+目标发布：`v0.5.1`
+
+Branch: `v0.5.1`
+
+Build: `2026071504`
+
+总体状态：实施已完成，638/638Swift测试通过。完整的九流模拟器UI矩阵在手机和平​​板上传递；肉体的孩子/父母的接受仍然开放。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V051-UX-001 | UX 改进 | 家长主页 | 将可见的 `Lock` 控件替换为 `Back`。返回返回到上一个子页面并恢复下次访问的Parent Gate。将活跃的儿童世界与现有场景、面板、颜色和触觉按钮组件相匹配。去除标语和多余标签；缩短进度标题和计数摘要。 | 自动通行证；设备视觉 QA 待处理 | 输入 Kid 选择中的 Parents，完成门控，确认 `Back` 替换 `Lock`，然后返回到上一个子页面。重新输入Parents并确认门仍然出现。在支持的家长方向中检查手机和平板电脑上的所有八个世界主题。 |
+| V051-UX-002 | UX 改进 | 启动 | 显示品牌启动页面至少 1.8 秒，播放捆绑的 `Tada Words` 启动签名，然后淡入应用程序。使用官方 Tada Words 和 Pawgoo 标记以及响应式手机/平板电脑尺寸和一个组合辅助功能标签。 | 自动通行证；设备视觉/听觉 QA 待处理 | 在支持的方向上在手机和平​​板电脑上冷启动。确认官方标记、口头品牌签名、最短持续时间、褪色、VoiceOver 标签以及不与隐藏应用内容交互。 |
+| V051-BUG-001 | Bug | Write 识别 | 改进精确的`of` 恢复，无需模糊接受。仅对于 `of`，收集三个渲染和识别比例，检查最多 10 个视觉候选，包括混合大小写`oF`，涵盖六种类似儿童的笔画样式，并仅在包含`o`的目标位置接受数字`0`。要求对排名较低的目标证据进行两个尺度的佐证，并在任何尺度暴露出强大的完整`off`时否决匹配。其他目标保留 v0.5 两遍/前五行为。 | 自动通行证；儿童手写待处理 | 让孩子在每个目标设备上分别书写和连接 `of`、`Of`、`OF`、`oF`、`0f` 和 `0F` 两次。拒绝`if`、`on`、`or`、`ot`、`off`、`00`、`90`、`0t`、`0ff`、`+0`和`f0`；捕获任何错误拒绝的隐私安全诊断。 |
+
+### 2026-07-15 v0.5.1 笔记
+
+- 将父主页 `Lock` 替换为 `Back`。可见的动作返回到
+之前的子页面，而路线会为下次访问恢复 Parent Gate。
+- 重复使用活跃的孩子世界的背景场景、颜色、面板和触觉
+对家长主页的控制。删除了标语、多余的`Kids`标签和较长的摘要；将`Progress & Performance`重命名为`Progress`。
+- 添加了一个最短 1.8 秒的启动页面，包含官方Tada Words 和 Pawgoo
+标记、捆绑的语音品牌签名、短暂的褪色以及一个组合的辅助功能标签。仅在配置音频首选项后才开始生产启动倒计时，而温暖的本机启动颜色可避免品牌页面之前出现冷蓝色闪烁。
+- 为`of`添加了特定目标的三尺度证据，仅扩展了其愿景
+来自 5 到 10 名候选人的观察，添加了混合大小写的 `oF`，并涵盖了六种类似儿童的风格。数值 `0` 仅在目标对齐的 `o` 处标准化为 `o`，允许 `0f` 和 `0F`，同时拒绝 `00`、`90`、`0t`、`0ff`、`+0` 和 `f0`。排名较低的精确目标必须在两个尺度上重复出现；任何强有力的完整`off`证据都会否决一场比赛，即使它出现在早期的`of`之后。三十对 `ot/on/or/off/if` 对照仍被拒绝。换句话说，保留其 v0.5 两遍/前五行为，没有模糊匹配或全局阈值更改。
+- 将版本和 LocalQA 标识设置为 v0.5.1 (`2026071504`)。树经过
+638/638 Swift 测试和严格格式 lint。关键的 XCUITest 矩阵在 iPhone 17 Pro Max 上通过了 9/9，在 iPad Pro 13 英寸模拟器上通过了 9/9。
+- 在检测到
+并行自动化PR保留了`2026071503`，防止两条发布线共享一个LocalQA构建标识。
+- 直接将签名的物理包验证为 v0.5.1 (`2026071504`)、LocalQA
+捆绑 ID `com.tadawords.app.localqa`，团队 `6S245NCUPQ`；其配置文件包括注册的 iPhone 和两台 iPad。安装和安装版本验证在阅读iPad时成功。在安装更正的软件包之前，iPhone 变得不可用，并且 iPad Air 13 英寸 (M4) 配对 Wi-Fi 隧道超时。重新连接这两个设备，安装`2026071504`，并在物理验收之前进行库存验证。
+
+## v0.6.0 — 2026-07-15
+
+目标发布：`v0.6.0`
+
+Branch: `agent/batch-kid-ui-v0.6.0`
+
+Build: `2026071601`
+
+总体状态：实施、严格 lint、641/641 Swift 测试通过。仍然需要精确HEAD模拟器、签名设备和儿童可用性证据。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V060-UX-001 | UX 改进 | Kid UI | 删除在Profile、大厅、Read、Write/法术、结果、世界、日历和收藏中重复明显图标、目标、状态或艺术作品的可见副本。保留个人资料名称、Read/Write身份、目标词/槽、有意义的进度、破坏性/恢复标签以及完整的VoiceOver含义。第 19 条已实施；模拟器/设备证据待定 | 使用复制矩阵以及在 iPhone 17 Pro Max 和目标 iPad 上捕获之前/之后。验证两个 Done 控件都是复选标记优先的 72×72 pt 操作，具有稳定的标识符、VoiceOver 标签/提示和未更改的行为。练习VoiceOver、Dynamic Type、Reduce Motion、Reduced Sound、两个横向、错误/加载/锁定状态和关键 E2E 矩阵。 |
+
+### 2026-07-15 v0.6.0 笔记
+
+- 替换了重复的Profile、大厅、任务、结果、世界、日历和收藏
+现有 SF 符号、国家边界、吉祥物、星星、奖励和选择/锁定徽章的解释。
+- 保留可见的`Read`和`Write`身份、个人资料名称、目标词和
+字母槽、有意义的锁定世界进度、破坏性`Clear`，以及所有加载、许可、技术重试和父恢复副本。
+- 使用以下命令将手写和拼写提交转换为复选标记优先控件
+共享 72 pt Kid 动作令牌。两者都保留 `Done` 作为 VoiceOver 标签，保留显式提示，并公开稳定的 `write.done` / `spell.done` 钩子。
+- 添加了逐路复制处置矩阵和重点回归测试
+用于空闲Read复制抑制、状态麦克风反馈、提交可访问性合同、稳定标识符和 72 点触摸目标。
+- 跨生产的保留版本`0.6.0`和单调构建`2026071601`，
+LocalQA，XcodeGen 配置、生成的项目设置和发布文档。
+
+## v0.6.1 — 2026-07-17
+
+目标发布：`v0.6.1`
+
+Branch: `agent/batch-parent-v0.6.1`
+
+Build: `2026071701`
+
+总体状态：Issue#15 实施和自动模拟器覆盖范围通过；物理链路开放和人类可达性接受仍然开放。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| APPSTORE-015 | 改进 | 家长隐私/支持 | 仅在 Parent Gate 之后公开 Pawgoo 的隐私政策和支持页面，并解释家长如何删除本地 Profile 数据或审查 iOS 权限而不更改数据行为。 | 自动通行证；物理链接质量检查待定| 在iPhone和iPad上，完成Parent Gate，打开应用程序和系列，点击两个链接，返回到相同的父状态，离线重试，并检查VoiceOver和大Dynamic Type。 |
+
+### 2026-07-17 v0.6.1 笔记
+
+- 添加了 Tada Words 隐私政策和 Pawgoo 支持的固定 HTTPS 链接
+受保护的应用程序和系列表面内的页面。链接标签、浏览器打开提示和稳定的可访问性标识符都是明确的。
+- 添加了面向家长的删除一名孩子的本地Profile数据的说明
+以及查看 iOS 设置中的相机、照片、麦克风、语音识别和通知。帐户、跟踪、分析、购买或数据收集行为没有改变。
+- 跨源 Plist 将版本和 LocalQA 身份设置为 v0.6.1 (`2026071701`)，
+`project.yml`，以及生成的Xcode项目。
+- 严格格式 lint、所有 643 Swift 测试和所有 14 Issue 代理测试均通过。重点应用程序和系列
+资源流在 iPhone 17 Pro Max 和 iPad Pro 13 英寸模拟器上传递。物理 Safari 打开、离线行为、VoiceOver 和大Dynamic Type 仍然是人工发布验收工作。
+
+## v0.6.7 — 2026-07-18
+
+目标发布：`v0.6.7`
+
+Branch: `agent/batch-automation-v0.6.7`
+
+Build: `2026071804`
+
+总体状态：发布候选预检和Issue代理调度程序更改通过完整的自动化套件；实时 LaunchAgent 安装和精确的HEAD运行时观察与PR合并验收分开记录。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| AUTO-020 | 功能 | 发布自动化 | 仅在源身份、签名、权利、资源、隐私和清理树检查通过后生成确定性发布候选清单。 | 自动传递 | 针对已签名的存档/导出运行预检并保留其精确的HEAD 清单。 |
+| AUTO-038 | 政策 | 版本控制 | 虽然第一个公开的 App Store 版本不完整，但拒绝任何当前、保留或高于 `v1.0.0` 的提议版本；普通的Issue示例不是保留。 |自动通行证|接受`v0.9.9`、`v0.10.0`和上限；拒绝`v1.0.1`、`v1.1.0`和`v2.0.0`；在发布后过渡之前需要完整的所有者证据。 |
+| AUTO-047 | 可靠性 | 皮卡所有权 | 在实施之前添加 `agent-reclaimed` 并获得独特的远程租赁，以便重叠的工人不能同时实施一个 Issue。 | 自动通行证；实时争用观察待定 | 运行重叠民意调查并证明一名租约获胜者、一名安全跳过者以及没有重复的分支/PR。 |
+| AUTO-048 | 可靠性 | PR 协调 | 链接精确的开放PR所有权并关闭过时的Issue，仅用于合并到当前`origin/main`中的精确关闭参考，以后不再重新打开。 | 自动通行证；实时对账待定| 行使开放PR、合并PR、重新开放Issue、模糊提及、所有者分支标记和更改PR HEAD。 |
+| AUTO-049 | 操作 | 调度程序 | 每 900 秒运行一次，具有 `gpt-5.6-sol` 和推理工作 `ultra`，在一个全工作人员 macOS 锁定下。 | 自动通行证；实时 LaunchAgent 观察待处理 | 验证加载的 plist 间隔/模型/工作量、重叠刻度、空队列无操作和日志/状态保留。 |
+| AUTO-050 ​​| 流程 | Issue-首次交付 | 每个实施/变更请求都会搜索并删除重复的 Issue，创建有界缺失的Issue，然后在编辑前立即回收。答复、诊断、审查和状态请求保持只读状态。 | 自动传递 | 查看回购指令并通过相同的回收路径启动新的实施会话。 |
+| AUTO-051 | 可靠性 | 准入和阻止程序 | 拾取顺序为 P0→P1→P2→P3→未指定，然后是依赖项/Issue编号。阻止者会生成持久报告、阻止状态、声明删除和经过验证的租约释放。 | 自动通行证；实时阻塞恢复待定| 证明 P0 排序、阻塞释放、同伴批次释放、新鲜回收要求、主动PR 序列化和远程分支重复预防。 |
+
+### 2026-07-18 v0.6.7 笔记
+
+- 将 LaunchAgent 间隔从 10 分钟更改为 15 分钟并固定无人值守
+在本地模型目录检查和实际探测后执行 Sol Ultra。
+- 用整体工作 `lockf` 锁替换了 PID 目录竞争。两人赛跑者
+测试证明第二个进程在检查之前退出，而第一个进程通过模拟 Codex 阶段拥有锁。
+- 添加了精确的打开/合并PR协调、所有者创作的远程分支
+所有权标记、新主合并可达性以及重新打开保护。模糊的文本和标题相似性永远不会导致Issue。
+- 添加了可见的回收标签以及独特的远程租赁提交、实时重新检查
+突变之前、受保护的租约删除、失败的保留清理以及事件确认之前的持久结果验证。
+- 添加了优先级优先、仅显式批次准入。类似的`area`标签没有
+更长地组合不相关的Issue，并且默认的活动实施通道是一个精确的HEAD批次。
+- 添加了阻止程序报告/发布。旧版被阻止的音频 Issue #13 是
+解除其声明和版本/构建保留；其未更改的远程占位符分支已被删除，而阻止程序证据仍然存在。
+- 添加了存储库拥有的应用商店前版本策略并停止处理
+Issue散文中的版本示例作为主动保留。
+- 完整的精确树门通过：严格的Swift格式，646/646Swift测试，
+37/37 Issue 代理测试和 11/11 发布预检测试。
+## v0.7.0 — 2026-07-18
+
+目标发布：`v0.7.0`
+
+Branch: `codex/batch-family-sync-v0.7.0`
+
+Build: `2026071806`
+
+总体状态：跨设备 Family Sync 源合同、严格格式门、814/814 Swift 测试、14/14 Issue 代理测试以及源批量模拟器矩阵通过。生产CloudKit模式、精确承诺HEAD模拟器重新运行、签名iPhone/iPad私有/共享流、破坏性测试专用擦除、后台交付和人工可访问性/恢复审查仍然是发布大门。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V070-FEAT-001 | 功能 | 跨设备同步 | 保持每个任务本地优先，同时通过私人/共享 CloudKit 同步家长批准的 Profile 事实、Read/Write 池、独立设置组、不可变的学习事件、派生进度、每日完成/奖励事实以及有界的 Profile 照片。 | 源和确定性模拟器 E2E 通行证；生产验收待定 | 在确切提交的 HEAD 上重新运行六流程套件，然后在已签名的 iPhone 和 iPad 版本上完成相同 Apple-ID 私有同步和不同 Apple-ID 共享验收。 |
+| V070-PRIV-001 | 隐私 | 终端删除 | 在删除所有者 Profile 记录/资产/共享/区域之前保留隐私最小删除分类账；使参与者离开并撤销终端；阻止陈旧设备复活并清除 Profile 范围内的传输/照片字节。 | 源删除/隐私保护通过 | 在仅测试配置文件上，在另一台设备离线时删除，重新连接后验证本地清除，并检查真实容器以证明仅保留最小的分类帐。 |
+| V070-RECOVERY-001 | 可靠性 | 持久同步 | 避免发件箱、收件箱、应用、确认、服务器记录冲突、隔离、帐户更改和重试状态的进程死亡，而不会丢失本地工作或重复完成/奖励事实。 | 源线束和模拟器重新启动/状态流通过 | 在每次重试边界强制退出两个已签名的设备，按两个顺序重新连接，并在重新启动之前和之后验证父状态。 |
+| V070-ACCESS-001 | 功能 | 家庭访问 | 使用 Apple 的生产共享控制器进行现有共享管理，将所有者路由至私有存储，将参与者路由至共享存储，因终端/格式错误的绑定而关闭失败，并通过正常通知路径协调保存/停止事件。 | 源实现和路由/演示测试通过 | 作为所有者和参与者，在签名设备上邀请、接受、删除/离开和撤销；证明撤销的路线不会产生私人后备。 |
+| V070-BUG-001 | P0 bug | 升级迁移 | 保留 v0.6.x 编写的每日任务历史记录，其合成的 `QuestStars` 可编码形状为 `{ "earned": [...] }`，而 v0.7.0 编写规范的确定性数组形式。切勿删除或重置不可读的快照。 | 修复了双格式解码和 schema-1 完成/奖励迁移回归；物理重新安装确认待处理 | 升级未更改的 v0.6.x LocalQA 容器，验证应用程序打开，并确认计划、完成情况、奖励、日历和星星保持不变。 |
+
+### 2026-07-18 v0.7.0 笔记
+
+- 添加了一种版本化的私有状态和一种具有持久性的共享`CKSyncEngine`状态，
+精确操作发件箱/收件箱持久性、帐户生成隔离、校验和有界信封、精确确认、隔离和更正记录恢复。
+- 使冲突解决具有确定性：使用不可变的尝试/更正
+稳定的身份，可变的池/设置记录使用逻辑修订，相同修订不同字节冲突无法关闭，并且进度/奖励是根据规范事实重建的。
+- 添加了经过验证的 512 px / 256 KiB 准备好的 Profile 照片 `CKAsset`
+具有持久暂存、确认清理、身份检查和损坏资产隔离功能的上传。声纹、原始/注册音频、通知、手写残留、图片/音频缓存、OCR和声音缓存保留在本地。
+- 实现了清除前的账本终端删除，保留了最低限度的隐私
+字段、所有者区域/共享/资产删除、参与者离开、撤销、重启幂等性、陈旧设备上传屏障以及 Profile 范围内的收件箱/隔离区/系统字段/锁/照片暂存清除。
+- 添加了家长授权的生产 Apple 访问管理 UI。现存的
+所有者和参与者路由使用其持久的私有/共享绑定；撤销、删除和格式错误的路由无法关闭。保存/停止共享委托事件重用幂等通知协调路径。
+- 添加了隐私安全的持久父状态，用于待处理计数、重试状态、最后状态
+成功、iCloud/帐户恢复、兼容性/损坏/冲突注意以及重新启动一致的演示。诊断不包含儿童姓名、单词、照片、录音、声纹或存储库负载。
+- 帐户确认现在报告已更改的 CloudKit 帐户生成，以便
+切换帐户后重新启用 Family Sync 会使旧的确认无效并为新确认的帐户播种。重新授权同一帐户仍然是幂等的。
+- 业主访问管理现在始终进入运输经过测试的现有-
+在介绍苹果控制器之前先分享一下恢复路径。已确认丢失的共享可以重建，瞬时故障会传播，并且参与者永远无法创建私有所有者共享。
+- 添加了机器可读的数据清单和五层证据矩阵。仅有的
+6个模拟器流程直接观察到的19个字段接收模拟器证据；未观察到的模拟器行和每个物理/人类行仍处于待处理状态。
+- 源批次在 iPhone 17 Pro Max 上通过了 Family Sync 6/6 测试，并且
+iPad Pro 13 英寸 (M5) 上为 6/6，加上每个模拟器上的临界流 10/10，全部在 iOS 26.5 上。在合并之前，精确承诺的-HEAD重新运行仍然是强制性的。
+- 物理就地升级暴露了之前失败关闭的遗留解码间隙
+所有保存的数据均已重置。 `QuestStars` 现在接受 v0.6.x 键控表示和规范 v0.7.0 数组，而所有新写入仍保持确定性。回归装置包括一个真实的计划/完成/奖励依赖链，这是早期的空完成迁移测试所遗漏的。
+
+## v0.7.2 — 2026-07-19
+
+目标发布：`v0.7.2`
+
+Branch: `codex/p0-saved-data-recovery`
+
+Build: `2026071902`
+
+总体状态：P0就地数据恢复。在 v0.6.7 LocalQA 包取代 Family Sync 版本后，物理iPhone 显示了通用的“已保存数据无法打开”屏幕。两个只读导出产生相同的校验和清单； JSON 是有效的，但词池、学习记录和每日任务已经处于正向模式 2、4 和 3，而 v0.6.7 仅接受模式 1。
+
+- 带来了先进的 Family Sync 阅读器及其规范数据合同
+到最新的合并自动化和离线图片提示基线。没有快照被降级、重置或手动编辑。
+- 在创建设备身份之前添加了应用程序级架构预检，
+事务重放、删除恢复或载入写入。未来的模式现在会产生隐私安全的“更新Tada Words”指南，仅命名存储和版本边界。
+- 为较新的词池添加了重试和无副作用回归覆盖，
+学习记录和每日任务模式，加上当前的 2/4/3 引导覆盖率和捆绑的读者策略漂移测试。
+- 添加了强制数据保存LocalQA安装包装。它执行一个
+只读设备容器副本并在 `devicectl install` 运行之前阻止较旧的目标读取器。
+- 复制的真实设备夹具加载了所有 488 次规范尝试，201
+保留了单词条目、两个配置文件和任务历史记录。确定性派生进度刷新仅更改了可重建的`progress`投影；规范事实和所有其他快照保持不变。
+- 确切的承诺HEAD门通过了严格的格式、821/821Swift测试，
+40/40 Issue 代理测试和 11/11 发布预检测试。合并前，精确提交的-HEAD模拟器和数据保存物理设备门被记录在P0PR上。
+
+## v0.7.3 — 2026-07-19
+
+目标发布：`v0.7.3`
+
+Branch: `agent/batch-third-party-notices-v0.7.3`
+
+Build: `2026071903`
+
+总体状态：家长控制的离线第三方归因加上版本化的内容权利清单和用于捆绑图片提示实施的确切源/存档验证器。 Cartesia 权利证据和 Pawgoo 所有权证明在 #32 和 #33 下仍然是独立的人类拦截器。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V073-COMP-001 | 合规性 | 父资源 | 保留确切的 Twemoji 归属、固定来源、未修改状态和 CC BY 4.0 许可证，可在 Parent Gate 后离线访问。 | 来源、存档和重点 iPhone/iPad 模拟器 UI 测试通过 | 保持发布清单与已签名的发布存档同步，并完成人工 VoiceOver 审查。 |
+
+### 2026-07-19 v0.7.3 笔记
+
+- 在家长主页 → 应用程序和家庭下添加了第三方通知目的地。
+- 声明所有 74 个捆绑图片提示图形均未经修改，并指出
+`jdecked/twemoji` 17.0.3，并公开了确切的版权归属以及来源和知识共享归属 4.0 国际链接。
+- 保持每个通知字符串离线可用并保留每个外部链接
+Parent Gate；没有添加面向儿童的路线。
+- 添加了精确内容、路由/返回堆栈和集中的 UI 回归覆盖范围。
+- 聚焦流程以最大的可访问性文本大小启动，验证
+每个必需的通知段落和两个资源控件都保留固定的视觉证据，并通过共享的“后退”控件返回到应用程序和家庭。
+- 聚焦的父流在 iPhone 17 Pro Max 上通过 1/1，在 iPad Pro 上通过 1/1
+13 英寸 (M5)，iOS26.5。
+- 完整的预提交门通过了严格的格式、822/822 Swift 测试，
+40/40 Issue 代理测试和 11/11 发布预检测试。
+- 添加了`Docs/APP_STORE_CONTENT_RIGHTS.md`和可重复的源/存档
+验证者。未签名的 v0.7.3 版本存档匹配 1,008 个 M4A 文件、74 个 Twemoji PNG、五个预期的 JSON 文件以及所有测试/资源排除项。
+
+## v0.7.4 — 2026-07-19
+
+目标发布：`v0.7.4`
+
+Branch: `codex/pr29-privacy-v074-refresh`
+
+Build: `2026071904`
+
+总体状态：根据合并的 v0.7.3 源刷新了 App Store 隐私清单。 App Store答案集仍然是有条件的草案，等待生产CloudKit、钥匙串删除、公共政策、运营商证明和精确签名的构建门。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| APPSTORE-017 | 文档 | 隐私清单 | 保留一个版本控制的、有来源支持的清单，用于设备上处理、Apple 服务、Pawgoo 可访问的支持数据、用户控制的导出以及每个配置/休眠的非 Apple 网络路径。切勿发布依赖于未经验证的操作实践的答案。 | 更新源审计和重点回归阶段 | 重新运行清单、依赖项/域扫描，以及针对确切签名的候选版本的 iPhone/iPad 流量观察；获得所有列出的所有者证明|
+| APPSTORE-017-WEB | 拦截器 | Pawgoo 隐私/支持 | 将实时页面与捆绑的离线提示、合格的删除保证、钥匙串应用程序删除现实以及完整的分类家庭同步范围保持一致。 | 记录不匹配；公共站点不变 | 发布经过审查的措辞，记录部署的资产/提交，并将两个实时页面与确切的运输行为进行比较 |
+
+### 2026-07-19 v0.7.4 笔记
+
+- 替换了过时的 v0.6.3 审核，该审核仍然描述了 jsDelivr 提示，
+缺少家长链接、尚未确定的家庭同步版本以及权威的传输进度。
+- 记录了所有 74 个 Twemoji 图片提示都捆绑在一起，并且发货
+配置没有教师音频端点、广告、分析、崩溃报告、跟踪 SDK 或外部 Swift 依赖项。
+- 添加了缺失的 `UserDefaults` 必要原因声明 (`CA92.1`) 和
+独立App Store审查后的源清单合同测试发现，生产手写工具首选项未包含在先前的两类清单中。
+- 将当前的 Family Sync 有效负载分类为同步规范事实，
+本地重建视图，以及仅设备敏感/恢复状态。添加了回归测试，可防止声纹字段静默进入同步类。
+- 用专用有线 DTO 替换了 Profile 同步有效负载，省略了
+完全`voiceprintStatus`。存储库导出/应用/身份验证和 CKAsset 照片暂存现在共享该 DTO；传统有效负载保持可读并保留其准确的照片校验和，而远程哨兵无法覆盖设备的钥匙串派生注册。递归合约现在检查每个记录类型、嵌套对象、数组元素、原始包装器和关联枚举情况的实际存储库输出。 1.0 之前签署的多设备验收要求所有设备都采用同一版本；未声明旧二进制/新照片混合版本兼容性。
+- 对每个常见的同步信封字段进行分类，包括每次安装的随机字段
+逻辑修订UUID，并用显式允许列表加上编码信封合同测试替换了记录类型推断。
+- 库存父 CSV 和隐私安全同步诊断共享表，本地
+操作系统诊断、APN 触发的 CloudKit 协调、有界 Profile 照片 `CKAsset`、终端删除分类账以及当前的家长隐私/支持/数据控制。
+- 重新获取实时 Pawgoo 隐私和支持页面并记录过时的内容
+提示下载、删除、钥匙串删除和未指定的家庭同步语言。公共站点或App Store Connect状态没有改变。
+- 记录当前应用程序无法删除其唯一剩余的Profile并且
+没有完整的“删除所有应用程序数据”路径； #19 必须在应用程序或公共政策声明完成应用内擦除之前缩小隐私差距。
+- 打开 #54 以拥有精确的 RC 对齐和现场部署证据
+Pawgoo 隐私和支持页面；这批没有改变公共站点。
+- 保留 **未收集数据** 以生产 CloudKit 验收为条件，
+准确的签名构建流量/依赖性证据、缺少远程音频端点、Pawgoo CloudKit 非访问、支持邮件实践和更正的公共副本。
+- 完整的预提交门通过了严格的格式、834/834 Swift 测试，
+40/40 Issue 代理测试和 11/11 发布预检测试。
+
+## v0.7.5 — 2026-07-19
+
+目标发布：`v0.7.5`
+
+Branch: `codex/pr36-appstore-v075-refresh`
+
+Build: `2026071905`
+
+总体状态：内部App Store提交包现在使用合并的隐私和内容权利清单，并将元数据声明映射到真实源和测试路径。它从App Store Connect开始一直处于封锁状态，直到确切的签署发布、人工决策、生产CloudKit、最终Profile/全部删除、钥匙串生命周期、公共复制、内容权利和Parents门控权限通过。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| APPSTORE-018 | 文档 | 提交元数据 | 在 Apple 领域限制内保留一个版本化元数据、审阅说明、屏幕截图、声明和精确 RC 预检包，并与合并的隐私/内容权利证据同步。添加了 | v0.7.5 源候选和自动合同覆盖范围 | 重新计算最终本地化字段，验证精确签名的 iPhone/iPad 屏幕截图和审阅者路径，然后通过人工控制的提交工作流程仅输入接受的值 |
+| APPSTORE-018-RIGHTS | 拦截器 | 版权/内容权利 | 将 `2026 Pawgoo LLC` 视为临时性的，并且在记录语音权利和 Pawgoo 权利链之前不要做出 App Store 内容权利表示。 | 合并库存可识别每个已发货的内容类别； #32 和 #33 保持开放| 保留帐户/层级证据并为每个选定的店面获取授权的 Pawgoo 作者/版权链证明|
+| APPSTORE-018-DATA | 拦截器 | 隐私/公共声明 | 将核心实践/无 Pawgoo 帐户与家长选择加入的 Family Sync 分开，后者需要可用的 iCloud 帐户。当最终Profile无法删除或无法执行完全重置时，请勿声称完全删除。 | 源边界和警告位于元数据包中； #19、#28 和 #54 保持开放| 通过生产破坏性同步和最终Profile/删除所有验收，选择/测试钥匙串生命周期，并部署/验证匹配的 Pawgoo 隐私和支持副本|
+| APPSTORE-018-KIDS | 阻止程序 | 权限请求 | 请勿指示应用程序审核者从面向儿童的 Read 屏幕授予语音或麦克风授权。 Tada Words 对此设置采用保守的家长隐私政策； Apple 并未在每次操作系统权限提示之前明确要求家长门。 |电流源可以触发Read中的两个系统提示；元数据和审核步骤被 #55 | 将设置移至 Parents 后面，涵盖拒绝/重试/已授权状态，并在替换审核者占位符 | 之前验证 iPhone 和 iPad 上的确切签名流程
+
+### 2026-07-19 v0.7.5 笔记
+
+- 保留版本`0.7.5`并跨两个源Plist构建`2026071905`，
+`project.yml`，以及生成的Xcode项目。
+- 添加了带有精确英文元数据的`Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md`，
+审阅笔记、虚构的屏幕截图装置、真实的源/测试链接以及明确的精确 RC 预检。该文件仍标记为内部，并非上传或提交的授权。
+- 删除了自然拼读法和抽认卡的误导性关键字声明； 93字节
+关键字字段现在描述常见单词、阅读、拼写、手写、单词列表和早期识字练习。
+- 记录当前教师音频捆绑或使用离线苹果语音；
+两个发货 plist 都没有配置运行时教师音频端点。
+- 将共享设备营销语言替换为特定于 Profile 的学习者
+措辞。核心实践不需要 Pawgoo 帐户，而 Family Sync 单独需要家长选择加入和可用的 iCloud 帐户。
+- 保持父级Profile控制合格：唯一剩余的Profile不能
+已删除且不存在完整的“删除所有应用程序数据”路径。 Issue#19 仍然是行为和防破坏门。
+- 整合合并的隐私和内容权利清单。 Issue#54 拥有
+实时 Pawgoo 副本； #32 和 #33 拥有发言权和 Pawgoo 所有权证据；所显示的 Pawgoo 版权仍然是临​​时的。
+- 阻止了 #55 下的当前 Read 权限指令，因为
+面向儿童的动作可以触发语音和麦克风系统授权。最终审阅者路径必须从 Parent Gate 后面开始，并在粘贴前通过精确设备验证。
+- 本批次不上传至App Store Connect，更改Pawgoo网站，
+变异CloudKit，或要求模拟器/设备/人类接受。
+- 完整的预提交门通过了严格的格式、837/837 Swift 测试，
+40/40 Issue 代理测试和 11/11 发布预检测试。重点元数据限制/本地链接/过时声明合同通过了 3/3，源内容清单独立验证当前版本、构建、音频、图片、JSON、字体、属性和缺席端点边界。
+
+## v0.7.6 — 2026-07-19
+
+目标发布：`v0.7.6`
+
+Branch: `codex/profile-erasure-lifecycle-v0.7.6`
+
+Build: `2026071906`
+
+总体状态：源实现和预提交存储库门已完成 #57 跟踪的 P0、隐私安全 Profile 擦除生命周期。生产CloudKit、真实账户删除、精确承诺HEAD模拟器和签署的跨设备验收仍然是#19、#22和#23下的独立门。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V076-PRIV-001 | P0 隐私 | Profile 删除 | 在本地删除 Profile 后，保留并显示真实请求、删除、等待/重试、需要注意和完成状态。完成需要在所有者或参与者清理路线完成后进行准确的墓碑确认。 | 来源完整；现场验收开放|预提交：998/998Swift、40/40Issue代理和11/11发布预检测试。仍然需要：精确的承诺HEAD模拟器矩阵，LocalQAiPhone/iPad回归，以及生产CloudKit破坏性证明。 |
+
+### 2026-07-19 v0.7.6 笔记
+
+- 为回收的 #57 批次保留版本 `0.7.6` 和构建 `2026071906`。
+- 保持本地立即删除和子流非阻塞；耐用的
+生命周期是在任何 Profile 有效负载清除之前使用逻辑删除写入的。
+- 将生命周期分类为设备本地、隐私最小恢复证据。
+它绝不能包含或导出昵称、单词、照片、学习负载、Apple Account标识符或共享 URL。
+- 传输发送未完成。只有确切的公认墓碑
+在每个所需的所有者或参与者清理步骤成功后，修订可能会完成生命周期。
+- 帐户更改失败关闭：无法进行属于先前帐户的清理
+通过运行新确认的帐户来得到确认。
+- Profile 删除保留来自持久墓碑写入的一个共享突变租约
+通过每个本地清除和提交标记。同步读取会等待该租约，并且在本地故障后无法导出未提交的逻辑删除。
+- CloudKit元数据拒绝重复的Profile路线、重复使用的区域、缺失
+根、丢失帐户来源以及所有者/参与者路由不匹配，而无需重写原始字节。项目记录必须是确切的持久根的父级，因此被拒绝的备用根的子级无法应用。
+- 所有者分类账恢复提交其最小的收件箱收据和终端绑定
+在每个区域删除证明之后以原子方式重新检查同一元数据事务中的确切Apple Account出处。
+- 远程所有者根/区域删除首先保留确切的隐私最低限度
+控制区域逻辑删除，然后擦除有效负载区域，清除本地源并终止。每个破坏性或接收消耗边界都会重新检查实时的Apple Account和CKSyncEngine生成。
+- 收据触发的子级和父级刷新使用单调生成和
+取消，因此较旧的暂停刷新在较新的删除获胜后无法重新发布 Profile 或 Kid。
+- 生产全新安装使用随机默认Profile身份并清除
+在创建任何本地标记之前，仅Tada Words'设备本地声纹钥匙串服务。现有安装会保留注册，并且重置失败会导致引导程序关闭以重试。
+- 父级可见的生命周期和导出的诊断使用匿名聚合；
+他们从不公开Profile、Apple Account、分享、昵称、文字、照片或语音数据。
+- 预提交存储库门通过了 998 Swift 测试、40 Issue 代理测试、
+和 11 项发布预检测试。仅在确切提交的HEAD通过后才会记录模拟器和物理验收证据。
+
+## v0.7.7 — 2026-07-19
+
+目标发布：`v0.7.7`
+
+Branch: `codex/apns-release-preflight-v0.7.7`
+
+Build: `2026071907`
+
+总体状态：问题 #56 在源/工具层实现。规范发布策略现在仅接受开发或生产签名的存档作为中间证据，并要求精确导出的应用程序或 IPA 携带生产 APN 和 CloudKit 权利。此批次不会创建或更改 Apple 资源、证书、配置文件、存档、导出、CloudKit 架构或 App Store Connect 记录。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V077-REL-001 | P0 发布 | APNs 预检 | 将推送权利证据绑定到精确签名的存档并导出，而不接受 LocalQA、源设置、屏幕截图或存档单独作为生产证明。 | 源/工具完整；签署出口开放|重点预检：16/16。仍然需要：完整的精确HEAD存储库和模拟器门，在iPhone和iPad上签署LocalQA身份/安装/启动，以及最终的PawGoo生产存档/导出清单。 |
+
+### 2026-07-19 v0.7.7 笔记
+
+- 为回收的问题 #56 保留版本 `0.7.7` 和构建 `2026071907`。
+- 添加了字面源合同
+规范政策的`aps-environment = $(APS_ENVIRONMENT)`。
+- 添加了 `aps-environment=production` 作为必需的导出应用程序权利。
+缺失、开发或任何其他导出值无法关闭。
+- 保留小写 `development` 的特定于存档的覆盖或
+`production`;这永远不会放松导出的应用程序或 IPA 要求。
+- 添加了针对确切源表达式的规范策略测试，有效
+生产导出、缺失值、开发导出、开发存档、LocalQA拒绝以及意外的额外权利。
+- 记录了清单保留了存档和导出路径、哈希值和
+权利字典分开。只有确切的出口才是生产推动的证据。
+- 重点发布预检套件已通过 16/16。真实签名的档案和
+导出的应用程序尚不存在，因此该批次不会在源/工具门之外提出生产就绪性声明。
+
+## v0.7.8 — 2026-07-20
+
+目标发布：`v0.7.8`
+
+Branch: `codex/issue55-parent-speech-permission-v0.7.8`
+
+Build: `2026071908`
+
+总体状态：源实现将仅子检查的语音和麦克风边界与仅限 Parents 的权限请求功能分开。在#55 或App Store 门关闭之前，仍需要对第一个iPhone 和一个iPad 进行准确签署的首次安装、拒绝、授权、限制和撤销接受。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| APPSTORE-019-KIDS | P1 隐私 | 权限请求 | 子启动、Profile 切换、Read 进入、重播、重新启动和调试演示/深层链接路由绝不能触发语音识别或麦克风系统提示。 Parents 需要一个清晰的设置路线，并为两种权限提供单独的状态。 | 来源已实施；精确设备门打开|确定性否定路由、状态、授权兼容性和故障关闭测试；然后对一个 iPhone 和一个 iPad | 进行精确签名的首次安装、拒绝、授权和撤销验证
+
+### 2026-07-20 v0.7.8 笔记
+
+- 保留现有版本`0.7.8`和构建`2026071908`；没有竞争分支
+或版本已创建。
+- 从 `TadaWordsFeatures` 中删除了所有请求功能。儿童Read可以
+仅检查现有授权并显示适合年龄的“询问家长”状态，而不将权限失败视为学习尝试。
+- 添加Parents → 应用程序和系列 → 具有独立语音功能的语音和麦克风
+识别和麦克风状态、显式设置、已授权的兼容性以及针对拒绝、限制或撤销访问的 iOS 设置指南。
+- 将语音设置保留为第二个成人拥有的权限入口点。苹果
+控制器仅请求每个尚未确定的权限，并且从不重新请求拒绝或限制状态。
+- 添加了`Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md`，枚举语音，
+麦克风、相机、照片、通知、设备所有者身份验证和无提示 APN/CloudKit 服务所有权。
+- 源/单元/文档门不声明模拟器、签名设备或
+人类的接受。这些仍然是#55/#22 下的连续发布证据。
+- 预提交存储库门通过了 1,016 Swift 测试、40 Issue 代理测试、
+集成 v0.7.7 生产 APNs 门后进行 16 次发布预检测试。准确的已提交-HEAD验证在实施提交后单独记录。
+## v0.7.9 — 2026-07-19
+
+目标发布：`v0.7.9`
+
+Branch: `codex/apns-registration-observability-v0.7.9`
+
+Build: `2026071909`
+
+总体状态：源实现和存储库门已完成，可实现 #64 跟踪的隐私安全 APNs 注册可观察性。精确签名的iPhone/iPad注册证据和真实背景收敛在#60和#62下仍然是分开的。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V079-SYNC-001 | P0 可观察性 | Family Sync 推送注册 | 区分未请求、待处理、已注册和失败的 APN 注册，无需保留或导出不透明设备令牌。 | 来源完整；实时验收开放|1042/1042Swift、40/40Issue代理和16/16发布预检测试通过了组合源候选。仍然需要：#60 下精确签名的 iPhone 和 iPad 回调； #62 下的真实背景收敛。 |
+
+### 2026-07-19 v0.7.9 笔记
+
+- 为回收的#64批次保留版本`0.7.9`和构建`2026071909`。
+- 添加了 UIKit 成功和失败委托回调。成功回调
+没有本地令牌标识符，并且没有设备令牌字节进入域、父 UI、诊断、日志、持久性、散列或导出路径。
+- 每个活动仅保留一个进程本地状态值和一个未读流值
+观察者。重新启动从未请求开始，重试返回到待处理状态。
+- 将 Apple 故障映射到配置、连接或系统类别
+无需导出原始域、代码、描述、设备标识、Apple Account 详细信息、Profile 内容或子数据。
+- 添加了家长可见的注册状态和 schema-2 系列同步诊断
+具有粗略状态、可选类别和更新时间戳。
+- 选择退出后的延迟回调无法替代未请求状态。登记
+失败永远不会阻碍本地实践或声称CloudKit收敛失败。
+- 通知呈现授权不作为沉默的证据
+CloudKit推送注册。
+- 语音/麦克风和 APN 集成焦点的组合超过 110/110。
+完整的组合源门通过了 1,042 项 Swift 测试、40 项 Issue 代理测试和 16 项发布预检测试。
+
+## v0.7.10 — 2026-07-19
+
+目标发布：`v0.7.10`
+
+Branch: `codex/second-device-profile-adoption-v0.7.10`
+
+Build: `2026071910`
+
+总体状态：问题 #66 源实现和确定性独立 - UUID 覆盖范围已完成。精确签署的iPhone加上干净的iPad生产-CloudKit接受仍然是后来的#62收敛门的一部分；该批次不会安装设备、改变 Apple 门户或合并自身。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V0710-SYNC-001 | P0 bug | 第二个设备加入 | 让家长在提交任何随机本地Profile之前发现并收养现有的同步孩子Profile。保留精确的UUID和同步字段；切勿根据昵称、年龄、头像、照片或相似性进行合并。 | 来源完整；签署的生产验收开放|独立-UUID单元/集成和模拟器UI覆盖，完整的存储库门，然后精确-HEAD一-iPhone加上清洁-iPadCloudKit根据#62|验收
+
+### 2026-07-19 v0.7.10 笔记
+
+- 为回收的#66批次保留版本`0.7.10`和构建`2026071910`，
+独立保留的下部释放插槽保持不变。
+- 添加了显式传输引导策略。生产CloudKit现已离开
+一个真正新鲜的Profile存储库是空的，直到父母选择寻找现有的孩子或明确创建一个单独的新孩子；仅设备安装保留其本地种子行为。
+- 添加了家长拥有的首次运行选择、隐私确认、可重试iCloud
+发现，为一个或多个孩子进行精确的Profile选择，以及明确的离线新孩子路线。
+- 采用仅保留确切选定的 Profile UUID 作为该设备的最后一个
+选择并完成入职，无需重写Profile。声纹注册仍然是设备本地的。
+- 发现意图在采用前退出或重新启动时是持久的，因此
+已经下载的远程Profile永远不会成为可编辑的本地新手种子。完成精确采用或显式创建可以明确该意图； schema-v1 载入状态在 v2 策略下仍然可读。
+- 显式创建在之前持久保留一个确切的待定 Profile UUID
+设置、Profile、子会话或完成标记写入。中断后重试会重用该UUID，因此它无法覆盖已发现的远程Profile或创建第二个本地Profile。重点测试在每个写入边界处中断和恢复。
+- 发现重试或重新启动会继续已启用的家庭同步
+与`synchronize()`会话而不是重新启用它，保留生产CKSyncEngine光标和收件箱状态。模拟器装置使用独立的持久光标标记来跟踪确认，而不是从本地Profile存在来推断它。
+- 帐户确认期间暂时 iCloud 不可用表示为
+离线重试状态；丢失或受限的 iCloud 帐户仍然处于明显的不可用状态。这两条路径都隐式创建了Profile。
+- 相同昵称的个人资料保持独立。没有昵称、年龄、头像、照片或
+采用路径中存在模糊身份规则。
+- 新的Profile创建在之前保留了隔离的默认实践设置
+如果 Profile 持久性失败，Profile 将变得可见并回滚这些设置。
+- 添加了针对干净引导/重新启动、一个和多个的确定性测试
+远程配置文件、相同的昵称、延迟连接、无iCloud帐户、显式离线创建、精确选择以及与捆绑模拟器种子不同的独立模拟器UUID。
+- 完整的预提交门通过了严格的格式、1012/1012Swift测试，
+40/40 Issue 代理测试和 11/11 发布预检测试。
+- 两个聚焦的独立UUID第二设备 XCUITests 在两个方面都通过了 2/2
+iPhone 17 Pro 和 iPad Pro 11 英寸 (M5) 模拟器：无需本地种子的精确采用，以及发现和采用之间的退出/重新启动，无需本地种子的重复。
+- 通用iOS模拟器应用程序构建也成功。这是源码和模拟器
+仅证据；它不能替代精确签署的生产版本和#62 中保留的一-iPhone 加上清洁-iPad CloudKit 验收。
+
+### 2026-07-20 v0.7.10可靠性后续
+
+- CloudKit回调，其元数据、收件箱、隔离区或传出系统-
+字段写入失败现在会留下一代范围的恢复围栏。下一次提取或直接发送将取消失败的引擎，并在同一进程中重新加载最后一个持久的私有/共享游标，因此重试不再需要强制退出。来自被丢弃一代的后期回调仍然被忽略。
+- 不可变的冲突处置现在不受 200 项诊断上限的影响。
+直接隔离、收据隔离和原子冲突转换共享一个失败关闭的 upsert 规则，因此稍后的兼容性回调在重新启动后无法解锁可见冲突或压缩冲突。
+- 采用和显式创建在提交之前请阅读最终的Profile列表
+入职完成标记。因此，失败的最终读取使流程保持可重试，并重复使用确切的保留ProfileUUID，而不是留下没有可用结果的已完成标记。
+- 前台iCloud-帐户重新验证现在会使正在进行的查找失效
+在最终存储库和表示边界处。从帐户 A 获取的结果将转换回持久重置状态，选择退出 Family Sync，并且只有新的父级重试才可能会暴露帐户 B 候选者。
+- 添加了确定性帐户切换竞赛测试，该测试会暂停帐户后查找
+A 已填充规范存储库，完成对帐户 B 的前台重新验证，并证明过时的结果在干净重试仅返回帐户 B 的确切 Profile UUID 之前被拒绝。
+- 添加了红到绿的覆盖范围，用于通用耐久性恢复、可见和
+压缩冲突锁降级尝试，以及采用和创建中的最终读取失败。确切的工作树门通过了严格的格式化、1037/1037 Swift 测试、40/40 Issue 代理测试和 11/11 发布预检测试。在此后续提交之后，仍然需要新的精确HEAD签名的模拟器证据。
+- App Store 后续行动仍然明确：#78 拥有版本化迁移
+新的紧凑冲突语义，#79 拥有并发公共传输恢复序列化，#80 拥有有界故障关闭冲突索引。这些是 P1 释放门，不会扩展正常的单协调器iPhone-加-iPad P0 家庭游戏路径。
+
+## v0.7.11 — 2026-07-20
+
+目标发布：`v0.7.11`
+
+Branch: `codex/auto-merge-exact-head-v0.7.11`
+
+Build: `2026072011`
+
+总体状态：Issue#85 更改交付政策和Issue代理合同；应用程序运行时逻辑和持久模式保持不变。 PR #72 被合并，并且该批次直接重新基于生成的 `main`。由于所需的发布增量会更改应用程序/LocalQA版本/构建元数据和生成的Xcode项目，因此精确HEAD模拟器和签名的LocalQAiPhone/iPad门仍然适用。 Apple Portal 状态、签名资产、CloudKit 和子数据仍然超出范围。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V0711-DELIVERY-001 | P1 自动化 | 交付 | 用常设的精确HEAD授权替换强制所有者`/merge`注释，同时保留所有证据、拦截器、高风险和合并后门。保留`/merge`可选，并提供经过验证的回滚到之前的评论政策。 | 保护合并强化正在进行中；打包工件验证待定|每PR基本OID加上规范保护/关闭引用摘要，严格的服务器强制精确头状态，存储库范围的合并租用，fsync支持的待定意图恢复，不确定请求后不重发，Issue代理聚焦/全面测试，存储库检查，精确HEADiPhone/iPad模拟器构建，并签名LocalQAiPhone/M4iPad身份/安装/启动证据|
+
+### 2026-07-20 v0.7.11 笔记
+
+- 为回收的 Issue #85 保留版本 `0.7.11` 和构建 `2026072011`
+交付政策批次。
+- 一个现成的、非草稿的、畅通无阻的代理PR现在会产生确定性的自动
+合并由其完整HEAD、每PR基本OID、PR主体SHA-256、分页规范结束引用摘要和经过验证的分支保护摘要键入的候选者，而不需要GitHub注释；堆叠/非 `main` PR 被排除在外。
+- 新的提交会产生新的候选者并使之前的检查、工件、
+设备证据、评论和准备情况。
+- 基础更改、PR-正文编辑或规范的结束引用更改
+在同一次提交中使候选者无效。工作人员对 GitHub 的侧边栏感知 GraphQL 连接进行分页，拒绝跨存储库关闭，并保持仅 `Refs` 的 PR 有效。
+- 可选的所有者`/merge <sha>`命令仍然受支持并受
+相同的当前-HEAD预检。
+- 合并突变集中在受保护的核心命令中。需要严格的
+服务器端最新保护和确切的头状态，获取单写入器元数据边界的存储库范围的远程租约，保留 fsync 支持的准备和发送或未知状态，禁止管理/更新/变基绕过，并发送完整的 HEAD 作为 GitHub 的合并比较和交换值。不确定的请求仅用于协调，并且永远不会重新发送。
+- 合并后的持久确认现在需要经过精确测试的HEAD，a
+合并提交可从新的`origin/main`到达，预期的基础作为其第一个父级，相同的合并树，以及通过该PR链接的每个规范链接的Issue的关闭。挂起的意图在进程死亡后仍然存在，而不会静默容量截断，并且即使当 PR 不再由 open-PR 列表返回时也会重播。
+- 规范关闭引用读取拒绝 GraphQL 部分错误、格式错误
+节点和畸形分页。持久确认在释放确切的唯一远程租约之前会同步未完成的租约清理记录；下一次轮询将恢复崩溃后存储库检查之前未完成的清理工作。
+- GitHub 没有针对 PR 元数据的比较和交换。自动作家必须尊重
+合并关键租约；所有者在短关键部分期间的编辑是记录的可信操作员边界，而不是原子GitHub保证。
+- 破坏性数据工作、不可逆转的提供商/帐户突变、凭证、
+身份验证、模糊的产品选择和不匹配的目标环境仍然是明确的人为大门。
+- 回滚会恢复此策略批次并重新安装经过验证的Issue代理；
+日志、状态、worktree（工作树）、分支、标签和审计证据均保留。
+- 应用程序行为不变，但版本/构建和生成的包
+元数据改变构建的工件。精确的HEAD模拟器验证和签名的LocalQAiPhone和iPad证据正在序列化设备通道中等待。
+
+## v0.7.12 — 2026-07-20
+
+目标发布：`v0.7.12`
+
+Branch: `codex/pawgoo-formal-identity-v0.7.12`
+
+Build: `2026072012`
+
+总体状态：Issue#68 仅将正常的调试/发布身份移至PawGooLLC 团队。 CloudKit 容器和每个持久的 Family Sync 标识符保持不变。 LocalQA 保留其现有的捆绑包、团队灵活性、空权利、已安装的数据和物理设备工作流程。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V0712-IDENTITY-001 | P0 发布身份 | 发布/持久 | 将 `app.tadawords.app` 和 PawGoo `7R78Q4HP86` 用于普通应用程序，而不派生或替换 LocalQA 身份。 | 保留分支上的实施正在进行中 | 静态身份合约、生成的构建设置矩阵、重点验证者测试、完整存储库门、精确HEAD iPhone/iPad 模拟器证据和精确PawGoo 开发签名工件验证 |
+
+### 2026-07-20 v0.7.12 笔记
+
+- 为回收的 P0 Issue #68 保留版本 `0.7.12` 和构建 `2026072012`。
+- 普通应用程序调试/发布使用捆绑包`app.tadawords.app`；正常的 UI 测试
+目标使用`app.tadawords.app.uitests`。两者都固定到PawGoo团队`7R78Q4HP86`。
+- LocalQA 仍为`com.tadawords.app.localqa`； LocalQA UI 测试仍然存在
+`com.tadawords.app.uitests`；设备测试仍为`com.tadawords.app.devicetests`。这些配置不会继承 PawGoo 团队或 APNs 设置。
+- 普通应用程序保留 APN 和唯一的 CloudKit 容器
+`iCloud.com.tadawords.app`，同时删除未使用的 KVS 源权利。 CloudKit 区域/根/订阅标识符和设备本地声纹服务未更改。
+- 新的普通包创建一个新的本地沙箱、权限状态和
+默认钥匙串组。本批次不安装； #60 拥有旧的普通库存和第一个普通应用程序安装。 LocalQA 数据未受影响。
+- 预提交源门通过 1,119/1,119 Swift 测试，91/91 Issue 代理
+测试和 54/54 发布/身份验证器测试。开发验证程序现在绑定 Apple CMS 信任和签名者固定、PawGoo 代码签名叶、配置文件授权信封、精确批准的设备覆盖范围、仅限 iPhoneOS 的 arm64 元数据以及稳定的应用程序树摘要。确切的承诺 - HEAD模拟器和签名的工件证据仍有待确定。
+
+## v0.7.17 — 2026-07-21
+
+目标发布：`v0.7.17`
+
+Branch: `codex/family-sync-status-refresh-v0.7.17`
+
+Build: `2026072117`
+
+总体状态：Issue#101 修复了物理设备 Family Sync 状态竞争。 CloudKit 已在两台批准的设备上聚合，但父 UI 在现有协调期间打开时保留了临时的 `.syncing` 快照。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V0717-BUG-001 | P0 bug | 家长/家庭同步 | 在进行中协调期间到达的读者必须接收其最终的家长可见状态，而不是短暂的 `.syncing` 快照。 |源传递|协调器并发回归，完整源套件，精确HEAD构建，然后一个物理iPhone加一个物理iPad，无需重新安装或重置数据|
+
+### 2026-07-21 v0.7.17 笔记
+
+- 为回收的 Issue #101 保留版本 `0.7.17` 和构建 `2026072117`。
+- 现在，参与者将并发状态和同步调用者排队，同时
+协调处于活动状态，然后在每个所需的立即传递完成后以相同的已结算状态恢复所有这些。
+- 不会进行轮询、配置文件更改、首选项更改、卸载或数据重置
+参与修复。
+- 修复前的物理证据显示，两台设备均已确认存在问题
+278 个本地清单，零发件箱和待处理记录，空闲持久状态，并且在两个屏幕仍显示“正在同步...”时没有错误。
+- 重点并发测试和完整的 1129 测试Swift套件通过。
+Exact-HEAD 构建和签名设备验收仍在等待中。
+
+## v0.7.32 — 2026-07-24
+
+目标发布：`v0.7.32`
+
+Branch: `codex/privacy-support-alignment-v0.7.32`
+
+Build: `2026072406`
+
+总体状态：Issue #76 采用所有者批准的保守 App Store 1.0 fallback：移除所有生产
+voiceprint 注册和说话人匹配入口，仅为休眠的预发布 Keychain 模板保留既有的
+Profile 删除与已验证首次安装清理路径。
+
+| ID | 类型 | 区域 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V0732-PRIVACY-001 | P0 发布范围 | Voiceprint/COPPA | 在没有合格书面处理前，不得在 App Store 1.0 发布 voiceprint 注册或说话人匹配；保留任何休眠预发布模板的删除能力。 | 自动通过；exact-artifact 验收待定 | 源契约、完整回归门、exact-HEAD iPhone 和 iPad 模拟器 UI 检查、保留数据的签名实体 iPhone 验收，以及保留的生命周期清理测试 |
+
+### 2026-07-24 v0.7.32 说明
+
+- 生产组合不再构造注册 service，也不会向 Read Practice 注入说话人验证器。
+- 当发布策略禁用时，Parent Profile 卡片不暴露 voice 设置；如果遗留代码尝试
+  导航或开始注册，view-model guard 会 fail closed。
+- 麦克风权限文案现在只覆盖 spoken Read Practice。
+- 更新期间不会静默擦除现有模板。生产 repository 仍保持组合，只为使 Profile 删除
+  与已验证首次安装 bootstrap 能执行此前验证过的限定范围清理。
+- 这是发布范围 fallback，而不是法律结论。Issue #76 仍待针对瞬态 Read 语音、
+  Profile/photo 数据、持久标识符和可选 CloudKit Family Sync 的合格处理。
+
+## v0.7.30 — 2026-07-23
+
+目标发布：`v0.7.30`
+
+Branch: `codex/voiceprint-lifecycle-proof-v0.7.30`
+
+### Voiceprint Keychain 生命周期验证
+
+- 新增签名真机测试，通过 Apple Security framework 验证生产
+  `KeychainDeviceVoiceprintRepository`。
+- 测试使用 UUID 限定范围的测试 service，而不是生产 voiceprint
+  service；无需卸载 App 或重置 App 数据。
+- 覆盖证明：保留项在 repository 重建后继续存在，直到限定范围的
+  fresh-install reset 执行；该 reset 会删除目标 service 中的全部项目，
+  同时保留相邻 service。
+- 覆盖还验证 `WhenUnlockedThisDeviceOnly`、不同步属性，以及空 service
+  reset 的幂等性。
+- 新增持久生命周期记录，并同步内部隐私和提交包文案。与之匹配的
+  Pawgoo Privacy/Support 文案部署仍归 #54。
+
+## v0.7.27 — 2026-07-21
+
+目标发布：`v0.7.27`
+
+Branch: `codex/appstore-decisions-v0.7.27`
+
+总体状态：App Store 1.0 分发约定已明确，并在发布决策记录、提交包、
+隐私计划、审查说明和 exact-RC 检查表之间保持一致。
+
+| ID | 类型 | 区域 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V0722-RELEASE-001 | P1 决策 | App Store | 使用 Made for Kids 6–8、免费且无 IAP 或广告、仅美国上架，并在所有地区手动发布。 | 所有者已批准；源契约已实现 | 精确源测试、生成项目身份、PR 合并，以及稍后由 #65 针对已验收 RC 填写 App Store Connect。 |
+
+### 2026-07-21 v0.7.27 说明
+
+- 所有者明确选择 Made for Kids，并以 6–8 岁为主要年龄段；批准后的
+  锁定被记录为不可逆。
+- 首个公开版本免费，不含 IAP、订阅、广告或付费解锁，仅在美国提供，
+  且不启用预购。
+- 获批的发布方式为手动发布。App Review 批准后，版本必须保持
+  Pending Developer Release，直到 #26 授权最终发布。
+- 即使 1.0 不包含欧盟 storefront，账户级 EU DSA trader 声明仍属于
+  #23 范围。
+- 本文档与发布身份批次不会填写 App Store Connect 值、提交构建，
+  也不会改变运行时或数据行为。
+
+## v0.7.19 — 2026-07-21
+
+目标发布：`v0.7.19`
+
+Branch: `codex/profile-chooser-grid-v0.7.19`
+
+总体状态：紧凑的iPhoneProfile选择器使用有界垂直网格而不是无界水平条带。第一行最多包含三个现有配置文件加上`New Kid`；后面的每一行最多包含三个配置文件，并且保留在景观安全区域内。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V0719-UI-001 | P1 bug | Kid/Profile 选择器 | 将三个以上配置文件保留在 iPhone 横向边界内，同时将 `New Kid` 保留在第一行中。 | 自动通过 | 0 到 20 个配置文件的布局策略覆盖范围、重点 Swift 测试以及使用四个配置文件的精确iPhone 横向视觉/点击验证。 |
+
+### 2026-07-21 v0.7.19 笔记
+
+- 紧凑型卡使用适合三个配置文件加上`New Kid`的有限宽度
+在现有的 760 点内容范围内。
+- 第四个现有的 Profile 开始垂直可滚动的第二行；
+后续行绝不会包含超过三个配置文件。
+- 每个紧凑行共享相同的前缘，因此部分溢出行不会
+不会漂移到iPhone屏幕的中心。
+- 标准高度和iPad布局保留其现有的自适应网格。
+
+## v0.7.18 — 2026-07-21
+
+目标发布：`v0.7.18`
+
+Branch: `codex/family-sync-background-and-default-consent-v0.7.18`
+
+总体状态：Family Sync 现在在启动后只要家长打开它就会注册远程通知。在支持 iCloud 的设备上首次运行的家长会看到家庭同步默认处于启用状态，可以在创建配置文件之前将其关闭，并且在使用 iCloud 配置文件发现之前必须明确将其保持打开状态。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V0718-SYNC-001 | P0 bug | 家长/家庭同步 | 在 Parents 中启用家庭同步必须立即注册 APN，而不是等待重新启动；然后，后台设备可能会收到CloudKit更改唤醒。 | 自动通行证；观察到已签名的 iPhone 到 iPad 传播 | 在正常的 `app.tadawords.app` 构建中，iPhone 创建 `Push Pebble 0721` 收敛到未受影响的 iPad，无需打开 Family Sync；两个设备快照均包含一个匹配的Profile，总共四个配置文件。 |
+| V0718-ONBOARDING-001 | P1 改进 | 首次运行家长协议 | 将 Family Sync 作为支持 iCloud 的默认设置，并在任何新的 Profile 排队之前以简单语言披露并在屏幕上选择退出。 | 自动通行证；干净设备物理验收待定|全新安装父路径：验证默认打开、显式关闭、新Profile创建以及选择退出时禁用“查找我的孩子”。在此测试中，故意不卸载或重置现有的家庭数据设备。 |
+
+### 2026-07-21 v0.7.18 笔记
+
+- 现在在Parents中打开或关闭家庭同步分别请求或
+在同一会话中取消注册远程通知传送。
+- 首次运行协议默认启用 iCloud-capable 选项；它是
+完成会在创建 Profile 之前写入所选的首选项，因此选择退出永远不会将第一个突变排入 Family Sync 的队列。
+- “查找我的孩子”仍然是仅限 iCloud 的操作，并且在以下情况下不可用：
+家长明确选择退出；创建本地Profile仍然可用。
+- 重点关注首次运行、通知注册、家长演示以及
+完成 233 项测试 Family Sync 回归套件的通过。已签名的 v0.7.18 应用程序工件现已安装在批准的 iPhone 和 iPad 上；设备数据容器均未重置、替换或卸载。
+- 在正常的PawGoo应用程序中，在生成的iPhone上创建`Push Pebble 0721`
+在未访问的 iPad 上添加一个匹配的 Profile，无需访问 Family Sync。 Read-仅设备容器快照显示每个设备上的四个配置文件以及每侧都有一个具有该显示名称的记录。
+
+## v0.7.13 — 2026-07-20
+
+目标发布：`v0.7.13`
+
+Branch: `codex/quest-session-regressions-v0.7.13`
+
+Build: `2026072013`
+
+总体状态：Issue#91、#92 和#93 修复三个日常练习回归，而不删除或替换儿童学习历史。源回归测试通过；精确HEAD模拟器和物理设备验收仍然是分开的。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V0713-BUG-001 | P1 bug | Kid UI | 适合 Spell 镶边、提示符、插槽和完整键盘在受限高度景观中 iPhone，同时保留 44 点控件和常规 iPad 比例。 |自动通过|布局策略测试加上精确HEAD景观iPhone和iPad模拟器捕获；物理分接待处理|
+| V0713-BUG-002 | P1 错误 | Write 会话 | 完成的手写项目后的显式拼写选择必须覆盖过时的恢复的输入模式证据，同时保留完整的前缀。 | 自动传递| 模型回归，涵盖手写完成、退出、显式拼写选择和第二项恢复；模拟器流程待定|
+| V0713-BUG-003 | P1 bug | 父级/持久性 | 提高新上限或审核上限必须单调地将符合条件的单词附加到今天的规范计划中，而不更改其 ID、完成度、奖励或尝试历史记录。重复刷新是幂等的，并且较低的大写字母永远不会删除历史记录。 | 自动通过 | 两种限制的本地 JSON 完成/扩展/重新启动测试以及待处理的父子模拟器流程 |
+
+### 2026-07-20 v0.7.13 笔记
+
+- 为回收的 Issue #91 保留版本 `0.7.13` 和构建 `2026072013`，
+＃92和＃93。
+- Spell 使用低于 560 点的受限高度指标：chrome、prompt、
+响应槽、键盘间距和提交控件紧凑在一起；每个交互式控件至少保留 44 个点，并且常规高度 iPad 值保持不变。
+- Write 选择器现在将其选择标记为显式。坚持尝试
+上下文对于通用崩溃/重新启动恢复仍然具有权威，但不能覆盖新的子选择。
+- 每日计划协调是一个序列化、单调的存储库突变。
+它保留稳定的计划 ID，并仅附加上限允许的增量。现有的完成和奖励参考保持不变；降低上限和重复核对是不行的。
+- 重点模型、内容存储库和布局套件通过。完整源码，
+自动化、模拟器和签名设备门分别记录。
+
+## v0.7.21 — 2026-07-21
+
+目标发布：`v0.7.21`
+
+Branch: `codex/atomic-profile-visibility-v0.7.21`
+
+Build: `2026072121`
+
+总体状态：已接受的远程 Family Sync Profile 批次在每个规范存储库和复合 UI 阅读器中都可见为一个已提交的生成。中断的应用会保留准确接受的重播负载，并在不发布部分子项、父项或通知快照的情况下关闭失败。
+
+| ID | 类型 | 面积 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V0721-SYNC-001 | P0 bug | 系列同步/应用 | 防止任何接受的跨存储库 Profile 代出现半新半旧的情况；保留精确的重播和删除最终性。 |自动传递|每次应用边界后的失败注入、精确的接收/重放断言、完整的源门、精确的HEAD模拟器家庭同步矩阵，以及签名的iPhone加iPad烟雾而不删除应用程序数据。 |
+
+### 2026-07-21 v0.7.21 笔记
+
+- 一个全流程的承诺生成门现在序列化已接受的Profile
+适用于规范存储库读取以及复合子项、父项和通知快照。
+- 部分接受的申请标志着受影响的Profile需要恢复。民众
+读取失败关闭，直到持久事务重播其确切字节；协调员协调在指纹或获胜者计算之前执行重播。
+- 应用收据在中断期间保持缺席，在完整后出现一次
+提交，并且在无操作恢复过程中不要更改。
+- 通过逻辑删除、本地数据擦除和远程Profile删除重放
+持久提交，不允许陈旧的Profile数据重新出现。
+- 该版本保留了现有的PawGoo捆绑标识、CloudKit容器、
+和就地数据合同。模拟器和签名设备证据仍然准确-HEAD，并与源测试分开记录。
+
+## v0.7.28 — 2026-07-24
+
+目标发布：`v0.7.28`
+
+Branch: `codex/camera-ocr-editor-v0.7.15`
+
+Build: `2026072402`
+
+总体状态：Issue #96 在相机拍摄与 OCR 审查之间增加设备端裁剪与遮罩
+编辑器，同时保留 v0.7.21 的原子 Family Sync 可见性和所有现有的
+家长批准词池规则。
+
+| ID | 类型 | 区域 | 后续要求 | 当前状态 | 所需验收证据 |
+|---|---|---|---|---|---|
+| V0720-UX-001 | P1 改进 | Parent/相机 OCR | 允许家长在 OCR 前裁剪拍摄的词表并遮盖无关内容，支持撤销、重置、重拍、取消和明确的 Use Photo 交接。 | 自动通过 | 编辑器模型/渲染测试、exact-HEAD iPhone 与 iPad 模拟器流程、签名 LocalQA 身份验证，以及保留数据的实体 iPhone 相机到 OCR 审查流程 |
+
+### 2026-07-24 v0.7.28 说明
+
+- 编辑器会规范化图像方向、保留源分辨率，并且只在所选裁剪范围内、
+  OCR 之前应用黑色遮罩。
+- 相机图像和编辑后的图像仅保留在设备上且不会持久化。取消不会改变
+  词池；OCR 结果仍需家长审查并明确添加。
+- Crop 和 Mask 在编辑器黑色背景上处于非活动状态时使用白色文字；
+  活动工具保留白色分段与黑色文字。
+- 所有者仅为本次合并豁免实体 iPad 与 Apple Pencil 通道；iPad 模拟器
+  覆盖仍为必需。一个实体 iPhone 相机流程仍是强制发布门槛。

@@ -7,7 +7,7 @@
 > an accepted signed release candidate. Family Sync is required for Tada Words
 > 1.0, but its production CloudKit, physical-device, and human acceptance remain
 > gated.
-> The Made for Kids 6–8 band, free/no-IAP model, United States-only
+> The Made for Kids product range of ages 3–8, free/no-IAP model, United States-only
 > availability, and manual release method are fixed by the 2026-07-21 owner
 > decision. App Store Connect entry and release remain separately gated.
 
@@ -55,11 +55,13 @@ be replaced with exact signed-release evidence during submission preparation:
   against production CloudKit and the exact signed release candidate.
 - **Pawgoo wording:** issue #54 owns alignment and deployment evidence for the
   public Privacy and Support pages; this document does not change the site.
-- **Child permission flow:** the v0.7.8 source candidate gives child Read only a
-  current-status check and adds Parents → App & Family → Speech & Microphone for
-  setup. Issue #55 still requires exact signed first-install, denied,
-  authorized, and revoked verification on iPhone and iPad before these steps are
-  paste-ready. See the
+- **Child permission flow:** the v0.7.38 source candidate lets the first child
+  microphone tap request each still-undetermined Speech Recognition and
+  Microphone permission in sequence, then continue the same tap into recording
+  when both are granted. Parents → App & Family → Speech & Microphone remains a
+  setup and recovery route. Issue #125 requires exact signed first-install,
+  partial-authorization, denied, authorized, and revoked verification on iPhone
+  and iPad before these steps are paste-ready. See the
   [shipping permission inventory](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md).
 
 Until every gate above is satisfied, this file is a metadata candidate, not an
@@ -70,20 +72,21 @@ execute.
 
 | Decision | Current treatment in this draft | Human gate |
 |---|---|---|
-| Made for Kids and age band | **Resolved: Made for Kids, primary age band 6–8.** This is the durable owner decision; issue #65 must enter the same value against the exact RC. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24) |
+| Made for Kids and age range | **Resolved: Made for Kids, Apple primary band `6–8`, product and in-app Profile ages 3–8.** Apple Kids Category supports one primary band rather than a combined 3–8 value. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24) |
 | Price | **Resolved: Free, with no IAP, subscription, advertising, or paid unlock in 1.0.** | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24) |
 | Family Sync in 1.0 | **Resolved: required.** The source contract is present in the audited baseline, but public availability, sharing, convergence, revocation, and remote-erasure claims remain blocked until exact-RC production acceptance. | [#40](https://github.com/darrenfu/tadawords/issues/40), [#19](https://github.com/darrenfu/tadawords/issues/19), [#41](https://github.com/darrenfu/tadawords/issues/41) |
 | Storefronts | **Resolved for 1.0: United States only.** Do not select all countries or regions, EU storefronts, or pre-order. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24), [#23](https://github.com/darrenfu/tadawords/issues/23) |
 | EU DSA trader status and displayed contact data | **No EU distribution in 1.0.** The account-level trader-status declaration remains unresolved and must not be inferred from the public website. | [#23](https://github.com/darrenfu/tadawords/issues/23) |
 | Release method | **Resolved: Manually release this version.** After approval, keep Pending Developer Release until the separately authorized #26 step. | [decision record](APP_STORE_RELEASE_DECISIONS_v0.7.27.md), [#24](https://github.com/darrenfu/tadawords/issues/24), [#26](https://github.com/darrenfu/tadawords/issues/26) |
 | Exact RC and device acceptance | **Unresolved.** Captures must come from the accepted signed RC, not this documentation branch by default. | [#22](https://github.com/darrenfu/tadawords/issues/22) |
-| Kids permission requests | **Source fixed; exact-device gate open.** Child Read has no request capability. The review path starts behind the Parent Gate at App & Family → Speech & Microphone, but first-install, denied, authorized, and revoked behavior still needs exact signed iPhone/iPad acceptance. | [#55](https://github.com/darrenfu/tadawords/issues/55), [permission inventory](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md) |
+| Kids permission requests | **Owner-approved source change; exact-device gate open.** The first Read microphone tap can request still-undetermined Speech Recognition and Microphone access in sequence and continue directly into recording. Denied, restricted, and revoked states fail closed with Ask a Parent / Settings recovery. First-install, partial-authorization, denied, authorized, and revoked behavior still needs exact signed iPhone/iPad acceptance. | [#125](https://github.com/darrenfu/tadawords/issues/125), [permission inventory](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md) |
 | App Privacy answers | **Merged inventory; conditional answer set.** The source-backed inventory covers bundled picture hints, Family Sync, device-local data, support/export flows, the privacy manifest, and every configured or dormant network path. Exact signed-build and operating-practice gates remain. | [`APP_STORE_PRIVACY_v0.7.4.md`](APP_STORE_PRIVACY_v0.7.4.md), [#17](https://github.com/darrenfu/tadawords/issues/17), [#54](https://github.com/darrenfu/tadawords/issues/54) |
-| Shipped-content rights | **Merged inventory; final release evidence blocked.** Twemoji provenance and in-app attribution are present. Cartesia account/tier evidence is preserved only for the recorded current pack; every retained generated-audio asset must be reconciled at exact RC. Pawgoo authorship/rights-chain attestation remains open. | [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md), [#32](https://github.com/darrenfu/tadawords/issues/32), [#33](https://github.com/darrenfu/tadawords/issues/33) |
+| Shipped-content rights | **Owner-confirmed; exact-archive reconciliation required.** Twemoji provenance and in-app attribution are present. Cartesia account/tier evidence is preserved for the recorded current pack. The Pawgoo representative confirmed the original-content rights chain on 2026-07-23; the exact RC must still pass the archive verifier. | [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md), [#32](https://github.com/darrenfu/tadawords/issues/32), [#33](https://github.com/darrenfu/tadawords/issues/33) |
 
 Apple states that a Made for Kids selection cannot be changed after approval,
-and subsequent updates must continue to follow the Kids Category rules. The
-owner deliberately selected the 6–8 band; it is not inferred from copy.
+and subsequent updates must continue to follow the Kids Category rules. Apple
+offers one primary band rather than the product's combined ages 3–8; do not
+infer or invent that single-band choice from public copy.
 
 ## Draft App Store metadata
 
@@ -97,13 +100,14 @@ limits come from Apple's current App Store Connect reference.
 | Primary category | `Education` | Draft category; verify at exact-RC preflight |
 | Secondary category | Leave blank | Draft; do not add Games merely for discoverability |
 | Kids Category | `Made for Kids` | Owner-approved; irreversible after App Review approval |
-| Primary Kids age band | `6–8` | Owner-approved primary audience |
+| Product age range | `3–8` | Use consistently in product metadata and profile creation/edit surfaces |
+| Primary Kids age band | `6–8` | Owner-selected on 2026-07-23; the product and in-app Profile range remain ages 3–8 |
 | Promotional text | `Turn school word lists into short Read and Write quests, with photo import, separate word libraries, and adaptive review for each learner.` | 138 characters; limit 170 |
 | Keywords | `sight words,reading,spelling,handwriting,vocabulary,school,practice,word lists,early literacy` | 93 UTF-8 bytes; limit 100 bytes |
 | Marketing URL | `https://pawgoo.app/en/tadawords` | Live audit: HTTP 200 |
 | Support URL | `https://pawgoo.app/en/support` | Live audit: HTTP 200; legal-contact sufficiency remains part of #23 |
 | Privacy Policy URL | `https://pawgoo.app/en/tadawords/privacy` | Live audit: HTTP 200 |
-| Copyright | `2026 Pawgoo LLC` | **Provisional — do not enter until #33 confirms the Pawgoo ownership/rights chain.** Apple adds the copyright symbol automatically |
+| Copyright | `2026 Pawgoo LLC` | Owner-confirmed on 2026-07-23. Apple adds the copyright symbol automatically |
 | Price | `Free` | No IAP, subscription, advertising, or paid unlock in 1.0 |
 | Availability | `United States only` | Do not select all countries/regions, EU storefronts, or pre-order |
 | Release option | `Manually release this version` | Keep Pending Developer Release until #26 authorizes release |
@@ -111,7 +115,7 @@ limits come from Apple's current App Store Connect reference.
 ### Description
 
 ```text
-Tada Words turns the exact sight words you choose into short, focused reading and writing practice.
+Made for children ages 3–8, Tada Words turns the exact sight words you choose into short, focused reading and writing practice.
 
 BUILD PERSONAL WORD LIBRARIES
 Type words one at a time or import a photo of a school list. Review every detected word before adding it to separate Read and Write libraries for each profile.
@@ -140,7 +144,7 @@ acceptance, the privacy inventory's exact-release gates, and matching public-sit
 copy are not complete. Add a source-backed Family Sync paragraph after those
 gates pass; do not describe the feature as optional release scope or imply
 tested remote erasure before the evidence exists. The owner has selected Made
-for Kids 6–8, but public wording must still be accurate and age-appropriate.
+for Kids ages 3–8, but public wording must still be accurate and age-appropriate.
 
 ## Draft App Review information
 
@@ -163,7 +167,7 @@ filled with invented personal data.
 > limited to 4,000 characters.
 
 ```text
-Tada Words is a local-first Made for Kids sight-word practice app for the 6–8 primary age band on iPhone and iPad. Core practice requires no Pawgoo account or login. Parent-opted-in Family Sync requires an available iCloud account. This build contains no advertising, third-party analytics, or in-app purchases.
+Tada Words is a local-first Made for Kids sight-word practice app for children ages 3–8 on iPhone and iPad. Core practice requires no Pawgoo account or login. Parent-opted-in Family Sync requires an available iCloud account. This build contains no advertising, third-party analytics, or in-app purchases.
 
 FIRST-LAUNCH PATH
 1. Complete the parent onboarding and create a fictional profile. No email address or phone number is requested.
@@ -176,14 +180,14 @@ PARENT GATE AND WORD IMPORT
 
 READ PATH
 1. Return to the profile and choose “Read.”
-2. [BLOCKED BY ISSUE #55 EXACT-DEVICE ACCEPTANCE — in Parents, open App & Family → Speech & Microphone and choose Set up access; verify the separate Speech Recognition and Microphone rows are Ready, then return to Read practice. Never instruct the reviewer to grant either permission from a child screen.]
+2. Tap the microphone. If Speech Recognition or Microphone access has not been decided, accept Apple's prompts. When both are allowed, the same tap continues into recording. If access is off, use the shown Ask a Parent recovery and review it under App & Family → Speech & Microphone or iOS Settings.
 
 WRITE PATH
 1. Return to the lobby and choose “Write.”
 2. Choose “Write by Hand” or “Spell with Letters.” Handwriting recognition uses Apple Vision on the device; the letter option uses the app’s own A–Z keyboard.
 
 PERMISSIONS
-Do not paste this proposed permission guidance until issue #55's exact signed build is verified. Speech and Microphone setup begins only after the Parent Gate under App & Family → Speech & Microphone; child Read only checks existing status and fails closed. Camera or Photos access is requested only after a parent chooses the corresponding import/profile-photo action. Notifications are optional and managed in the Parent area. Face ID may be requested only for a sensitive parent action present in the exact release candidate. The complete ownership list is in `SYSTEM_PERMISSION_INVENTORY_v0.7.8.md`.
+Do not paste this proposed permission guidance until issue #125's exact signed build is verified. The first microphone tap in child Read can request each still-undetermined Speech Recognition and Microphone permission in sequence. Parents can also review or finish setup under App & Family → Speech & Microphone. Denied, restricted, or revoked access is not repeatedly requested and uses Ask a Parent / iOS Settings recovery. Camera or Photos access is requested only after a parent chooses the corresponding import/profile-photo action. Notifications are optional and managed in the Parent area. Face ID may be requested only for a sensitive parent action present in the exact release candidate. The complete ownership list is in `SYSTEM_PERMISSION_INVENTORY_v0.7.8.md`.
 
 OFFLINE BEHAVIOR
 Core Read and Write practice, bundled presets, teacher-word audio, speech recognition, and handwriting recognition are designed to work without a network connection. Raw speech recordings are not saved or uploaded to Pawgoo.
@@ -286,7 +290,7 @@ exact RC preflight must confirm that these symbols and tests still apply.
 | Parents can type words or import word-sheet photos and review recognized words before adding them | [`GuardianQuickAddView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianQuickAddView.swift) (`GuardianWordManagerView`); [`AppleImageTextRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleImageTextRecognitionService.swift); [`ManualWordBatchParser.swift`](../Sources/TadaWordsContent/ManualWordBatchParser.swift) | [`TadaWordsCriticalFlowUITests.swift`](../Tests/TadaWordsUITests/TadaWordsCriticalFlowUITests.swift); [`AppleImageTextRecognitionTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleImageTextRecognitionTests.swift); [`ManualWordBatchParserTests.swift`](../Tests/TadaWordsContentTests/ManualWordBatchParserTests.swift) | Real Camera/Photos/Vision transfer still needs #22 device acceptance |
 | Separate Read and Write libraries exist for each Profile | [`RepositoryGuardianWordStore.swift`](../Sources/TadaWordsGuardianFeatures/RepositoryGuardianWordStore.swift); [`LocalJSONWordPoolRepository.swift`](../Sources/TadaWordsContent/LocalJSONWordPoolRepository.swift); [`GuardianQuickAddView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianQuickAddView.swift) | [`RepositoryGuardianWordStoreTests.swift`](../Tests/TadaWordsGuardianFeaturesTests/RepositoryGuardianWordStoreTests.swift); [`LocalJSONWordPoolRepositoryTests.swift`](../Tests/TadaWordsContentTests/LocalJSONWordPoolRepositoryTests.swift) | Capture only fictional Profiles |
 | Multiple Profiles keep separate words, progress, settings, worlds, and rewards on the current device | [`KidProfileRepositories.swift`](../Sources/TadaWordsContent/KidProfileRepositories.swift) (`LocalJSONKidProfileRepository`); [`RepositoryGuardianFamilyStore.swift`](../Sources/TadaWordsGuardianFeatures/RepositoryGuardianFamilyStore.swift); [`ProfileChooserView.swift`](../Sources/TadaWordsFeatures/ProfileChooserView.swift) | [`KidProfileRepositoryTests.swift`](../Tests/TadaWordsContentTests/KidProfileRepositoryTests.swift); [`RepositoryGuardianFamilyStoreTests.swift`](../Tests/TadaWordsGuardianFeaturesTests/RepositoryGuardianFamilyStoreTests.swift); [`TadaWordsAppModelTests.swift`](../Tests/TadaWordsFeaturesTests/TadaWordsAppModelTests.swift) | This row does not claim cross-device acceptance |
-| Read quests use speech recognition for spoken practice | [`ReadQuestView.swift`](../Sources/TadaWordsFeatures/ReadQuestView.swift); [`AppleSpeechRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechRecognitionService.swift); [`AppleSpeechPermissions.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechPermissions.swift); [`SYSTEM_PERMISSION_INVENTORY_v0.7.8.md`](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md) | [`AppleSpeechAdapterTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleSpeechAdapterTests.swift); [`ChildSpeechPermissionRouteContractTests.swift`](../Tests/TadaWordsAppShellTests/ChildSpeechPermissionRouteContractTests.swift); [`GuardianSpeechPermissionTests.swift`](../Tests/TadaWordsGuardianFeaturesTests/GuardianSpeechPermissionTests.swift); critical Read UI tests | Child Read now has check-only authorization and Parents owns setup. Issue #55 and #22 still require exact signed first-install, denied, authorized, and revoked iPhone/iPad acceptance before this becomes paste-ready reviewer guidance |
+| Read quests use speech recognition for spoken practice | [`ReadQuestView.swift`](../Sources/TadaWordsFeatures/ReadQuestView.swift); [`AppleSpeechRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechRecognitionService.swift); [`AppleSpeechPermissions.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechPermissions.swift); [`SYSTEM_PERMISSION_INVENTORY_v0.7.8.md`](SYSTEM_PERMISSION_INVENTORY_v0.7.8.md) | [`AppleSpeechAdapterTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleSpeechAdapterTests.swift); [`ChildSpeechPermissionRouteContractTests.swift`](../Tests/TadaWordsAppShellTests/ChildSpeechPermissionRouteContractTests.swift); [`GuardianSpeechPermissionTests.swift`](../Tests/TadaWordsGuardianFeaturesTests/GuardianSpeechPermissionTests.swift); critical Read UI tests | The first child microphone tap can request still-undetermined Speech Recognition and Microphone access in sequence; Parents remains a setup and recovery route. Issues #125 and #22 still require exact signed first-install, partial-authorization, denied, authorized, and revoked iPhone/iPad acceptance before this becomes paste-ready reviewer guidance |
 | Write offers handwriting and an in-app letter keyboard | [`WriteInputChooserView.swift`](../Sources/TadaWordsFeatures/WriteInputChooserView.swift); [`WriteQuestView.swift`](../Sources/TadaWordsFeatures/WriteQuestView.swift); [`SpellQuestView.swift`](../Sources/TadaWordsFeatures/SpellQuestView.swift); [`AppleHandwritingRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleHandwritingRecognitionService.swift) | [`AppleHandwritingRecognitionTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleHandwritingRecognitionTests.swift); [`SpellQuestTests.swift`](../Tests/TadaWordsFeaturesTests/SpellQuestTests.swift) | Exact-RC device handwriting requires #22 |
 | Adaptive spaced review prioritizes due and difficult words from outcomes, help, retries, and pace | [`AdaptiveRetrievalScheduler.swift`](../Sources/TadaWordsLearning/AdaptiveRetrievalScheduler.swift); [`ReviewPriority.swift`](../Sources/TadaWordsLearning/ReviewPriority.swift); [`QuestPlanner.swift`](../Sources/TadaWordsLearning/QuestPlanner.swift) | [`AdaptiveRetrievalSchedulerTests.swift`](../Tests/TadaWordsLearningTests/AdaptiveRetrievalSchedulerTests.swift); [`ReviewPriorityTests.swift`](../Tests/TadaWordsLearningTests/ReviewPriorityTests.swift); [`QuestPlannerTests.swift`](../Tests/TadaWordsLearningTests/QuestPlannerTests.swift) | Public copy says “adaptive spaced review,” not a medical or guaranteed learning outcome |
 | Parent controls are behind a multiplication challenge | [`GuardianParentGateView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianParentGateView.swift); [`GuardianRootView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianRootView.swift) | [`GuardianParentGateTests.swift`](../Tests/TadaWordsGuardianFeaturesTests/GuardianParentGateTests.swift); critical Parent UI tests | A parental gate is not itself parental consent under privacy law |
@@ -320,9 +324,10 @@ final-Profile/delete-all, and human gates pass.
   Profile deletion guidance, but it cannot delete the sole remaining Profile
   and has no complete delete-all reset. Issue #19 owns the required behavior
   and destructive exact-RC proof.
-- **Child-facing Speech or Microphone authorization:** the v0.7.8 source moves
-  permission setup behind the Parent Gate and removes requesting capability from
-  child features. Issue #55 still requires exact-device verification; do not
+- **Child-facing Speech or Microphone authorization:** the v0.7.38 source lets
+  a first child microphone tap request still-undetermined access in sequence
+  while retaining parent setup and recovery. Issue #125 still requires
+  exact-device verification; do not
   paste the proposed reviewer path until that evidence exists.
 - **EU DSA trader classification or broader storefront availability:** 1.0 is
   United States only, but #23 must still complete the account-level declaration
@@ -338,21 +343,21 @@ privacy copy still describe the pre-bundling picture-hint network behavior.
 
 | URL | Current source/content finding | Submission consequence |
 |---|---|---|
-| `https://pawgoo.app/en/tadawords` | Product route exists and describes photo import, separate word libraries, adaptive review, iPhone/iPad, optional parent-controlled Family Sync, and picture-hint downloads | Picture hints are now bundled, so the download/network wording is stale. Family Sync is required 1.0 scope but remains parent opt-in on each device; align availability language only after production acceptance. |
-| `https://pawgoo.app/en/tadawords/privacy` | Product privacy route identifies Pawgoo LLC, `privacy@pawgoo.app`, local data, Apple processing, a Twemoji CDN request, and current CloudKit limitations | The Twemoji CDN disclosure no longer matches current app source. Reconcile it with the merged privacy inventory and the accepted Family Sync data flow before submission. |
+| `https://pawgoo.app/en/tadawords` | Must say Made for Kids ages 3–8; picture hints are bundled and work offline; Family Sync is optional, off by default, and parent controlled | Verify the deployed route against the exact website commit before submission. |
+| `https://pawgoo.app/en/tadawords/privacy` | Must identify Pawgoo LLC, `privacy@pawgoo.app`, local data, exact Apple/iCloud processing, bundled Twemoji assets, and Family Sync's opt-in scope | Verify the deployed route against the exact website commit before submission. |
 | `https://pawgoo.app/en/support` | Support route identifies the product, compatibility, developer, `support@pawgoo.app`, and `privacy@pawgoo.app` | It provides working contact email, but #23 must determine any legal address/phone/DSA display obligations for selected storefronts. |
 
-No website change or deployment is part of this draft. Issue #54 owns the
-reviewed public-copy change, deployment identity, and live verification. Until
-that evidence exists, none of the HTTP-200 results above closes the
-content-consistency gate.
+Website copy and deployment are tracked independently. Record the reviewed
+website commit and live verification here before submission; an HTTP 200 alone
+does not close the content-consistency gate.
 
 ## Exact-RC preflight before upload
 
 - [ ] Record the immutable PR/archive commit, version, build, bundle ID, and
       TeamIdentifier; replace the runtime baseline at the top of this pack.
-- [ ] Apply the resolved #24 values exactly: Made for Kids, age band 6–8, Free
-      with no IAP, United States only, no pre-order, and manual release.
+- [ ] Apply the resolved #24 values exactly: Made for Kids, product and in-app
+      Profile ages 3–8, Apple primary band `6–8`, Free with
+      no IAP, United States only, no pre-order, and manual release.
 - [ ] Treat Family Sync as required 1.0 scope and complete #19/#41 production,
       physical-device, destructive test-only erasure, and human acceptance.
 - [ ] Start from the merged App Privacy inventory; verify every SDK, CloudKit
@@ -368,9 +373,16 @@ content-consistency gate.
       until #33 passes.
 - [ ] Resolve #19 with a final-Profile/delete-all route and production
       destructive evidence before claiming complete in-app or CloudKit erasure.
-- [ ] Complete #28's signed iPhone/iPad uninstall/reinstall proof for the
-      fail-closed Tada Words voiceprint-service reset, verify that an in-place
-      upgrade preserves enrollment, and reconcile final policy/support wording.
+- [ ] Confirm the #76 conservative 1.0 fallback remains enforced: no Parent
+      voice-enrollment action and no speaker verifier in production
+      composition. Keep the repository only for retained-template cleanup. See
+      [`VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md`](VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md).
+- [ ] Run #28's signed physical-device
+      `KeychainVoiceprintLifecycleDeviceTests` on the exact candidate. The
+      isolated real-Keychain proof must show retained items survive repository
+      recreation until the fail-closed scoped reset, without uninstalling the
+      user's app or touching production voiceprints. Reconcile final deployed
+      policy/support wording under #54.
 - [ ] Complete #54 and verify that the deployed Pawgoo Privacy and Support copy
       matches bundled hints, Family Sync scope, deletion limits, and Keychain
       lifecycle on the exact RC.

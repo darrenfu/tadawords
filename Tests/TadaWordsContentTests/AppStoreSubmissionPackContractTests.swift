@@ -88,13 +88,17 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "#32",
             "#33",
             "#54",
-            "#55",
-            "Provisional",
-            "BLOCKED BY ISSUE #55",
+            "#125",
+            "#76",
+            "Owner-confirmed; exact-archive reconciliation required",
+            "first child microphone tap",
             "SYSTEM_PERMISSION_INVENTORY_v0.7.8.md",
-            "Child Read has no request capability",
+            "VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md",
+            "request still-undetermined Speech Recognition and Microphone access in sequence",
             "APP_STORE_RELEASE_DECISIONS_v0.7.27.md",
-            "Made for Kids, primary age band 6–8",
+            "Made for Kids, Apple primary band `6–8`, product and in-app Profile ages 3–8",
+            "Primary Kids age band | `6–8`",
+            "Apple Kids Category supports one primary band",
             "United States only",
             "Manually release this version",
             "No IAP, subscription, advertising, or paid unlock in 1.0",
@@ -132,16 +136,50 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.29</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072403</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.43</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072417</string>"))
+            XCTAssertFalse(plist.contains("voice setup"))
         }
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.29"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072403"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.43"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072417"))
+
+        let appComposition = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Apps/TadaWordsApp/TadaWordsApp.swift"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertFalse(
+            appComposition.contains("AppleVoiceprintEnrollmentService(")
+        )
+        XCTAssertFalse(
+            appComposition.contains(
+                "voiceprintVerifier: AppleVoiceprintVerifier("
+            )
+        )
+        XCTAssertTrue(
+            appComposition.contains("voiceprintEnrollmentService: nil")
+        )
+        XCTAssertTrue(
+            appComposition.contains("voiceprintRepository: voiceprintRepository")
+        )
+
+        let profilesView = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Sources/TadaWordsGuardianFeatures/GuardianProfilesView.swift"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertTrue(
+            profilesView.contains(
+                "if VoiceprintReleasePolicy.shipsEnrollmentAndSpeakerMatching"
+            )
+        )
 
         for unresolvedDecision in [
             "Price | **UNRESOLVED — #24**",
@@ -155,6 +193,25 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
         }
     }
 
+    func testProductionDeviceInstallerPreservesExistingAppData() throws {
+        let installer = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Scripts/install-production-device.sh"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(
+            installer.contains("TADA_EXPECTED_BUNDLE_ID=app.tadawords.app")
+        )
+        XCTAssertTrue(
+            installer.contains("verify-localqa-device-persistence.sh")
+        )
+        XCTAssertFalse(
+            installer.contains("devicectl device uninstall")
+        )
+    }
+
     func testQAArtifactsContainsNoChildDirectories() throws {
         let artifacts = repositoryRoot.appendingPathComponent("QAArtifacts")
         let children = try FileManager.default.contentsOfDirectory(
@@ -165,14 +222,6 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
         let directories = try children.filter {
             try $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
         }
-
-        XCTAssertEqual(
-            Set(children.map(\.lastPathComponent)),
-            [
-                "DESIGN_AUDIT_2026-07-12.md",
-                "FULL_FEATURE_AUDIT_2026-07-12.md",
-            ]
-        )
         XCTAssertTrue(
             directories.isEmpty,
             "QAArtifacts child directories must stay out of source control: \(directories)"

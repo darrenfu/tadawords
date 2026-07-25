@@ -457,7 +457,7 @@ struct GuardianAppAndFamilyView: View {
                 accessibilityIdentifier: "guardian.app.third-party-notices",
                 action: onOpenThirdPartyNotices
             )
-            GuardianPrivacyAndSupportSection()
+            GuardianPrivacyAndSupportSection(appVersion: .current)
         }
     }
 
@@ -528,10 +528,12 @@ enum GuardianDataControlCopy {
         + "This removes that child’s words, settings, quest history, rewards, and saved picture from this device."
 
     static let permissionManagement =
-        "Use Speech & Microphone above for first setup. To review or change access later, open the iOS Settings app, choose Apps, then Tada Words to review Camera, Photos, Microphone, Speech Recognition, and Notifications."
+        "Use Speech & Microphone above to review or finish setup. To change access later, open the iOS Settings app, choose Apps, then Tada Words to review Camera, Photos, Microphone, Speech Recognition, and Notifications."
 }
 
 private struct GuardianPrivacyAndSupportSection: View {
+    let appVersion: GuardianAppVersionPresentation
+
     var body: some View {
         GuardianCard {
             VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.medium) {
@@ -571,6 +573,18 @@ private struct GuardianPrivacyAndSupportSection: View {
                     symbol: "gearshape.fill",
                     accessibilityIdentifier: "guardian.app.permission-management"
                 )
+
+                Divider()
+
+                Text(appVersion.footerText)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .accessibilityLabel(appVersion.footerText)
+                    .accessibilityIdentifier(
+                        GuardianAppVersionPresentation.accessibilityIdentifier
+                    )
             }
         }
         .accessibilityIdentifier("guardian.app.privacy-and-support")

@@ -123,11 +123,13 @@ private struct GuardianProfileManagementCard: View {
         Button("Edit", action: onEdit)
             .buttonStyle(.bordered)
             .accessibilityIdentifier("guardian.profile.\(profile.id).edit")
-        Button(action: onVoiceprint) {
-            Label(voiceprintTitle, systemImage: "waveform.badge.mic")
+        if VoiceprintReleasePolicy.shipsEnrollmentAndSpeakerMatching {
+            Button(action: onVoiceprint) {
+                Label(voiceprintTitle, systemImage: "waveform.badge.mic")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("guardian.profile.\(profile.id).voice")
         }
-        .buttonStyle(.bordered)
-        .accessibilityIdentifier("guardian.profile.\(profile.id).voice")
     }
 
     private var voiceprintTitle: String {
@@ -374,19 +376,13 @@ struct GuardianProfileEditorView: View {
                 .pickerStyle(.menu)
                 TadaAgePicker(
                     selection: $ageYears,
-                    ages: existingProfile == nil
-                        ? ProfileAgePolicy.supportedAges
-                        : ProfileAgePolicy.durableAges,
+                    ages: ProfileAgePolicy.supportedAges,
                     prompt: "Age",
                     tint: GuardianSemanticTokens.primary
                 )
-                Text(
-                    existingProfile == nil
-                        ? "Choose an age from 3 to 8. Changing age never changes the grade above."
-                        : "Changing age never changes the grade above. Legacy profiles may keep ages from 2 to 18."
-                )
-                .font(.system(.caption, design: .rounded, weight: .medium))
-                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                Text("Choose an age from 3 to 8. Changing age never changes the grade above.")
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
             }
         }
     }
@@ -477,7 +473,7 @@ struct GuardianProfileEditorView: View {
         guard !normalizedName.isEmpty,
             normalizedName.count
                 <= RepositoryGuardianFamilyStore.maximumDisplayNameCharacterCount,
-            existingProfile != nil || ageYears.map(ProfileAgePolicy.isSupported) == true
+            ageYears.map(ProfileAgePolicy.isSupported) == true
         else { return nil }
 
         return GuardianProfileDraft(
@@ -539,43 +535,13 @@ extension ProfileAvatar {
 }
 
 #if os(iOS)
-    private struct GuardianCameraPicker: UIViewControllerRepresentable {
+    private struct GuardianCameraPicker: View {
         let onImage: (Data) -> Void
         let onCancel: () -> Void
 
-        func makeCoordinator() -> Coordinator {
-            Coordinator(onImage: onImage, onCancel: onCancel)
-        }
-
-        func makeUIViewController(context: Context) -> UIImagePickerController {
-            let controller = UIImagePickerController()
-            controller.sourceType = .camera
-            controller.cameraCaptureMode = .photo
-            controller.delegate = context.coordinator
-            return controller
-        }
-
-        func updateUIViewController(
-            _ uiViewController: UIImagePickerController,
-            context: Context
-        ) {}
-
-        final class Coordinator: NSObject, UINavigationControllerDelegate,
-            UIImagePickerControllerDelegate
-        {
-            let onImage: (Data) -> Void
-            let onCancel: () -> Void
-
-            init(onImage: @escaping (Data) -> Void, onCancel: @escaping () -> Void) {
-                self.onImage = onImage
-                self.onCancel = onCancel
-            }
-
-            func imagePickerController(
-                _ picker: UIImagePickerController,
-                didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
-            ) {
-                guard let image = info[.originalImage] as? UIImage,
+        var body: some View {
+            GuardianSystemCameraPicker { image in
+                guard
                     let source = image.jpegData(compressionQuality: 0.9),
                     let prepared = ProfilePhotoPreparation.prepare(source)
                 else {
@@ -583,9 +549,7 @@ extension ProfileAvatar {
                     return
                 }
                 onImage(prepared)
-            }
-
-            func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            } onCancel: {
                 onCancel()
             }
         }

@@ -43,8 +43,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tadawords.app
         PRODUCT_NAME: Tada Words
-        MARKETING_VERSION: 0.7.29
-        CURRENT_PROJECT_VERSION: 2026072403
+        MARKETING_VERSION: 0.7.43
+        CURRENT_PROJECT_VERSION: 2026072417
         TADA_GIT_COMMIT: unknown
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -71,16 +71,16 @@ targets:
       path: Apps/TadaWordsApp/Info.plist
       properties:
         CFBundleDisplayName: Tada Words
-        CFBundleShortVersionString: "0.7.29"
-        CFBundleVersion: "2026072403"
+        CFBundleShortVersionString: "0.7.43"
+        CFBundleVersion: "2026072417"
         TadaWordsGitCommit: "$(TADA_GIT_COMMIT)"
         CKSharingSupported: true
         ITSAppUsesNonExemptEncryption: false
-        NSMicrophoneUsageDescription: A parent enables microphone access for spoken Read Practice and voice setup. Tada Words analyzes short recordings on device; raw audio is not saved or uploaded.
+        NSMicrophoneUsageDescription: Allow microphone access when starting spoken Read Practice. Tada Words analyzes short recordings on device; raw audio is not saved or uploaded.
         NSFaceIDUsageDescription: Tada Words uses Face ID to protect sensitive parent actions such as sharing or deleting a profile.
         NSCameraUsageDescription: Tada Words uses the camera only when a parent chooses a profile photo or scans a word sheet for on-device text recognition.
         NSPhotoLibraryUsageDescription: Tada Words lets a parent choose a profile photo or a word-sheet photo for on-device text recognition.
-        NSSpeechRecognitionUsageDescription: A parent enables on-device speech recognition so Tada Words can compare a spoken practice word and give immediate feedback.
+        NSSpeechRecognitionUsageDescription: Allow on-device speech recognition when starting spoken Read Practice so Tada Words can compare a practice word and give immediate feedback.
         UIRequiresFullScreen: true
         UIBackgroundModes:
           - remote-notification
@@ -140,6 +140,21 @@ targets:
           PRODUCT_BUNDLE_IDENTIFIER: app.tadawords.app.uitests
           DEVELOPMENT_TEAM: 7R78Q4HP86
 
+  TadaWordsPhotoEditorTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/TadaWordsGuardianFeaturesTests/GuardianPhotoEditorTests.swift
+    dependencies:
+      - package: TadaWordsModules
+        product: TadaWordsGuardianFeatures
+      - package: TadaWordsModules
+        product: TadaWordsDomain
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.tadawords.photo-editor-tests
+        GENERATE_INFOPLIST_FILE: true
+
 schemes:
   TadaWords:
     build:
@@ -176,3 +191,11 @@ schemes:
       config: LocalQA
       targets:
         - name: TadaWordsDeviceTests
+  TadaWordsPhotoEditorTests:
+    build:
+      targets:
+        TadaWordsPhotoEditorTests: [test]
+    test:
+      config: Debug
+      targets:
+        - name: TadaWordsPhotoEditorTests

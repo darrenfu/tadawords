@@ -33,7 +33,7 @@ final class SystemPermissionInventoryContractTests: XCTestCase {
         }
     }
 
-    func testKnownShippingRequestSurfacesStayAtAuditedAdultOwnedSites() throws {
+    func testKnownShippingRequestSurfacesStayAtAuditedPlatformSites() throws {
         let inventory = try permissionInventory()
         let shippingSources =
             try swiftSources(
@@ -79,8 +79,7 @@ final class SystemPermissionInventoryContractTests: XCTestCase {
                 sourceToken: "UIImagePickerController()",
                 inventoryToken: "UIImagePickerController",
                 expectedPaths: [
-                    "Sources/TadaWordsGuardianFeatures/GuardianProfilesView.swift",
-                    "Sources/TadaWordsGuardianFeatures/GuardianQuickAddView.swift",
+                    "Sources/TadaWordsGuardianFeatures/GuardianSystemCameraPicker.swift"
                 ]
             ),
             RequestSurface(
@@ -115,12 +114,12 @@ final class SystemPermissionInventoryContractTests: XCTestCase {
             )
             XCTAssertTrue(
                 surface.expectedPaths.allSatisfy { !$0.contains("TadaWordsFeatures/") },
-                "A child feature owns \(surface.sourceToken)"
+                "A child feature directly owns \(surface.sourceToken)"
             )
         }
     }
 
-    func testInventoryLocksChildRoutesToCheckOnlyBehavior() throws {
+    func testInventoryLocksChildRoutesToContextualTapBehavior() throws {
         let inventory = try permissionInventory()
         let normalizedInventory =
             inventory
@@ -141,8 +140,10 @@ final class SystemPermissionInventoryContractTests: XCTestCase {
         }
 
         for contract in [
-            "cannot receive the Parents-only request closure",
-            "`isAuthorized()` only",
+            "Only an active microphone tap calls `authorizeMicrophoneTap()`",
+            "cannot call Apple permission APIs directly",
+            "Rapid repeated taps cannot overlap",
+            "cancellation after the first prompt prevents the second prompt",
             "one physical iPhone and one physical iPad",
         ] {
             XCTAssertTrue(
@@ -150,6 +151,50 @@ final class SystemPermissionInventoryContractTests: XCTestCase {
                 "Missing release contract: \(contract)"
             )
         }
+    }
+
+    func testPortraitOnlySystemCameraIsTopLevelAndFullScreen() throws {
+        let cameraSource = try source(
+            repositoryRoot.appendingPathComponent(
+                "Sources/TadaWordsGuardianFeatures/GuardianSystemCameraPicker.swift"
+            )
+        )
+
+        for requiredToken in [
+            ".iOS(interfaceOrientations: .portrait)",
+            "interfaceOrientation.isPortrait == true",
+            "picker.modalPresentationStyle = .fullScreen",
+            "presenter.present(picker, animated: false)",
+        ] {
+            XCTAssertTrue(
+                cameraSource.contains(requiredToken),
+                "The portrait-only system camera lost: \(requiredToken)"
+            )
+        }
+        let portraitGate = try XCTUnwrap(
+            cameraSource.range(of: "interfaceOrientation.isPortrait == true")
+        )
+        let pickerCreation = try XCTUnwrap(
+            cameraSource.range(of: "let picker = UIImagePickerController()")
+        )
+        XCTAssertLessThan(
+            portraitGate.lowerBound,
+            pickerCreation.lowerBound,
+            "The system camera must not be created until the scene is portrait."
+        )
+        XCTAssertFalse(
+            cameraSource.contains(
+                "requestGeometryUpdate(\n                    "
+                    + ".iOS(interfaceOrientations: .portrait)\n                ) { _ in"
+            ),
+            "A denied camera geometry request must not be silently ignored."
+        )
+        XCTAssertFalse(
+            cameraSource.split(separator: "\n").contains { line in
+                line.contains("class") && line.contains(": UIImagePickerController")
+            },
+            "Apple's system camera must be presented as-is, not subclassed."
+        )
     }
 
     private struct RequestSurface {
