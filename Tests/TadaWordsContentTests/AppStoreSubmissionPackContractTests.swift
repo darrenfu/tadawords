@@ -139,7 +139,7 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             )
         )
         XCTAssertTrue(productionPlist.contains("<string>0.7.39</string>"))
-        XCTAssertTrue(productionPlist.contains("<string>2026072413</string>"))
+        XCTAssertTrue(productionPlist.contains("<string>2026072415</string>"))
         XCTAssertFalse(productionPlist.contains("voice setup"))
 
         for plistPath in ["Apps/TadaWordsApp/InfoLocalQA.plist"] {
@@ -149,7 +149,7 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
             XCTAssertTrue(plist.contains("<string>0.7.39</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072413</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072415</string>"))
             XCTAssertFalse(plist.contains("voice setup"))
         }
 
@@ -165,14 +165,14 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             )
         )
         XCTAssertTrue(debugPlist.contains("<string>0.7.39</string>"))
-        XCTAssertTrue(debugPlist.contains("<string>2026072413</string>"))
+        XCTAssertTrue(debugPlist.contains("<string>2026072415</string>"))
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
         XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.39"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072413"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072415"))
 
         let appComposition = try String(
             contentsOf: repositoryRoot.appendingPathComponent(
