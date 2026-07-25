@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import XCTest
 
 @testable import TadaWordsFeatures
@@ -7,7 +8,7 @@ final class QuestStarFeedbackTests: XCTestCase {
     func testEarnedEventCommitsExactlyOnceAtItsTargetSlot() {
         var state = QuestStarProgressState(earnedCount: 2)
         let event = QuestStarFeedbackEvent(
-            id: 7,
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000007")!,
             kind: .earned,
             targetSlot: 2
         )
@@ -24,7 +25,7 @@ final class QuestStarFeedbackTests: XCTestCase {
     func testMissedEventNeverChangesEarnedProgress() {
         var state = QuestStarProgressState(earnedCount: 2)
         let event = QuestStarFeedbackEvent(
-            id: 8,
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000008")!,
             kind: .missed,
             targetSlot: 2
         )
@@ -36,7 +37,9 @@ final class QuestStarFeedbackTests: XCTestCase {
 
     func testTrajectoryTravelsBottomToTopAndEndsAtExactSlot() {
         let slotCenter = CGPoint(x: 132, y: 18)
+        let source = CGPoint(x: 110, y: 496)
         let trajectory = QuestStarTrajectory(
+            source: source,
             target: slotCenter,
             viewportSize: CGSize(width: 220, height: 800),
             targetSlot: 3
@@ -50,6 +53,7 @@ final class QuestStarFeedbackTests: XCTestCase {
 
     func testMissFloorIsTenPercentAboveBottomWithVisibleBounce() {
         let trajectory = QuestStarTrajectory(
+            source: CGPoint(x: 90, y: 496),
             target: CGPoint(x: 80, y: 18),
             viewportSize: CGSize(width: 180, height: 800),
             targetSlot: 1
@@ -66,5 +70,12 @@ final class QuestStarFeedbackTests: XCTestCase {
         state.synchronize(earnedCount: 4)
 
         XCTAssertEqual(state.earnedCount, 4)
+    }
+
+    func testEachFeedbackEventGetsAUniqueIdentity() {
+        let first = QuestStarFeedbackEvent(kind: .missed, targetSlot: 1)
+        let second = QuestStarFeedbackEvent(kind: .missed, targetSlot: 1)
+
+        XCTAssertNotEqual(first.id, second.id)
     }
 }

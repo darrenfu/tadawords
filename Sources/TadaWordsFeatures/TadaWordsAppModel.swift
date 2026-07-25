@@ -1430,6 +1430,11 @@ final class TadaWordsAppModel: ObservableObject {
             completedAt: pending.completionRecordedAt
         )
         let replayPrompts = focusedReplayPrompts(for: quest)
+        let correctWordCount = Set(
+            quest.attempts.compactMap { attempt in
+                attempt.outcome.isCorrect ? attempt.wordPromptID : nil
+            }
+        ).count
         focusedReplaySeed =
             replayPrompts.isEmpty
             ? nil
@@ -1452,7 +1457,8 @@ final class TadaWordsAppModel: ObservableObject {
                 score: score,
                 runKind: quest.launch.runKind,
                 rewardGrant: writeResult.rewardGrant,
-                replayWordCount: replayPrompts.count
+                replayWordCount: replayPrompts.count,
+                correctWordCount: correctWordCount
             )
         )
     }

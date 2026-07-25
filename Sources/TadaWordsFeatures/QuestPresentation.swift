@@ -250,23 +250,29 @@ struct QuestResultViewState {
     let runKind: DailyQuestRunKind
     let rewardGrant: RewardGrant?
     let replayWordCount: Int
+    let correctWordCount: Int
 
     init(
         mode: LearningMode,
         score: QuestScore,
         runKind: DailyQuestRunKind = .today,
         rewardGrant: RewardGrant? = nil,
-        replayWordCount: Int = 0
+        replayWordCount: Int = 0,
+        correctWordCount: Int? = nil
     ) {
         self.mode = mode
         self.score = score
         self.runKind = runKind
         self.rewardGrant = rewardGrant
         self.replayWordCount = max(0, replayWordCount)
+        self.correctWordCount = max(
+            0,
+            correctWordCount ?? score.firstIndependentCorrectCount
+        )
     }
 
     var earnedStarCount: Int {
-        score.stars.count
+        correctWordCount
     }
 
     var points: Int {

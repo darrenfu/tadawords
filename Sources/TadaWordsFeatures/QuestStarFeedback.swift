@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 enum QuestStarFeedbackKind: Equatable, Sendable {
@@ -6,14 +7,24 @@ enum QuestStarFeedbackKind: Equatable, Sendable {
 }
 
 struct QuestStarFeedbackEvent: Equatable, Identifiable, Sendable {
-    let id: Int
+    let id: UUID
     let kind: QuestStarFeedbackKind
     let targetSlot: Int
+
+    init(
+        id: UUID = UUID(),
+        kind: QuestStarFeedbackKind,
+        targetSlot: Int
+    ) {
+        self.id = id
+        self.kind = kind
+        self.targetSlot = targetSlot
+    }
 }
 
 struct QuestStarProgressState: Equatable, Sendable {
     private(set) var earnedCount: Int
-    private(set) var lastHandledEventID: Int?
+    private(set) var lastHandledEventID: UUID?
 
     init(earnedCount: Int) {
         self.earnedCount = max(0, earnedCount)
@@ -47,18 +58,15 @@ struct QuestStarTrajectory: Equatable, Sendable {
     let bounceHeight: CGFloat
 
     init(
+        source: CGPoint,
         target: CGPoint,
         viewportSize: CGSize,
         targetSlot: Int
     ) {
         let safeHeight = max(180, viewportSize.height)
-        let source = CGPoint(
-            x: viewportSize.width * 0.5,
-            y: safeHeight * 0.56
-        )
+        self.source = source
         let horizontalDelta = target.x - source.x
         let alternatingBend: CGFloat = targetSlot.isMultiple(of: 2) ? 44 : -44
-        self.source = source
         control = CGPoint(
             x: source.x + horizontalDelta * 0.46 + alternatingBend,
             y: target.y + (source.y - target.y) * 0.43
@@ -94,7 +102,7 @@ struct QuestStarProgressBar: View {
     let earnedStarCount: Int
     let totalStarCount: Int
     let feedbackEvent: QuestStarFeedbackEvent?
-    let viewportHeight: CGFloat
+    let feedbackViewportFrame: CGRect
     let accent: Color
     let surface: Color
 
@@ -106,6 +114,7 @@ struct QuestStarProgressBar: View {
     @State private var transientOpacity: CGFloat = 0
     @State private var transientScale: CGFloat = 1
     @State private var committingSlot: Int?
+    @State private var barFrame: CGRect = .zero
 
     private let horizontalPadding: CGFloat = 8
 
@@ -113,14 +122,14 @@ struct QuestStarProgressBar: View {
         earnedStarCount: Int,
         totalStarCount: Int,
         feedbackEvent: QuestStarFeedbackEvent?,
-        viewportHeight: CGFloat,
+        feedbackViewportFrame: CGRect,
         accent: Color,
         surface: Color
     ) {
         self.earnedStarCount = earnedStarCount
         self.totalStarCount = totalStarCount
         self.feedbackEvent = feedbackEvent
-        self.viewportHeight = viewportHeight
+        self.feedbackViewportFrame = feedbackViewportFrame
         self.accent = accent
         self.surface = surface
         _progressState = State(
@@ -144,12 +153,28 @@ struct QuestStarProgressBar: View {
         .overlay(alignment: .topLeading) {
             transientLayer
                 .frame(
-                    width: barWidth,
-                    height: max(180, viewportHeight),
+                    width: feedbackViewportFrame.width,
+                    height: max(180, feedbackViewportFrame.height),
                     alignment: .topLeading
+                )
+                .offset(
+                    x: feedbackViewportFrame.minX - barFrame.minX,
+                    y: feedbackViewportFrame.minY - barFrame.minY
                 )
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
+        }
+        .background {
+            GeometryReader { proxy in
+                let frame = proxy.frame(in: .global)
+                Color.clear
+                    .onAppear {
+                        barFrame = frame
+                    }
+                    .onChange(of: frame) { _, newFrame in
+                        barFrame = newFrame
+                    }
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Star progress")
@@ -219,14 +244,8 @@ struct QuestStarProgressBar: View {
 
     @ViewBuilder
     private var transientLayer: some View {
-        if let activeEvent {
-            let target = slotCenter(for: activeEvent.targetSlot)
-            let size = CGSize(width: barWidth, height: max(180, viewportHeight))
-            let trajectory = QuestStarTrajectory(
-                target: target,
-                viewportSize: size,
-                targetSlot: activeEvent.targetSlot
-            )
+        if let activeEvent, barFrame != .zero {
+            let trajectory = trajectory(for: activeEvent)
 
             if activeEvent.kind == .earned {
                 fadingTrail(trajectory: trajectory)
@@ -241,7 +260,7 @@ struct QuestStarProgressBar: View {
                     .opacity(transientOpacity)
             } else {
                 missedStar
-                    .position(x: target.x, y: fallingY)
+                    .position(x: trajectory.target.x, y: fallingY)
                     .scaleEffect(transientScale)
                     .opacity(transientOpacity)
             }
@@ -303,14 +322,7 @@ struct QuestStarProgressBar: View {
     private func animate(_ event: QuestStarFeedbackEvent) async {
         resetTransient()
         activeEvent = event
-        let trajectory = QuestStarTrajectory(
-            target: slotCenter(for: event.targetSlot),
-            viewportSize: CGSize(
-                width: barWidth,
-                height: max(180, viewportHeight)
-            ),
-            targetSlot: event.targetSlot
-        )
+        let trajectory = trajectory(for: event)
 
         if reduceMotion {
             if progressState.commit(event) {
@@ -391,5 +403,29 @@ struct QuestStarProgressBar: View {
         transientOpacity = 0
         transientScale = 1
         committingSlot = nil
+    }
+
+    private func trajectory(
+        for event: QuestStarFeedbackEvent
+    ) -> QuestStarTrajectory {
+        let viewportSize = CGSize(
+            width: feedbackViewportFrame.width,
+            height: max(180, feedbackViewportFrame.height)
+        )
+        let localSlot = slotCenter(for: event.targetSlot)
+        let target = CGPoint(
+            x: barFrame.minX - feedbackViewportFrame.minX + localSlot.x,
+            y: barFrame.minY - feedbackViewportFrame.minY + localSlot.y
+        )
+        let source = CGPoint(
+            x: viewportSize.width * 0.5,
+            y: viewportSize.height * 0.62
+        )
+        return QuestStarTrajectory(
+            source: source,
+            target: target,
+            viewportSize: viewportSize,
+            targetSlot: event.targetSlot
+        )
     }
 }
