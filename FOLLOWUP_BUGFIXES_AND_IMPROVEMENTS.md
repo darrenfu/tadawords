@@ -1492,7 +1492,7 @@ trademark clearance or a legal opinion.
 - Adds deterministic source hashes for the zodiac master and twelve exports,
   plus archive inspection for all twelve compiled asset names.
 - Replaces stale #32/#33 blocker wording with an exact-content-set delta gate.
-- Reconciles the inventory with the v0.7.39 App Store acceptance baseline
+- Reconciles the inventory with the v0.7.40 app-version diagnostics baseline
   without changing child data, Apple account state, App Store submission,
   CloudKit records, or runtime product behavior.
 
