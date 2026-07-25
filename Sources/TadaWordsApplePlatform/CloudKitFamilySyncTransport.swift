@@ -1524,13 +1524,28 @@ public actor CloudKitFamilySyncTransport:
                 zoneID: zoneID
             )
             if metadataStore.isQuarantined(recordID: recordID, scope: scope) {
-                blockedFailures.append(
-                    FamilySyncTransportFailure(
-                        key: operation.key,
-                        category: .compatibility
+                let recoveredHistoricalConflict: Bool
+                switch operation {
+                case .save(let record):
+                    recoveredHistoricalConflict =
+                        try metadataStore
+                        .recoverByteEquivalentHistoricalProfileConflict(
+                            currentLocalRecord: record,
+                            recordID: recordID,
+                            scope: scope
+                        )
+                case .delete:
+                    recoveredHistoricalConflict = false
+                }
+                guard recoveredHistoricalConflict else {
+                    blockedFailures.append(
+                        FamilySyncTransportFailure(
+                            key: operation.key,
+                            category: .compatibility
+                        )
                     )
-                )
-                continue
+                    continue
+                }
             }
             let record: CKRecord?
             switch operation {
