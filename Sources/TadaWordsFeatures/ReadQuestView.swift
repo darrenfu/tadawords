@@ -15,6 +15,7 @@ struct ReadQuestView: View {
 
     @ObservedObject private var questTimer: QuestTimerModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var attemptState = QuestAttemptStateMachine()
     @State private var isListening = false
@@ -127,6 +128,10 @@ struct ReadQuestView: View {
         }
         .task(id: questTimer.isEmergency) {
             await audioExperienceService.setEmergencyMode(questTimer.isEmergency)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .background else { return }
+            cancelListeningForBackground()
         }
         .sensoryFeedback(.success, trigger: successFeedbackTrigger)
     }
@@ -451,7 +456,7 @@ struct ReadQuestView: View {
         questTimer.suspend(for: .speechRecognition)
         listeningTask?.cancel()
         listeningTask = Task { @MainActor in
-            let isAuthorized = await permissionActions.isAuthorized()
+            let isAuthorized = await permissionActions.authorizeMicrophoneTap()
             didCheckPermission = true
             isCheckingPermission = false
             guard !Task.isCancelled, !isPaused else {
@@ -468,8 +473,6 @@ struct ReadQuestView: View {
                 return
             }
 
-            // The check only reads current authorization. Parent setup owns all
-            // system prompts, so a child tap can never start one.
             if shouldResetResponseClock {
                 responseClock.reset(at: questTimer.elapsedSeconds)
             }
@@ -782,6 +785,14 @@ struct ReadQuestView: View {
         questTimer.resume(from: .speechRecognition)
         questTimer.resume(from: .promptPlayback)
         isPaused = true
+    }
+
+    private func cancelListeningForBackground() {
+        listeningTask?.cancel()
+        attemptState.cancelAttempt()
+        isListening = false
+        isCheckingPermission = false
+        questTimer.resume(from: .speechRecognition)
     }
 
     private func resume() {

@@ -69,7 +69,7 @@ struct GuardianSpeechPermissionSetupView: View {
                         Label("Set up Read Practice", systemImage: "waveform.badge.mic")
                             .font(.system(.title2, design: .rounded, weight: .bold))
                         Text(
-                            "Set this up here before your child uses Read Practice. Child screens only check access and never show an iOS permission prompt."
+                            "You can review or finish setup here. If access has not been decided, the first microphone tap in Read Practice can also show Apple's Speech Recognition and Microphone prompts."
                         )
                         .font(.system(.body, design: .rounded, weight: .medium))
                         .foregroundStyle(GuardianSemanticTokens.secondaryForeground)

@@ -224,7 +224,7 @@ struct TadaWordsApp: App {
     private var currentSpeechPermissionState: @Sendable () async -> SpeechPermissionState {
         let controller = speechPermissionController
         return {
-            controller.currentState()
+            await controller.currentState()
         }
     }
 

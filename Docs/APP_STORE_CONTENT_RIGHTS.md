@@ -1,9 +1,9 @@
 # App Store content-rights inventory
 
-- Exact source baseline inspected: `4bf1ef30f7a28721b2dab4840cb8a2ab65a75f1b`
+- Exact source baseline inspected: `a60c906f163bb564143e14fa0fdd8189152b7041`
 - Content-bearing Third-Party Notices implementation: `1fd65c583583bf9ec6b01a4f5cacee3a4c286011`
-- Final evidence-freeze identity: `0.7.35 / 2026072409`
-- Audit date: 2026-07-23
+- Final evidence-freeze identity: `0.7.41 / 2026072415`
+- Audit date: 2026-07-25
 - Scope: production iOS target, repository-owned App Store/QA captures, runtime family content, and test-only fixtures
 
 This is an engineering evidence inventory, not a legal opinion. It records what

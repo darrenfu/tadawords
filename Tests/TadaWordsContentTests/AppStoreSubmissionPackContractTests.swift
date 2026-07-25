@@ -88,14 +88,15 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "#32",
             "#33",
             "#54",
-            "#55",
+            "#125",
             "#76",
             "Finalized for the enumerated content set",
             "#33 preserves the Pawgoo owner attestation",
-            "BLOCKED BY ISSUE #55",
+            "Owner-confirmed; exact-archive reconciliation required",
+            "first child microphone tap",
             "SYSTEM_PERMISSION_INVENTORY_v0.7.8.md",
             "VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md",
-            "Child Read has no request capability",
+            "request still-undetermined Speech Recognition and Microphone access in sequence",
             "APP_STORE_RELEASE_DECISIONS_v0.7.27.md",
             "Made for Kids, Apple primary band `6–8`, product and in-app Profile ages 3–8",
             "Primary Kids age band | `6–8`",
@@ -137,8 +138,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.35</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072409</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.41</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072415</string>"))
             XCTAssertFalse(plist.contains("voice setup"))
         }
 
@@ -146,8 +147,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.35"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072409"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.41"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072415"))
 
         let appComposition = try String(
             contentsOf: repositoryRoot.appendingPathComponent(
@@ -192,6 +193,25 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 "Resolved #24 decision regressed: \(unresolvedDecision)"
             )
         }
+    }
+
+    func testProductionDeviceInstallerPreservesExistingAppData() throws {
+        let installer = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Scripts/install-production-device.sh"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(
+            installer.contains("TADA_EXPECTED_BUNDLE_ID=app.tadawords.app")
+        )
+        XCTAssertTrue(
+            installer.contains("verify-localqa-device-persistence.sh")
+        )
+        XCTAssertFalse(
+            installer.contains("devicectl device uninstall")
+        )
     }
 
     private var repositoryRoot: URL {

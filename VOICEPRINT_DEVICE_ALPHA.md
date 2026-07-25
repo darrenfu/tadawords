@@ -1,3 +1,95 @@
+<!-- TADA_BILINGUAL_DOC: English is the default reading language. The original source text is preserved for verification. -->
+<a id="english-default"></a>
+
+> **Languages / 语言：** **English (default) / 英文（默认）** · [简体中文](#简体中文版)
+
+# Tada Words Childrenvoiceprint Device Alpha Conclusion
+
+Date: 2026-07-12
+
+## conclusion
+
+At present, the "Device End Alpha Basic" can be delivered safely, but **it is not possible to mark the child voiceprint as production completed, nor is it possible to connect the speaker mismatch to the child's wrong answer**.
+
+The reason is not that the iOS model cannot run, but that the public scheme lacks credible verification for 4-year-old children, household noise and single sight word phrase sounds. At this stage, the correct semantic meaning of the product is: voiceprint only provides a non-blocking confidence signal; unavailability or suspected mismatch can only trigger technical retry or be completely ignored.
+
+## Apple capability boundaries
+
+- Apple [Speech framework](https://developer.apple.com/documentation/speech/) is responsible for speech-to-text, and does not provide speaker identity verification. `supportsOnDeviceRecognition` only indicates whether ASR can run offline.
+- [`setVoiceProcessingEnabled`](https://developer.apple.com/documentation/avfaudio/avaudioionode/setvoiceprocessingenabled%28_%3A%29) and [`voiceChat`](https://developer.apple.com/documentation/avfaudio/avaudiosession/mode-swift.struct/voicechat) of `AVAudioEngine` can provide voice processing such as echo cancellation and automatic gain, but they cannot guarantee that "only the child's voice will be left".
+- [Core ML](https://developer.apple.com/documentation/coreml) can fully localize inference; therefore, there is no need for a server database or uploading recordings.
+- Finally, embedding is suitable for storing in the Keychain and using [`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`](https://developer.apple.com/documentation/security/ksecattraccessiblewhenunlockedthisdeviceonly), so as not to migrate to new devices and not participate in iCloud Keychain synchronization.
+- Apple requires explicit consent and visible/audible prompts for microphone collection; Kids Category also requires careful handling of child data, see [App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/).
+
+## Candidate plan evaluation
+
+| Scheme | License / Size | iOS Local Reasoning | Applicability for 4-year-old children | Conclusion |
+|---|---|---|---|---|
+| Apple Speech + Voice Processing | System framework, no additional models | is | no speaker verification | Reserved for ASR and noise reduction, cannot claim voiceprint |
+| [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) + [3D-Speaker CAM++ Chinese and English models](https://modelscope.cn/models/iic/speech_campplus_sv_zh_en_16k-common_advanced) | Apache-2.0; model 28,281,164 bytes; official iOS no-TTS package 41,692,409 bytes | official support iOS arm64, Swift/C API, CPU/Core ML provider | Adult/general corpus, no 4-year verification | **Device Alpha preferred**, not included in production scoring |
+| [WeSpeaker](https://github.com/wenet-e2e/wespeaker) | Apache-2.0; ONNX about 26–114 MB | Can be deployed by sherpa-onnx | Main VoxCeleb/CNCeleb adult data | Can be used as a comparison model, not prioritized integration |
+| [SpeechBrain ECAPA-TDNN](https://github.com/speechbrain/speechbrain) | Apache-2.0; [Pre-trained package about 89.1 MB](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb/tree/main) | PyTorch scheme, no first-class native iOS package | VoxCeleb adult data | Optional |
+| [NVIDIA TitaNet-Large](https://huggingface.co/nvidia/speakerverification_en_titanet_large) | CC-BY-4.0; 23M parameters | Can be converted by yourself or use ONNX | Model cards clearly indicate that fine-tuning is required across domains, and the training set is mainly adult speech | Do not select the first edition |
+| `Otosaku/NeMoSpeaker-iOS` | README states MIT, 7/14/27 MB | Core ML Swift API | No child verification | Does not use: repository There is no LICENSE file, and the conversion model comes from Google Drive. The non-existent Tests resource is declared in the checkout, which cannot be used as a credible dependency |
+
+## Local smoke testing
+
+There is no administrator permission, Apple ID or password requirement locally. The downloads come from the official GitHub Release of sherpa-onnx:
+
+- `sherpa-onnx` Python 1.13.4 (native arm64)
+- `3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx`
+  - SHA-256：`aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2`
+- `sherpa-onnx-v1.13.4-ios-no-tts.tar.bz2`
+  - SHA-256：`dcc5f1748144e88bdb17dfb7b9e5d06d194f478cdb6047adc133f9480c473b1a`
+  - After decompression iOS device slice: sherpa static library is about 16 MB, ONNX Runtime framework is about 42 MB; plus the model is about 28 MB. The real App Store download/installation increment still needs to be measured after the final link.
+
+192-bit embedding results of the official adult sample:
+
+| Comparison | cosine similarity |
+|---|---:|
+| Fangjun, two excerpts from the same speaker | 0.8095 |
+| Leijun, two excerpts from the same speaker | 0.7776 |
+| Fangjun vs Leijun | 0.2476 |
+
+On the local M4 and Core ML provider, the single embedding of 2.3-5.2-second clips takes about 18-22 ms. This only proves that the model and the local execution chain can run, **but does not prove the iPhone physical device performance or child accuracy**.
+
+The short video smoke test exposed the core risk of sight-word scenes. Compared with the other audio segment of the same adult speaker, the similarity when extracting 0.5 seconds is only `0.5061`, and 1.0 seconds is `0.7402`; the official example threshold is `0.6`. When children read only one word, it is often less than a second, so they cannot judge the speaker word by word. A safer Alpha is to form a session-level signal after accumulating multiple utterances of this quest.
+
+## Why it is not yet enabled in production
+
+- Research shows that children and adults have different effective frequency spectrum areas, and the younger the age, the worse the performance: [Speaker recognition for children's speech](https://www.isca-archive.org/interspeech_2012/safavi12_interspeech.html).
+- In 2025, the Children's voiceprint study once again pointed out that the performance of the system for adult voice training declines in children's scenarios and needs to be adapted to the children's domain: [G-IFT](https://www.isca-archive.org/wocci_2025/shetty25_wocci.html).
+- There was a "chicken or egg first" before enrollment: when the child template was not yet established, the system could not reliably determine who was the child in the recording. The first round of registration could only rely on parental guidance, VAD, quiet environment and single speaker quality inspection.
+- Speaker embedding is recognition, not source separation. When adults and children speak overlappingly, it is impossible to promise to only retain the child's channel.
+- Single sight words are too short to directly copy the fixed threshold of adult long speech.
+
+## Minimum Device Alpha Experiment
+
+1. Parents are clearly instructed behind the door: completely local, original recordings will not be stored or uploaded, and can be deleted at any time voiceprint.
+2. About 1 minute to register: 6-8 interesting tips, 1.5-5 seconds per segment; at least 6 segments and a cumulative effective voice of at least 15 seconds. Each segment of PCM only exists in memory and is released immediately after embedding is produced; only normalized centroids and model versions are saved.
+3. Do not do speaker gate by word. Accumulate multiple read utterances in a quest, and only mark `likelyMatch` when the signal is stable; short audio, noise, multiple speakers and model errors are all `unavailable`.
+4. Do physical device Alpha for 3 days: Children read a few words each in a quiet/TV background/normal family noise; parents or other children also read the same content. Only similarity, duration, scene labels and manual speaker labels are saved, and audio is not saved.
+5. Measure latency, memory, heat, and installation volume on at least one iPhone and one iPad.
+6. The release threshold needs to be determined by device data, and cannot be carried over from the adult default `0.6`. Under any threshold, the speaker signal should not change the accuracy, stars, Ebbinghaus progress or mastery.
+
+## The security foundation that has been coded.
+
+- `VoiceprintEmbedding`: Limited value verification, L2 normalization, model/dimension isolation.
+- `VoiceprintEnrollmentSession`: Multi-segment registration state machine; default at least 6 segments, 15 seconds of valid voice; refuse short, long, cross-model and cross-dimensional segments.
+- `DeviceVoiceprintRepository`: Clearly stipulate that it is device-only and prohibit CloudKit/server adapter impersonation.
+- `KeychainDeviceVoiceprintRepository`: persists only embedding templates, uses `ThisDeviceOnly`, and does not sync.
+- `SpeakerConfidenceSignal.canBlockLearning` Always for `false`.
+- Neither any placeholder models were connected to Read/Write, nor was profile `voiceprintStatus` disguised as registered.
+
+Verification: the latest `swift test` run on 2026-07-12 had 0 failures; all 5 voiceprint tests passed. Final delivery must record the total from the full test run at that time.
+<!-- TADA_BILINGUAL_ZH_START -->
+
+---
+
+<a id="简体中文版"></a>
+
+> **翻译说明：** 英文为默认阅读语言；本文同时保留原始语言文本。如中英文内容存在差异，请以原始语言文本为准。
+
 # Tada Words 儿童声纹 Device Alpha 结论
 
 日期：2026-07-12
