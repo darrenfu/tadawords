@@ -53,7 +53,7 @@ struct QuestChrome: View {
     let totalItems: Int
     let earnedStars: Int
     let starFeedback: QuestStarFeedbackEvent?
-    let feedbackViewportHeight: CGFloat
+    let feedbackViewportFrame: CGRect
     let elapsedText: String
     let isEmergency: Bool
     let theme: TadaWorldTheme
@@ -135,7 +135,7 @@ struct QuestChrome: View {
             earnedStarCount: earnedStars,
             totalStarCount: totalItems,
             feedbackEvent: starFeedback,
-            viewportHeight: feedbackViewportHeight,
+            feedbackViewportFrame: feedbackViewportFrame,
             accent: modeTokens.accent,
             surface: theme.surface
         )

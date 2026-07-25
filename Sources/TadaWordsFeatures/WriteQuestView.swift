@@ -149,7 +149,6 @@ struct WriteQuestView: View {
     @State private var pictureHintAsset: WordPictureHintAsset?
     @State private var isShowingPictureHint = false
     @State private var starFeedbackEvent: QuestStarFeedbackEvent?
-    @State private var starFeedbackSequence = 0
 
     init(
         session: QuestSession,
@@ -208,7 +207,7 @@ struct WriteQuestView: View {
                             totalItems: session.totalItems,
                             earnedStars: session.earnedItemCount,
                             starFeedback: starFeedbackEvent,
-                            feedbackViewportHeight: viewport.size.height,
+                            feedbackViewportFrame: viewport.frame(in: .global),
                             elapsedText: questTimer.elapsedText,
                             isEmergency: questTimer.isEmergency,
                             theme: theme,
@@ -816,9 +815,7 @@ struct WriteQuestView: View {
         case .uncertain, .technicalFailure:
             return
         }
-        starFeedbackSequence += 1
         starFeedbackEvent = QuestStarFeedbackEvent(
-            id: starFeedbackSequence,
             kind: kind,
             targetSlot: min(session.earnedItemCount, session.totalItems - 1)
         )

@@ -130,7 +130,6 @@ struct SpellQuestView: View {
     @State private var responseClock: AttemptResponseClock
     @State private var keyFeedbackTrigger = 0
     @State private var starFeedbackEvent: QuestStarFeedbackEvent?
-    @State private var starFeedbackSequence = 0
 
     private let evaluator = SpellingAnswerEvaluator()
 
@@ -185,7 +184,7 @@ struct SpellQuestView: View {
                             totalItems: session.totalItems,
                             earnedStars: session.earnedItemCount,
                             starFeedback: starFeedbackEvent,
-                            feedbackViewportHeight: proxy.size.height,
+                            feedbackViewportFrame: proxy.frame(in: .global),
                             elapsedText: questTimer.elapsedText,
                             isEmergency: questTimer.isEmergency,
                             theme: theme,
@@ -462,9 +461,7 @@ struct SpellQuestView: View {
         case .uncertain, .technicalFailure:
             return
         }
-        starFeedbackSequence += 1
         starFeedbackEvent = QuestStarFeedbackEvent(
-            id: starFeedbackSequence,
             kind: kind,
             targetSlot: min(session.earnedItemCount, session.totalItems - 1)
         )

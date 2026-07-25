@@ -38,7 +38,6 @@ struct ReadQuestView: View {
     @State private var replayCountSinceLastAttempt = 0
     @State private var isPlayingPronunciationHint = false
     @State private var starFeedbackEvent: QuestStarFeedbackEvent?
-    @State private var starFeedbackSequence = 0
 
     init(
         session: QuestSession,
@@ -88,7 +87,7 @@ struct ReadQuestView: View {
                             totalItems: session.totalItems,
                             earnedStars: session.earnedItemCount,
                             starFeedback: starFeedbackEvent,
-                            feedbackViewportHeight: proxy.size.height,
+                            feedbackViewportFrame: proxy.frame(in: .global),
                             elapsedText: questTimer.elapsedText,
                             isEmergency: questTimer.isEmergency,
                             theme: theme,
@@ -590,9 +589,7 @@ struct ReadQuestView: View {
         case .uncertain, .technicalFailure:
             return
         }
-        starFeedbackSequence += 1
         starFeedbackEvent = QuestStarFeedbackEvent(
-            id: starFeedbackSequence,
             kind: kind,
             targetSlot: min(session.earnedItemCount, session.totalItems - 1)
         )

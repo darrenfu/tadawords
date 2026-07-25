@@ -413,6 +413,28 @@ final class ProceduralAudioTests: XCTestCase {
         )
     }
 
+    func testFunctionalFeedbackMixIsAudibleAndPlaybackDurationMatchesBuffer() {
+        let correct = ProceduralAudioFactory.effect(
+            cue: .correct,
+            world: .moonpetalKingdom,
+            sampleRate: 44_100
+        )
+
+        XCTAssertGreaterThan(
+            FunctionalAudioPlaybackPolicy.playerVolume(for: .correct),
+            0.5
+        )
+        XCTAssertGreaterThan(
+            FunctionalAudioPlaybackPolicy.playerVolume(for: .validRetry),
+            0.4
+        )
+        XCTAssertEqual(
+            FunctionalAudioPlaybackPolicy.duration(of: correct),
+            0.58,
+            accuracy: 0.001
+        )
+    }
+
     func testVoicePromptDuckingIsConservativeAndCrossfadeKeepsConstantGain() {
         XCTAssertLessThan(
             AmbientMixPolicy.duckedVolume,

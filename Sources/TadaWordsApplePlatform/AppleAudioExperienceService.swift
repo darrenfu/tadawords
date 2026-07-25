@@ -81,6 +81,32 @@ struct VoicePromptAudioSessionState {
     }
 }
 
+struct FunctionalAudioPlaybackPolicy {
+    static func playerVolume(for cue: FunctionalAudioCue) -> Float {
+        switch cue {
+        case .click:
+            0.28
+        case .correct:
+            0.62
+        case .validRetry:
+            0.48
+        case .technicalRetry:
+            0.38
+        case .star:
+            0.58
+        case .reward:
+            0.60
+        case .writing:
+            0.18
+        }
+    }
+
+    static func duration(of buffer: AVAudioPCMBuffer) -> TimeInterval {
+        guard buffer.format.sampleRate > 0 else { return 0 }
+        return Double(buffer.frameLength) / buffer.format.sampleRate
+    }
+}
+
 /// Hybrid audio layer. Original world scores and effects remain synthesized in
 /// memory; the launch mark and brief transition voices come from the versioned
 /// Aurora bundle and never require a runtime network request.
@@ -257,19 +283,27 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         {
             stopWritingAudio()
             effectPlayer.stop()
-            effectPlayer.volume = adjustedVolume(0.20)
+            effectPlayer.volume = adjustedVolume(
+                FunctionalAudioPlaybackPolicy.playerVolume(for: cue)
+            )
+            let buffer = ProceduralAudioFactory.effect(
+                cue: cue,
+                world: world,
+                sampleRate: Self.sampleRate
+            )
             effectPlayer.scheduleBuffer(
-                ProceduralAudioFactory.effect(
-                    cue: cue,
-                    world: world,
-                    sampleRate: Self.sampleRate
-                ),
+                buffer,
                 at: nil,
                 options: [],
                 completionCallbackType: .dataConsumed,
                 completionHandler: nil
             )
             effectPlayer.play()
+            try? await Task.sleep(
+                for: .seconds(
+                    FunctionalAudioPlaybackPolicy.duration(of: buffer)
+                )
+            )
         }
 
         guard let accentURL = spokenAccentURL(for: cue) else { return }

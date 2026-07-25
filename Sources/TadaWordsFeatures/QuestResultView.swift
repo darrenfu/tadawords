@@ -194,13 +194,9 @@ struct QuestResultView: View {
     private var achievementPanel: some View {
         TadaPanel(theme: theme) {
             VStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                TadaStarRow(
-                    earned: result.earnedStarCount,
-                    tint: theme.secondary,
-                    size: 44
-                )
-                .opacity(revealPhase >= 2 ? 1 : 0)
-                .accessibilityHidden(revealPhase < 2)
+                earnedStarSummary(size: 44)
+                    .opacity(revealPhase >= 2 ? 1 : 0)
+                    .accessibilityHidden(revealPhase < 2)
 
                 HStack(spacing: 12) {
                     ResultMetric(symbol: "checkmark.circle.fill", value: "Complete", theme: theme)
@@ -276,13 +272,9 @@ struct QuestResultView: View {
         TadaPanel(theme: theme) {
             VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
                 HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                    TadaStarRow(
-                        earned: result.earnedStarCount,
-                        tint: theme.secondary,
-                        size: 30
-                    )
-                    .opacity(revealPhase >= 2 ? 1 : 0)
-                    .accessibilityHidden(revealPhase < 2)
+                    earnedStarSummary(size: 30)
+                        .opacity(revealPhase >= 2 ? 1 : 0)
+                        .accessibilityHidden(revealPhase < 2)
                 }
 
                 HStack(spacing: TadaPrimitiveTokens.Spacing.small) {
@@ -378,6 +370,31 @@ struct QuestResultView: View {
         .accessibilityHidden(true)
     }
 
+    private func earnedStarSummary(size: CGFloat) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "star.fill")
+                .font(.system(size: size, weight: .bold))
+                .foregroundStyle(theme.secondary)
+                .shadow(
+                    color: theme.secondary.opacity(0.28),
+                    radius: 6,
+                    y: 3
+                )
+            Text("× \(result.earnedStarCount)")
+                .font(
+                    .system(
+                        size: size * 0.72,
+                        weight: .heavy,
+                        design: .rounded
+                    )
+                )
+                .monospacedDigit()
+                .foregroundStyle(theme.ink)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(result.earnedStarCount) stars earned")
+    }
+
     private func revealResults() async {
         guard revealPhase == 0 else { return }
         let delay = reduceMotion ? 40 : 210
@@ -432,7 +449,7 @@ struct QuestResultView: View {
                 "First try accuracy \($0) percent."
             } ?? "First try accuracy not scored."
         return
-            "\(completionTitle). \(result.earnedStarCount) of 3 stars. \(result.points) points. \(accuracySummary) \(result.paceLabel)."
+            "\(completionTitle). \(result.earnedStarCount) stars earned. \(result.points) points. \(accuracySummary) \(result.paceLabel)."
     }
 
     private var completionTitle: String {

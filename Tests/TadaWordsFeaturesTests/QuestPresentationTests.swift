@@ -63,6 +63,22 @@ final class QuestPresentationTests: XCTestCase {
         XCTAssertEqual(result.firstTryAccuracyPercentage, 67)
     }
 
+    func testFinalEarnedStarsUseCorrectWordCountInsteadOfThreeStarRating() {
+        let result = QuestResultViewState(
+            mode: .read,
+            score: QuestScore(
+                points: 50,
+                firstIndependentCorrectCount: 2,
+                firstIndependentAttemptCount: 5,
+                stars: QuestStars(earned: [.completion]),
+                personalPaceAssessment: .withinPersonalBand
+            ),
+            correctWordCount: 4
+        )
+
+        XCTAssertEqual(result.earnedStarCount, 4)
+    }
+
     func testPracticePowerUpResultExposesReplayAction() {
         let result = QuestResultViewState(
             mode: .read,
