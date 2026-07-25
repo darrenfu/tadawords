@@ -5,7 +5,7 @@ import TadaWordsDomain
 /// Apple-platform text-to-speech adapter. Feature code depends only on
 /// `AudioPromptService`, so recorded human audio can replace this implementation
 /// without changing a quest view.
-public actor SystemAudioPromptService: AudioPromptService {
+public actor SystemAudioPromptService: FallbackAudioPromptService {
     private let synthesizer: AVSpeechSynthesizer
     private let playbackDelegate: SpeechPlaybackDelegate
     private let audioPlaybackDelegate: AudioClipPlaybackDelegate
@@ -60,6 +60,27 @@ public actor SystemAudioPromptService: AudioPromptService {
         guard await audioExperienceService.prepareForVoicePrompt() else { return }
         do {
             try await playPreparedText(normalized, role: .voiceEnrollment)
+            await audioExperienceService.finishVoicePrompt()
+        } catch {
+            await audioExperienceService.finishVoicePrompt()
+            throw error
+        }
+    }
+
+    public func playFallback(
+        _ prompt: WordPrompt,
+        for profileID: ProfileID
+    ) async throws {
+        _ = profileID
+        let request = TeacherWordAudioRequest(prompt: prompt)
+        guard await audioExperienceService.prepareForVoicePrompt() else { return }
+        do {
+            try await playPreparedText(
+                request.spokenText,
+                role: TeacherAudioFallbackPolicy.spokenRole(
+                    for: request.usage
+                )
+            )
             await audioExperienceService.finishVoicePrompt()
         } catch {
             await audioExperienceService.finishVoicePrompt()

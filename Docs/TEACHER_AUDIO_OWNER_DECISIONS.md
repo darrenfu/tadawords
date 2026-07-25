@@ -56,8 +56,10 @@ verified execution evidence.
   typed Parent-retryable failure.
 - Prepared clips remain locally playable offline.
 - PawGoo's explicit catalog-miss response (`422`) authorizes device-local
-  Apple `en-US` speech for that word. Authentication, integrity, rate-limit,
-  timeout, and provider failures remain visible and never trigger fallback.
+  Apple `en-US` speech for that word without a warning. Authentication,
+  integrity, rate-limit, timeout, and provider failures show a short,
+  non-blocking warning and then use device-local Apple speech so practice can
+  continue.
 - No alternative ElevenLabs voice is permitted.
 
 ## Vocabulary and child-data decision

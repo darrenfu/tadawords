@@ -132,6 +132,16 @@ public protocol AudioPromptService: Sendable {
     ) async throws
 }
 
+/// Optional recovery capability for prompt services that can speak a word
+/// without the remote teacher-audio path. Feature code uses this only after
+/// the primary prompt reports a visible, non-fatal failure.
+public protocol FallbackAudioPromptService: AudioPromptService {
+    func playFallback(
+        _ prompt: WordPrompt,
+        for profileID: ProfileID
+    ) async throws
+}
+
 extension AudioPromptService {
     public func playVoiceSetupSentence(
         _ sentence: String,

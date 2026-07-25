@@ -64,10 +64,10 @@ Apple speech. Every other failed preparation leaves the prior Pool visible.
 Child Quest planning and playback are strictly local. They read the bundle or
 validated cache and use Apple speech for an approved catalog miss; they never
 start a network request. Corrupt or mismatched clips and security/operational
-failures remain visible. Apple speech is the catalog-miss fallback, not a mask
-for those failures. A one-way request hash names the durable catalog-miss
-marker, so a missing or corrupt Bella cache entry cannot be mistaken for an
-approved Apple-speech fallback after relaunch.
+failures remain visible through a transient warning, then use Apple speech
+without blocking the quest. A one-way request hash names the durable
+catalog-miss marker, so a missing or corrupt Bella cache entry remains
+diagnostically distinct even though both paths preserve playable practice.
 
 ## Owner decisions and remaining deployment actions
 

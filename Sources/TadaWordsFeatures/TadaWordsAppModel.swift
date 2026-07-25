@@ -21,6 +21,7 @@ final class TadaWordsAppModel: ObservableObject {
     @Published private(set) var rewardCollections: [WorldTheme: RewardCollection] = [:]
     @Published private(set) var worldSelectionError: String?
     @Published private(set) var rechargingModes: Set<LearningMode> = []
+    @Published private(set) var audioFallbackNoticeIsVisible = false
 
     private let contentProvider: any QuestContentProviding
     private let audioPromptService: any AudioPromptService
@@ -49,6 +50,7 @@ final class TadaWordsAppModel: ObservableObject {
     private var profileSelectionTask: Task<Void, Never>?
     private var handwritingToolTask: Task<Void, Never>?
     private var worldProgressTask: Task<Void, Never>?
+    private var audioFallbackNoticeTask: Task<Void, Never>?
     private var focusedReplaySeed: FocusedReplaySeed?
     private var pendingWritePreparationIntent: QuestPreparationIntent = .standard
     private var lastPracticeWordOrderByMode: [LearningMode: [WordPromptID]] = [:]
@@ -698,10 +700,37 @@ final class TadaWordsAppModel: ObservableObject {
         } catch is CancellationError {
             return
         } catch {
+            if let fallbackService =
+                audioPromptService as? any FallbackAudioPromptService
+            {
+                presentAudioFallbackNotice()
+                do {
+                    try await fallbackService.playFallback(
+                        prompt,
+                        for: profileID
+                    )
+                    return
+                } catch is CancellationError {
+                    return
+                } catch {
+                    // If both teacher audio and device speech fail, retain the
+                    // existing blocking recovery instead of silently advancing.
+                }
+            }
             destination = .blocked(
                 mode: prompt.learningMode,
                 reason: .audioUnavailable
             )
+        }
+    }
+
+    private func presentAudioFallbackNotice() {
+        audioFallbackNoticeIsVisible = true
+        audioFallbackNoticeTask?.cancel()
+        audioFallbackNoticeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard !Task.isCancelled else { return }
+            self?.audioFallbackNoticeIsVisible = false
         }
     }
 

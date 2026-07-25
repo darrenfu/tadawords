@@ -51,8 +51,8 @@ Teacher-audio caches are disposable and device-local; they are not Family Sync
 payloads. A Parent flow on each receiving device prepares any Bella clip absent
 from the approved bundle before the related word can become child-reachable.
 Quest planning and playback never download on demand. Apple speech is the
-catalog-miss fallback; corrupt, mismatched, and operational failures stay
-visible.
+catalog-miss fallback. Corrupt, mismatched, and operational failures show a
+transient warning and then use Apple speech so the quest remains playable.
 
 Profile photos are not disposable caches. When a parent opts in, the prepared
 source avatar is Profile data and syncs as a bounded `CKAsset`; the general
