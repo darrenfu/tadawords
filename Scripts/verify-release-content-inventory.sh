@@ -10,9 +10,14 @@ picture_relative="Sources/TadaWordsApplePlatform/Resources/PictureHints/Twemoji-
 preset_relative="Sources/TadaWordsContent/Resources/PresetWords.json"
 compatibility_relative="Apps/TadaWordsApp/PersistenceSchemaCompatibility.json"
 guardian_notice_relative="Sources/TadaWordsGuardianFeatures/GuardianThirdPartyNoticesView.swift"
+zodiac_master_relative="DesignAssets/ZodiacAvatars/zodiac-avatar-master.png"
+zodiac_readme_relative="DesignAssets/ZodiacAvatars/README.md"
+zodiac_assets_relative="Apps/TadaWordsApp/Assets.xcassets"
+rights_inventory_relative="Docs/APP_STORE_CONTENT_RIGHTS.md"
 
 expected_audio_digest="d8556c3035e6bce1947ce094531b64164a88433d0f58ee54ca03fd81a02fab86"
 expected_picture_digest="fbe89ce4496e0f50a59f93b3dc55f2e3e24eb1bcd463597c218a40e5f19d7a1a"
+expected_zodiac_export_digest="68dc7150c9eb6403bded39ca61381ec40466953c26d14f6b5d67a455a930c142"
 
 fail() {
     echo "content-inventory verification failed: $*" >&2
@@ -52,6 +57,19 @@ stable_tree_digest() {
             | LC_ALL=C sort \
             | while IFS= read -r path; do
                 shasum -a 256 "$path"
+            done
+    ) | shasum -a 256 | awk '{print $1}'
+}
+
+stable_path_digest() {
+    local root="$1"
+    local path_pattern="$2"
+    (
+        cd "$root"
+        find . -type f -path "$path_pattern" -print \
+            | LC_ALL=C sort \
+            | while IFS= read -r file_path; do
+                shasum -a 256 "$file_path"
             done
     ) | shasum -a 256 | awk '{print $1}'
 }
@@ -220,6 +238,24 @@ verify_audio_pack "$repo_root/$audio_relative"
 verify_picture_pack "$repo_root/$picture_relative"
 verify_preset_catalog "$repo_root/$preset_relative"
 assert_sha256 "$repo_root/$compatibility_relative" "51f579dccf3d44c5b03176cbb6abc975e983b547f7be205867f1a65df8156676" "persistence compatibility table"
+assert_sha256 "$repo_root/$zodiac_master_relative" "1abdc56e278d8ce8a476bde3beaa0d2c58f94057f09212bc6842d8f4df0f320f" "zodiac avatar master"
+assert_equal "$(find "$repo_root/$zodiac_assets_relative" -type f -path '*/Zodiac*.imageset/*.png' | awk 'END { print NR + 0 }')" "12" "zodiac avatar export count"
+assert_equal "$(stable_path_digest "$repo_root/$zodiac_assets_relative" './Zodiac*.imageset/*.png')" "$expected_zodiac_export_digest" "zodiac avatar export digest"
+grep -Fq 'No third-party artwork was supplied as a reference' "$repo_root/$zodiac_readme_relative" \
+    || fail "zodiac no-reference provenance statement is missing"
+grep -Fq 'ORIGINAL character designs only' "$repo_root/$zodiac_readme_relative" \
+    || fail "zodiac original-design prompt is missing"
+
+rights_inventory="$repo_root/$rights_inventory_relative"
+assert_file "$rights_inventory" "content-rights inventory"
+grep -Fq 'No unresolved content-rights evidence blocker remains' "$rights_inventory" \
+    || fail "content-rights conclusion is not finalized"
+grep -Fq 'issues/33#issuecomment-5066488733' "$rights_inventory" \
+    || fail "owner attestation pointer is missing"
+grep -Fq '85a98c0275800457e53d8607312650a6621afd3ce2e2f165c0c6fa2ab47ee73f' "$rights_inventory" \
+    || fail "private Pawgoo evidence index checksum is missing"
+grep -Fq '71e3533be3361733cf5d13ae9fe5240a0e87e2d1c9aa8f854876a9e51175f24b' "$rights_inventory" \
+    || fail "Cartesia invoice checksum pointer is missing"
 
 guardian_notice="$repo_root/$guardian_notice_relative"
 guardian_today="$repo_root/Sources/TadaWordsGuardianFeatures/GuardianTodayView.swift"
@@ -279,8 +315,8 @@ if plutil -extract TadaWordsTeacherAudioEndpoint raw "$production_plist" >/dev/n
     fail "production plist configures a runtime teacher-audio endpoint"
 fi
 
-echo "source inventory verified: $expected_version ($expected_build), 1,008 M4A, 74 offline Twemoji PNGs, four package JSON files plus one app schema JSON, no custom fonts"
-echo "in-app Twemoji attribution verified; rights readiness remains blocked by #32 and #33 because this verifier does not replace human evidence"
+echo "source inventory verified: $expected_version ($expected_build), 1,008 M4A, 74 offline Twemoji PNGs, 12 zodiac avatar exports, four package JSON files plus one app schema JSON, no custom fonts"
+echo "content-rights evidence pointers and in-app Twemoji attribution verified; #32 and #33 are reconciled for this exact content set"
 
 if [[ "$#" -eq 0 ]]; then
     echo "archive inspection skipped: pass a .xcarchive or .app path to verify the built product"
@@ -316,7 +352,14 @@ archive_preset="$(find "$app_path" -type f -name 'PresetWords.json' -print -quit
 verify_audio_pack "$archive_audio_root"
 verify_picture_pack "$archive_picture_root"
 verify_preset_catalog "$archive_preset"
-find "$app_path" -type f -name 'Assets.car' -print -quit | grep -q . || fail "compiled asset catalog missing from archive"
+archive_assets="$(find "$app_path" -type f -name 'Assets.car' -print -quit)"
+[[ -n "$archive_assets" ]] || fail "compiled asset catalog missing from archive"
+command -v assetutil >/dev/null || fail "assetutil is required for archive inspection"
+assetutil --info "$archive_assets" >"$scratch/assets.json"
+for zodiac_name in ZodiacRat ZodiacOx ZodiacTiger ZodiacRabbit ZodiacDragon ZodiacSnake ZodiacHorse ZodiacGoat ZodiacMonkey ZodiacRooster ZodiacDog ZodiacPig; do
+    jq -e --arg name "$zodiac_name" 'any(.[]; .Name? == $name)' "$scratch/assets.json" >/dev/null \
+        || fail "$zodiac_name is missing from compiled Assets.car"
+done
 archive_compatibility="$app_path/PersistenceSchemaCompatibility.json"
 assert_file "$archive_compatibility" "archive persistence compatibility table"
 assert_sha256 "$archive_compatibility" "51f579dccf3d44c5b03176cbb6abc975e983b547f7be205867f1a65df8156676" "archive persistence compatibility table"
@@ -328,4 +371,4 @@ if find "$app_path" -type f | grep -E "$excluded_pattern"; then
 fi
 
 echo "archive inventory verified: $app_path"
-echo "in-app Twemoji attribution verified at exact source HEAD; rights readiness remains blocked by #32 and #33 until separate human evidence lands"
+echo "compiled zodiac avatars, in-app Twemoji attribution, and reconciled rights evidence verified at exact source HEAD"

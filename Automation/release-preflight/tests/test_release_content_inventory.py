@@ -53,6 +53,23 @@ class ReleaseContentInventoryTests(unittest.TestCase):
             result.stderr,
         )
 
+    def test_inventory_records_resolved_human_evidence(self):
+        inventory = (
+            self.repository_root / "Docs" / "APP_STORE_CONTENT_RIGHTS.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(
+            "No unresolved content-rights evidence blocker remains",
+            inventory,
+        )
+        self.assertIn("issues/33#issuecomment-5066488733", inventory)
+        self.assertIn(
+            "85a98c0275800457e53d8607312650a6621afd3ce2e2f165c0c6fa2ab47ee73f",
+            inventory,
+        )
+        self.assertNotIn("Missing; #33", inventory)
+        self.assertNotIn("rights-chain confirmation is blocked by #33", inventory)
+
     def run_route_verifier(self, source: str) -> subprocess.CompletedProcess[str]:
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".swift", encoding="utf-8"

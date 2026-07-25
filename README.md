@@ -26,7 +26,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.7.43` (build `2026072417`) removes obsolete tracked QA screenshot and result directories while retaining the root-level audits and enforcing that no child directory returns under `QAArtifacts/`. It retains v0.7.40's installed-version footer and schema 3 diagnostics, v0.7.39's data-preserving production-device installer, v0.7.38 contextual Read permission sequencing, the v0.7.34 Profile-erasure retry, and the conservative App Store 1.0 voiceprint fallback. The distribution contract remains: Made for Kids with Apple's `6–8` primary band, public and in-app Profile ages 3–8, Free with no IAP or ads, United States only, and manual release. External App Store, TestFlight, cross-device CloudKit, privacy-traffic, and human acceptance remain pending until recorded against the exact release HEAD. See the [v0.7.43 cleanup release note](Docs/Releases/v0.7.43-qa-artifact-cleanup.md), [v0.7.40 release note](Docs/Releases/v0.7.40-app-version-diagnostics.md), [v0.7.39 release note](Docs/Releases/v0.7.39-app-store-acceptance.md), [v0.7.38 permission release note](Docs/Releases/v0.7.38-child-speech-permissions.md), [permission inventory](Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md), [1.0 fallback record](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md), [decision record](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md), v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), and [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md).
+> **Project status:** Version `0.7.43` (build `2026072417`) removes obsolete tracked QA artifact directories while retaining their root audit records and adds a contract against their return. It also retains the v0.7.41 evidence-backed App Store content-rights inventory, v0.7.40 installed version/build presentation and diagnostics schema 3, contextual Read permission sequencing, the Profile-erasure retry, the conservative App Store 1.0 voiceprint fallback, and the data-preserving production-device installer. The distribution contract remains: Made for Kids with Apple's `6–8` primary band, public and in-app Profile ages 3–8, Free with no IAP or ads, United States only, and manual release. See the [v0.7.43 cleanup note](Docs/Releases/v0.7.43-qa-artifact-cleanup.md), [v0.7.40 release note](Docs/Releases/v0.7.40-app-version-diagnostics.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), and [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -214,7 +214,7 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 |---|---|
 | Strict Swift format lint | Passed |
 | Version and build | v0.7.43 (`2026072417`) in source Plists and generated project settings |
-| Swift tests | v0.7.43 removes obsolete tracked QA artifact directories, preserves root audits, and adds a no-child-directory contract while retaining v0.7.40's support metadata, v0.7.39's data-preserving production-install contract, and the existing permission, privacy, release, Family Sync, content-rights, and Profile-erasure coverage; the full source gate is rerun at the immutable release HEAD |
+| Swift tests | v0.7.43 removes obsolete QA artifacts and rejects future child directories while retaining v0.7.41's content-rights contracts and v0.7.40's shared bundle-version presentation, Privacy & Support footer, schema 3 diagnostics, and existing privacy and Family Sync coverage; the full source gate is rerun at the immutable release HEAD |
 | Family Sync physical delta | Normal PawGoo v0.7.18 installed in place on the approved iPhone and iPad; an iPhone-created test Profile converged automatically to the untouched iPad without opening Family Sync, with one matching record and four Profiles total on each side |
 | Family Sync simulator E2E | Merged v0.7.2: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5 |
 | Critical XCUITest flows | Merged v0.7.2: full critical matrix passed on iPad; the single iPhone Photos-dismiss timing case passed 2/2 in isolated fresh reruns after the combined run, and every other flow passed |
@@ -239,7 +239,7 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | CloudKit remote erasure | Durable lifecycle, exact owner/participant disposition, crash repair, retry, terminal completion, and account-provenance tests passed; production destructive test-only proof open |
 | Physical child speech, handwriting, audio, accessibility, and CloudKit | Acceptance open |
 
-The [feature audit](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md) records the merged v0.2 implementation evidence. The [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md) records changes through v0.7.33, and the [V1 backlog](V1_BACKLOG.md) lists the remaining device and human acceptance work.
+The [feature audit](QAArtifacts/FULL_FEATURE_AUDIT_2026-07-12.md) records the merged v0.2 implementation evidence. The [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md) records changes through v0.7.43, and the [V1 backlog](V1_BACKLOG.md) lists the remaining device and human acceptance work.
 
 ## Test fixture attribution
 
@@ -283,7 +283,7 @@ The project source does not include an open-source license. Copyright remains wi
 <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
 <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
 <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-<img src="https://img.shields.io/badge/status-v0.7.43%20QA%20Artifact%20Cleanup-6D48D7" alt="v0.7.43 QA artifact cleanup">
+  <img src="https://img.shields.io/badge/status-v0.7.43%20QA%20Artifact%20Cleanup-6D48D7" alt="v0.7.43 QA artifact cleanup">
 </p>
 
 Tada Words为孩子们提供了每天两个独立的视字任务：
@@ -294,7 +294,7 @@ Tada Words为孩子们提供了每天两个独立的视字任务：
 
 Parents通过键入、使用光学字符识别（OCR）扫描学校列表或从离线预设中选择单词来添加每个练习单词。Tada Words从不自动填充池。审查时间表根据回忆强度、错误、帮助使用、重播和每个孩子的反应速度将家长批准的单词带回。
 
-> **项目状态：**版本 `0.7.43`（构建 `2026072417`）移除了过时的 QA 截图和结果目录，保留根目录审计记录，并通过契约测试防止 `QAArtifacts/` 下重新出现子目录。它保留 v0.7.40 的版本页脚和 schema 3 diagnostics、v0.7.39 的数据保留生产安装通道、v0.7.38 的 Read 权限顺序、v0.7.34 的 Profile 删除重试，以及 App Store 1.0 voiceprint fallback。分发契约仍为：Made for Kids，Apple 主年龄段 `6–8`，产品与 App 内 Profile 年龄 3–8，免费、无内购、无广告，仅美国区，手动发布。App Store、TestFlight、跨设备 CloudKit、隐私流量和人工验收必须在精确发布 HEAD 上记录后才算完成。另见 [v0.7.43 清理发布说明](Docs/Releases/v0.7.43-qa-artifact-cleanup.md)、[v0.7.40 发布说明](Docs/Releases/v0.7.40-app-version-diagnostics.md)、[v0.7.39 发布说明](Docs/Releases/v0.7.39-app-store-acceptance.md)、[v0.7.38 权限发布说明](Docs/Releases/v0.7.38-child-speech-permissions.md)、[系统权限清单](Docs/SYSTEM_PERMISSION_INVENTORY_v0.7.8.md)、[1.0 fallback 记录](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md)、[App Store 决策记录](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md)和[隐私清单](Docs/APP_STORE_PRIVACY_v0.7.4.md)。
+> **项目状态：**版本 `0.7.43`（构建 `2026072417`）清理过期的受跟踪 QA 产物目录，保留根目录审计记录，并加入防止其重新出现的契约测试。它同时保留 v0.7.41 的 App Store 内容权利清单、v0.7.40 的应用版本展示和 Family Sync diagnostics schema 3、Read 权限顺序、Profile 删除重试、1.0 voiceprint fallback 与数据保留的生产安装通道。另见 [v0.7.43 清理说明](Docs/Releases/v0.7.43-qa-artifact-cleanup.md)、[v0.7.40 发布说明](Docs/Releases/v0.7.40-app-version-diagnostics.md)、[隐私清单](Docs/APP_STORE_PRIVACY_v0.7.4.md)和[内容权利清单](Docs/APP_STORE_CONTENT_RIGHTS.md)。
 
 该应用程序包含八个独立的视觉世界：Moonpetal Kingdom、Build-It Bay、Paws & Pines、Dino Discovery、Firehouse Heroes、Brickwork City、Frostlight World和Coaster Carnival。每个世界都保留了自己的原创场景、吉祥物、音乐、声音线索和25个物品的奖励收藏。
 
@@ -385,7 +385,7 @@ iOS目标取决于`TadaWordsAppShell`、`TadaWordsApplePlatform`和`TadaWordsDom
 - 一个免费的Apple Account，用于直接LocalQA在个人设备上安装
 - 一个为 TestFlight 和 CloudKit 接受提供付费的 Apple Developer Program 团队
 
-当前 v0.7.43 源候选版本使用 Xcode 26.6。合并后的 v0.7.2 通过了 exact-HEAD iPhone/iPad 模拟器矩阵、LocalQA 安装保护和数据保留的实体 iPhone 更新；合并后的 v0.7.3 增加了离线 Parent 通知和精确内容验证。Family Sync 生产 schema、签名跨设备共享/删除、人工可访问性和精确发布隐私/网络验收仍未完成。
+当前 v0.7.40 源候选版本使用 Xcode 26.6。合并后的 v0.7.2 通过了 exact-HEAD iPhone/iPad 模拟器矩阵、LocalQA 安装保护和数据保留的实体 iPhone 更新；合并后的 v0.7.3 增加了离线 Parent 通知和精确内容验证。Family Sync 生产 schema、签名跨设备共享/删除、人工可访问性和精确发布隐私/网络验收仍未完成。
 
 ## 构建和测试
 
@@ -412,7 +412,7 @@ open TadaWords.xcodeproj
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.7.43 2026072417 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.7.40 2026072414 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 对于正常的PawGoo开发人工制品，请使用更严格的无安装门槛：
@@ -420,7 +420,7 @@ open TadaWords.xcodeproj
 ```sh
 ./Scripts/verify-pawgoo-development-app.py \
   '/path/to/Tada Words.app' \
-  0.7.43 2026072417 "$(git rev-parse HEAD)" \
+  0.7.40 2026072414 "$(git rev-parse HEAD)" \
   --device-udid 'APPROVED_IPHONE_HARDWARE_UDID' \
   --device-udid 'APPROVED_IPAD_HARDWARE_UDID'
 ```
@@ -462,7 +462,7 @@ open TadaWords.xcodeproj
 |---|---|
 |严格Swift格式杂毛|通过|
 | 版本和构建 | 源 Plist 与生成项目设置中的 v0.7.43（`2026072417`） |
-| Swift 测试 | v0.7.43 移除过时 QA 目录、保留根审计记录并新增防回归契约，同时保留 v0.7.40 的支持元数据、v0.7.39 的数据保留生产安装契约以及现有权限、隐私、发布、Family Sync、内容权利和 Profile 删除覆盖；必须在不可变的发布 HEAD 上重跑完整 source gate |
+| Swift 测试 | v0.7.43 清理过期 QA 产物并拒绝新的子目录，同时保留 v0.7.41 的内容权利契约和 v0.7.40 的 bundle 版本展示、Privacy & Support 页脚、schema 3 diagnostics 及既有隐私和 Family Sync 覆盖；必须在不可变的发布 HEAD 上重跑完整 source gate |
 | 家庭同步物理差分 | 正常 PawGoo v0.7.18 已安装在批准的 iPhone 和 iPad 上；一个 iPhone 创建的测试 Profile 自动收敛到未触碰的 iPad，无需打开家庭同步，每侧总共有一个匹配记录和四个 Profile |
 | 家庭同步模拟器E2E |合并v0.7.2：6/6在iPhone 17 Pro Max和6/6在iPad Pro 13英寸（M5），iOS 26.5 |
 | 关键 XCUITest 流程 | 合并 v0.7.2：完整的关键矩阵通过 iPad；单个 iPhone 照片-拒绝时间案例在合并运行后在孤立的新重播中通过了 2/2，其余每个流程都通过了 |

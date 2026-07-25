@@ -649,7 +649,7 @@ Release 的 Family Sync 默认关闭并持久保存。Onboarding 的隐私确认
 5. 完成建档、加词、设置和 Quest 后强制退出
 6. 重新打开，确认所有数据与上次 Profile 恢复
 
-历史模拟器验收曾确认：iPad 的首次 Parents 页面使用 tall/portrait window，child Read 使用 landscape window；临时截图已在 v0.7.29 仓库清理中删除。iPhone raw framebuffer 的方向仍有歧义，不作为竖屏通过证据。iPhone 与 iPad 的真机旋转仍按上述步骤验收。
+历史模拟器验收曾确认：iPad 的首次 Parents 页面使用 tall/portrait window，child Read 使用 landscape window；临时截图已在 v0.7.43 仓库清理中删除。iPhone raw framebuffer 的方向仍有歧义，不作为竖屏通过证据。iPhone 与 iPad 的真机旋转仍按上述步骤验收。
 
 `Contents.json` 只描述 Xcode 资产。运行数据位于 App 沙盒的 Application Support 目录。App 没有自建服务器数据库。`TadaWordsLocalQA` 安装为独立的 **Tada Words QA**，没有 iCloud 能力且数据不跨设备；正常 Release 也只有在家长明确开启后才会同步。
 

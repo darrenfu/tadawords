@@ -18,8 +18,8 @@ Branch: `codex/qa-artifacts-cleanup-v0.7.29`
 Build: `2026072417`
 
 Overall state: Issue #114 removes obsolete tracked QA screenshot and result
-directories while retaining the root-level audit records. Source, simulator, and
-signed-device gates must be collected again for this exact package metadata.
+directories while retaining the root-level audit records. This repository-only
+cleanup is validated by source checks and does not require runtime testing.
 
 - Removed every tracked child directory below `QAArtifacts/`.
 - Retained the two root-level audit Markdown files.
@@ -792,7 +792,7 @@ gates pass.
 | ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
 |---|---|---|---|---|---|
 | APPSTORE-018 | Documentation | Submission metadata | Keep one versioned metadata, review-notes, screenshot, claim, and exact-RC preflight pack within Apple field limits and synchronized with the merged privacy/content-rights evidence. | v0.7.5 source candidate and automated contract coverage added | Recount final localized fields, validate exact signed iPhone/iPad screenshots and reviewer paths, then enter only the accepted values through the human-gated submission workflow |
-| APPSTORE-018-RIGHTS | Blocker | Copyright/content rights | Treat `2026 Pawgoo LLC` as provisional and do not make the App Store content-rights representation until the voice entitlement and Pawgoo rights chain are documented. | Merged inventory identifies every shipped content class; #32 and #33 remain open | Preserve the account/tier evidence and obtain an authorized Pawgoo authorship/rights-chain attestation for every selected storefront |
+| APPSTORE-018-RIGHTS | Exact-RC gate | Copyright/content rights | Keep the finalized inventory bound to the exact enumerated content set and re-open review for any archive, terms, marketing-asset, or storefront delta. | #32 Cartesia evidence and #33 Pawgoo owner attestation are closed and frozen into the v0.7.41 inventory | Run the source/archive verifier at the immutable release HEAD and confirm no content or terms delta before entering the App Store representation |
 | APPSTORE-018-DATA | Blocker | Privacy/public claims | Keep core practice/no-Pawgoo-account separate from parent-opted-in Family Sync, which needs an available iCloud account. Do not claim complete deletion while the final Profile cannot be deleted or a full reset performed. | Source boundaries and caveats are in the metadata pack; #19, #28, and #54 remain open | Pass production destructive sync and final-Profile/delete-all acceptance, choose/test the Keychain lifecycle, and deploy/verify matching Pawgoo Privacy and Support copy |
 | APPSTORE-018-KIDS | Blocker | Permission requests | Do not direct an App Reviewer to grant Speech or Microphone authorization from the child-facing Read screen. Tada Words adopts a conservative parent-owned privacy policy for this setup; Apple does not explicitly require a parental gate before every OS permission prompt. | Current source can trigger both system prompts from Read; metadata and review steps are blocked by #55 | Move setup behind Parents, cover deny/retry/already-authorized states, and verify the exact signed flow on iPhone and iPad before replacing the reviewer placeholder |
 
@@ -1482,6 +1482,36 @@ and all existing parent-approved word-pool rules.
 - The physical iPad and Apple Pencil lane is waived for this merge only by the
   owner; iPad simulator coverage remains required. One physical iPhone camera
   flow is still a mandatory release gate.
+
+## v0.7.41 — 2026-07-25
+
+Target release: `v0.7.41`
+
+Branch: `codex/content-rights-inventory-v0.7.35`
+
+Build: `2026072415`
+
+Overall state: Issue #25 freezes the final content-rights inventory after the
+Cartesia evidence in #32 and the authorized Pawgoo owner attestation in #33
+closed. The inventory remains scoped to its exact content set and is not
+trademark clearance or a legal opinion.
+
+| ID | Type | Area | Follow-up requirement | Current state | Required acceptance evidence |
+|---|---|---|---|---|---|
+| APPSTORE-025-RIGHTS | Release evidence | Copyright/content rights | Keep the App Store representation tied to the exact shipped audio, Twemoji, original/generated art, editorial content, screenshots, and storefront set. | Source inventory finalized; exact-HEAD archive verification required | Verify 1,008 Cartesia M4A files, 74 Twemoji PNGs, all twelve compiled zodiac assets, no test fixture/custom font leakage, and the immutable evidence pointers at the release HEAD |
+
+### 2026-07-25 v0.7.41 notes
+
+- Records the #33 owner attestation for Pawgoo/Tada Words original content and
+  the OpenAI-generated zodiac avatars without treating it as legal advice.
+- Retains the #32 private Cartesia invoice, receipt, entitlement, and terms
+  pointers without committing private account artifacts.
+- Adds deterministic source hashes for the zodiac master and twelve exports,
+  plus archive inspection for all twelve compiled asset names.
+- Replaces stale #32/#33 blocker wording with an exact-content-set delta gate.
+- Reconciles the inventory with the v0.7.40 app-version diagnostics baseline
+  without changing child data, Apple account state, App Store submission,
+  CloudKit records, or runtime product behavior.
 
 <!-- TADA_BILINGUAL_ZH_START -->
 

@@ -90,7 +90,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             "#54",
             "#125",
             "#76",
-            "Owner-confirmed; exact-archive reconciliation required",
+            "Finalized for the enumerated content set",
+            "#33 preserves the Pawgoo owner attestation",
             "first child microphone tap",
             "SYSTEM_PERMISSION_INVENTORY_v0.7.8.md",
             "VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md",
@@ -213,19 +214,21 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
     }
 
     func testQAArtifactsContainsNoChildDirectories() throws {
-        let artifacts = repositoryRoot.appendingPathComponent("QAArtifacts")
+        let artifactsURL = repositoryRoot.appendingPathComponent("QAArtifacts")
         let children = try FileManager.default.contentsOfDirectory(
-            at: artifacts,
+            at: artifactsURL,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         )
-        let directories = try children.filter {
-            try $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+
+        for child in children {
+            let values = try child.resourceValues(forKeys: [.isDirectoryKey])
+            XCTAssertNotEqual(
+                values.isDirectory,
+                true,
+                "QAArtifacts must not contain child directories: \(child.lastPathComponent)"
+            )
         }
-        XCTAssertTrue(
-            directories.isEmpty,
-            "QAArtifacts child directories must stay out of source control: \(directories)"
-        )
     }
 
     private var repositoryRoot: URL {
