@@ -457,7 +457,7 @@ struct GuardianAppAndFamilyView: View {
                 accessibilityIdentifier: "guardian.app.third-party-notices",
                 action: onOpenThirdPartyNotices
             )
-            GuardianPrivacyAndSupportSection()
+            GuardianPrivacyAndSupportSection(appVersion: .current)
         }
     }
 
@@ -532,6 +532,8 @@ enum GuardianDataControlCopy {
 }
 
 private struct GuardianPrivacyAndSupportSection: View {
+    let appVersion: GuardianAppVersionPresentation
+
     var body: some View {
         GuardianCard {
             VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.medium) {
@@ -571,6 +573,18 @@ private struct GuardianPrivacyAndSupportSection: View {
                     symbol: "gearshape.fill",
                     accessibilityIdentifier: "guardian.app.permission-management"
                 )
+
+                Divider()
+
+                Text(appVersion.footerText)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .accessibilityLabel(appVersion.footerText)
+                    .accessibilityIdentifier(
+                        GuardianAppVersionPresentation.accessibilityIdentifier
+                    )
             }
         }
         .accessibilityIdentifier("guardian.app.privacy-and-support")

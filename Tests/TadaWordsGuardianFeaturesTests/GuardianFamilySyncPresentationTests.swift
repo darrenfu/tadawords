@@ -237,9 +237,16 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
                 category: .connectivity,
                 at: Date(timeIntervalSince1970: 1_735_689_700)
             ),
+            appVersion: GuardianAppVersionPresentation(
+                marketingVersion: "0.7.40",
+                buildNumber: "2026072414"
+            ),
             generatedAt: Date(timeIntervalSince1970: 1_735_689_600)
         ).text
 
+        XCTAssertTrue(report.contains("Schema: 3"))
+        XCTAssertTrue(report.contains("App version: 0.7.40"))
+        XCTAssertTrue(report.contains("App build: 2026072414"))
         XCTAssertTrue(report.contains("State: waiting_for_connection"))
         XCTAssertTrue(report.contains("Pending changes: 3"))
         XCTAssertTrue(report.contains("Retry count: 2"))
@@ -255,6 +262,8 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
             "payloadChecksum",
             "device token",
             "private details",
+            "app.tadawords.app",
+            "TadaWordsGitCommit",
         ] {
             XCTAssertFalse(report.contains(childPayload))
         }

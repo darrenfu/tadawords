@@ -13,12 +13,15 @@ struct GuardianFamilySyncDiagnosticReport: Equatable {
         profileErasure: GuardianProfileErasurePresentation? = nil,
         remoteNotificationRegistration:
             FamilySyncRemoteNotificationRegistrationState = .notRequested,
+        appVersion: GuardianAppVersionPresentation = .current,
         generatedAt: Date = Date()
     ) {
         var fields = [
             "Tada Words Family Sync Diagnostics",
-            "Schema: 2",
+            "Schema: 3",
             "Generated: \(generatedAt.ISO8601Format())",
+            "App version: \(appVersion.marketingVersion)",
+            "App build: \(appVersion.buildNumber)",
             "Enabled on this device: \(isEnabled ? "yes" : "no")",
         ]
         switch status {
