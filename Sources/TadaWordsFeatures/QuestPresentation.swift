@@ -153,6 +153,7 @@ struct QuestSession: Identifiable {
     let source: QuestItemSource
     let currentItem: Int
     let totalItems: Int
+    let earnedItemCount: Int
     let timer: QuestTimerModel
     let interfacePreferences: PracticeInterfacePreferences
 
@@ -165,6 +166,7 @@ struct QuestSession: Identifiable {
         source: QuestItemSource,
         currentItem: Int,
         totalItems: Int,
+        earnedItemCount: Int = 0,
         timer: QuestTimerModel,
         interfacePreferences: PracticeInterfacePreferences
     ) {
@@ -176,6 +178,7 @@ struct QuestSession: Identifiable {
         self.source = source
         self.currentItem = currentItem
         self.totalItems = totalItems
+        self.earnedItemCount = max(0, min(earnedItemCount, totalItems))
         self.timer = timer
         self.interfacePreferences = interfacePreferences
     }

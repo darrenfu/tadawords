@@ -17,11 +17,11 @@ final class BundledVoiceAccentLibraryTests: XCTestCase {
         XCTAssertNotNil(library.questComplete)
     }
 
-    func testSpokenTransitionsRespectVoiceAndReducedSoundPreferences() {
-        XCTAssertTrue(
+    func testQuestFeedbackTransitionsNeverLayerSpokenPraise() {
+        XCTAssertFalse(
             SpokenAccentPolicy.allows(.correct, preferences: .default)
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             SpokenAccentPolicy.allows(.reward, preferences: .default)
         )
         XCTAssertFalse(

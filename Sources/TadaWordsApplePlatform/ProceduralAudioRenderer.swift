@@ -70,15 +70,17 @@ enum ProceduralAudioFactory {
                 0.18
             )
         case .correct:
-            recipe = (
-                0.58,
-                [
-                    (frequency(forMIDINote: tonic + 12), 0, 0.17),
-                    (frequency(forMIDINote: tonic + 16), 0.12, 0.18),
-                    (frequency(forMIDINote: tonic + 19), 0.25, 0.20),
-                    (frequency(forMIDINote: tonic + 24), 0.39, 0.18),
+            return makeSimpleBuffer(
+                duration: 0.58,
+                sampleRate: sampleRate,
+                notes: [
+                    (frequency(forMIDINote: tonic + 12), 0, 0.22),
+                    (frequency(forMIDINote: tonic + 16), 0.085, 0.23),
+                    (frequency(forMIDINote: tonic + 19), 0.17, 0.24),
+                    (frequency(forMIDINote: tonic + 24), 0.255, 0.27),
                 ],
-                0.34
+                waveform: .marimba,
+                gain: 0.34
             )
         case .validRetry:
             recipe = (
@@ -423,10 +425,13 @@ enum ProceduralAudioFactory {
                 let localTime = Double(frame - startFrame) / sampleRate
                 let progress = localTime / note.duration
                 let attack = min(1, localTime / 0.018)
-                let decay = pow(
-                    max(0, 1 - progress),
-                    waveform == .softTriangle ? 2.8 : 1.8
-                )
+                let decayExponent: Double =
+                    switch waveform {
+                    case .marimba: 3.35
+                    case .softTriangle: 2.8
+                    case .sine, .wooden: 1.8
+                    }
+                let decay = pow(max(0, 1 - progress), decayExponent)
                 let value =
                     oscillator(
                         phase: 2 * Double.pi * note.pitch * localTime,
@@ -520,6 +525,9 @@ enum ProceduralAudioFactory {
         case .wooden:
             sin(phase) * 0.72 + sin(phase * 2.01) * 0.18
                 + sin(phase * 3.98) * 0.06
+        case .marimba:
+            sin(phase) * 0.68 + sin(phase * 3.98) * 0.18
+                + sin(phase * 9.15) * 0.05
         }
     }
 

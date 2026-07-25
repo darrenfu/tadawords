@@ -37,6 +37,8 @@ struct ReadQuestView: View {
     @State private var pendingAttemptTiming = AttemptTiming.unmeasured
     @State private var replayCountSinceLastAttempt = 0
     @State private var isPlayingPronunciationHint = false
+    @State private var starFeedbackEvent: QuestStarFeedbackEvent?
+    @State private var starFeedbackSequence = 0
 
     init(
         session: QuestSession,
@@ -77,38 +79,51 @@ struct ReadQuestView: View {
 
     var body: some View {
         TadaWorldBackground(theme: theme, sceneStyle: .quest) {
-            ZStack {
-                VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
-                    QuestChrome(
-                        mode: .read,
-                        currentItem: session.currentItem,
-                        totalItems: session.totalItems,
-                        elapsedText: questTimer.elapsedText,
-                        isEmergency: questTimer.isEmergency,
+            GeometryReader { proxy in
+                ZStack {
+                    VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                        QuestChrome(
+                            mode: .read,
+                            currentItem: session.currentItem,
+                            totalItems: session.totalItems,
+                            earnedStars: session.earnedItemCount,
+                            starFeedback: starFeedbackEvent,
+                            feedbackViewportHeight: proxy.size.height,
+                            elapsedText: questTimer.elapsedText,
+                            isEmergency: questTimer.isEmergency,
+                            theme: theme,
+                            onBack: onBack,
+                            onPause: pause
+                        )
+                        .zIndex(3)
+
+                        readingStage
+                    }
+                    .padding(.vertical, TadaPrimitiveTokens.Spacing.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .hiddenFromAccessibility(when: isPaused)
+
+                    TadaEmergencyAtmosphere(
                         theme: theme,
-                        onBack: onBack,
-                        onPause: pause
+                        isActive: questTimer.isEmergency
                     )
 
-                    readingStage
-                }
-                .padding(.vertical, TadaPrimitiveTokens.Spacing.small)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .hiddenFromAccessibility(when: isPaused)
+                    if let pendingCompletion =
+                        completionFeedbackLifecycle
+                        .visibleFeedback(for: session.prompt.id)
+                    {
+                        completionFeedback(for: pendingCompletion)
+                            .transition(.scale(scale: 0.88).combined(with: .opacity))
+                            .zIndex(2)
+                    }
 
-                TadaEmergencyAtmosphere(theme: theme, isActive: questTimer.isEmergency)
-
-                if let pendingCompletion =
-                    completionFeedbackLifecycle
-                    .visibleFeedback(for: session.prompt.id)
-                {
-                    completionFeedback(for: pendingCompletion)
-                        .transition(.scale(scale: 0.88).combined(with: .opacity))
-                        .zIndex(2)
-                }
-
-                if isPaused {
-                    QuestPauseOverlay(theme: theme, onResume: resume, onExit: onBack)
+                    if isPaused {
+                        QuestPauseOverlay(
+                            theme: theme,
+                            onResume: resume,
+                            onExit: onBack
+                        )
+                    }
                 }
             }
         }
@@ -532,13 +547,15 @@ struct ReadQuestView: View {
     }
 
     private func receive(_ result: RecognitionResult) {
+        guard case .evaluating = attemptState.phase else { return }
         isListening = false
-        let feedbackPlayback = playFeedback(for: result.decision)
         attemptState.receive(
             result,
             timing: pendingAttemptTiming,
             replayCount: replayCountSinceLastAttempt
         )
+        presentStarFeedback(for: result.decision)
+        let feedbackPlayback = playFeedback(for: result.decision)
         replayCountSinceLastAttempt = 0
         if let message = currentFeedback?.message {
             announceForAccessibility(message)
@@ -561,6 +578,24 @@ struct ReadQuestView: View {
         if !isPaused {
             questTimer.resume(from: .speechRecognition)
         }
+    }
+
+    private func presentStarFeedback(for decision: RecognitionDecision) {
+        let kind: QuestStarFeedbackKind
+        switch decision {
+        case .matched:
+            kind = .earned
+        case .notMatched:
+            kind = .missed
+        case .uncertain, .technicalFailure:
+            return
+        }
+        starFeedbackSequence += 1
+        starFeedbackEvent = QuestStarFeedbackEvent(
+            id: starFeedbackSequence,
+            kind: kind,
+            targetSlot: min(session.earnedItemCount, session.totalItems - 1)
+        )
     }
 
     private func playFeedback(
@@ -713,7 +748,7 @@ struct ReadQuestView: View {
             do {
                 try await QuestAdvanceTimingPolicy.waitBeforeAdvance(
                     minimumFeedbackVisibility: .milliseconds(
-                        reduceMotion ? 40 : 430
+                        reduceMotion ? 40 : 780
                     ),
                     feedbackPlayback: feedbackPlayback,
                     hasNextItem: session.currentItem < session.totalItems
@@ -761,6 +796,7 @@ struct ReadQuestView: View {
         completionTask = nil
         answerPlaybackTask = nil
         hintPlaybackTask = nil
+        starFeedbackEvent = nil
 
         attemptState = QuestAttemptStateMachine(policy: .read)
         isListening = false

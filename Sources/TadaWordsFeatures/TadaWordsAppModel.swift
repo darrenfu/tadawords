@@ -1371,6 +1371,11 @@ final class TadaWordsAppModel: ObservableObject {
     private func showCurrentItem() {
         guard let quest = activeQuest else { return }
         guard quest.currentIndex < quest.prompts.count else { return }
+        let earnedWordIDs = Set(
+            quest.attempts.compactMap { attempt in
+                attempt.outcome.isCorrect ? attempt.wordPromptID : nil
+            }
+        )
 
         destination = .quest(
             QuestSession(
@@ -1382,6 +1387,7 @@ final class TadaWordsAppModel: ObservableObject {
                 source: quest.currentItem.source,
                 currentItem: quest.currentIndex + 1,
                 totalItems: quest.prompts.count,
+                earnedItemCount: earnedWordIDs.count,
                 timer: quest.timer,
                 interfacePreferences: quest.interfacePreferences
             )

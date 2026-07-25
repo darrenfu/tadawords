@@ -129,6 +129,8 @@ struct SpellQuestView: View {
     @State private var promptPauseSeconds: TimeInterval = 0
     @State private var responseClock: AttemptResponseClock
     @State private var keyFeedbackTrigger = 0
+    @State private var starFeedbackEvent: QuestStarFeedbackEvent?
+    @State private var starFeedbackSequence = 0
 
     private let evaluator = SpellingAnswerEvaluator()
 
@@ -181,6 +183,9 @@ struct SpellQuestView: View {
                             mode: .write,
                             currentItem: session.currentItem,
                             totalItems: session.totalItems,
+                            earnedStars: session.earnedItemCount,
+                            starFeedback: starFeedbackEvent,
+                            feedbackViewportHeight: proxy.size.height,
                             elapsedText: questTimer.elapsedText,
                             isEmergency: questTimer.isEmergency,
                             theme: theme,
@@ -188,6 +193,7 @@ struct SpellQuestView: View {
                             onBack: onBack,
                             onPause: pause
                         )
+                        .zIndex(3)
 
                         spellingBoard(metrics: metrics)
                             .frame(maxWidth: 980, maxHeight: .infinity)
@@ -427,6 +433,7 @@ struct SpellQuestView: View {
             timing: timing,
             replayCount: attemptReplayCount
         )
+        presentStarFeedback(for: decision)
         Task {
             await audioExperienceService.play(
                 decision == .matched ? .correct : .validRetry
@@ -443,6 +450,24 @@ struct SpellQuestView: View {
                 "The word is \(session.prompt.displayText). Spell it one more time."
             )
         }
+    }
+
+    private func presentStarFeedback(for decision: RecognitionDecision) {
+        let kind: QuestStarFeedbackKind
+        switch decision {
+        case .matched:
+            kind = .earned
+        case .notMatched:
+            kind = .missed
+        case .uncertain, .technicalFailure:
+            return
+        }
+        starFeedbackSequence += 1
+        starFeedbackEvent = QuestStarFeedbackEvent(
+            id: starFeedbackSequence,
+            kind: kind,
+            targetSlot: min(session.earnedItemCount, session.totalItems - 1)
+        )
     }
 
     private func playPrompt(countsAsReplay: Bool = true) {
@@ -510,7 +535,9 @@ struct SpellQuestView: View {
         completionTask = Task { @MainActor in
             do {
                 try await Task.sleep(
-                    for: WriteQuestTimingPolicy.completionFeedbackVisibility
+                    for: reduceMotion
+                        ? .milliseconds(40)
+                        : WriteQuestTimingPolicy.completionFeedbackVisibility
                 )
             } catch {
                 return
@@ -554,6 +581,7 @@ struct SpellQuestView: View {
         showGuidedWord = false
         replayCountSinceLastAttempt = 0
         promptPauseSeconds = 0
+        starFeedbackEvent = nil
         responseClock.reset(at: questTimer.elapsedSeconds)
         questTimer.resume(from: .promptPlayback)
     }
