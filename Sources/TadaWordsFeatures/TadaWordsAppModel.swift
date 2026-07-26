@@ -39,6 +39,7 @@ final class TadaWordsAppModel: ObservableObject {
     private let profileRepository: (any KidProfileRepository)?
     private let profileMutationGate: ProfileScopedMutationGate?
     private let onLearningDataChanged: @Sendable () async -> Void
+    private let audioFallbackNoticeNanoseconds: UInt64
 
     private var activeQuest: ActiveQuest?
     private var pendingCompletion: PendingItemCompletion?
@@ -81,6 +82,7 @@ final class TadaWordsAppModel: ObservableObject {
         profileMutationGate: ProfileScopedMutationGate? = nil,
         progressReducer: WordProgressReducer = WordProgressReducer(),
         onLearningDataChanged: @escaping @Sendable () async -> Void = {},
+        audioFallbackNoticeNanoseconds: UInt64 = 2_500_000_000,
         questTimerFactory: @escaping (TimeInterval) -> QuestTimerModel = {
             QuestTimerModel(emergencyAfter: $0)
         }
@@ -101,6 +103,8 @@ final class TadaWordsAppModel: ObservableObject {
         self.profileMutationGate = profileMutationGate
         self.progressReducer = progressReducer
         self.onLearningDataChanged = onLearningDataChanged
+        self.audioFallbackNoticeNanoseconds =
+            audioFallbackNoticeNanoseconds
         self.questTimerFactory = questTimerFactory
         lastPlayedProfileID = initialProfileID.flatMap { rememberedID in
             profiles.contains(where: { $0.id == rememberedID }) ? rememberedID : nil
@@ -727,8 +731,9 @@ final class TadaWordsAppModel: ObservableObject {
     private func presentAudioFallbackNotice() {
         audioFallbackNoticeIsVisible = true
         audioFallbackNoticeTask?.cancel()
+        let noticeNanoseconds = audioFallbackNoticeNanoseconds
         audioFallbackNoticeTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            try? await Task.sleep(nanoseconds: noticeNanoseconds)
             guard !Task.isCancelled else { return }
             self?.audioFallbackNoticeIsVisible = false
         }

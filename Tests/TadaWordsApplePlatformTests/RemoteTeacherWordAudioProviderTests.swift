@@ -476,6 +476,173 @@ final class RemoteTeacherWordAudioProviderTests: XCTestCase {
         XCTAssertEqual(requestCount.value, 1)
     }
 
+    func testPipelinePrefersBundleThenCacheBeforeRemote() async throws {
+        let bundledDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "TadaWordsTeacherAudioBundlePriority-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        let cachedDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "TadaWordsTeacherAudioCachePriority-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer {
+            try? FileManager.default.removeItem(at: bundledDirectory)
+            try? FileManager.default.removeItem(at: cachedDirectory)
+        }
+        let endpoint = try XCTUnwrap(URL(string: "https://audio.example/word"))
+        let requestCount = LockedCounter()
+        let remote = RemoteTeacherWordAudioProvider(
+            endpoint: endpoint,
+            authorizer: TestTeacherAudioAuthorizer(),
+            dataLoader: { _ in
+                requestCount.increment()
+                throw URLError(.cannotConnectToHost)
+            }
+        )
+
+        let bundled = try XCTUnwrap(
+            BundledTeacherWordAudioProvider.production()
+        )
+        let bundledPrompt = try WordPrompt(
+            learningMode: .write,
+            text: "as"
+        )
+        let bundledRequest = TeacherWordAudioRequest(prompt: bundledPrompt)
+        let bundledCache = FileTeacherWordAudioCache(
+            directory: bundledDirectory
+        )
+        try await bundledCache.store(
+            TeacherWordAudioClip(audioData: Data([9, 9, 9])),
+            for: bundledRequest
+        )
+        let bundledPipeline = TeacherWordAudioPipeline(
+            bundled: bundled,
+            remote: remote,
+            cache: bundledCache
+        )
+
+        try await bundledPipeline.prepare([bundledPrompt])
+        let bundledClip = try await bundledPipeline.audio(for: bundledRequest)
+        let canonicalBundledClip = try await bundled.audio(
+            for: bundledRequest
+        )
+
+        XCTAssertEqual(bundledClip, canonicalBundledClip)
+        XCTAssertEqual(requestCount.value, 0)
+
+        let cachedPrompt = try WordPrompt(
+            learningMode: .write,
+            text: "albatross"
+        )
+        let cachedRequest = TeacherWordAudioRequest(prompt: cachedPrompt)
+        let cachedClip = try TeacherWordAudioClip(
+            audioData: Data([0x49, 0x44, 0x33, 0x04])
+        )
+        let cache = FileTeacherWordAudioCache(directory: cachedDirectory)
+        try await cache.store(cachedClip, for: cachedRequest)
+        let cachedPipeline = TeacherWordAudioPipeline(
+            bundled: nil,
+            remote: remote,
+            cache: cache
+        )
+
+        try await cachedPipeline.prepare([cachedPrompt])
+        let loadedCachedClip = try await cachedPipeline.audio(
+            for: cachedRequest
+        )
+
+        XCTAssertEqual(loadedCachedClip, cachedClip)
+        XCTAssertEqual(requestCount.value, 0)
+    }
+
+    func testPipelineContinuesMixedBatchAfterOperationalFailure() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "TadaWordsTeacherAudioMixedBatch-\(UUID().uuidString)",
+                isDirectory: true
+            )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = try XCTUnwrap(URL(string: "https://audio.example/word"))
+        let audioData = Data([0x49, 0x44, 0x33, 0x04])
+        let requestCount = LockedCounter()
+        let remote = RemoteTeacherWordAudioProvider(
+            endpoint: endpoint,
+            authorizer: TestTeacherAudioAuthorizer(),
+            dataLoader: { request in
+                requestCount.increment()
+                let body = try XCTUnwrap(request.httpBody)
+                let payload = try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: body)
+                        as? [String: Any]
+                )
+                let word = try XCTUnwrap(payload["word"] as? String)
+                if word == "albatross" {
+                    return (
+                        Data(),
+                        try XCTUnwrap(
+                            HTTPURLResponse(
+                                url: endpoint,
+                                statusCode: 503,
+                                httpVersion: nil,
+                                headerFields: nil
+                            )
+                        )
+                    )
+                }
+                let checksum = SHA256.hash(data: audioData)
+                    .map { String(format: "%02x", $0) }
+                    .joined()
+                return (
+                    audioData,
+                    try XCTUnwrap(
+                        HTTPURLResponse(
+                            url: endpoint,
+                            statusCode: 200,
+                            httpVersion: nil,
+                            headerFields: [
+                                "Content-Type": "audio/mpeg",
+                                "X-PawGoo-Audio-Checksum": checksum,
+                                "X-PawGoo-Audio-Contract":
+                                    "elevenlabs-teacher-v1",
+                            ]
+                        )
+                    )
+                )
+            }
+        )
+        let pipeline = TeacherWordAudioPipeline(
+            bundled: nil,
+            remote: remote,
+            cache: FileTeacherWordAudioCache(directory: directory)
+        )
+        let failingPrompt = try WordPrompt(
+            learningMode: .write,
+            text: "albatross"
+        )
+        let succeedingPrompt = try WordPrompt(
+            learningMode: .read,
+            text: "aluminum"
+        )
+
+        do {
+            try await pipeline.prepare([failingPrompt, succeedingPrompt])
+            XCTFail("The first operational failure must remain observable")
+        } catch {
+            XCTAssertEqual(
+                error as? TeacherWordAudioError,
+                .serverRejected(statusCode: 503)
+            )
+        }
+
+        let cachedSuccess = try await pipeline.audio(
+            for: TeacherWordAudioRequest(prompt: succeedingPrompt)
+        )
+        XCTAssertEqual(cachedSuccess.audioData, audioData)
+        XCTAssertEqual(requestCount.value, 2)
+    }
+
     func testPipelineTreatsExplicitCatalogMissAsAppleSpeechEligible() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(

@@ -54,26 +54,44 @@ public actor TeacherWordAudioPipeline:
     }
 
     public func prepare(_ prompts: [WordPrompt]) async throws {
+        var firstFailure: (any Error)?
         for prompt in uniquePrompts(prompts) {
-            let request = TeacherWordAudioRequest(prompt: prompt)
             do {
-                _ = try await audio(for: request)
-            } catch TeacherWordAudioError.catalogMissAppleFallback {
-                continue
-            } catch TeacherWordAudioError.unavailableOfflineClip {
-                guard let remote else {
-                    throw TeacherWordAudioError.unconfiguredEndpoint
+                try await prepare(prompt)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // Keep preparing the remaining independent prompts so one
+                // transient or corrupt word cannot starve the rest of a Quest.
+                if firstFailure == nil {
+                    firstFailure = error
                 }
-                do {
-                    let clip = try await remote.audio(for: request)
-                    try await cache.store(clip, for: request)
-                } catch TeacherWordAudioError.serverRejected(statusCode: 422) {
-                    // PawGoo has authoritatively confirmed that this valid
-                    // isolated word is outside the online Bella catalog.
-                    // The word may still be committed; playback will use the
-                    // device-local Apple English voice.
-                    try await cache.markCatalogMiss(for: request)
-                }
+            }
+        }
+        if let firstFailure {
+            throw firstFailure
+        }
+    }
+
+    private func prepare(_ prompt: WordPrompt) async throws {
+        let request = TeacherWordAudioRequest(prompt: prompt)
+        do {
+            _ = try await audio(for: request)
+        } catch TeacherWordAudioError.catalogMissAppleFallback {
+            return
+        } catch TeacherWordAudioError.unavailableOfflineClip {
+            guard let remote else {
+                throw TeacherWordAudioError.unconfiguredEndpoint
+            }
+            do {
+                let clip = try await remote.audio(for: request)
+                try await cache.store(clip, for: request)
+            } catch TeacherWordAudioError.serverRejected(statusCode: 422) {
+                // PawGoo has authoritatively confirmed that this valid
+                // isolated word is outside the online Bella catalog.
+                // The word may still be committed; playback will use the
+                // device-local Apple English voice.
+                try await cache.markCatalogMiss(for: request)
             }
         }
     }
