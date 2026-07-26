@@ -26,7 +26,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.7.44` (build `2026072502`) replaces spoken answer praise with immediate star-progress feedback in Read and both Write input paths. Correct answers move a complete star from the answer area into the exact next slot with a short fading trail and a bright synthesized marimba cue. Incorrect answers release a transient star from that same slot, bounce once on a raised floor, and remove it without changing earned progress. Reduce Motion commits without travel. The distribution contract remains: Made for Kids with Apple's `6–8` primary band, public and in-app Profile ages 3–8, Free with no IAP or ads, United States only, and manual release. External App Store, TestFlight, cross-device CloudKit, privacy-traffic, and human acceptance remain pending until recorded against an exact release HEAD. See the [v0.7.44 release note](Docs/Releases/v0.7.44-star-feedback.md), [v0.7.40 release note](Docs/Releases/v0.7.40-app-version-diagnostics.md), [1.0 fallback record](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md), [decision record](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md), v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), and [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md).
+> **Project status:** Version `0.7.44` (build `2026072601`) replaces spoken answer praise with immediate star-progress feedback in Read and both Write input paths. Correct answers move a complete star from the answer area into the exact next slot with a short fading trail and a bright synthesized marimba cue. Incorrect answers release a transient star from that same slot, bounce once on a raised floor, and remove it without changing earned progress. Read has two fixed attempts; Write and Spell reveal the answer after the second miss and allow one guided third attempt. The result board counts earned stars from 1 at a 120 ms tempo. Reduce Motion commits without travel. The distribution contract remains: Made for Kids with Apple's `6–8` primary band, public and in-app Profile ages 3–8, Free with no IAP or ads, United States only, and manual release. External App Store, TestFlight, cross-device CloudKit, privacy-traffic, and human acceptance remain pending until recorded against an exact release HEAD. See the [v0.7.44 release note](Docs/Releases/v0.7.44-star-feedback.md), [v0.7.40 release note](Docs/Releases/v0.7.40-app-version-diagnostics.md), [1.0 fallback record](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md), [decision record](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md), v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), and [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -43,7 +43,7 @@ music, sound cues, and 25-item reward collection.
 
 Read never speaks the target before the child's first independent response. Each recording can listen for up to six seconds. An unclear recording or listening timeout consumes one of the fixed two tries without becoming accuracy evidence. After a correct response or the second miss, Read plays the correct pronunciation, pauses briefly, and advances. Covered words use the bundled Katie Read-hint recording, while other guardian-entered words use Apple speech. Each World owns one coordinated, high-contrast word color, so every Read word stays visually consistent until the child changes Worlds.
 
-Write plays the bundled Katie isolated-word recording at 0.67× for the first 500 covered words and never pre-shows the spelling. The separate Read-hint version uses the same one-and-a-half-times-slower cadence. Both variants retain 120 ms of encoding-safe tail padding so final consonants such as the `/t/` in `at` finish before playback completes. Apple speech is the offline fallback for words outside the pack and keeps a neutral pitch plus enough release time to preserve final consonants. The child first chooses **Write by Hand** or **Spell with Letters**; either choice completes the same Daily Write Quest and shares its Pool, mastery, review schedule, score, and reward. Both Write paths use a fixed two-try limit and reveal the correct spelling only after the second miss. Typed pace is recorded in a separate input-method band so fast key taps never make handwriting look slow. The spelling surface is a fixed-position, theme-colored QWERTY A–Z keyboard built in SwiftUI. An attached iPad keyboard can enter A–Z, Delete/Backspace, and Return through the same constrained input state; the system keyboard, predictive text, numbers, and symbols never appear. Comparison ignores capitalization, while apostrophes and hyphens are supplied as structural parts of the prompt. Focused Replay keeps the selected input method.
+Write plays the bundled Katie isolated-word recording at 0.67× for the first 500 covered words and never pre-shows the spelling. The separate Read-hint version uses the same one-and-a-half-times-slower cadence. Both variants retain 120 ms of encoding-safe tail padding so final consonants such as the `/t/` in `at` finish before playback completes. Apple speech is the offline fallback for words outside the pack and keeps a neutral pitch plus enough release time to preserve final consonants. The child first chooses **Write by Hand** or **Spell with Letters**; either choice completes the same Daily Write Quest and shares its Pool, mastery, review schedule, score, and reward. Both Write paths allow two independent attempts, reveal the correct spelling after the second miss, and keep input enabled for one guided imitation attempt. Typed pace is recorded in a separate input-method band so fast key taps never make handwriting look slow. The spelling surface is a fixed-position, theme-colored QWERTY A–Z keyboard built in SwiftUI. An attached iPad keyboard can enter A–Z, Delete/Backspace, and Return through the same constrained input state; the system keyboard, predictive text, numbers, and symbols never appear. Comparison ignores capitalization, while apostrophes and hyphens are supplied as structural parts of the prompt. Focused Replay keeps the selected input method.
 
 For handwriting, the `?` control reveals the word on demand. After the first genuine mismatch, a concrete word such as `dog` can show a tappable picture hint from the bundled Twemoji pack, including on a fresh offline install; abstract and function words such as `the` receive no image. Children can choose Pencil, Chalk, or Brush; ink is always black and the selected tool persists per Profile. The 4× local eraser restores the prior pen after a blank-canvas tap. The canvas is 10% wider, keeps fixed coordinates during feedback and word transitions, and preserves dots, later letters, and connected strokes. Most words retain two lazy Vision raster passes and five candidates per observation. The visually ambiguous target `of` alone gathers three scales and up to 10 candidates before deciding: a lower-ranked exact spelling needs agreement across two scales, while any strong complete `off` spelling vetoes a match. Mixed-case `oF`, connected lowercase `of`, and six child-like shape variations receive this exact, target-specific recovery. A numeric `0` may stand for `o` only when its aligned target position is exactly `o`, so `0f` and `0F` are accepted while `00`, `90`, `0t`, `0ff`, `+0`, and `f0` remain rejected. Technical speech or recognition failures do not reduce the child's score.
 
@@ -154,7 +154,7 @@ build, commit, and bundle ID:
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.7.44 2026072502 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.7.44 2026072601 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 For the normal PawGoo Development artifact, use the stricter no-install gate:
@@ -162,7 +162,7 @@ For the normal PawGoo Development artifact, use the stricter no-install gate:
 ```sh
 ./Scripts/verify-pawgoo-development-app.py \
   '/path/to/Tada Words.app' \
-  0.7.44 2026072502 "$(git rev-parse HEAD)" \
+  0.7.44 2026072601 "$(git rev-parse HEAD)" \
   --device-udid 'APPROVED_IPHONE_HARDWARE_UDID' \
   --device-udid 'APPROVED_IPAD_HARDWARE_UDID'
 ```
@@ -213,7 +213,7 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Version and build | v0.7.44 (`2026072502`) in source Plists and generated project settings |
+| Version and build | v0.7.44 (`2026072601`) in source Plists and generated project settings |
 | Swift tests | v0.7.44 adds idempotent star progress, exact-slot success/failure trajectories, Reduce Motion behavior, marimba feedback, and a no-spoken-transition policy; the full source gate is rerun at the immutable release HEAD |
 | Family Sync physical delta | Normal PawGoo v0.7.18 installed in place on the approved iPhone and iPad; an iPhone-created test Profile converged automatically to the untouched iPad without opening Family Sync, with one matching record and four Profiles total on each side |
 | Family Sync simulator E2E | Merged v0.7.2: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5 |
@@ -294,7 +294,7 @@ Tada Words为孩子们提供了每天两个独立的视字任务：
 
 Parents通过键入、使用光学字符识别（OCR）扫描学校列表或从离线预设中选择单词来添加每个练习单词。Tada Words从不自动填充池。审查时间表根据回忆强度、错误、帮助使用、重播和每个孩子的反应速度将家长批准的单词带回。
 
-> **项目状态：**版本 `0.7.44`（构建 `2026072502`）把 Read 和两种 Write 输入路径中的答题语音表扬替换为即时星星进度反馈。答对时，完整星星从答题区沿短渐隐尾迹准确吸入下一个星槽，并播放纯合成木琴音效；答错时，临时星星从同一目标槽准确掉落，在抬高的水平面明显短弹一次后完全消失，不改变已得进度。Reduce Motion 会直接提交状态而不移动。App Store、TestFlight、跨设备 CloudKit、隐私流量和人工验收仍须在精确发布 HEAD 上记录。另见 [v0.7.44 发布说明](Docs/Releases/v0.7.44-star-feedback.md)、[v0.7.40 发布说明](Docs/Releases/v0.7.40-app-version-diagnostics.md)、[1.0 fallback 记录](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md)、[App Store 决策记录](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md)、[隐私清单](Docs/APP_STORE_PRIVACY_v0.7.4.md)和[内容权利清单](Docs/APP_STORE_CONTENT_RIGHTS.md)。
+> **项目状态：**版本 `0.7.44`（构建 `2026072601`）把 Read 和两种 Write 输入路径中的答题语音表扬替换为即时星星进度反馈。答对时，完整星星从答题区沿短渐隐尾迹准确吸入下一个星槽，并播放纯合成木琴音效；答错时，临时星星从同一目标槽准确掉落，在抬高的水平面明显短弹一次后完全消失，不改变已得进度。Read 固定两次机会；Write 和 Spell 第二次答错后显示答案，并保留一次引导式第三次模仿机会。结果页按 120ms 节奏从 1 翻到所得星星数。Reduce Motion 会直接提交状态而不移动。App Store、TestFlight、跨设备 CloudKit、隐私流量和人工验收仍须在精确发布 HEAD 上记录。另见 [v0.7.44 发布说明](Docs/Releases/v0.7.44-star-feedback.md)、[v0.7.40 发布说明](Docs/Releases/v0.7.40-app-version-diagnostics.md)、[1.0 fallback 记录](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md)、[App Store 决策记录](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md)、[隐私清单](Docs/APP_STORE_PRIVACY_v0.7.4.md)和[内容权利清单](Docs/APP_STORE_CONTENT_RIGHTS.md)。
 
 该应用程序包含八个独立的视觉世界：Moonpetal Kingdom、Build-It Bay、Paws & Pines、Dino Discovery、Firehouse Heroes、Brickwork City、Frostlight World和Coaster Carnival。每个世界都保留了自己的原创场景、吉祥物、音乐、声音线索和25个物品的奖励收藏。
 
@@ -461,7 +461,7 @@ open TadaWords.xcodeproj
 |检查|结果|
 |---|---|
 |严格Swift格式杂毛|通过|
-| 版本和构建 | 源 Plist 与生成项目设置中的 v0.7.44（`2026072502`） |
+| 版本和构建 | 源 Plist 与生成项目设置中的 v0.7.44（`2026072601`） |
 | Swift 测试 | v0.7.44 覆盖星星进度幂等提交、准确槽位轨迹、Reduce Motion、木琴反馈和无转场人声策略；必须在不可变的发布 HEAD 上重跑完整 source gate |
 | 家庭同步物理差分 | 正常 PawGoo v0.7.18 已安装在批准的 iPhone 和 iPad 上；一个 iPhone 创建的测试 Profile 自动收敛到未触碰的 iPad，无需打开家庭同步，每侧总共有一个匹配记录和四个 Profile |
 | 家庭同步模拟器E2E |合并v0.7.2：6/6在iPhone 17 Pro Max和6/6在iPad Pro 13英寸（M5），iOS 26.5 |
