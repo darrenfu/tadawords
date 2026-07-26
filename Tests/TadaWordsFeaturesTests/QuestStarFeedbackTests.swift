@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import TadaWordsDomain
 import XCTest
 
 @testable import TadaWordsFeatures
@@ -77,5 +78,46 @@ final class QuestStarFeedbackTests: XCTestCase {
         let second = QuestStarFeedbackEvent(kind: .missed, targetSlot: 1)
 
         XCTAssertNotEqual(first.id, second.id)
+    }
+
+    func testUncertainAndNotHeardFailuresUseMissedStarFeedback() {
+        XCTAssertEqual(
+            QuestAttemptFeedbackPolicy.presentation(for: .uncertain),
+            QuestAttemptFeedbackPresentation(kind: .missed, cue: .validRetry)
+        )
+        XCTAssertEqual(
+            QuestAttemptFeedbackPolicy.presentation(
+                for: .technicalFailure(.noUsableAudio)
+            ),
+            QuestAttemptFeedbackPresentation(kind: .missed, cue: .validRetry)
+        )
+        XCTAssertEqual(
+            QuestAttemptFeedbackPolicy.presentation(
+                for: .technicalFailure(.timedOut)
+            ),
+            QuestAttemptFeedbackPresentation(kind: .missed, cue: .validRetry)
+        )
+    }
+
+    func testPermissionFailureStaysTechnicalAndDoesNotBlameChild() {
+        XCTAssertEqual(
+            QuestAttemptFeedbackPolicy.presentation(
+                for: .technicalFailure(.permissionDenied)
+            ),
+            QuestAttemptFeedbackPresentation(kind: nil, cue: .technicalRetry)
+        )
+    }
+
+    func testGlobalSlotCenterConvertsOnceIntoStableViewportCoordinates() {
+        let viewport = CGRect(x: 40, y: 80, width: 820, height: 520)
+        let slot = CGRect(x: 306, y: 102, width: 24, height: 24)
+
+        XCTAssertEqual(
+            QuestStarCoordinateSpace.localCenter(
+                of: slot,
+                in: viewport
+            ),
+            CGPoint(x: 278, y: 34)
+        )
     }
 }

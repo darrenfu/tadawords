@@ -140,7 +140,6 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     private var spokenAccentPlayer: AVAudioPlayer?
     private var spokenAccentGeneration = 0
     private var spokenAccentOwnsVoicePrompt = false
-    private var correctAccentIndex = 0
 
     public init() {
         voiceAccentLibrary = .production()
@@ -279,7 +278,7 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         }
 
         if AudioPreferencePolicy.shouldPlay(cue, preferences: preferences),
-            startEngineIfNeeded()
+            prepareEngineForEffectPlayback()
         {
             stopWritingAudio()
             effectPlayer.stop()
@@ -376,25 +375,10 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     }
 
     private func spokenAccentURL(for cue: FunctionalAudioCue) -> URL? {
-        guard SpokenAccentPolicy.allows(cue, preferences: preferences) else {
-            return nil
-        }
-
-        switch cue {
-        case .correct:
-            guard !voiceAccentLibrary.correct.isEmpty else { return nil }
-            let url = voiceAccentLibrary.correct[
-                correctAccentIndex % voiceAccentLibrary.correct.count
-            ]
-            correctAccentIndex =
-                (correctAccentIndex + 1)
-                % voiceAccentLibrary.correct.count
-            return url
-        case .reward:
-            return voiceAccentLibrary.questComplete
-        case .click, .validRetry, .technicalRetry, .star, .writing:
-            return nil
-        }
+        _ = cue
+        // Per-answer and quest-completion transitions are intentionally
+        // non-verbal. Prompt pronunciation remains owned by the prompt service.
+        return nil
     }
 
     @discardableResult
@@ -647,6 +631,23 @@ public actor AppleAudioExperienceService: AudioExperienceService {
             // block word practice. Leaving both players stopped also ensures
             // a later activation retries engine startup instead of mistaking
             // a scheduled-but-silent node for live music.
+            return false
+        }
+    }
+
+    private func prepareEngineForEffectPlayback() -> Bool {
+        do {
+            // Prompt playback and speech recognition both change the shared
+            // iOS audio session. Re-assert the app policy for every discrete
+            // effect even when AVAudioEngine itself still reports running.
+            try activateAudioSession()
+            if !engine.isRunning {
+                engine.prepare()
+                try engine.start()
+            }
+            return engine.isRunning
+        } catch {
+            engine.stop()
             return false
         }
     }

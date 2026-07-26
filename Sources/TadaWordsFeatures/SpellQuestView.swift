@@ -131,6 +131,7 @@ struct SpellQuestView: View {
     @State private var responseClock: AttemptResponseClock
     @State private var keyFeedbackTrigger = 0
     @State private var starFeedbackEvent: QuestStarFeedbackEvent?
+    @State private var starSlotFrames: [Int: CGRect] = [:]
 
     private let evaluator = SpellingAnswerEvaluator()
 
@@ -191,7 +192,6 @@ struct SpellQuestView: View {
                             totalItems: session.totalItems,
                             earnedStars: session.earnedItemCount,
                             starFeedback: starFeedbackEvent,
-                            feedbackViewportFrame: proxy.frame(in: .global),
                             elapsedText: questTimer.elapsedText,
                             isEmergency: questTimer.isEmergency,
                             theme: theme,
@@ -228,6 +228,19 @@ struct SpellQuestView: View {
                             onExit: onBack
                         )
                     }
+
+                    QuestStarFeedbackOverlay(
+                        event: starFeedbackEvent,
+                        targetSlotFrame: starFeedbackEvent.flatMap {
+                            starSlotFrames[$0.targetSlot]
+                        },
+                        viewportFrame: proxy.frame(in: .global),
+                        accent: theme.primary
+                    )
+                    .zIndex(5)
+                }
+                .onPreferenceChange(QuestStarSlotFramesPreferenceKey.self) {
+                    starSlotFrames = $0
                 }
             }
         }
@@ -447,10 +460,9 @@ struct SpellQuestView: View {
         )
         presentStarFeedback(for: decision)
         feedbackPlaybackTask?.cancel()
+        let cue = QuestAttemptFeedbackPolicy.presentation(for: decision).cue
         let feedbackPlayback = Task {
-            await audioExperienceService.play(
-                decision == .matched ? .correct : .validRetry
-            )
+            await audioExperienceService.play(cue)
         }
         feedbackPlaybackTask = feedbackPlayback
 
@@ -467,15 +479,11 @@ struct SpellQuestView: View {
     }
 
     private func presentStarFeedback(for decision: RecognitionDecision) {
-        let kind: QuestStarFeedbackKind
-        switch decision {
-        case .matched:
-            kind = .earned
-        case .notMatched:
-            kind = .missed
-        case .uncertain, .technicalFailure:
-            return
-        }
+        guard
+            let kind = QuestAttemptFeedbackPolicy.presentation(
+                for: decision
+            ).kind
+        else { return }
         starFeedbackEvent = QuestStarFeedbackEvent(
             kind: kind,
             targetSlot: min(session.earnedItemCount, session.totalItems - 1)

@@ -435,6 +435,18 @@ final class ProceduralAudioTests: XCTestCase {
         )
     }
 
+    func testAllStarFeedbackAndCompletionCuesUseXylophoneTimbre() {
+        XCTAssertTrue(ProceduralAudioFactory.usesXylophoneTimbre(for: .correct))
+        XCTAssertTrue(ProceduralAudioFactory.usesXylophoneTimbre(for: .validRetry))
+        XCTAssertTrue(
+            ProceduralAudioFactory.usesXylophoneTimbre(for: .star(index: 0))
+        )
+        XCTAssertTrue(ProceduralAudioFactory.usesXylophoneTimbre(for: .reward))
+        XCTAssertFalse(
+            ProceduralAudioFactory.usesXylophoneTimbre(for: .technicalRetry)
+        )
+    }
+
     func testVoicePromptDuckingIsConservativeAndCrossfadeKeepsConstantGain() {
         XCTAssertLessThan(
             AmbientMixPolicy.duckedVolume,

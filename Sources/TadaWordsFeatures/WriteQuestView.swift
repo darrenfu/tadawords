@@ -149,6 +149,7 @@ struct WriteQuestView: View {
     @State private var pictureHintAsset: WordPictureHintAsset?
     @State private var isShowingPictureHint = false
     @State private var starFeedbackEvent: QuestStarFeedbackEvent?
+    @State private var starSlotFrames: [Int: CGRect] = [:]
 
     init(
         session: QuestSession,
@@ -210,7 +211,6 @@ struct WriteQuestView: View {
                             totalItems: session.totalItems,
                             earnedStars: session.earnedItemCount,
                             starFeedback: starFeedbackEvent,
-                            feedbackViewportFrame: viewport.frame(in: .global),
                             elapsedText: questTimer.elapsedText,
                             isEmergency: questTimer.isEmergency,
                             theme: theme,
@@ -257,6 +257,19 @@ struct WriteQuestView: View {
                             onExit: onBack
                         )
                     }
+
+                    QuestStarFeedbackOverlay(
+                        event: starFeedbackEvent,
+                        targetSlotFrame: starFeedbackEvent.flatMap {
+                            starSlotFrames[$0.targetSlot]
+                        },
+                        viewportFrame: viewport.frame(in: .global),
+                        accent: theme.primary
+                    )
+                    .zIndex(5)
+                }
+                .onPreferenceChange(QuestStarSlotFramesPreferenceKey.self) {
+                    starSlotFrames = $0
                 }
             }
         }
@@ -803,15 +816,11 @@ struct WriteQuestView: View {
     }
 
     private func presentStarFeedback(for decision: RecognitionDecision) {
-        let kind: QuestStarFeedbackKind
-        switch decision {
-        case .matched:
-            kind = .earned
-        case .notMatched:
-            kind = .missed
-        case .uncertain, .technicalFailure:
-            return
-        }
+        guard
+            let kind = QuestAttemptFeedbackPolicy.presentation(
+                for: decision
+            ).kind
+        else { return }
         starFeedbackEvent = QuestStarFeedbackEvent(
             kind: kind,
             targetSlot: min(session.earnedItemCount, session.totalItems - 1)
@@ -821,15 +830,7 @@ struct WriteQuestView: View {
     private func playFeedback(
         for decision: RecognitionDecision
     ) -> Task<Void, Never> {
-        let cue: FunctionalAudioCue
-        switch decision {
-        case .matched:
-            cue = .correct
-        case .notMatched:
-            cue = .validRetry
-        case .uncertain, .technicalFailure:
-            cue = .technicalRetry
-        }
+        let cue = QuestAttemptFeedbackPolicy.presentation(for: decision).cue
         feedbackPlaybackTask?.cancel()
         let task = Task {
             await audioExperienceService.play(cue)
