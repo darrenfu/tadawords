@@ -73,21 +73,15 @@ one new World and one animal icon on the following local day. Collection shows
 25 distinct icons per World even while locked; collected treasures can become
 Profile avatars without replacing the source photo.
 
-## Current screenshot evidence
+## Historical screenshot evidence
 
-Fresh Phase 1 evidence:
+The Phase 1 screenshot set covered:
 
-- `QAArtifacts/v0.2-phase1-2026-07-13/iPhone17ProMax-last-played-profile.jpg`
-- `QAArtifacts/v0.2-phase1-2026-07-13/iPhone17ProMax-moonpetal-lobby.jpg`
-- `QAArtifacts/v0.2-phase1-2026-07-13/iPhone17ProMax-moonpetal-read.jpg`
-- `QAArtifacts/v0.2-phase1-2026-07-13/iPhone17ProMax-moonpetal-result.jpg`
-- `QAArtifacts/v0.2-phase1-2026-07-13/iPadPro13-last-played-profile.jpg`
-- `QAArtifacts/v0.2-phase1-2026-07-13/iPadPro13-moonpetal-lobby.jpg`
-- `QAArtifacts/v0.2-phase1-2026-07-13/iPadPro13-paws-read.jpg`
-- `QAArtifacts/v0.2-phase1-2026-07-13/iPadPro13-paws-result.jpg`
+- iPhone last-played Profile, Moonpetal Lobby, Read, and Result
+- iPad last-played Profile, Moonpetal Lobby, Paws Read, and Result
 
-The pre-refinement Lobby/Read captures remain under
-`QAArtifacts/v0.2-2026-07-12/` for direct comparison.
+The temporary Phase 1 and pre-refinement image files were removed by the
+Issue #114 repository cleanup after the audit conclusions were recorded here.
 
 Headless simulator screenshots can store a rotated or letterboxed framebuffer even when the built orientation declarations are correct. Do not crop those images and treat them as full-screen rotation evidence.
 
