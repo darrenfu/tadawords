@@ -315,6 +315,7 @@ class PawGooDevelopmentAppVerifierTests(unittest.TestCase):
 
     def test_profile_authorization_rejects_wrong_cloudkit_or_team_wildcard(self):
         mutations = {
+            "com.apple.developer.devicecheck.appattest-environment": "production",
             "com.apple.developer.icloud-container-environment": ["Production"],
             "com.apple.developer.icloud-services": ["CloudDocuments"],
             "com.apple.developer.ubiquity-kvstore-identifier": "6S245NCUPQ.*",
@@ -327,6 +328,44 @@ class PawGooDevelopmentAppVerifierTests(unittest.TestCase):
                 )
                 entitlements[key] = value
                 with self.assertRaisesRegex(verifier.VerificationError, key):
+                    verifier.validate_profile_authorization(
+                        entitlements, self.policy
+                    )
+
+    def test_profile_authorization_accepts_app_attest_development_authorization(self):
+        for value in (
+            "development",
+            ["development"],
+            ["development", "production"],
+        ):
+            with self.subTest(value=value):
+                entitlements = copy.deepcopy(
+                    self.fixture["profile"]["Entitlements"]
+                )
+                entitlements[
+                    "com.apple.developer.devicecheck.appattest-environment"
+                ] = value
+                verifier.validate_profile_authorization(
+                    entitlements, self.policy
+                )
+
+    def test_profile_authorization_rejects_invalid_app_attest_authorization(self):
+        for value in (
+            ["production"],
+            ["development", "staging"],
+            ["development", "development"],
+        ):
+            with self.subTest(value=value):
+                entitlements = copy.deepcopy(
+                    self.fixture["profile"]["Entitlements"]
+                )
+                entitlements[
+                    "com.apple.developer.devicecheck.appattest-environment"
+                ] = value
+                with self.assertRaisesRegex(
+                    verifier.VerificationError,
+                    "com.apple.developer.devicecheck.appattest-environment",
+                ):
                     verifier.validate_profile_authorization(
                         entitlements, self.policy
                     )
@@ -431,6 +470,7 @@ class PawGooDevelopmentAppVerifierTests(unittest.TestCase):
     def test_wrong_environment_container_service_and_team_fail(self):
         mutations = {
             "aps-environment": "production",
+            "com.apple.developer.devicecheck.appattest-environment": "production",
             "com.apple.developer.icloud-container-environment": "Production",
             "com.apple.developer.icloud-container-identifiers": [
                 "iCloud.example.wrong"

@@ -26,12 +26,13 @@ crash-reporting, or tracking SDK and no third-party Swift package dependency.
 The 74-picture Twemoji hint catalog is bundled; the old jsDelivr runtime request
 is gone.
 
-The production target contains one configured network feature: parent-opted-in
-Family Sync through Apple's CloudKit private/shared databases, with Apple push
-notifications used to wake reconciliation. Tada Words has no app-owned account
-or database server in this source. A dormant HTTPS teacher-audio client exists,
-but `TadaWordsTeacherAudioEndpoint` is absent from both production and LocalQA
-configuration, so it is not reachable in the audited build.
+The production target contains two configured network features:
+parent-opted-in Family Sync through Apple's CloudKit private/shared databases,
+and Parent-triggered preparation of approved teacher words through
+`https://audio.pawgoo.app`. LocalQA remains endpoint-free. The teacher-audio
+request contains one normalized isolated word plus contract and App Attest
+fields; it contains no Profile ID, child name, recording, transcript, or
+learning history.
 
 The v0.7.38 source candidate lets the first child microphone tap request
 still-undetermined Speech Recognition and Microphone access in context, while
@@ -46,9 +47,10 @@ by default on every device. A parent must explicitly enable it on each device.
 Local practice remains available while sync is off, offline, or recovering.
 
 Do **not** publish App Store Privacy answers until the remaining exact-release
-gates pass. The source and the 2026-07-23 owner operating-practice attestations
-support a conditional **No data collected** draft, with these release gates
-still open:
+gates pass. Because ElevenLabs Creator does not provide Zero Retention Mode,
+the shipping manifest now conservatively declares
+`Other User Content → App Functionality`, not linked and not used for tracking,
+for the isolated teacher word. These release gates remain open:
 
 1. Deploy and physically accept the production CloudKit schema, sharing,
    background delivery, and test-only destructive erasure in issue
@@ -56,9 +58,12 @@ still open:
 2. Physically verify the implemented fail-closed Keychain cleanup across a
    signed uninstall/reinstall on iPhone and iPad in issue
    [#28](https://github.com/darrenfu/tadawords/issues/28).
-3. Scan and observe the exact signed iPhone/iPad release candidate. Confirm
-   that the teacher-audio endpoint remains absent and that no new SDK or domain
-   has appeared.
+3. Complete #74/#81 exact-TestFlight verification of the deployed PawGoo
+   Worker, production App Attest allowed path, ElevenLabs retention, logs,
+   domain, and exact request fields.
+4. Scan and observe the exact signed iPhone/iPad release candidate. Confirm
+   that its production endpoint matches the verified deployment and that no
+   unexpected SDK or domain has appeared.
 
 Resolved operating-practice evidence:
 
@@ -72,9 +77,9 @@ Resolved operating-practice evidence:
   parent-initiated support is used only to respond to that request, with no
   tracking, advertising, marketing, or unrelated use.
 
-`PrivacyInfo.xcprivacy` currently declares no collected data. That remains a
-candidate declaration, not proof that the final App Store Connect answers are
-complete.
+`PrivacyInfo.xcprivacy` declares the isolated teacher word as Other User
+Content for App Functionality, not linked and not tracked. That conservative
+manifest does not replace final App Store Connect reconciliation.
 
 ## Apple definition used by this audit
 
@@ -112,7 +117,7 @@ family and remains a release blocker in #19.
 | Profile deletion ledger | Profile ID, revision counter, revision device ID, and envelope schema, plus CloudKit system record metadata | Retained in the owner's CloudKit control zone to prevent stale-device resurrection | App-authored fields contain no nickname, photo, word, learning event, or voice data. CloudKit also maintains system metadata for the record. The Profile zone/share/assets are designed to be erased after the barrier. No tracking | Parent authorization required. Owner erasure, participant leave, and revocation paths exist in source; deletion of the sole Profile is currently blocked, and signed production destructive acceptance remains open | [`CloudKitFamilyDeletionLedger.swift`](../Sources/TadaWordsApplePlatform/CloudKitFamilyDeletionLedger.swift), [`RepositoryFamilySyncDeletionPrivacyHarnessTests.swift`](../Tests/TadaWordsContentTests/RepositoryFamilySyncDeletionPrivacyHarnessTests.swift) |
 | Picture hints | Concrete-word lookup and a child-safe Twemoji PNG | Bundle only. No runtime URL request | 74 unique PNGs are bundled. Abstract/function words have no mapping. No request logging, cache download, or tracking | Shown only after the practice assistance rule permits it. Removing the app removes bundled/cache copies | [`AppleWordPictureHintService.swift`](../Sources/TadaWordsApplePlatform/AppleWordPictureHintService.swift), [`Package.swift`](../Package.swift) |
 | Third-Party Notices | Offline Twemoji attribution, pinned source/version, unmodified status, and CC BY 4.0 terms | Notice text stays in the bundle. Only a parent's explicit tap opens the GitHub source or Creative Commons license in the external browser | No Profile, word, learning, photo, voice, or device identifier is appended to either URL. Normal open-web policy applies. No tracking SDK | Available behind the Parent Gate; external navigation is parent initiated | [`GuardianThirdPartyNoticesView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianThirdPartyNoticesView.swift), [`APP_STORE_CONTENT_RIGHTS.md`](APP_STORE_CONTENT_RIGHTS.md) |
-| Teacher word audio | Bundled Katie/Aurora clip or offline Apple speech. Dormant client payload contains word, optional pronunciation key, usage, speed, and contract version | Current configuration: bundle/Apple speech only. If an HTTPS `TadaWordsTeacherAudioEndpoint` is added later, that JSON would go to the configured server and an MP3 would return | Current app contains no endpoint or provider credential. Any future endpoint needs a new server-retention/provider audit. Received audio would be cached under a one-way SHA-256 filename. No current tracking | No current remote choice because the path is inactive. Enabling an endpoint invalidates this inventory | [`TadaWordsApp.swift`](../Apps/TadaWordsApp/TadaWordsApp.swift), [`RemoteTeacherWordAudioProvider.swift`](../Sources/TadaWordsApplePlatform/RemoteTeacherWordAudioProvider.swift) |
+| Teacher word audio | Bundled Bella clip, validated device-local cache, or device-local Apple speech after an explicit online-catalog miss or a visible remote-playback failure. A Parent preparation request contains normalized isolated word, usage, locale, optional pronunciation key, immutable contract version, one-time challenge, opaque App Attest key ID, and assertion; it contains no Profile ID, child name, recording, transcript, or learning history | Release uses only the audited PawGoo production endpoint; Debug uses its isolated development endpoint and LocalQA is endpoint-free. PawGoo verifies App Attest, enforces limits/cache, requests approved missing audio from ElevenLabs, and returns MP3 bytes plus contract/checksum headers. Apple fallback synthesis stays on device | No provider credential enters the app. App Attest key ID is device/app-install scoped and can link authorized requests at PawGoo for abuse prevention. Audio is cached under a one-way SHA-256 filename with a checksum sidecar; an explicit catalog miss uses a separate one-way-hash marker so it remains distinguishable from missing or corrupt audio after relaunch. A catalog-external word reaches PawGoo for membership checking but is not sent to ElevenLabs. The conservative Other User Content disclosure covers ElevenLabs retention of approved isolated words | Parent import prepares before committing the Pool. An explicit `422` catalog miss may commit and later use Apple speech. Child Quest planning and playback are local-only. Authentication, rate, service, corrupt-audio, and integrity failures show a short warning and then use Apple speech without blocking practice | [`TadaWordsApp.swift`](../Apps/TadaWordsApp/TadaWordsApp.swift), [`TeacherWordAudioPipeline.swift`](../Sources/TadaWordsApplePlatform/TeacherWordAudioPipeline.swift), [`RemoteTeacherWordAudioProvider.swift`](../Sources/TadaWordsApplePlatform/RemoteTeacherWordAudioProvider.swift), [`AppAttestTeacherAudioAuthorizer.swift`](../Sources/TadaWordsApplePlatform/AppAttestTeacherAudioAuthorizer.swift), [`TEACHER_AUDIO_RELEASE_GATES.md`](TEACHER_AUDIO_RELEASE_GATES.md) |
 | Parent learning-report export | Word, mode, first-attempt count, correct count, accuracy, and mean seconds in CSV | Leaves the app only when an authorized parent invokes the iOS share sheet and chooses a destination | Tada Words does not upload the CSV. The selected destination's policy applies. No automatic retention or tracking by this app | Sensitive Parent action authorization, followed by an explicit share-sheet choice each time | [`GuardianReportsView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianReportsView.swift), [`GuardianModels.swift`](../Sources/TadaWordsGuardianFeatures/GuardianModels.swift) |
 | Family Sync diagnostic export | Generated timestamp, enabled flag, coarse transport state, pending/retry count, next retry, and last-success timestamp | Leaves the app only when a parent explicitly chooses a share-sheet destination | Deliberately excludes Profile ID, child name, words, photo, voice sample, voiceprint, and repository payload. Destination policy applies. No tracking | Parent explicitly shares each report | [`GuardianPlatformViews.swift`](../Sources/TadaWordsGuardianFeatures/GuardianPlatformViews.swift) |
 | OS diagnostics | Bootstrap failure category/store/schema boundary and speech-framework error domain/code | Written to Apple's local unified logging system; no app network exporter exists | No nickname, word, photo, voice sample, transcript, voiceprint, stroke, or repository payload is logged by these paths. OS retention/access policy applies. No analytics or tracking | Automatic on technical failure; removed under OS log lifecycle | [`ApplicationBootstrap.swift`](../Sources/TadaWordsAppShell/ApplicationBootstrap.swift), [`AppleSpeechRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechRecognitionService.swift) |
@@ -178,6 +183,13 @@ CloudKit must not win a conflict with a transported progress/report snapshot.
   ink/eraser state, and unfinished input.
 - Picture, teacher-audio, music, and sound-effect assets/caches.
 
+Remote teacher-audio cache entries use hashed request identities and matching
+SHA-256 sidecars. They contain no Profile or child identifier, persist in the
+app-private Application Support container so prepared Quest audio survives
+relaunch, are explicitly excluded from device backup, and never enter
+CloudKit. If persistent storage is unavailable, Parent preparation fails
+closed instead of using a temporary cache that could disappear before Quest.
+
 ### CloudKit operator boundary
 
 Production source constructs container `iCloud.com.tadawords.app`, uses a
@@ -197,7 +209,7 @@ process exists. The release owner must attest that boundary.
 
 | Surface | Current declaration/behavior | Audit result |
 | --- | --- | --- |
-| `PrivacyInfo.xcprivacy` | Tracking false; no tracking domains; empty collected-data array; File Timestamp reason `C617.1`; System Boot Time reason `35F9.1`; app-container User Defaults reason `CA92.1` | The three required-reason declarations cover the audited source, including the Profile-scoped handwriting-tool preference in `UserDefaults`. Keep the manifest and conditional no-Pawgoo-collection design provisional until the owner attestations and exact signed-build scan pass |
+| `PrivacyInfo.xcprivacy` | Tracking false; no tracking domains; Other User Content for App Functionality, not linked and not tracked; File Timestamp reason `C617.1`; System Boot Time reason `35F9.1`; app-container User Defaults reason `CA92.1` | The collected-data entry conservatively covers the isolated teacher word because the current ElevenLabs plan lacks Zero Retention Mode. The required-reason declarations cover the audited source, including the Profile-scoped handwriting-tool preference in `UserDefaults` |
 | Microphone | Spoken Read Practice; raw audio not saved/uploaded | Matches source. Voice setup and speaker matching are not included in App Store 1.0 |
 | Speech Recognition | On-device comparison | Matches source; unsupported on-device recognition fails closed |
 | Camera | Parent-selected Profile photo or word-sheet OCR | Matches source; prepared Profile photo may later sync through CloudKit after opt-in |
@@ -275,10 +287,10 @@ Apple CloudKit/share participants with Profile-scoped records. The release
 owner must classify it against the exact App Store Privacy questionnaire and
 the final Pawgoo CloudKit-access operating boundary.
 
-If those facts do not support the conditional **No data collected** answer,
-declare `Identifiers → Device ID` for App Functionality with the truthful
-linked-to-user result rather than omitting the UUID. Source code alone cannot
-decide Pawgoo access/retention or the final questionnaire treatment.
+The teacher-word disclosure does not decide the separate installation UUID
+classification. If the CloudKit facts require it, also declare
+`Identifiers → Device ID` for App Functionality with the truthful
+linked-to-user result rather than omitting the UUID.
 
 For data provided in an app interface, the optional-disclosure exception
 requires optional and infrequent submission, clear disclosure of the submitted
@@ -290,7 +302,8 @@ actual mailbox practice.
 
 ### Stop-and-re-audit triggers
 
-- `TadaWordsTeacherAudioEndpoint` becomes present in any shipping configuration.
+- `TadaWordsTeacherAudioEndpoint` changes from the audited production hostname,
+  or appears in LocalQA.
 - Pawgoo gains CloudKit server/API, dashboard, export, support attachment, or
   other record access.
 - A login/account, analytics, crash, telemetry, advertising, attribution, or
@@ -318,7 +331,7 @@ shipping behavior and obtain the operator's retention/access facts.
 | Pawgoo CloudKit access | **Owner-confirmed 2026-07-23:** no separate server credential, API, dashboard, export, support attachment, or retention process reads/retains CloudKit records | Release-owner attestation |
 | Installation Device ID classification | Confirm the random per-install logical-revision UUID is handled consistently in the final Privacy Report and App Store Privacy questionnaire; if the conditional no-collection assumptions do not hold, disclose Device ID for App Functionality rather than guessing | Release-owner/privacy review |
 | Support retention/use | Owner confirms mailbox retention, uses, access, deletion response, and optional-disclosure eligibility | Release-owner/privacy review |
-| Remote teacher audio | Exact signed plist/project scan proves endpoint absent | Exact signed-RC gate |
+| Remote teacher audio | Production Worker `cfd3b7e6-7922-472c-80aa-1d8b34b5399e` is deployed with production-only App Attest, isolated secrets, audited quotas, 26 vocabulary shards, privacy-safe logs, and `audio.pawgoo.app`. Verify the allowed path, retention behavior, signed plist, and observed traffic on the exact TestFlight RC | #74/#81 and exact signed-RC gate |
 | Dependency/domain scan | No new SDK, package, framework destination, or unexpected iPhone/iPad traffic | Exact signed-RC gate |
 
 ## Edge-case matrix
@@ -348,8 +361,9 @@ shipping behavior and obtain the operator's retention/access facts.
    `35F9.1`, and app-container User Defaults `CA92.1` exactly once.
 2. Search source, generated project, final Info.plist, linked frameworks, and
    resolved dependencies for URLSession, CloudKit, analytics, telemetry,
-   crash-reporting, advertising, attribution, and account code. Prove
-   `TadaWordsTeacherAudioEndpoint` is absent.
+   crash-reporting, advertising, attribution, and account code. Prove Release
+   contains only `https://audio.pawgoo.app`, Debug contains only
+   `https://audio-dev.pawgoo.app`, and LocalQA contains no endpoint.
 3. With Family Sync off, run fresh/install-preserving iPhone and iPad tests
    online and offline. Exercise Read, voice setup, OCR, Profile photo,
    handwriting/spelling, hints, notifications, CSV/diagnostic share sheets,

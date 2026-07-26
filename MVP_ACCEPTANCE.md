@@ -307,7 +307,11 @@ Pass criteria: Reduced Sound Retain necessary correct, retry and technical non-v
 5. Force exit after completing the file creation, word addition, setting and Quest.
 6. Reopen and confirm that all data has been restored to the last Profile.
 
-Current simulator evidence: the first Parents page of iPad uses a tall/portrait window, and the child Read uses a landscape window; corresponding screenshots can be found in `QAArtifacts/v0.2-2026-07-12/iPadPro13-launch.jpg` and `QAArtifacts/v0.2-2026-07-12/iPadPro13-paws-read.jpg`. The final JPG of iPhone Lobby/Read has been rotated to a readable landscape screen, which is only used for UI inspection; the direction of the raw framebuffer is still ambiguous and is not passed as a vertical screen through evidence. iPhone The rotation of physical device in iPhone and iPad still follows the above steps acceptance.
+Historical simulator evidence recorded a tall/portrait iPad Parents page and a
+landscape child Read page. The temporary screenshots were removed from source
+control by the Issue #114 repository cleanup; their recorded observations
+remain informational only and do not replace current device acceptance. iPhone
+and iPad rotation still follow the acceptance steps above.
 
 `Contents.json` Only describe Xcode assets. Running data is located in the Application Support directory of the App sandbox. The App does not have its own server database. `TadaWordsLocalQA` Installed as an independent **Tada Words QA**, without iCloud capabilities and data does not cross devices; normal releases will only be synchronized when parents explicitly enable it.
 
@@ -645,7 +649,7 @@ Release 的 Family Sync 默认关闭并持久保存。Onboarding 的隐私确认
 5. 完成建档、加词、设置和 Quest 后强制退出
 6. 重新打开，确认所有数据与上次 Profile 恢复
 
-当前模拟器证据：iPad 的首次 Parents 页面使用 tall/portrait window，child Read 使用 landscape window；对应截图见 `QAArtifacts/v0.2-2026-07-12/iPadPro13-launch.jpg` 与 `QAArtifacts/v0.2-2026-07-12/iPadPro13-paws-read.jpg`。iPhone Lobby/Read 的最终 JPG 已旋转为可读横屏，只用于 UI 检查；raw framebuffer 的方向仍有歧义，不作为竖屏通过证据。iPhone 与 iPad 的真机旋转仍按上述步骤验收。
+历史模拟器验收曾确认：iPad 的首次 Parents 页面使用 tall/portrait window，child Read 使用 landscape window；临时截图已由 Issue #114 仓库清理删除。iPhone raw framebuffer 的方向仍有歧义，不作为竖屏通过证据。iPhone 与 iPad 的真机旋转仍按上述步骤验收。
 
 `Contents.json` 只描述 Xcode 资产。运行数据位于 App 沙盒的 Application Support 目录。App 没有自建服务器数据库。`TadaWordsLocalQA` 安装为独立的 **Tada Words QA**，没有 iCloud 能力且数据不跨设备；正常 Release 也只有在家长明确开启后才会同步。
 

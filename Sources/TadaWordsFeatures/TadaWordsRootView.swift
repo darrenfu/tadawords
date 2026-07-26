@@ -145,6 +145,7 @@ public struct TadaWordsRootView: View {
         clock: any AppClock = SystemAppClock(),
         timeZone: TimeZone = .current,
         deviceClass: DeviceClass? = nil,
+        teacherAudioPreparer: (any TeacherWordAudioPreparing)? = nil,
         audioPromptService: any AudioPromptService,
         audioExperienceService: any AudioExperienceService =
             SilentAudioExperienceService(),
@@ -176,6 +177,7 @@ public struct TadaWordsRootView: View {
                 repository: wordPoolRepository,
                 clock: clock
             ),
+            teacherAudioPreparer: teacherAudioPreparer,
             deviceClass: resolvedDeviceClass,
             clock: clock,
             timeZone: timeZone
@@ -337,7 +339,34 @@ public struct TadaWordsRootView: View {
                     value: model.transitionKey,
                     standardTransition: .opacity.combined(with: .scale(scale: 0.985))
                 )
+
+            if model.audioFallbackNoticeIsVisible {
+                VStack {
+                    Label(
+                        "Teacher sound paused — using this device's voice.",
+                        systemImage: "speaker.wave.2.fill"
+                    )
+                    .font(.system(.callout, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    .background(.black.opacity(0.82), in: Capsule())
+                    .accessibilityIdentifier("quest.audio-fallback.notice")
+                    .accessibilityLabel(
+                        "Teacher sound paused. Using this device's voice."
+                    )
+                    .padding(.top, 18)
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .allowsHitTesting(false)
+            }
         }
+        .animation(
+            .easeInOut(duration: 0.2),
+            value: model.audioFallbackNoticeIsVisible
+        )
         .environment(\.font, .system(.body, design: .rounded))
         .preferredColorScheme(.light)
         .task {

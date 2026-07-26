@@ -46,7 +46,13 @@ The selected handwriting/input tool is part of the Profile's interface settings 
 - Downloaded canonical teacher-word audio.
 - Rendered music, sound-effect, OCR, or recognition caches.
 
-Picture hints arrive inside the app bundle and need no sync or download. Teacher-audio caches are disposable; a receiving device downloads eligible teacher audio on demand and continues with its offline fallback if that asset is unavailable.
+Picture hints arrive inside the app bundle and need no sync or download.
+Teacher-audio caches are disposable and device-local; they are not Family Sync
+payloads. A Parent flow on each receiving device prepares any Bella clip absent
+from the approved bundle before the related word can become child-reachable.
+Quest planning and playback never download on demand. Apple speech is the
+catalog-miss fallback. Corrupt, mismatched, and operational failures show a
+transient warning and then use Apple speech so the quest remains playable.
 
 Profile photos are not disposable caches. When a parent opts in, the prepared
 source avatar is Profile data and syncs as a bounded `CKAsset`; the general

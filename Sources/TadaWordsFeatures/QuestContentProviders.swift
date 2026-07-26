@@ -154,6 +154,7 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
     private let planner: QuestPlanner
     private let reviewRanker: ReviewPriorityRanker
     private let gradeWordRecommender: (any GradeWordRecommending)?
+    private let teacherAudioPreparer: (any TeacherWordAudioPreparing)?
 
     init(
         wordPoolRepository: any WordPoolRepository,
@@ -161,6 +162,7 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         practiceSettingsRepository: any PracticeSettingsRepository,
         attemptEventRepository: (any AttemptEventRepository)? = nil,
         gradeWordRecommender: (any GradeWordRecommending)? = nil,
+        teacherAudioPreparer: (any TeacherWordAudioPreparing)? = nil,
         deviceClass: DeviceClass = .tablet,
         clock: any AppClock,
         timeZone: TimeZone
@@ -170,6 +172,7 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         self.practiceSettingsRepository = practiceSettingsRepository
         self.attemptEventRepository = attemptEventRepository
         self.gradeWordRecommender = gradeWordRecommender
+        self.teacherAudioPreparer = teacherAudioPreparer
         self.deviceClass = deviceClass
         self.clock = clock
         self.dailyProvider = DailyQuestContentProvider(
@@ -271,6 +274,7 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         guard !prompts.isEmpty else {
             throw QuestContentError.noReviewDue
         }
+        await prepareTeacherAudioWithoutBlocking(prompts)
         return PreparedQuest(
             plan: plan,
             orderedPrompts: prompts,
@@ -338,6 +342,7 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         )
         let selected = selectedEntries.map(\.prompt)
         guard !selected.isEmpty else { throw QuestContentError.emptyPool }
+        await prepareTeacherAudioWithoutBlocking(selected)
         let plan = QuestPlan(
             profileID: profile.id,
             configuration: modeConfiguration.questConfiguration,
@@ -359,6 +364,17 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
             interfacePreferences: settings.interface,
             incorrectAttemptLimit: modeConfiguration.incorrectAttemptLimit
         )
+    }
+
+    private func prepareTeacherAudioWithoutBlocking(
+        _ prompts: [WordPrompt]
+    ) async {
+        do {
+            try await teacherAudioPreparer?.prepare(prompts)
+        } catch {
+            // An online Bella failure must never block a child from starting
+            // practice. Playback owns the transient warning and Apple fallback.
+        }
     }
 
     private func activeEntries(

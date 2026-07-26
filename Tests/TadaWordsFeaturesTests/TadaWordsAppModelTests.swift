@@ -175,6 +175,65 @@ final class TadaWordsAppModelTests: XCTestCase {
         XCTAssertEqual(reason, .audioUnavailable)
     }
 
+    func testPromptFailureShowsTransientNoticeAndUsesDeviceFallback() async throws {
+        let profile = TestFixture.profile(name: "Mia", number: 2)
+        let readPrompt = try TestFixture.prompt("aluminum", number: 2)
+        let audio = RecoveringAudioPromptService()
+        let model = TadaWordsAppModel(
+            profiles: [profile],
+            audioPromptService: audio
+        )
+        model.selectProfile(profile)
+
+        await model.speakAndWait(readPrompt)
+
+        guard case .lobby = model.destination else {
+            return XCTFail("A successful device fallback must not block the route.")
+        }
+        XCTAssertTrue(model.audioFallbackNoticeIsVisible)
+        let fallbackWords = await audio.fallbackWords
+        XCTAssertEqual(fallbackWords, ["aluminum"])
+    }
+
+    func testFallbackNoticeAutomaticallyDismisses() async throws {
+        let profile = TestFixture.profile(name: "Mia", number: 3)
+        let readPrompt = try TestFixture.prompt("aluminum", number: 3)
+        let model = TadaWordsAppModel(
+            profiles: [profile],
+            audioPromptService: RecoveringAudioPromptService(),
+            audioFallbackNoticeNanoseconds: 1_000_000
+        )
+        model.selectProfile(profile)
+
+        await model.speakAndWait(readPrompt)
+        XCTAssertTrue(model.audioFallbackNoticeIsVisible)
+
+        try await Task.sleep(nanoseconds: 10_000_000)
+
+        XCTAssertFalse(model.audioFallbackNoticeIsVisible)
+        guard case .lobby = model.destination else {
+            return XCTFail("Notice dismissal must not change the active route.")
+        }
+    }
+
+    func testTeacherAndDeviceSpeechFailureBlocksAfterFallbackAttempt() async throws {
+        let profile = TestFixture.profile(name: "Mia", number: 4)
+        let readPrompt = try TestFixture.prompt("aluminum", number: 4)
+        let model = TadaWordsAppModel(
+            profiles: [profile],
+            audioPromptService: DoubleFailingAudioPromptService()
+        )
+        model.selectProfile(profile)
+
+        await model.speakAndWait(readPrompt)
+
+        guard case .blocked(let mode, let reason) = model.destination else {
+            return XCTFail("Both audio routes failing must block the route.")
+        }
+        XCTAssertEqual(mode, .read)
+        XCTAssertEqual(reason, .audioUnavailable)
+    }
+
     func testStartQuestPublishesPreparingStateBeforeAsyncWorkRuns() throws {
         let fixture = try ModelFixture(wordCount: 1)
 
@@ -1745,6 +1804,41 @@ private enum TestFailure: Error {
 
 private struct FailingAudioPromptService: AudioPromptService {
     func play(_ prompt: WordPrompt, for profileID: ProfileID) async throws {
+        _ = prompt
+        _ = profileID
+        throw TestFailure.injectedStorageFailure
+    }
+}
+
+private actor RecoveringAudioPromptService: FallbackAudioPromptService {
+    private(set) var fallbackWords: [String] = []
+
+    func play(_ prompt: WordPrompt, for profileID: ProfileID) async throws {
+        _ = prompt
+        _ = profileID
+        throw TeacherWordAudioError.serverRejected(statusCode: 401)
+    }
+
+    func playFallback(
+        _ prompt: WordPrompt,
+        for profileID: ProfileID
+    ) async throws {
+        _ = profileID
+        fallbackWords.append(prompt.normalizedText)
+    }
+}
+
+private struct DoubleFailingAudioPromptService: FallbackAudioPromptService {
+    func play(_ prompt: WordPrompt, for profileID: ProfileID) async throws {
+        _ = prompt
+        _ = profileID
+        throw TeacherWordAudioError.serverRejected(statusCode: 503)
+    }
+
+    func playFallback(
+        _ prompt: WordPrompt,
+        for profileID: ProfileID
+    ) async throws {
         _ = prompt
         _ = profileID
         throw TestFailure.injectedStorageFailure

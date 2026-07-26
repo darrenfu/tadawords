@@ -5,14 +5,15 @@ public enum TeacherWordAudioUsage: String, Codable, Hashable, Sendable {
     case writePrompt = "write_prompt"
 }
 
-/// The only word-pronunciation contract exposed by the app. The bundled pack
-/// owns the canonical Cartesia voice; a child profile cannot select or override
-/// it. The usage keeps Read and Write pacing explicit without leaking a vendor
-/// API into feature code. Read and Write retain separate resource variants even
-/// though v3 intentionally gives both the same one-and-a-half-times-slower pace.
+/// The only word-pronunciation contract exposed by the app. It contains one
+/// normalized isolated word and never carries the prompt's sentence context.
+/// The version freezes the server-owned voice, model, dictionary, encoding,
+/// vendor speed, and client playback rate as one indivisible contract.
 public struct TeacherWordAudioRequest: Hashable, Sendable {
-    public static let contractVersion = "canonical-teacher-v3"
-    public static let practiceSpeed = 0.67
+    public static let contractVersion = "elevenlabs-teacher-v1"
+    public static let vendorSpeed = 0.70
+    public static let clientPlaybackRate = 20.0 / 21.0
+    public static let practiceSpeed = 2.0 / 3.0
 
     public let spokenText: String
     public let pronunciationKey: String?
@@ -24,7 +25,7 @@ public struct TeacherWordAudioRequest: Hashable, Sendable {
     public var voiceContractVersion: String { Self.contractVersion }
 
     public init(prompt: WordPrompt) {
-        spokenText = prompt.audioCue.spokenContext ?? prompt.displayText
+        spokenText = Self.normalize(prompt.displayText)
         pronunciationKey = prompt.audioCue.pronunciationKey
         usage = prompt.learningMode == .write ? .writePrompt : .readHint
     }
@@ -34,11 +35,12 @@ public struct TeacherWordAudioRequest: Hashable, Sendable {
         pronunciationKey: String? = nil,
         usage: TeacherWordAudioUsage = .readHint
     ) throws {
-        let normalizedText = spokenText.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
+        let normalizedText = Self.normalize(spokenText)
         guard !normalizedText.isEmpty else {
             throw TeacherWordAudioError.emptySpokenText
+        }
+        guard Self.isSupportedIsolatedWord(normalizedText) else {
+            throw TeacherWordAudioError.invalidIsolatedWord
         }
 
         self.spokenText = normalizedText
@@ -47,10 +49,25 @@ public struct TeacherWordAudioRequest: Hashable, Sendable {
         )
         self.usage = usage
     }
+
+    private static func normalize(_ value: String) -> String {
+        value
+            .precomposedStringWithCanonicalMapping
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(with: Locale(identifier: "en-US"))
+    }
+
+    private static func isSupportedIsolatedWord(_ value: String) -> Bool {
+        guard !value.isEmpty, value.count <= 32 else { return false }
+        return value.range(
+            of: #"^[a-z]+(?:['-][a-z]+)*$"#,
+            options: .regularExpression
+        ) != nil
+    }
 }
 
 public struct TeacherWordAudioClip: Equatable, Sendable {
-    public static let maximumByteCount = 5 * 1_024 * 1_024
+    public static let maximumByteCount = 2 * 1_024 * 1_024
 
     public let audioData: Data
 
@@ -69,6 +86,7 @@ public struct TeacherWordAudioClip: Equatable, Sendable {
 
 public enum TeacherWordAudioError: Error, Equatable, Sendable {
     case emptySpokenText
+    case invalidIsolatedWord
     case unconfiguredEndpoint
     case invalidEndpoint
     case invalidResponse
@@ -77,12 +95,25 @@ public enum TeacherWordAudioError: Error, Equatable, Sendable {
     case serverRejected(statusCode: Int)
     case unsupportedContentType(String?)
     case unavailableOfflineClip
+    case catalogMissAppleFallback
+    case persistentCacheUnavailable
+    case appAttestUnavailable
+    case invalidAudioChecksum
+    case mismatchedAudioContract
 }
 
 public protocol TeacherWordAudioProviding: Sendable {
     func audio(
         for request: TeacherWordAudioRequest
     ) async throws -> TeacherWordAudioClip
+}
+
+/// Parent flows may fetch clips, while child Quest planning may only verify
+/// that the exact local clip is already present. Neither operation receives a
+/// Profile identifier.
+public protocol TeacherWordAudioPreparing: Sendable {
+    func prepare(_ prompts: [WordPrompt]) async throws
+    func requirePrepared(_ prompts: [WordPrompt]) async throws
 }
 
 public protocol TeacherWordAudioCaching: Sendable {
@@ -96,7 +127,10 @@ public protocol TeacherWordAudioCaching: Sendable {
     ) async throws
 }
 
-/// Adds a best-effort cache without making a cache failure block practice.
+/// Resolves from the exact local cache or downloads and durably stores the
+/// canonical clip before reporting success. A failed store stays visible to
+/// callers; parent import flows may treat preparation as best effort so any
+/// valid word remains addable and playback can use Apple speech fallback.
 public actor CachingTeacherWordAudioProvider: TeacherWordAudioProviding {
     private let upstream: any TeacherWordAudioProviding
     private let cache: any TeacherWordAudioCaching
@@ -117,14 +151,14 @@ public actor CachingTeacherWordAudioProvider: TeacherWordAudioProviding {
         }
 
         let downloaded = try await upstream.audio(for: request)
-        try? await cache.store(downloaded, for: request)
+        try await cache.store(downloaded, for: request)
         return downloaded
     }
 }
 
-/// Tries providers in priority order. This keeps the app offline-first while
-/// preserving the existing optional Tada Words backend before Apple TTS takes
-/// over. Provider-specific failures are intentionally hidden from the child.
+/// Uses the next provider only for a genuine pack miss. Corrupt clips, network
+/// failures, authentication failures, and provider rejection are surfaced
+/// instead of silently changing the child's teacher voice.
 public actor FirstAvailableTeacherWordAudioProvider: TeacherWordAudioProviding {
     private let providers: [any TeacherWordAudioProviding]
 
@@ -141,7 +175,7 @@ public actor FirstAvailableTeacherWordAudioProvider: TeacherWordAudioProviding {
                 return try await provider.audio(for: request)
             } catch is CancellationError {
                 throw CancellationError()
-            } catch {
+            } catch TeacherWordAudioError.unavailableOfflineClip {
                 continue
             }
         }

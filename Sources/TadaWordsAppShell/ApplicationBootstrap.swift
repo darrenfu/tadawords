@@ -149,6 +149,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
     private let voiceprintRepository: (any DeviceVoiceprintRepository)?
     private let handwritingPreferenceRemover: any HandwritingPreferenceRemoving
     private let profileMutationGate: ProfileScopedMutationGate
+    private let teacherAudioPreparer: (any TeacherWordAudioPreparing)?
 
     init(
         applicationSupportDirectory: @escaping @Sendable () throws -> URL,
@@ -158,6 +159,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         familySyncTransport: any FamilySyncTransport = LocalOnlyFamilySyncTransport(),
         notificationScheduler: (any LearningNotificationScheduling)? = nil,
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
+        teacherAudioPreparer: (any TeacherWordAudioPreparing)? = nil,
         profileMutationGate: ProfileScopedMutationGate = ProfileScopedMutationGate(),
         handwritingPreferenceRemover: any HandwritingPreferenceRemoving =
             HandwritingPreferenceStore()
@@ -169,6 +171,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
         self.familySyncTransport = familySyncTransport
         self.notificationScheduler = notificationScheduler
         self.voiceprintRepository = voiceprintRepository
+        self.teacherAudioPreparer = teacherAudioPreparer
         self.profileMutationGate = profileMutationGate
         self.handwritingPreferenceRemover = handwritingPreferenceRemover
     }
@@ -405,6 +408,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             voiceprintRepository: voiceprintRepository,
             handwritingPreferenceRemover: handwritingPreferenceRemover,
             mutationGate: profileMutationGate,
+            teacherAudioPreparer: teacherAudioPreparer,
             onLocalMutation: { _ in
                 Task {
                     _ = await familySyncCoordinator.synchronize(

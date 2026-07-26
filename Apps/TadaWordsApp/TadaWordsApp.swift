@@ -12,6 +12,7 @@ struct TadaWordsApp: App {
 
     private let audioExperienceService: AppleAudioExperienceService
     private let audioPromptService: SystemAudioPromptService
+    private let teacherAudioPipeline: TeacherWordAudioPipeline
     private let profileMutationGate: ProfileScopedMutationGate
     private let voiceprintRepository: ProfileMutationGatedDeviceVoiceprintRepository
     private let speechRecognitionService: AppleSpeechRecognitionService
@@ -42,9 +43,11 @@ struct TadaWordsApp: App {
             mutationGate: mutationGate
         )
         let teacherAudioCacheDirectory =
-            ((try? Self.cachesDirectory())
-            ?? FileManager.default.temporaryDirectory)
-            .appendingPathComponent("TadaWords/teacher-audio", isDirectory: true)
+            try? Self.teacherAudioCacheDirectory()
+        let teacherPipeline = TeacherWordAudioPipeline(
+            endpoint: Self.teacherAudioEndpoint(),
+            cacheDirectory: teacherAudioCacheDirectory
+        )
         #if targetEnvironment(simulator) || LOCAL_DEVICE_QA
             // CKContainer traps when an intentionally unsigned simulator build
             // has no iCloud entitlement. Simulator and Local Device QA builds
@@ -77,14 +80,13 @@ struct TadaWordsApp: App {
             appTimeZone = .current
         #endif
         audioExperienceService = experience
+        teacherAudioPipeline = teacherPipeline
         profileMutationGate = mutationGate
         voiceprintRepository = voiceprints
         pictureHintProvider = AppleWordPictureHintService()
         audioPromptService = SystemAudioPromptService(
             audioExperienceService: experience,
-            teacherWordAudioProvider: Self.teacherWordAudioProvider(
-                cacheDirectory: teacherAudioCacheDirectory
-            )
+            teacherWordAudioProvider: teacherPipeline
         )
         speechRecognitionService = AppleSpeechRecognitionService()
     }
@@ -118,6 +120,7 @@ struct TadaWordsApp: App {
                     notificationScheduler: notificationScheduler,
                     voiceprintEnrollmentService: nil,
                     voiceprintRepository: voiceprintRepository,
+                    teacherAudioPreparer: teacherAudioPipeline,
                     profileMutationGate: profileMutationGate,
                     sensitiveActionAuthorizer: sensitiveActionAuthorizer,
                     interfaceOrientationController:
@@ -191,34 +194,31 @@ struct TadaWordsApp: App {
         )
     }
 
-    /// The versioned Katie pack is always first. The optional public app backend
-    /// fills future pack misses, and Apple en-US TTS remains the final offline
-    /// fallback. No Cartesia credential is present in the app.
-    private static func teacherWordAudioProvider(
-        cacheDirectory: URL,
-        bundle: Bundle = .main
-    ) -> (any TeacherWordAudioProviding)? {
-        var providers: [any TeacherWordAudioProviding] = []
-        if let bundled = BundledTeacherWordAudioProvider.production() {
-            providers.append(bundled)
-        }
+    nonisolated private static func teacherAudioCacheDirectory() throws -> URL {
+        #if DEBUG && targetEnvironment(simulator) && !LOCAL_DEVICE_QA
+            let root = try cachesDirectory()
+        #else
+            let root = try applicationSupportDirectory()
+        #endif
+        return root.appendingPathComponent(
+            "TadaWords/teacher-audio",
+            isDirectory: true
+        )
+    }
 
-        if let rawEndpoint = bundle.object(
-            forInfoDictionaryKey: "TadaWordsTeacherAudioEndpoint"
-        ) as? String,
+    /// Resolves only the PawGoo endpoint. The canonical pipeline owns bundle,
+    /// cache, App Attest, and remote routing without an alternate voice.
+    private static func teacherAudioEndpoint(
+        bundle: Bundle = .main
+    ) -> URL? {
+        guard
+            let rawEndpoint = bundle.object(
+                forInfoDictionaryKey: "TadaWordsTeacherAudioEndpoint"
+            ) as? String,
             let endpoint = URL(string: rawEndpoint),
             endpoint.scheme?.lowercased() == "https"
-        {
-            providers.append(
-                CachingTeacherWordAudioProvider(
-                    upstream: RemoteTeacherWordAudioProvider(endpoint: endpoint),
-                    cache: FileTeacherWordAudioCache(directory: cacheDirectory)
-                )
-            )
-        }
-
-        guard !providers.isEmpty else { return nil }
-        return FirstAvailableTeacherWordAudioProvider(providers: providers)
+        else { return nil }
+        return endpoint
     }
 
     private var currentSpeechPermissionState: @Sendable () async -> SpeechPermissionState {

@@ -28,6 +28,8 @@ class SourceIdentityContractTests(unittest.TestCase):
         self.assertNotIn("6S245NCUPQ", project)
         self.assertEqual(project.count("APS_ENVIRONMENT: development"), 1)
         self.assertEqual(project.count("APS_ENVIRONMENT: production"), 1)
+        self.assertEqual(project.count("APP_ATTEST_ENVIRONMENT: development"), 1)
+        self.assertEqual(project.count("APP_ATTEST_ENVIRONMENT: production"), 1)
 
     def test_normal_entitlements_are_cloudkit_only_and_localqa_is_empty(self):
         with (REPO_ROOT / "Apps/TadaWordsApp/TadaWords.entitlements").open(
@@ -40,6 +42,10 @@ class SourceIdentityContractTests(unittest.TestCase):
             localqa = plistlib.load(handle)
 
         self.assertEqual(normal["aps-environment"], "$(APS_ENVIRONMENT)")
+        self.assertEqual(
+            normal["com.apple.developer.devicecheck.appattest-environment"],
+            "$(APP_ATTEST_ENVIRONMENT)",
+        )
         self.assertEqual(
             normal["com.apple.developer.icloud-container-identifiers"],
             ["iCloud.com.tadawords.app"],

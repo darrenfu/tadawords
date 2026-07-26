@@ -30,6 +30,7 @@ targets:
       - path: Apps/TadaWordsApp
         excludes:
           - InfoLocalQA.plist
+          - Info 2.plist
     dependencies:
       - package: TadaWordsModules
         product: TadaWordsAppShell
@@ -43,8 +44,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tadawords.app
         PRODUCT_NAME: Tada Words
-        MARKETING_VERSION: 0.7.44
-        CURRENT_PROJECT_VERSION: 2026072601
+        MARKETING_VERSION: 0.7.48
+        CURRENT_PROJECT_VERSION: 2026072505
         TADA_GIT_COMMIT: unknown
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -55,10 +56,13 @@ targets:
       configs:
         Debug:
           DEVELOPMENT_TEAM: 7R78Q4HP86
+          APP_ATTEST_ENVIRONMENT: development
           APS_ENVIRONMENT: development
           ICLOUD_CONTAINER_ENVIRONMENT: Development
+          INFOPLIST_FILE: Apps/TadaWordsApp/InfoDebug.plist
         Release:
           DEVELOPMENT_TEAM: 7R78Q4HP86
+          APP_ATTEST_ENVIRONMENT: production
           APS_ENVIRONMENT: production
           ICLOUD_CONTAINER_ENVIRONMENT: Production
         LocalQA:
@@ -71,9 +75,10 @@ targets:
       path: Apps/TadaWordsApp/Info.plist
       properties:
         CFBundleDisplayName: Tada Words
-        CFBundleShortVersionString: "0.7.44"
-        CFBundleVersion: "2026072601"
+        CFBundleShortVersionString: "0.7.48"
+        CFBundleVersion: "2026072505"
         TadaWordsGitCommit: "$(TADA_GIT_COMMIT)"
+        TadaWordsTeacherAudioEndpoint: https://audio.pawgoo.app
         CKSharingSupported: true
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: Allow microphone access when starting spoken Read Practice. Tada Words analyzes short recordings on device; raw audio is not saved or uploaded.

@@ -24,13 +24,16 @@ public struct ManualWordPoolImportResult: Sendable {
 public struct ManualWordPoolImporter: Sendable {
     private let repository: any WordPoolRepository
     private let parser: ManualWordBatchParser
+    private let audioPreparer: (any TeacherWordAudioPreparing)?
 
     public init(
         repository: any WordPoolRepository,
-        parser: ManualWordBatchParser = ManualWordBatchParser()
+        parser: ManualWordBatchParser = ManualWordBatchParser(),
+        audioPreparer: (any TeacherWordAudioPreparing)? = nil
     ) {
         self.repository = repository
         self.parser = parser
+        self.audioPreparer = audioPreparer
     }
 
     public func importBatch(
@@ -54,6 +57,18 @@ public struct ManualWordPoolImporter: Sendable {
                 source: source,
                 positionInBatch: parsedWord.inputPosition
             )
+        }
+        // Teacher audio is prepared eagerly when possible, but it is never a
+        // membership gate. Any valid parent word must remain addable during a
+        // PawGoo, App Attest, network, or cache failure; playback owns the
+        // transient notice and Apple speech fallback for an unprepared word.
+        do {
+            try await audioPreparer?.prepare(drafts.map(\.prompt))
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // Best effort by product contract. The repository commit below
+            // remains atomic and independent from external audio availability.
         }
         let outcomes = try await repository.upsert(drafts)
 

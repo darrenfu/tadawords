@@ -15,6 +15,19 @@ enum GuardianThirdPartyNoticesContent {
     static let licenseURL = URL(
         string: "https://creativecommons.org/licenses/by/4.0/"
     )!
+
+    static let wordCatalogAttribution =
+        "Word-frequency ranking data © Robyn Speer and contributors."
+    static let wordCatalogDescription =
+        "The disjoint 2,000-word offline and 4,000-word online Bella tiers are selected with wordfreq 3.1.1 data."
+    static let wordCatalogLicenseDescription =
+        "wordfreq data is available under Creative Commons Attribution-ShareAlike 4.0."
+    static let wordCatalogSourceURL = URL(
+        string: "https://github.com/rspeer/wordfreq"
+    )!
+    static let wordCatalogLicenseURL = URL(
+        string: "https://creativecommons.org/licenses/by-sa/4.0/"
+    )!
 }
 
 struct GuardianThirdPartyNoticesView: View {
@@ -63,6 +76,38 @@ struct GuardianThirdPartyNoticesView: View {
                         }
                     }
                 }
+
+                GuardianCard {
+                    VStack(
+                        alignment: .leading,
+                        spacing: GuardianPrimitiveTokens.Spacing.medium
+                    ) {
+                        Label("Teacher word catalog", systemImage: "text.book.closed.fill")
+                            .font(.system(.title2, design: .rounded, weight: .bold))
+                            .foregroundStyle(GuardianSemanticTokens.primary)
+
+                        Text(GuardianThirdPartyNoticesContent.wordCatalogAttribution)
+                            .font(.system(.headline, design: .rounded, weight: .bold))
+
+                        Text(GuardianThirdPartyNoticesContent.wordCatalogDescription)
+                            .font(.system(.body, design: .rounded, weight: .medium))
+
+                        Text(
+                            GuardianThirdPartyNoticesContent
+                                .wordCatalogLicenseDescription
+                        )
+                        .font(.system(.body, design: .rounded, weight: .medium))
+
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                                wordCatalogLinks
+                            }
+                            VStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                                wordCatalogLinks
+                            }
+                        }
+                    }
+                }
             }
             .frame(maxWidth: 760, alignment: .leading)
             .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
@@ -85,6 +130,21 @@ struct GuardianThirdPartyNoticesView: View {
             symbol: "doc.text.fill",
             destination: GuardianThirdPartyNoticesContent.licenseURL,
             accessibilityIdentifier: "guardian.third-party-notices.license"
+        )
+    }
+
+    @ViewBuilder private var wordCatalogLinks: some View {
+        GuardianNoticeLink(
+            title: "wordfreq source",
+            symbol: "chevron.left.forwardslash.chevron.right",
+            destination: GuardianThirdPartyNoticesContent.wordCatalogSourceURL,
+            accessibilityIdentifier: "guardian.third-party-notices.wordfreq-source"
+        )
+        GuardianNoticeLink(
+            title: "CC BY-SA 4.0 license",
+            symbol: "doc.text.fill",
+            destination: GuardianThirdPartyNoticesContent.wordCatalogLicenseURL,
+            accessibilityIdentifier: "guardian.third-party-notices.wordfreq-license"
         )
     }
 }

@@ -280,10 +280,9 @@ Overall state: production fix, automated regression, signed iPhone and iPad inst
 - The same iPad passes the LocalQA critical XCUITest target 7/7: OCR Add All,
   Delete All/restore, explicit Preset approval, sequential deletes/sort, Photo
   picker/sort, and Read/Write completion dismissal.
-- The final [iPhone Moonpetal](QAArtifacts/v0.3.1-2026-07-14/iPhone17ProMax-moonpetal-clearance.jpg)
-  and [iPad Dino](QAArtifacts/v0.3.1-2026-07-14/iPadPro13-dino-clearance.jpg)
-  captures keep all lower story art visibly clear of the foreground Quest cards
-  after waiting through the ambient motion cycle.
+- Historical iPhone Moonpetal and iPad Dino captures confirmed that lower story
+  art remained clear of foreground Quest cards after the ambient motion cycle.
+  The temporary screenshot files were removed by the Issue #114 repository cleanup.
 - Fresh LocalQA simulator builds pass for iPhone 17 Pro Max and iPad Pro 13-inch
   (M5). Signed `Tada Words QA` v0.3.1 (`2026071402`) was installed and launched on
   the connected iPhone.
@@ -1751,8 +1750,8 @@ Baseline: `main` 和 `cc42e17`，合并了 v0.3 至 PR #2。
 DeviceTests 2/2：错误词拒绝和`of/go`大小写变体。
 - 相同的iPad通过了LocalQA关键XCUITest目标7/7：OCR添加全部，
 全部删除/恢复、明确预设批准、顺序删除/排序、照片选择器/排序以及Read/Write完成解雇。
-- 最终的[iPhone月瓣](QAArtifacts/v0.3.1-2026-07-14/iPhone17ProMax-moonpetal-clearance.jpg)
-和[iPad恐龙](QAArtifacts/v0.3.1-2026-07-14/iPadPro13-dino-clearance.jpg)捕获在等待环境运动周期后使所有底层故事艺术明显远离前景任务卡。
+- 历史 iPhone 月瓣和 iPad 恐龙截图确认：等待环境动画周期后，底层场景艺术仍明显避开前景任务卡。
+  临时截图文件已由 Issue #114 仓库清理移除。
 - 适用于 iPhone 17 Pro Max 和 iPad Pro 13 英寸的全新LocalQA 模拟器构建通行证
 （M5）。已签名的 `Tada Words QA` v0.3.1 (`2026071402`) 已在连接的 iPhone 上安装并启动。
 - 团队 `6S245NCUPQ` 签署了 `Tada Words QA` v0.3.1 (`2026071403`) 已安装并

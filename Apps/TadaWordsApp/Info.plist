@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.7.44</string>
+	<string>0.7.48</string>
 	<key>CFBundleVersion</key>
-	<string>2026072601</string>
+	<string>2026072505</string>
 	<key>CKSharingSupported</key>
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
@@ -36,6 +36,8 @@
 	<string>Allow on-device speech recognition when starting spoken Read Practice so Tada Words can compare a practice word and give immediate feedback.</string>
 	<key>TadaWordsGitCommit</key>
 	<string>$(TADA_GIT_COMMIT)</string>
+	<key>TadaWordsTeacherAudioEndpoint</key>
+	<string>https://audio.pawgoo.app</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

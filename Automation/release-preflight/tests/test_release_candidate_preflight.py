@@ -75,6 +75,7 @@ def valid_entitlements(team: str = PAWGOO_TEAM) -> dict:
     return {
         "application-identifier": f"{team}.{NORMAL_BUNDLE}",
         "aps-environment": "production",
+        "com.apple.developer.devicecheck.appattest-environment": "production",
         "com.apple.developer.icloud-container-environment": "Production",
         "com.apple.developer.icloud-container-identifiers": [
             "iCloud.com.tadawords.app"
@@ -106,6 +107,12 @@ class ReleaseCandidatePreflightTests(unittest.TestCase):
         self.assertEqual(
             policy["source_entitlements"]["aps-environment"],
             "$(APS_ENVIRONMENT)",
+        )
+        self.assertEqual(
+            source_entitlements[
+                "com.apple.developer.devicecheck.appattest-environment"
+            ],
+            "$(APP_ATTEST_ENVIRONMENT)",
         )
 
     def test_dirty_release_source_fails(self):
@@ -236,12 +243,18 @@ class ReleaseCandidatePreflightTests(unittest.TestCase):
     def test_archive_may_be_development_signed_but_export_must_be_production(self):
         entitlements = valid_entitlements()
         entitlements["aps-environment"] = "development"
+        entitlements[
+            "com.apple.developer.devicecheck.appattest-environment"
+        ] = "development"
         entitlements["com.apple.developer.icloud-container-environment"] = "Development"
         entitlements["get-task-allow"] = True
         preflight.validate_signed_entitlements(
             entitlements, canonical_policy(), PAWGOO_TEAM, "archive"
         )
         entitlements["aps-environment"] = "production"
+        entitlements[
+            "com.apple.developer.devicecheck.appattest-environment"
+        ] = "production"
         with self.assertRaisesRegex(
             preflight.PreflightError, "icloud-container-environment"
         ):

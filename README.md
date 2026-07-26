@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
   <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-  <img src="https://img.shields.io/badge/status-v0.7.44%20Star%20Feedback-6D48D7" alt="v0.7.44 star feedback">
+  <img src="https://img.shields.io/badge/status-v0.7.41%20Rights%20Inventory-6D48D7" alt="v0.7.41 content-rights inventory">
 </p>
 
 Tada Words gives children two separate daily quests for sight words:
@@ -26,7 +26,7 @@ Tada Words gives children two separate daily quests for sight words:
 
 Parents add every practice word by typing, scanning a school list with optical character recognition (OCR), or selecting words from an offline preset. Tada Words never fills a Pool automatically. The review scheduler brings parent-approved words back based on recall strength, errors, help use, replays, and each child's response pace.
 
-> **Project status:** Version `0.7.44` (build `2026072601`) replaces spoken answer praise with immediate star-progress feedback in Read and both Write input paths. Correct answers move a complete star from the answer area into the exact next slot with a short fading trail and a bright synthesized marimba cue. Incorrect answers release a transient star from that same slot, bounce once on a raised floor, and remove it without changing earned progress. Read has two fixed attempts; Write and Spell reveal the answer after the second miss and allow one guided third attempt. After the result board fully appears, it waits 200 ms, then counts earned stars from 1 at a 180 ms tempo, with a yellow dot hit traveling under the centered `star × number` row. Reduce Motion commits without travel. The distribution contract remains: Made for Kids with Apple's `6–8` primary band, public and in-app Profile ages 3–8, Free with no IAP or ads, United States only, and manual release. External App Store, TestFlight, cross-device CloudKit, privacy-traffic, and human acceptance remain pending until recorded against an exact release HEAD. See the [v0.7.44 release note](Docs/Releases/v0.7.44-star-feedback.md), [v0.7.40 release note](Docs/Releases/v0.7.40-app-version-diagnostics.md), [1.0 fallback record](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md), [decision record](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md), v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), and [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md).
+> **Project status:** Version `0.7.41` (build `2026072415`) reconciles the final evidence-backed App Store content-rights inventory after v0.7.40 added exact installed version/build presentation in Parent Home → App & Family → Privacy & Support and privacy-safe version/build fields to Family Sync diagnostics schema 3. It retains contextual Read permission sequencing, the Profile-erasure retry, the conservative App Store 1.0 voiceprint fallback, and the data-preserving production-device installer. The distribution contract remains: Made for Kids with Apple's `6–8` primary band, public and in-app Profile ages 3–8, Free with no IAP or ads, United States only, and manual release. External App Store, TestFlight, cross-device CloudKit, privacy-traffic, and human acceptance remain pending until recorded against an exact release HEAD. See the [v0.7.40 release note](Docs/Releases/v0.7.40-app-version-diagnostics.md), [v0.7.39 release note](Docs/Releases/v0.7.39-app-store-acceptance.md), [v0.7.38 permission release note](Docs/Releases/v0.7.38-child-speech-permissions.md), [1.0 fallback record](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md), [decision record](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md), v0.7.5 [submission pack](Docs/APP_STORE_SUBMISSION_PACK_v0.7.5.md), [privacy inventory](Docs/APP_STORE_PRIVACY_v0.7.4.md), [content-rights inventory](Docs/APP_STORE_CONTENT_RIGHTS.md), [data manifest](Docs/FAMILY-SYNC-DATA-MANIFEST.md), [evidence matrix](Docs/FAMILY-SYNC-ACCEPTANCE-COVERAGE.md), and [follow-up log](FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md).
 
 The app ships eight separate visual worlds: Moonpetal Kingdom, Build-It Bay,
 Paws & Pines, Dino Discovery, Firehouse Heroes, Brickwork City, Frostlight
@@ -38,16 +38,16 @@ music, sound cues, and 25-item reward collection.
 | Route | Prompt | Child response | Evidence |
 |---|---|---|---|
 | Read Quest | The app shows a sight word | The child says the word | On-device speech recognition; App Store 1.0 does not use voiceprint speaker matching |
-| Write Quest | The app speaks a sight word | The child chooses handwriting or A–Z spelling with the on-screen keyboard or an attached iPad keyboard | Vision handwriting recognition or exact case-insensitive typed spelling; both complete the same Write Quest while pace stays separate |
+| Write Quest | The app speaks a sight word | The child chooses handwriting or the in-app A–Z spelling keyboard | Vision handwriting recognition or exact case-insensitive typed spelling; both complete the same Write Quest while pace stays separate |
 | Review | The scheduler selects due and weak words | The child retrieves the word again | Accuracy, elapsed time, help, replay, and retry history |
 
-Read never speaks the target before the child's first independent response. Each recording can listen for up to six seconds. An unclear recording or listening timeout consumes one of the fixed two tries without becoming accuracy evidence. After a correct response or the second miss, Read plays the correct pronunciation, pauses briefly, and advances. Covered words use the bundled Katie Read-hint recording, while other guardian-entered words use Apple speech. Each World owns one coordinated, high-contrast word color, so every Read word stays visually consistent until the child changes Worlds.
+Read never speaks the target before the child's first independent response. Each recording can listen for up to six seconds. An unclear recording or listening timeout consumes one of the fixed two tries without becoming accuracy evidence. After a correct response or the second miss, Read plays the correct pronunciation, pauses briefly, and advances. Teacher words use one immutable voice/model/dictionary contract: a clip must already be in the approved bundle or device-local cache before the child can reach it. A missing or corrupt clip fails visibly and never changes to an Apple or alternative teacher voice. Each World owns one coordinated, high-contrast word color, so every Read word stays visually consistent until the child changes Worlds.
 
-Write plays the bundled Katie isolated-word recording at 0.67× for the first 500 covered words and never pre-shows the spelling. The separate Read-hint version uses the same one-and-a-half-times-slower cadence. Both variants retain 120 ms of encoding-safe tail padding so final consonants such as the `/t/` in `at` finish before playback completes. Apple speech is the offline fallback for words outside the pack and keeps a neutral pitch plus enough release time to preserve final consonants. The child first chooses **Write by Hand** or **Spell with Letters**; either choice completes the same Daily Write Quest and shares its Pool, mastery, review schedule, score, and reward. Both Write paths allow two independent attempts, reveal the correct spelling after the second miss, and keep input enabled for one guided imitation attempt. Typed pace is recorded in a separate input-method band so fast key taps never make handwriting look slow. The spelling surface is a fixed-position, theme-colored QWERTY A–Z keyboard built in SwiftUI. An attached iPad keyboard can enter A–Z, Delete/Backspace, and Return through the same constrained input state; the system keyboard, predictive text, numbers, and symbols never appear. Comparison ignores capitalization, while apostrophes and hyphens are supplied as structural parts of the prompt. Focused Replay keeps the selected input method.
+Write plays the prepared isolated-word recording at an effective two-thirds cadence and never pre-shows the spelling. Read and Write have separate manifest entries under the same immutable teacher contract. Protected encoding tail keeps final consonants such as the `/t/` in `at` audible through playback completion. Words outside the approved bundle must be prepared by a Parent flow through the PawGoo endpoint and cached locally before the Pool change becomes visible; child Quest planning and playback perform local reads only. The child first chooses **Write by Hand** or **Spell with Letters**; either choice completes the same Daily Write Quest and shares its Pool, mastery, review schedule, score, and reward. Both Write paths allow two independent attempts, reveal the correct spelling after the second miss, and keep input enabled for one guided imitation attempt. Typed pace is recorded in a separate input-method band so fast key taps never make handwriting look slow. The spelling surface is a fixed-position, theme-colored QWERTY A–Z keyboard built in SwiftUI. An attached iPad keyboard can enter A–Z, Delete/Backspace, and Return through the same constrained input state; the system keyboard, predictive text, numbers, and symbols never appear. Comparison ignores capitalization, while apostrophes and hyphens are supplied as structural parts of the prompt. Focused Replay keeps the selected input method.
 
 For handwriting, the `?` control reveals the word on demand. After the first genuine mismatch, a concrete word such as `dog` can show a tappable picture hint from the bundled Twemoji pack, including on a fresh offline install; abstract and function words such as `the` receive no image. Children can choose Pencil, Chalk, or Brush; ink is always black and the selected tool persists per Profile. The 4× local eraser restores the prior pen after a blank-canvas tap. The canvas is 10% wider, keeps fixed coordinates during feedback and word transitions, and preserves dots, later letters, and connected strokes. Most words retain two lazy Vision raster passes and five candidates per observation. The visually ambiguous target `of` alone gathers three scales and up to 10 candidates before deciding: a lower-ranked exact spelling needs agreement across two scales, while any strong complete `off` spelling vetoes a match. Mixed-case `oF`, connected lowercase `of`, and six child-like shape variations receive this exact, target-specific recovery. A numeric `0` may stand for `o` only when its aligned target position is exactly `o`, so `0f` and `0F` are accepted while `00`, `90`, `0t`, `0ff`, `+0`, and `f0` remain rejected. Technical speech or recognition failures do not reduce the child's score.
 
-Child-facing stars reward completion, accurate retrieval, and a comfortable personal pace. A child who answers a word correctly after retrying still earns that word's progress star. Learning evidence remains separate: immutable events preserve first-response correctness, prompt replay and help counts, and the eventual response, while mastery and scheduling stay strict. One immediate unaided recovery can still earn the Accuracy Star, calibration can earn Pace, and the post-calibration slow side gets 50% grace.
+Child-facing stars reward completion, accurate retrieval, and a comfortable personal pace. A child who answers a word correctly after retrying still earns that word's progress star. Learning evidence remains separate: immutable events preserve first-response correctness, prompt replay and help counts, and the eventual response, while mastery and scheduling stay strict. Correct answers use an immediate synthesized marimba cue; incorrect and not-heard outcomes use a distinct gentle cue with the transient falling-star feedback. The Quest Board waits 200 ms after it fully appears, then flips the earned count from 1 through N every 180 ms with one traveling yellow tempo-dot hit per count. Answer and completion transitions never layer spoken praise. One immediate unaided recovery can still earn the Accuracy Star, calibration can earn Pace, and the post-calibration slow side gets 50% grace.
 
 ### Scoring rules
 
@@ -65,7 +65,7 @@ The one-recovery rule changes only the child's reward display. Parent reports ke
 
 Parents only enter the school word. Every newly added word uses the canonical isolated teacher pronunciation; there is no pronunciation-context editor or pronunciation picker. Older saved prompts that contain contextual audio metadata still decode for data compatibility, but Parents cannot create or edit that metadata.
 
-The bundled audio pack contains 500 unique Pre-K–Grade 1 words, with separate Read and Write recordings at 0.67×. Katie is the canonical teacher; the manifest documents one quality override (`bun`) to Aurora after two independent speech recognizers rejected Katie's isolated rendering. Its 1,000 AAC clips plus eight Aurora resources add about 7.4 MB. Correct answers use an immediate synthesized marimba cue; answer and quest-completion transitions never layer spoken praise. Reduced Sound keeps essential attempt feedback while suppressing decorative sound.
+The teacher-audio contract uses a 2,000-word offline Bella tier with separate Read and Write recordings plus a disjoint 4,000-word PawGoo Bella tier, for 6,000 Bella words total. Valid words outside both tiers use device-local Apple speech. The repository contains the expanded 4,000-clip Bella pack; shipping still requires exact-resource installation and acceptance on both approved device classes. Aurora launch and celebration resources remain independently scoped. Quest answer and completion feedback uses non-verbal synthesized marimba cues; Reduced Sound keeps essential attempt feedback while suppressing decorative sound. See the [teacher-audio release gates](Docs/TEACHER_AUDIO_RELEASE_GATES.md).
 
 The scheduler uses an Ebbinghaus-style recall model. A word reaches Mastered after independent success on three local dates and a predicted 14-day recall rate above the configured threshold.
 
@@ -93,7 +93,7 @@ Preset imports also stay bound to the initiating Profile. An import to **Both** 
 | Motivation | Eight original worlds, 20 small rewards and five milestones per world, 200 distinct treasure icons, Double-Quest next-day Theme/Icon unlocks, My Collection, and a monthly calendar |
 | Guardian tools | Single-tap `Parents` → auto-checking math Parent Gate, World-themed Parent Home with a Profile card, Words & Practice, Progress, and App & Family entrances, Word Manager, reports, corrections, settings, CSV export, offline Third-Party Notices, and Back-to-child navigation |
 | Accessibility | Landscape child routes plus rotatable parent routes, shared 44-point minimum targets, VoiceOver labels and announcements, Reduce Motion, left-handed writing, Reduced Sound, and Calm Rescue; physical accessibility acceptance remains open |
-| Platform | A 1.8s branded launch page with official Tada Words and Pawgoo marks, offline-first Katie teacher audio with an Apple Speech fallback, bundled Aurora launch/transitions, dormant Keychain-template cleanup with no 1.0 enrollment or matching, target-informed Vision handwriting recognition, local notifications, local JSON snapshots, device-only LocalQA, and explicitly enabled CloudKit family sync |
+| Platform | A 1.8s branded launch page with official Tada Words and Pawgoo marks, prepared-local Bella teacher audio with device-local Apple speech as the catalog-miss fallback, bundled Aurora launch/transitions, dormant Keychain-template cleanup with no 1.0 voiceprint enrollment or matching, target-informed Vision handwriting recognition, local notifications, local JSON snapshots, device-only LocalQA, and explicitly enabled CloudKit family sync |
 
 ## Architecture
 
@@ -120,7 +120,7 @@ The iOS target depends on `TadaWordsAppShell`, `TadaWordsApplePlatform`, and `Ta
 - A free Apple Account for direct LocalQA installation on personal devices
 - A paid Apple Developer Program team for TestFlight and CloudKit acceptance
 
-The current v0.7.44 source candidate uses Xcode 26.6. Merged v0.7.2 passed
+The current v0.7.41 source candidate uses Xcode 26.6. Merged v0.7.2 passed
 the exact-HEAD iPhone/iPad simulator matrix, LocalQA install guard, and a data-
 preserving physical iPhone update; merged v0.7.3 added offline Parent notices
 and exact content verification. Family Sync production schema, signed cross-
@@ -154,7 +154,7 @@ build, commit, and bundle ID:
 ```sh
 ./Scripts/verify-signed-app-identity.sh \
   '/path/to/Tada Words QA.app' \
-  0.7.44 2026072601 "$(git rev-parse HEAD)" com.tadawords.app.localqa
+  0.7.41 2026072415 "$(git rev-parse HEAD)" com.tadawords.app.localqa
 ```
 
 For the normal PawGoo Development artifact, use the stricter no-install gate:
@@ -162,7 +162,7 @@ For the normal PawGoo Development artifact, use the stricter no-install gate:
 ```sh
 ./Scripts/verify-pawgoo-development-app.py \
   '/path/to/Tada Words.app' \
-  0.7.44 2026072601 "$(git rev-parse HEAD)" \
+  0.7.41 2026072415 "$(git rev-parse HEAD)" \
   --device-udid 'APPROVED_IPHONE_HARDWARE_UDID' \
   --device-udid 'APPROVED_IPAD_HARDWARE_UDID'
 ```
@@ -186,7 +186,7 @@ Follow [DEVICE_DEPLOYMENT.md](DEVICE_DEPLOYMENT.md) for signing, Developer Mode,
 - The app does not run an app-owned server database.
 - Speech audio buffers stay in memory. The app does not save or upload raw child recordings.
 - App Store 1.0 does not expose voiceprint enrollment or use a retained template for speaker matching. An existing pre-release template stays inaccessible to practice and remains device-only; Profile deletion and proven-fresh-install bootstrap retain their fail-closed cleanup paths.
-- Practice uses one canonical teacher-voice contract rather than a per-Profile style picker. A versioned offline pack covers 500 words with Katie as the canonical voice and one manifest-documented Aurora quality override for `bun`; other words use the clearest compatible American-English Apple voice already installed. Aurora launch and transition clips are also bundled. No Cartesia API key or runtime Cartesia request is present in the app.
+- Practice uses one canonical teacher-voice contract rather than a per-Profile style picker. The versioned release pack covers 2,000 words with separate Read and Write clips under the approved ElevenLabs Bella voice/model/dictionary contract and no per-word override. The disjoint 4,000-word online tier must be prepared through PawGoo and atomically cached before becoming child-reachable. Valid words outside both Bella tiers use on-device Apple speech; authentication, integrity, quota, timeout, and provider failures do not. Provider credentials never enter the app. Aurora launch and transition clips remain independently bundled.
 - Pool import prefetches only the child-safe concrete-word picture catalog. All 74 unique Twemoji PNGs are bundled with the app, so a fresh offline install needs no CDN request. Abstract words have no picture mapping.
 - Parents can open offline Third-Party Notices behind the Parent Gate to review the exact Twemoji source, modification status, copyright attribution, and CC BY 4.0 license.
 - Release builds keep iCloud Family Sync off by default. Completing onboarding does not enable it; a parent must explicitly turn it on in Guardian settings.
@@ -213,8 +213,8 @@ Simulator builds also use a deterministic local test transport. A normal signed 
 | Check | Result |
 |---|---|
 | Strict Swift format lint | Passed |
-| Version and build | v0.7.44 (`2026072601`) in source Plists and generated project settings |
-| Swift tests | v0.7.44 adds idempotent star progress, exact-slot success/failure trajectories, Reduce Motion behavior, marimba feedback, and a no-spoken-transition policy; the full source gate is rerun at the immutable release HEAD |
+| Version and build | v0.7.41 (`2026072415`) in source Plists and generated project settings |
+| Swift tests | v0.7.41 reconciles the final content-rights inventory and provenance contracts while retaining v0.7.40's shared bundle-version presentation, Privacy & Support footer, schema 3 diagnostic privacy checks, data-preserving production-install contract, contextual child permission sequencing, ages 3–8 profile-write, App Store decision, voiceprint release-policy, atomic Family Sync, and Profile-erasure coverage; the full source gate is rerun at the immutable release HEAD |
 | Family Sync physical delta | Normal PawGoo v0.7.18 installed in place on the approved iPhone and iPad; an iPhone-created test Profile converged automatically to the untouched iPad without opening Family Sync, with one matching record and four Profiles total on each side |
 | Family Sync simulator E2E | Merged v0.7.2: 6/6 on iPhone 17 Pro Max and 6/6 on iPad Pro 13-inch (M5), iOS 26.5 |
 | Critical XCUITest flows | Merged v0.7.2: full critical matrix passed on iPad; the single iPhone Photos-dismiss timing case passed 2/2 in isolated fresh reruns after the combined run, and every other flow passed |
@@ -283,7 +283,7 @@ The project source does not include an open-source license. Copyright remains wi
 <img src="https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white" alt="Swift 6.0">
 <img src="https://img.shields.io/badge/iOS-18%2B-111111?logo=apple" alt="iOS 18 or later">
 <img src="https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white" alt="SwiftUI">
-<img src="https://img.shields.io/badge/status-v0.7.44%20Star%20Feedback-6D48D7" alt="v0.7.44 star feedback">
+<img src="https://img.shields.io/badge/status-v0.7.41%20Rights%20Inventory-6D48D7" alt="v0.7.41 content-rights inventory">
 </p>
 
 Tada Words为孩子们提供了每天两个独立的视字任务：
@@ -294,7 +294,7 @@ Tada Words为孩子们提供了每天两个独立的视字任务：
 
 Parents通过键入、使用光学字符识别（OCR）扫描学校列表或从离线预设中选择单词来添加每个练习单词。Tada Words从不自动填充池。审查时间表根据回忆强度、错误、帮助使用、重播和每个孩子的反应速度将家长批准的单词带回。
 
-> **项目状态：**版本 `0.7.44`（构建 `2026072601`）把 Read 和两种 Write 输入路径中的答题语音表扬替换为即时星星进度反馈。答对时，完整星星从答题区沿短渐隐尾迹准确吸入下一个星槽，并播放纯合成木琴音效；答错时，临时星星从同一目标槽准确掉落，在抬高的水平面明显短弹一次后完全消失，不改变已得进度。Read 固定两次机会；Write 和 Spell 第二次答错后显示答案，并保留一次引导式第三次模仿机会。结果页完整显示后先等待 200ms，再按 180ms 节奏从 1 翻到所得星星数，黄色 dot 会在居中的“星星 × 数字”整行下方依次跳过每个位置。Reduce Motion 会直接提交状态而不移动。App Store、TestFlight、跨设备 CloudKit、隐私流量和人工验收仍须在精确发布 HEAD 上记录。另见 [v0.7.44 发布说明](Docs/Releases/v0.7.44-star-feedback.md)、[v0.7.40 发布说明](Docs/Releases/v0.7.40-app-version-diagnostics.md)、[1.0 fallback 记录](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md)、[App Store 决策记录](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md)、[隐私清单](Docs/APP_STORE_PRIVACY_v0.7.4.md)和[内容权利清单](Docs/APP_STORE_CONTENT_RIGHTS.md)。
+> **项目状态：**版本 `0.7.41`（构建 `2026072415`）在 v0.7.40 的应用版本展示和 Family Sync diagnostics schema 3 基础上，完成最终 App Store 内容权利清单与证据核对。它保留数据不丢失的生产真机安装通道、Read 权限顺序、Profile 删除重试，以及 App Store 1.0 voiceprint fallback。分发契约仍为：Made for Kids，Apple 主年龄段 `6–8`，产品与 App 内 Profile 年龄 3–8，免费、无内购、无广告，仅美国区，手动发布。App Store、TestFlight、跨设备 CloudKit、隐私流量和人工验收必须在精确发布 HEAD 上记录后才算完成。另见 [v0.7.40 发布说明](Docs/Releases/v0.7.40-app-version-diagnostics.md)、[v0.7.39 发布说明](Docs/Releases/v0.7.39-app-store-acceptance.md)、[v0.7.38 权限发布说明](Docs/Releases/v0.7.38-child-speech-permissions.md)、[1.0 fallback 记录](Docs/VOICEPRINT_1_0_RELEASE_FALLBACK_v0.7.32.md)、[App Store 决策记录](Docs/APP_STORE_RELEASE_DECISIONS_v0.7.27.md)、[隐私清单](Docs/APP_STORE_PRIVACY_v0.7.4.md)和[内容权利清单](Docs/APP_STORE_CONTENT_RIGHTS.md)。
 
 该应用程序包含八个独立的视觉世界：Moonpetal Kingdom、Build-It Bay、Paws & Pines、Dino Discovery、Firehouse Heroes、Brickwork City、Frostlight World和Coaster Carnival。每个世界都保留了自己的原创场景、吉祥物、音乐、声音线索和25个物品的奖励收藏。
 
@@ -303,16 +303,16 @@ Parents通过键入、使用光学字符识别（OCR）扫描学校列表或从�
 | 路线 | 迅速 | 儿童反应 | 证据 |
 |---|---|---|---|
 | Read Quest | 应用程序显示一个视觉单词 | 孩子说出单词 | 设备上的语音识别加上可选的设备语音指纹置信度 |
-| Write Quest | 应用程序会说视觉单词 | 孩子选择手写，或使用屏幕键盘/连接的 iPad 键盘进行 A-Z 拼写 | 视觉手写识别或精确大小写无区分的打字拼写；两者都完成相同的 Write Quest 同时速度保持独立 |
+| Write Quest | 应用程序会说视觉单词 | 孩子选择手写或应用程序内的A-Z拼写键盘 | 视觉手写识别或精确大小写无区分的打字拼写；两者都完成相同的 Write Quest 同时速度保持独立 |
 | 复习 | 排程器选择应答和弱词 | 孩子再次检索单词 | 准确性、已过时间、帮助、重播和重试历史记录 |
 
-Read 在孩子第一次独立反应之前从不说目标。每次录音最多监听 6 秒；没听清或超时会消耗固定两次机会中的一次，但不会被计入准确率。答对或第二次未通过后，Read 会播放正确读音、短暂停顿，然后进入下一个单词。涵盖的单词使用捆绑的 Katie Read 提示录音，而其他由监护人输入的单词使用 Apple 语音。每个世界拥有一个协调的、高对比度的单词颜色，因此每个 Read 单词在视觉上保持一致，直到孩子切换世界。
+Read 在孩子第一次独立反应之前从不说目标。每次录音最多监听 6 秒；没听清或超时会消耗固定两次机会中的一次，但不会被计入准确率。答对或第二次未通过后，Read 会播放正确读音、短暂停顿，然后进入下一个单词。2,000 个离线目录词使用捆绑的 Bella Read 提示，另外 4,000 个 Bella 词使用 Parent 阶段准备的 PawGoo 缓存，两个目录之外的有效词使用设备上的 Apple 语音。每个世界拥有一个协调的、高对比度的单词颜色，因此每个 Read 单词在视觉上保持一致，直到孩子切换世界。
 
-Write 会为首批 500 个覆盖词播放 0.67× 速度的 Katie 独立单词录音，并且不会预先显示拼写。单独的 Read 提示版本采用相同的 1.5 倍慢速节奏。两个版本都保留 120 毫秒的编码安全尾部填充，确保 `at` 中的 `/t/` 等末尾辅音在播放结束前完整发出。打包范围之外的单词离线回退到 Apple 语音，并保持中性音高和足够的释放时间，以保留末尾辅音。孩子先手动选择 **Write by Hand** 或 **Spell with Letters**；任一方式都会完成同一个 Daily Write Quest，并共享其 Pool、掌握度、复习计划、分数和奖励。两种 Write 路径都固定为两次机会，只有第二次答错后才显示正确拼写。打字速度记录在独立的输入方式区间中，因此快速按键不会让手写显得过慢。拼写界面是用 SwiftUI 构建的固定位置、主题配色 QWERTY A–Z 键盘；连接的 iPad 物理键盘可以通过同一受限输入状态使用 A–Z、Delete/Backspace 和 Return，仍不会出现系统键盘、预测文本、数字或符号。比较时忽略大小写，撇号和连字符则作为提示的结构部分直接提供。聚焦 Replay 会保留所选输入方式。
+Write 会为 2,000 个离线词播放约 0.67× 有效速度的 Bella 独立单词录音，并且不会预先显示拼写。Read 提示使用同一份 Bella 合同。两个版本都保留 120 毫秒的编码安全尾部填充，确保 `at` 中的 `/t/` 等末尾辅音在播放结束前完整发出。另有不重复的 4,000 个 Bella 词由 PawGoo 在 Parent 准备阶段生成并原子缓存；两个 Bella 目录之外的有效单词才回退到设备上的 Apple 语音。孩子先手动选择 **Write by Hand** 或 **Spell with Letters**；任一方式都会完成同一个 Daily Write Quest，并共享其 Pool、掌握度、复习计划、分数和奖励。两种 Write 路径都允许两次独立尝试，第二次答错后显示正确拼写，并保留一次输入仍可用的引导式模仿机会。打字速度记录在独立的输入方式区间中，因此快速按键不会让手写显得过慢。拼写界面是用 SwiftUI 构建的固定位置、主题配色 QWERTY A–Z 键盘；连接的 iPad 物理键盘可以通过同一受限输入状态使用 A–Z、Delete/Backspace 和 Return，仍不会出现系统键盘、预测文本、数字或符号。比较时忽略大小写，撇号和连字符则作为提示的结构部分直接提供。聚焦 Replay 会保留所选输入方式。
 
 对于手写，`?`控制可按需显示单词。在第一次真正的不匹配后，如`dog`等具体单词可以显示来自捆绑的Twemoji包的可触摸图片提示，包括在新的离线安装中；如`the`等抽象和功能单词不会收到图像。儿童可以选择铅笔、粉笔或画笔；墨水始终为黑色，所选工具会根据Profile保持不变。4×本地橡皮擦在轻点空白画布后恢复之前的笔迹。画布宽度增加10%，在反馈和单词切换期间保持固定坐标，并保留点、后续字母和连接的笔触。大多数单词保留两个懒散的Vision网格透视，每个观察包含五个候选词。仅视觉模糊的目标`of`在决定之前就收集了三个尺度和最多10个候选词：较低等级的准确拼写需要两个尺度的一致，而任何强烈的完整拼写`off`都拒绝匹配。混合大小写`oF`、连接的小写`of`和六种类似儿童形状的变体都获得这种精确的、特定目标的恢复。数字`0`只有当其对齐的目标位置正好为`o`时才可能代表`o`，因此`0f`和`0F`被接受，而`00`、`90`、`0t`、`0ff`、`+0`和`f0`则仍然被拒绝。技术语音或识别失败不会降低儿童的分数。
 
-面向儿童的星星奖励完成、准确检索和舒适的个人节奏。孩子重试后最终答对，仍会得到该单词的进度星星。学习证据与奖励分开保存：不可变事件保留首次作答是否正确、提示和重播次数以及最终作答结果，掌握度和学习调度仍保持严格。一次即时的无助恢复仍然可以获得准确性星星，校准可以获得节奏，校准后缓慢的一面获得50%的宽限。
+面向儿童的星星奖励完成、准确检索和舒适的个人节奏。孩子重试后最终答对，仍会得到该单词的进度星星；不可变学习事件继续保留首次作答、提示、重播和最终作答证据，掌握度与调度保持严格。答对使用即时合成木琴音效；答错和没听清使用不同的柔和木琴音效及临时坠落星星。Quest Board 完整显示后等待 200ms，再按每次 180ms 从 1 翻到 N，并让黄色 tempo dot 逐个跳到对应位置；答题和完成转场都不叠加人声表扬。一次即时的无助恢复仍然可以获得准确性星星，校准可以获得节奏，校准后缓慢的一面获得50%的宽限。
 
 ### 评分规则
 
@@ -330,7 +330,7 @@ Write 会为首批 500 个覆盖词播放 0.67× 速度的 Katie 独立单词录
 
 Parents只输入学校单词。每个新添加的单词都使用规范的孤立教师发音；没有发音上下文编辑器或发音选择器。包含上下文音频元数据的旧保存提示仍然用于数据兼容性解码，但Parents无法创建或编辑该元数据。
 
-捆绑的音频包包含500个独特的幼儿园至1年级单词，分别有0.67倍的Read和Write录音。Katie是规范教师；在两个独立的语音识别器拒绝Katie的孤立渲染后，Manifest文件向Aurora进行了一个质量覆盖（`bun`）。其1000个AAC剪辑加上八个Aurora资源增加了约7.4 MB。正确的答案保留了所选世界的即时合成闪光，并旋转了五个简短的Aurora庆祝活动；既没有这些行也没有`Quest complete!`使用`Ta-da`作为过渡插话。Reduced Sound抑制了装饰性的口头过渡。
+捆绑的音频包包含 2,000 个独特单词，分别有 Bella 的 Read 和 Write MP3 录音；不存在逐词替代 voice。正确答案保留所选世界的即时合成闪光，并轮换五个简短的 Aurora 庆祝音频；这些内容与教师单词语音独立。Reduced Sound 会抑制装饰性的口头过渡。
 
 调度器使用Ebbinghaus风格的回忆模型。一个单词在三个本地日期的独立成功后达到熟练程度，并预测的14天回忆率高于配置的阈值。
 
@@ -358,7 +358,7 @@ Parents在创建Profile时记录3至8岁的年龄。Tada Words仅使用年龄和
 | 激励 | 8个原始世界，每个世界20个小奖励和5个里程碑，200个不同的宝藏图标，第二天双任务主题/图标解锁，我的收藏和一个月历 |
 | Guardian 工具 | 单击 `Parents` → 自动检查数学 Parent Gate，带有Profile卡的世界主题家长主页，单词和练习、进度和应用程序和家庭入口，单词管理器，报告，更正，设置，CSV导出，离线第三方通知和返回儿童导航 |
 | 辅助功能 | 景观儿童路线以及可旋转的家长路线，共享44点最低目标，VoiceOver 标签和公告，Reduce Motion，左撇子书写，Reduced Sound，以及Calm Rescue；物理辅助功能接受仍然开放 |
-|平台|带有官方Tada Words和Pawgoo标志的1.8秒品牌发布页面，带有Apple Speech备用功能的离线优先Katie教师音频，捆绑的Aurora发布/过渡，我之后重复的钥匙扣语音印记，基于目标的信息的Vision手写识别，本地通知，本地JSON快照，仅限设备LocalQA，并明确启用的CloudKit家庭同步|
+|平台|带有官方 Tada Words 和 Pawgoo 标志的 1.8 秒品牌启动页；离线优先的 Bella 教师音频、PawGoo Bella 缓存与明确的 Apple Speech 目录外 fallback；捆绑的 Aurora 启动/过渡；设备本地语音指纹；基于目标信息的 Vision 手写识别；本地通知；本地 JSON 快照；仅设备 LocalQA；明确启用的 CloudKit 家庭同步|
 
 ## 建筑物
 
@@ -438,7 +438,7 @@ open TadaWords.xcodeproj
 - 该应用程序不运行应用程序拥有的服务器数据库。
 - 语音和注册音频缓冲区会保留在内存中。该应用程序不会保存或上传原始子录音。
 - 语音设置随机打乱六句简短的幼儿园前段句子，供孩子听并重复。每个设备只在钥匙串中存储生成的语音指纹模板。CloudKit不同步模板，因此每个设备都需要单独注册。真正的全新安装会获得随机Profile身份，在创建任何本地数据之前，只清除Tada Words保留的语音指纹钥匙串服务；普通升级会保留注册的模板，失败的重置会失败，以安全重试。
-- 练习使用一个标准教师语音合同，而不是每个Profile风格选择器。一个版本的离线包涵盖了500个单词，Katie是标准语音，并为`bun`提供了一个明文记录的Aurora质量覆盖。其他单词使用已安装的最清晰的兼容的美国英语Apple语音。Aurora启动和过渡剪辑也随附。应用程序中不存在Cartesia API密钥或运行时Cartesia请求。
+- 练习使用一个标准教师语音合同，而不是每个 Profile 的风格选择器。离线包涵盖 2,000 个 Bella 词，另有不重复的 4,000 个 Bella 词由 PawGoo 在 Parent 准备阶段生成并原子缓存；两个目录之外的有效词使用设备上的 Apple 英语语音。网络、鉴权、配额或完整性失败不会触发 Apple fallback。应用中不存在 ElevenLabs 或 Cartesia API key。
 - Pool导入只预加载儿童安全的混凝土单词图片目录。所有74个独特的Twemoji PNG都与应用程序捆绑在一起，因此新的离线安装不需要CDN请求。抽象单词没有图片映射。
 - Parents可以在Parent Gate后打开离线第三方通知，以查看确切的Twemoji源代码、修改状态、版权归属和CC BY 4.0许可证。
 - 发布构建默认情况下保持iCloud家庭同步关闭。完成入职不会启用它；父组件必须在Guardian设置中明确打开它。
@@ -461,8 +461,8 @@ open TadaWords.xcodeproj
 |检查|结果|
 |---|---|
 |严格Swift格式杂毛|通过|
-| 版本和构建 | 源 Plist 与生成项目设置中的 v0.7.44（`2026072601`） |
-| Swift 测试 | v0.7.44 覆盖星星进度幂等提交、准确槽位轨迹、Reduce Motion、木琴反馈和无转场人声策略；必须在不可变的发布 HEAD 上重跑完整 source gate |
+| 版本和构建 | 源 Plist 与生成项目设置中的 v0.7.41（`2026072415`） |
+| Swift 测试 | v0.7.41 核对最终内容权利清单与来源证据，并保留 v0.7.40 的 bundle 版本展示、Privacy & Support 页脚、schema 3 diagnostics 隐私检查、数据保留生产安装契约及现有权限、隐私、Family Sync 和 Profile 删除覆盖；必须在不可变的发布 HEAD 上重跑完整 source gate |
 | 家庭同步物理差分 | 正常 PawGoo v0.7.18 已安装在批准的 iPhone 和 iPad 上；一个 iPhone 创建的测试 Profile 自动收敛到未触碰的 iPad，无需打开家庭同步，每侧总共有一个匹配记录和四个 Profile |
 | 家庭同步模拟器E2E |合并v0.7.2：6/6在iPhone 17 Pro Max和6/6在iPad Pro 13英寸（M5），iOS 26.5 |
 | 关键 XCUITest 流程 | 合并 v0.7.2：完整的关键矩阵通过 iPad；单个 iPhone 照片-拒绝时间案例在合并运行后在孤立的新重播中通过了 2/2，其余每个流程都通过了 |

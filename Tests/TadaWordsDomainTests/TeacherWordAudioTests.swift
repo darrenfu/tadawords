@@ -9,11 +9,17 @@ final class TeacherWordAudioTests: XCTestCase {
 
         let request = TeacherWordAudioRequest(prompt: prompt)
 
-        XCTAssertEqual(request.spokenText, "Dog")
+        XCTAssertEqual(request.spokenText, "dog")
         XCTAssertNil(request.pronunciationKey)
         XCTAssertEqual(request.usage, .readHint)
-        XCTAssertEqual(request.speed, 0.67, accuracy: 0.000_1)
-        XCTAssertEqual(request.voiceContractVersion, "canonical-teacher-v3")
+        XCTAssertEqual(request.speed, 2.0 / 3.0, accuracy: 0.000_1)
+        XCTAssertEqual(
+            TeacherWordAudioRequest.vendorSpeed
+                * TeacherWordAudioRequest.clientPlaybackRate,
+            request.speed,
+            accuracy: 0.000_1
+        )
+        XCTAssertEqual(request.voiceContractVersion, "elevenlabs-teacher-v1")
     }
 
     func testWritePromptUsesTheOneAndAHalfTimesSlowerCadence() throws {
@@ -22,10 +28,10 @@ final class TeacherWordAudioTests: XCTestCase {
         let request = TeacherWordAudioRequest(prompt: prompt)
 
         XCTAssertEqual(request.usage, .writePrompt)
-        XCTAssertEqual(request.speed, 0.67, accuracy: 0.000_1)
+        XCTAssertEqual(request.speed, 2.0 / 3.0, accuracy: 0.000_1)
     }
 
-    func testContextAndPronunciationKeyArePreserved() throws {
+    func testContextIsNeverSentButPronunciationKeyIsPreserved() throws {
         let prompt = try WordPrompt(
             learningMode: .read,
             text: "read",
@@ -37,7 +43,7 @@ final class TeacherWordAudioTests: XCTestCase {
 
         let request = TeacherWordAudioRequest(prompt: prompt)
 
-        XCTAssertEqual(request.spokenText, "I read every day.")
+        XCTAssertEqual(request.spokenText, "read")
         XCTAssertEqual(request.pronunciationKey, "present-tense")
         XCTAssertEqual(request.usage, .readHint)
     }
@@ -73,6 +79,68 @@ final class TeacherWordAudioTests: XCTestCase {
         XCTAssertEqual(second, clip)
         XCTAssertEqual(requestCount, 1)
     }
+
+    func testCachingProviderNeverReportsAnUnpersistedDownloadAsPrepared() async throws {
+        let request = try TeacherWordAudioRequest(spokenText: "dog")
+        let clip = try TeacherWordAudioClip(audioData: Data([1, 2, 3]))
+        let provider = CachingTeacherWordAudioProvider(
+            upstream: TeacherAudioProviderStub(clip: clip),
+            cache: TeacherAudioCacheStub(
+                storeError: TeacherWordAudioError.invalidAudioChecksum
+            )
+        )
+
+        do {
+            _ = try await provider.audio(for: request)
+            XCTFail("Expected the failed durable store to remain visible")
+        } catch {
+            XCTAssertEqual(
+                error as? TeacherWordAudioError,
+                .invalidAudioChecksum
+            )
+        }
+    }
+
+    func testProviderChainFallsThroughOnlyForPackMiss() async throws {
+        let request = try TeacherWordAudioRequest(spokenText: "dog")
+        let clip = try TeacherWordAudioClip(audioData: Data([1, 2, 3]))
+        let fallback = TeacherAudioProviderStub(clip: clip)
+        let missing = FailingTeacherAudioProvider(
+            error: TeacherWordAudioError.unavailableOfflineClip
+        )
+        let provider = FirstAvailableTeacherWordAudioProvider(
+            providers: [missing, fallback]
+        )
+
+        let resolvedClip = try await provider.audio(for: request)
+        XCTAssertEqual(resolvedClip, clip)
+        let fallbackRequestCount = await fallback.requestCount
+        XCTAssertEqual(fallbackRequestCount, 1)
+    }
+
+    func testProviderChainNeverChangesVoiceAfterOperationalFailure() async throws {
+        let request = try TeacherWordAudioRequest(spokenText: "dog")
+        let clip = try TeacherWordAudioClip(audioData: Data([1, 2, 3]))
+        let fallback = TeacherAudioProviderStub(clip: clip)
+        let rejected = FailingTeacherAudioProvider(
+            error: TeacherWordAudioError.serverRejected(statusCode: 503)
+        )
+        let provider = FirstAvailableTeacherWordAudioProvider(
+            providers: [rejected, fallback]
+        )
+
+        do {
+            _ = try await provider.audio(for: request)
+            XCTFail("Expected the operational failure to remain visible")
+        } catch {
+            XCTAssertEqual(
+                error as? TeacherWordAudioError,
+                .serverRejected(statusCode: 503)
+            )
+        }
+        let fallbackRequestCount = await fallback.requestCount
+        XCTAssertEqual(fallbackRequestCount, 0)
+    }
 }
 
 private actor TeacherAudioProviderStub: TeacherWordAudioProviding {
@@ -94,6 +162,11 @@ private actor TeacherAudioProviderStub: TeacherWordAudioProviding {
 
 private actor TeacherAudioCacheStub: TeacherWordAudioCaching {
     private var clips: [TeacherWordAudioRequest: TeacherWordAudioClip] = [:]
+    private let storeError: TeacherWordAudioError?
+
+    init(storeError: TeacherWordAudioError? = nil) {
+        self.storeError = storeError
+    }
 
     func clip(
         for request: TeacherWordAudioRequest
@@ -105,6 +178,18 @@ private actor TeacherAudioCacheStub: TeacherWordAudioCaching {
         _ clip: TeacherWordAudioClip,
         for request: TeacherWordAudioRequest
     ) async throws {
+        if let storeError { throw storeError }
         clips[request] = clip
+    }
+}
+
+private struct FailingTeacherAudioProvider: TeacherWordAudioProviding {
+    let error: TeacherWordAudioError
+
+    func audio(
+        for request: TeacherWordAudioRequest
+    ) async throws -> TeacherWordAudioClip {
+        _ = request
+        throw error
     }
 }

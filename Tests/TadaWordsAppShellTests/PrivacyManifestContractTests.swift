@@ -30,7 +30,7 @@ final class PrivacyManifestContractTests: XCTestCase {
         )
     }
 
-    func testPrivacyManifestKeepsTrackingAndCollectionDisabled() throws {
+    func testPrivacyManifestDisclosesRemoteTeacherWordWithoutTracking() throws {
         let manifest = try loadManifest()
 
         XCTAssertEqual(manifest["NSPrivacyTracking"] as? Bool, false)
@@ -38,10 +38,26 @@ final class PrivacyManifestContractTests: XCTestCase {
             manifest["NSPrivacyTrackingDomains"] as? [String],
             []
         )
-        XCTAssertTrue(
-            try XCTUnwrap(
-                manifest["NSPrivacyCollectedDataTypes"] as? [[String: Any]]
-            ).isEmpty
+        let collected = try XCTUnwrap(
+            manifest["NSPrivacyCollectedDataTypes"] as? [[String: Any]]
+        )
+        XCTAssertEqual(collected.count, 1)
+        let teacherWord = try XCTUnwrap(collected.first)
+        XCTAssertEqual(
+            teacherWord["NSPrivacyCollectedDataType"] as? String,
+            "NSPrivacyCollectedDataTypeOtherUserContent"
+        )
+        XCTAssertEqual(
+            teacherWord["NSPrivacyCollectedDataTypeLinked"] as? Bool,
+            false
+        )
+        XCTAssertEqual(
+            teacherWord["NSPrivacyCollectedDataTypeTracking"] as? Bool,
+            false
+        )
+        XCTAssertEqual(
+            teacherWord["NSPrivacyCollectedDataTypePurposes"] as? [String],
+            ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
         )
     }
 
