@@ -457,21 +457,34 @@ struct QuestResultView: View {
                         earnedCount: result.earnedStarCount,
                         reduceMotion: reduceMotion
                     )
-                activeTempoDotCount =
-                    reduceMotion ? result.earnedStarCount : 0
+                activeTempoDotCount = 0
             }
             withAnimation(
                 .easeOut(duration: reduceMotion ? 0.01 : TadaPrimitiveTokens.Motion.celebration)
             ) {
                 revealPhase = phase
             }
-            if phase == 2 {
-                await revealEarnedStarCount()
-            } else if phase == 5 {
+            if phase == 5 {
                 resultSummaryIsFocused = true
                 announceForAccessibility(resultAccessibilitySummary)
             }
         }
+
+        let boardRevealDurationMilliseconds =
+            reduceMotion
+            ? 10
+            : Int(TadaPrimitiveTokens.Motion.celebration * 1_000)
+        try? await Task.sleep(
+            for: .milliseconds(boardRevealDurationMilliseconds)
+        )
+        guard !Task.isCancelled else { return }
+        try? await Task.sleep(
+            for: .milliseconds(
+                QuestResultStarCountAnimation.postBoardDelayMilliseconds
+            )
+        )
+        guard !Task.isCancelled else { return }
+        await revealEarnedStarCount()
     }
 
     private func revealEarnedStarCount() async {
@@ -656,8 +669,9 @@ enum QuestResultLayoutMode: Equatable {
 }
 
 enum QuestResultStarCountAnimation {
-    static let exitDurationMilliseconds = 70
-    static let enterDurationMilliseconds = 100
+    static let postBoardDelayMilliseconds = 500
+    static let exitDurationMilliseconds = 90
+    static let enterDurationMilliseconds = 130
     static let millisecondsPerFlip =
         exitDurationMilliseconds + enterDurationMilliseconds
     static let exitDurationSeconds =
@@ -685,7 +699,9 @@ enum QuestResultStarCountAnimation {
                 displayedCount: count,
                 activeDotCount: count,
                 cue: .star(index: count - 1),
-                landingMilliseconds: (count - 1) * millisecondsPerFlip
+                landingMilliseconds:
+                    postBoardDelayMilliseconds
+                    + (count - 1) * millisecondsPerFlip
             )
         }
     }

@@ -207,7 +207,7 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
             "A nonzero result must begin at 1, never flash 0."
         )
         XCTAssertTrue(
-            waitUntil(timeout: 3) {
+            waitUntil(timeout: 5) {
                 (starCount.value as? String) == "5"
             },
             "The visible flip card should finish counting through 5."
