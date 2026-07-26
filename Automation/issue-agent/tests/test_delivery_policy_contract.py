@@ -54,7 +54,14 @@ class DeliveryPolicyContractTests(unittest.TestCase):
                 self.assertIn(required.casefold(), documents.casefold())
 
     def test_rollback_to_the_prior_comment_gate_is_documented(self):
-        agents = self.document("AGENTS.md")
+        agents = "\n".join(
+            (
+                self.document("AGENTS.md"),
+                self.document(
+                    "Docs/AgentProtocol/07-human-gates-and-rollback.md"
+                ),
+            )
+        )
         readme = self.document("Automation/issue-agent/README.md")
 
         self.assertIn("roll back to the prior comment gate", agents)
@@ -90,6 +97,7 @@ class DeliveryPolicyContractTests(unittest.TestCase):
             self.document(path)
             for path in (
                 "AGENTS.md",
+                "Docs/AgentProtocol/06-guarded-merge.md",
                 ".github/pull_request_template.md",
                 "Automation/issue-agent/README.md",
                 "Automation/issue-agent/agent-prompt.md",
@@ -107,7 +115,13 @@ class DeliveryPolicyContractTests(unittest.TestCase):
                 self.assertIn(required, documents)
 
     def test_risk_tiers_replace_uniform_device_and_version_gates(self):
-        agents = self.document("AGENTS.md")
+        agents = "\n".join(
+            (
+                self.document("AGENTS.md"),
+                self.document("Docs/AgentProtocol/02-versioning-and-generation.md"),
+                self.document("Docs/AgentProtocol/03-verification.md"),
+            )
+        )
         template = self.document(".github/pull_request_template.md")
         prompt = self.document("Automation/issue-agent/agent-prompt.md")
         pipeline = self.document("Docs/DEVELOPMENT_PIPELINE.md")
