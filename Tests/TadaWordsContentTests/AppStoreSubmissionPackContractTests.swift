@@ -128,26 +128,52 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
             XCTAssertFalse(document.contains(claim), "Stale claim returned: \(claim)")
         }
 
-        for plistPath in [
-            "Apps/TadaWordsApp/Info.plist",
-            "Apps/TadaWordsApp/InfoLocalQA.plist",
-        ] {
+        let productionPlist = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Apps/TadaWordsApp/Info.plist"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertTrue(
+            productionPlist.contains(
+                "<string>https://audio.pawgoo.app</string>"
+            )
+        )
+        XCTAssertTrue(productionPlist.contains("<string>0.7.48</string>"))
+        XCTAssertTrue(productionPlist.contains("<string>2026072505</string>"))
+        XCTAssertFalse(productionPlist.contains("voice setup"))
+
+        for plistPath in ["Apps/TadaWordsApp/InfoLocalQA.plist"] {
             let plist = try String(
                 contentsOf: repositoryRoot.appendingPathComponent(plistPath),
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.41</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072415</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.48</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072505</string>"))
             XCTAssertFalse(plist.contains("voice setup"))
         }
+
+        let debugPlist = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Apps/TadaWordsApp/InfoDebug.plist"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertTrue(
+            debugPlist.contains(
+                "<string>https://audio-dev.pawgoo.app</string>"
+            )
+        )
+        XCTAssertTrue(debugPlist.contains("<string>0.7.48</string>"))
+        XCTAssertTrue(debugPlist.contains("<string>2026072505</string>"))
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.41"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072415"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.48"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072505"))
 
         let appComposition = try String(
             contentsOf: repositoryRoot.appendingPathComponent(
@@ -191,6 +217,106 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 document.contains(unresolvedDecision),
                 "Resolved #24 decision regressed: \(unresolvedDecision)"
             )
+        }
+    }
+
+    func testTeacherAudioDocsDefineCatalogMissAppleFallback() throws {
+        let paths = [
+            "README.md",
+            "Docs/ADR-0001-CROSS-DEVICE-FAMILY-SYNC.md",
+            "Docs/TEACHER_AUDIO_RELEASE_GATES.md",
+            "Tools/Audio/README.md",
+        ]
+        for path in paths {
+            let document = try String(
+                contentsOf: repositoryRoot.appendingPathComponent(path),
+                encoding: .utf8
+            )
+            XCTAssertTrue(
+                document.localizedCaseInsensitiveContains(
+                    "catalog-miss fallback"
+                ),
+                "Missing bounded Apple fallback contract in \(path)"
+            )
+        }
+    }
+
+    func testTeacherAudioCatalogFreezesOfflineOnlineAndCostBoundaries() throws {
+        let catalogURL = repositoryRoot.appendingPathComponent(
+            "Tools/Audio/Catalogs/TeacherWordCatalog-4000-v1.json"
+        )
+        let catalog = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: catalogURL))
+                as? [String: Any]
+        )
+        let offline = try XCTUnwrap(catalog["offlineWords"] as? [String])
+        let online = try XCTUnwrap(catalog["onlineWords"] as? [String])
+        let counts = try XCTUnwrap(catalog["counts"] as? [String: Int])
+
+        XCTAssertEqual(offline.count, 2_000)
+        XCTAssertEqual(online.count, 4_000)
+        XCTAssertEqual(Set(offline).count, offline.count)
+        XCTAssertEqual(Set(online).count, online.count)
+        XCTAssertTrue(Set(offline).isDisjoint(with: Set(online)))
+        XCTAssertEqual(Set(offline).union(online).count, 6_000)
+        XCTAssertEqual(counts["totalBellaWords"], 6_000)
+        XCTAssertEqual(counts["offlineTwoVariantCharacters"], 22_532)
+        XCTAssertEqual(counts["onlineTwoVariantCharacters"], 56_262)
+        XCTAssertEqual(counts["twoVariantCharacters"], 78_794)
+        XCTAssertEqual(counts["newTwoVariantCharacters"], 74_560)
+        XCTAssertTrue(Set(offline).contains("as"))
+        XCTAssertTrue(Set(online).contains("albatross"))
+
+        let manifestURL = repositoryRoot.appendingPathComponent(
+            "Sources/TadaWordsApplePlatform/Resources/Audio/TeacherWords/"
+                + "ElevenLabs-Teacher-2000-v1/manifest.json"
+        )
+        let manifest = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL))
+                as? [String: Any]
+        )
+        let bundled = try XCTUnwrap(manifest["words"] as? [String])
+        XCTAssertTrue(Set(bundled).isSubset(of: Set(offline)))
+
+        let releasePolicyURL = repositoryRoot.appendingPathComponent(
+            "Config/release-candidate-policy.json"
+        )
+        let releasePolicy = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: releasePolicyURL))
+                as? [String: Any]
+        )
+        let requiredSourceFiles = try XCTUnwrap(
+            releasePolicy["required_source_files"] as? [String]
+        )
+        let requiredAppResources = try XCTUnwrap(
+            releasePolicy["required_app_resources"] as? [String]
+        )
+        XCTAssertTrue(
+            requiredSourceFiles.contains {
+                $0.contains("ElevenLabs-Teacher-2000-v1/manifest.json")
+            }
+        )
+        XCTAssertTrue(
+            requiredAppResources.contains {
+                $0.contains("ElevenLabs-Teacher-2000-v1/read-hint/*.mp3")
+            }
+        )
+        XCTAssertTrue(
+            requiredAppResources.contains {
+                $0.contains("ElevenLabs-Teacher-2000-v1/write-prompt/*.mp3")
+            }
+        )
+        XCTAssertFalse(
+            (requiredSourceFiles + requiredAppResources).contains {
+                $0.contains("ElevenLabs-Teacher-500-v1")
+            }
+        )
+
+        for excluded in [
+            "fuck", "shit", "bitch", "porn", "rape", "sex", "sexual",
+            "sexy", "suicide",
+        ] {
+            XCTAssertFalse(online.contains(excluded))
         }
     }
 

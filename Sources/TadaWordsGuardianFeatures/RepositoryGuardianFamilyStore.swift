@@ -17,6 +17,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
     private let voiceprintRepository: (any DeviceVoiceprintRepository)?
     private let handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)?
     private let mutationGate: ProfileScopedMutationGate?
+    private let teacherAudioPreparer: (any TeacherWordAudioPreparing)?
     private let onLocalMutation: @Sendable (ProfileID) -> Void
     private let clock: any AppClock
     private let timeZone: TimeZone
@@ -36,6 +37,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
         handwritingPreferenceRemover: (any HandwritingPreferenceRemoving)? = nil,
         mutationGate: ProfileScopedMutationGate? = nil,
+        teacherAudioPreparer: (any TeacherWordAudioPreparing)? = nil,
         onLocalMutation: @escaping @Sendable (ProfileID) -> Void = { _ in },
         clock: any AppClock,
         timeZone: TimeZone = .current
@@ -50,6 +52,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
         self.voiceprintRepository = voiceprintRepository
         self.handwritingPreferenceRemover = handwritingPreferenceRemover
         self.mutationGate = mutationGate
+        self.teacherAudioPreparer = teacherAudioPreparer
         self.onLocalMutation = onLocalMutation
         self.clock = clock
         self.timeZone = timeZone
@@ -491,6 +494,7 @@ public actor RepositoryGuardianFamilyStore: GuardianFamilyStore {
             practiceSettingsRepository: practiceSettingsRepository,
             learningRecordRepository: learningRecordRepository,
             dailyQuestRepository: dailyQuestRepository,
+            teacherAudioPreparer: teacherAudioPreparer,
             clock: clock,
             timeZone: timeZone
         )

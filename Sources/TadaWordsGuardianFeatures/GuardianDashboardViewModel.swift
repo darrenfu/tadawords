@@ -646,7 +646,7 @@ final class GuardianDashboardViewModel: ObservableObject {
             do {
                 report = try await store.importWords(request)
             } catch {
-                errorMessage = "Those words could not be added. Your existing pools are unchanged."
+                errorMessage = Self.wordImportErrorMessage(error)
                 return
             }
 
@@ -689,7 +689,7 @@ final class GuardianDashboardViewModel: ObservableObject {
         do {
             report = try await store.importWords(request, for: profileID)
         } catch {
-            errorMessage = "Those words could not be added. Your existing pools are unchanged."
+            errorMessage = Self.wordImportErrorMessage(error)
             return nil
         }
         guard report.profileID == profileID else {
@@ -709,6 +709,46 @@ final class GuardianDashboardViewModel: ObservableObject {
                 "The words were added, but the list could not refresh. Reopen Manage Words to try again."
         }
         return report
+    }
+
+    static func wordImportErrorMessage(_ error: Error) -> String {
+        if let audioError = error as? TeacherWordAudioError {
+            switch audioError {
+            case .unconfiguredEndpoint, .invalidEndpoint:
+                return """
+                    Teacher audio is not available in this build yet. \
+                    No words were added; your existing pools are unchanged.
+                    """
+            case .serverRejected(statusCode: 429):
+                return """
+                    Teacher audio is temporarily busy. Wait a moment and try \
+                    again; your existing pools are unchanged.
+                    """
+            case .serverRejected(statusCode: 401), .appAttestUnavailable:
+                return """
+                    This device could not verify the teacher-audio request. \
+                    Try again from this Parent screen; no words were added.
+                    """
+            case .invalidResponse, .emptyAudio, .responseTooLarge,
+                .unsupportedContentType, .invalidAudioChecksum,
+                .mismatchedAudioContract, .persistentCacheUnavailable:
+                return """
+                    Teacher audio could not be verified, so no words were added. \
+                    Please try again later.
+                    """
+            case .serverRejected, .unavailableOfflineClip,
+                .catalogMissAppleFallback,
+                .emptySpokenText, .invalidIsolatedWord:
+                break
+            }
+        }
+        if error is URLError {
+            return """
+                Connect to the internet and try adding those words again. \
+                Your existing pools are unchanged.
+                """
+        }
+        return "Those words could not be added. Your existing pools are unchanged."
     }
 
     /// Reverses only memberships changed by an incomplete preset import. This

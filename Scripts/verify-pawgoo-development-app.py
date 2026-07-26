@@ -39,6 +39,7 @@ CANONICAL_DEVELOPMENT_ENTITLEMENT_CONTRACT = {
     "required_exact": {
         "application-identifier": "${APP_IDENTIFIER_PREFIX}.app.tadawords.app",
         "aps-environment": "development",
+        "com.apple.developer.devicecheck.appattest-environment": "development",
         "com.apple.developer.icloud-container-environment": "Development",
         "com.apple.developer.icloud-container-identifiers": [
             "iCloud.com.tadawords.app"
@@ -61,6 +62,7 @@ CANONICAL_DEVELOPMENT_ENTITLEMENT_CONTRACT = {
     "allowed_keys": [
         "application-identifier",
         "aps-environment",
+        "com.apple.developer.devicecheck.appattest-environment",
         "com.apple.developer.icloud-container-development-container-identifiers",
         "com.apple.developer.icloud-container-environment",
         "com.apple.developer.icloud-container-identifiers",
@@ -357,6 +359,7 @@ def validate_profile_authorization(
     allowed_keys = {
         "application-identifier",
         "aps-environment",
+        "com.apple.developer.devicecheck.appattest-environment",
         "com.apple.developer.icloud-container-development-container-identifiers",
         "com.apple.developer.icloud-container-environment",
         "com.apple.developer.icloud-container-identifiers",
@@ -395,6 +398,28 @@ def validate_profile_authorization(
                 "provisioning profile entitlement mismatch for "
                 f"{key}; expected={expected!r} actual={actual!r}"
             )
+
+    app_attest_environments = entitlements.get(
+        "com.apple.developer.devicecheck.appattest-environment"
+    )
+    if isinstance(app_attest_environments, str):
+        app_attest_authorized = app_attest_environments == "development"
+    elif isinstance(app_attest_environments, list):
+        app_attest_values = set(app_attest_environments)
+        app_attest_authorized = (
+            all(isinstance(item, str) for item in app_attest_environments)
+            and len(app_attest_values) == len(app_attest_environments)
+            and "development" in app_attest_values
+            and app_attest_values <= {"development", "production"}
+        )
+    else:
+        app_attest_authorized = False
+    if not app_attest_authorized:
+        raise VerificationError(
+            "provisioning profile entitlement mismatch for "
+            "com.apple.developer.devicecheck.appattest-environment; "
+            "expected a narrow Apple-issued value that authorizes development"
+        )
 
     environments = entitlements.get(
         "com.apple.developer.icloud-container-environment"
@@ -438,6 +463,7 @@ def validate_app_authorized_by_profile(
     """Bind each sealed app entitlement to the profile that authorizes it."""
     exact_or_member_keys = {
         "aps-environment",
+        "com.apple.developer.devicecheck.appattest-environment",
         "com.apple.developer.icloud-container-environment",
     }
     list_subset_keys = {

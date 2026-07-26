@@ -25,6 +25,7 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
         learningRecordRepository:
             (any AttemptEventRepository & WordProgressRepository)? = nil,
         dailyQuestRepository: any DailyQuestRepository = InMemoryDailyQuestRepository(),
+        teacherAudioPreparer: (any TeacherWordAudioPreparing)? = nil,
         clock: any AppClock,
         timeZone: TimeZone = .current
     ) {
@@ -33,7 +34,10 @@ public actor RepositoryGuardianWordStore: GuardianWordStore {
         self.practiceSettingsRepository = practiceSettingsRepository
         self.learningRecordRepository = learningRecordRepository
         self.dailyQuestRepository = dailyQuestRepository
-        self.importer = ManualWordPoolImporter(repository: wordPoolRepository)
+        self.importer = ManualWordPoolImporter(
+            repository: wordPoolRepository,
+            audioPreparer: teacherAudioPreparer
+        )
         self.clock = clock
         self.timeZone = timeZone
     }

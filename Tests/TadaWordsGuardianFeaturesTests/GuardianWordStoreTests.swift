@@ -6,6 +6,40 @@ import XCTest
 @testable import TadaWordsGuardianFeatures
 
 final class GuardianWordStoreTests: XCTestCase {
+    @MainActor
+    func testTeacherAudioImportFailuresStayParentRecoverableAndPrivacySafe() {
+        let cases: [(Error, String)] = [
+            (
+                TeacherWordAudioError.serverRejected(statusCode: 429),
+                "temporarily busy"
+            ),
+            (
+                TeacherWordAudioError.appAttestUnavailable,
+                "could not verify"
+            ),
+            (
+                TeacherWordAudioError.unconfiguredEndpoint,
+                "not available in this build"
+            ),
+            (
+                TeacherWordAudioError.persistentCacheUnavailable,
+                "could not be verified"
+            ),
+            (
+                URLError(.notConnectedToInternet),
+                "Connect to the internet"
+            ),
+        ]
+
+        for (error, expectedCopy) in cases {
+            let message = GuardianDashboardViewModel.wordImportErrorMessage(error)
+            XCTAssertTrue(message.contains(expectedCopy))
+            XCTAssertFalse(message.localizedCaseInsensitiveContains("profile"))
+            XCTAssertFalse(message.localizedCaseInsensitiveContains("child"))
+            XCTAssertFalse(message.contains("Mia"))
+        }
+    }
+
     func testKeyboardDismissGestureNeverOwnsControlTouchesExclusively() {
         XCTAssertFalse(GuardianKeyboardDismissGesturePolicy.cancelsControlTouches)
         XCTAssertFalse(GuardianKeyboardDismissGesturePolicy.delaysTouchDelivery)
@@ -287,6 +321,57 @@ final class GuardianWordStoreTests: XCTestCase {
         XCTAssertFalse(isUpdatingWordPool)
     }
 
+    func testViewModelAddsDifferentNewWordsWhenTeacherAudioPreparationFails()
+        async throws
+    {
+        let profileRepository = InMemoryKidProfileRepository()
+        let profile = KidProfile(
+            displayName: "Mia",
+            avatar: .cartoonAnimal(assetID: "hare"),
+            selectedWorld: .moonpetalKingdom,
+            createdAt: Date(timeIntervalSince1970: 1_999_999_900)
+        )
+        try await profileRepository.save(profile)
+        let store = RepositoryGuardianFamilyStore(
+            profiles: [profile],
+            profileRepository: profileRepository,
+            wordPoolRepository: InMemoryWordPoolRepository(),
+            practiceSettingsRepository: InMemoryPracticeSettingsRepository(),
+            teacherAudioPreparer: GuardianAlwaysFailingAudioPreparer(),
+            clock: GuardianWordStoreFixedClock(
+                now: Date(timeIntervalSince1970: 2_000_000_000)
+            )
+        )
+        let model = await MainActor.run {
+            GuardianDashboardViewModel(
+                store: store,
+                audioPromptService: GuardianWordStoreSilentAudioPromptService()
+            )
+        }
+        await MainActor.run { model.unlockGuardianArea() }
+        try await waitForProfile(profile.id, in: model)
+
+        let report = await model.addWords(
+            GuardianWordImportRequest(
+                rawText: "isabella periwinkle narwhal",
+                learningMode: .write
+            )
+        )
+        let state = await MainActor.run {
+            (model.errorMessage, model.snapshot?.writePool.map(\.normalizedText))
+        }
+
+        XCTAssertEqual(
+            report?.accepted,
+            ["isabella", "periwinkle", "narwhal"]
+        )
+        XCTAssertNil(state.0)
+        XCTAssertEqual(
+            Set(state.1 ?? []),
+            Set(["isabella", "periwinkle", "narwhal"])
+        )
+    }
+
     func testOCRPreviewSkipsExistingDuplicatesAndInvalidEdits() {
         let existing = Set(["cat"])
         let ready = GuardianEditableOCRWord(
@@ -465,6 +550,17 @@ final class GuardianWordStoreTests: XCTestCase {
 
 private struct GuardianWordStoreFixedClock: AppClock {
     let now: Date
+}
+
+private actor GuardianAlwaysFailingAudioPreparer: TeacherWordAudioPreparing {
+    func prepare(_ prompts: [WordPrompt]) async throws {
+        _ = prompts
+        throw TeacherWordAudioError.serverRejected(statusCode: 503)
+    }
+
+    func requirePrepared(_ prompts: [WordPrompt]) async throws {
+        _ = prompts
+    }
 }
 
 private actor GuardianFailOnSettingsReadNumber: PracticeSettingsRepository {

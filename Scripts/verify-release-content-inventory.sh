@@ -10,12 +10,13 @@ picture_relative="Sources/TadaWordsApplePlatform/Resources/PictureHints/Twemoji-
 preset_relative="Sources/TadaWordsContent/Resources/PresetWords.json"
 compatibility_relative="Apps/TadaWordsApp/PersistenceSchemaCompatibility.json"
 guardian_notice_relative="Sources/TadaWordsGuardianFeatures/GuardianThirdPartyNoticesView.swift"
+expected_teacher_audio_endpoint="https://audio.pawgoo.app"
 zodiac_master_relative="DesignAssets/ZodiacAvatars/zodiac-avatar-master.png"
 zodiac_readme_relative="DesignAssets/ZodiacAvatars/README.md"
 zodiac_assets_relative="Apps/TadaWordsApp/Assets.xcassets"
 rights_inventory_relative="Docs/APP_STORE_CONTENT_RIGHTS.md"
 
-expected_audio_digest="d8556c3035e6bce1947ce094531b64164a88433d0f58ee54ca03fd81a02fab86"
+expected_audio_digest="4c2f6768dedf79c541cc63e8038b34d45f33105391b3a664abc6e6cd53a9b662"
 expected_picture_digest="fbe89ce4496e0f50a59f93b3dc55f2e3e24eb1bcd463597c218a40e5f19d7a1a"
 expected_zodiac_export_digest="68dc7150c9eb6403bded39ca61381ec40466953c26d14f6b5d67a455a930c142"
 
@@ -57,6 +58,18 @@ stable_tree_digest() {
             | LC_ALL=C sort \
             | while IFS= read -r path; do
                 shasum -a 256 "$path"
+            done
+    ) | shasum -a 256 | awk '{print $1}'
+}
+
+stable_audio_tree_digest() {
+    local root="$1"
+    (
+        cd "$root"
+        find . -type f \( -name '*.mp3' -o -name '*.m4a' \) -print \
+            | LC_ALL=C sort \
+            | while IFS= read -r audio_file; do
+                shasum -a 256 "$audio_file"
             done
     ) | shasum -a 256 | awk '{print $1}'
 }
@@ -109,26 +122,33 @@ verify_picture_pack() {
 
 verify_audio_pack() {
     local audio_root="$1"
-    local teacher_root="$audio_root/TeacherWords/Katie-500-v1"
+    local teacher_root="$audio_root/TeacherWords/ElevenLabs-Teacher-2000-v1"
     local aurora_root="$audio_root/VoiceAccents/Aurora-v1"
     local teacher_manifest="$teacher_root/manifest.json"
     local aurora_manifest="$aurora_root/manifest.json"
 
-    assert_file "$teacher_manifest" "Katie manifest"
+    assert_file "$teacher_manifest" "ElevenLabs teacher manifest"
     assert_file "$aurora_manifest" "Aurora manifest"
-    assert_equal "$(jq -r '.vendor' "$teacher_manifest")" "Cartesia" "Katie vendor"
-    assert_equal "$(jq -r '.model' "$teacher_manifest")" "sonic-3.5" "Katie model"
-    assert_equal "$(jq -r '.voice.name' "$teacher_manifest")" "Katie" "Katie voice"
-    assert_equal "$(jq -r '.pack_version' "$teacher_manifest")" "1.1.0" "Katie pack version"
-    assert_equal "$(jq -r '.created_on' "$teacher_manifest")" "2026-07-14" "Katie creation date"
-    assert_equal "$(jq '.words | length' "$teacher_manifest")" "500" "Katie manifest words"
-    assert_equal "$(jq '[.words[]] | unique | length' "$teacher_manifest")" "500" "Katie unique words"
-    assert_equal "$(count_files "$teacher_root/read-hint" '*.m4a')" "500" "Katie Read clips"
-    assert_equal "$(count_files "$teacher_root/write-prompt" '*.m4a')" "500" "Katie Write clips"
+    assert_equal "$(jq -r '.vendor' "$teacher_manifest")" "ElevenLabs" "teacher vendor"
+    assert_equal "$(jq -r '.model' "$teacher_manifest")" "eleven_multilingual_v2" "teacher model"
+    assert_equal "$(jq -r '.voice.id' "$teacher_manifest")" "hpp4J3VqNfWAUOO0d1Us" "teacher voice"
+    assert_equal "$(jq -r '.voice.approval' "$teacher_manifest")" "approved" "teacher approval"
+    assert_equal "$(jq -r '.pack_version' "$teacher_manifest")" "3.0.0" "teacher pack version"
+    assert_equal "$(jq -r '.created_on' "$teacher_manifest")" "2026-07-24" "teacher creation date"
+    assert_equal "$(jq -r '.seed' "$teacher_manifest")" "20260725" "teacher seed"
+    assert_equal "$(jq -r '.pronunciation_dictionary.id' "$teacher_manifest")" "jlikgZytU86rmsPnDwrK" "teacher dictionary"
+    assert_equal "$(jq -r '.pronunciation_dictionary.version_id' "$teacher_manifest")" "E2NROj7X6ZT7VcK11GgH" "teacher dictionary version"
+    assert_equal "$(jq -r '.release_post_processing.peak_dbfs' "$teacher_manifest")" "-3" "teacher release peak"
+    assert_equal "$(jq -r '.release_post_processing.tail_padding_seconds' "$teacher_manifest")" "0.12" "teacher release tail"
+    assert_equal "$(jq '.words | length' "$teacher_manifest")" "2000" "teacher manifest words"
+    assert_equal "$(jq '[.words[]] | unique | length' "$teacher_manifest")" "2000" "teacher unique words"
+    assert_equal "$(count_files "$teacher_root/read-hint" '*.mp3')" "2000" "teacher Read clips"
+    assert_equal "$(count_files "$teacher_root/write-prompt" '*.mp3')" "2000" "teacher Write clips"
+    assert_sha256 "$teacher_manifest" "6d973e4b40749af02bf3dee7ec2208443ae4a7ad686c8ac396be4cd73883d82b" "teacher manifest"
 
     while IFS= read -r word; do
-        assert_file "$teacher_root/read-hint/$word.m4a" "Read clip for $word"
-        assert_file "$teacher_root/write-prompt/$word.m4a" "Write clip for $word"
+        assert_file "$teacher_root/read-hint/$word.mp3" "Read clip for $word"
+        assert_file "$teacher_root/write-prompt/$word.mp3" "Write clip for $word"
     done < <(jq -r '.words[]' "$teacher_manifest")
 
     assert_equal "$(jq -r '.vendor' "$aurora_manifest")" "Cartesia" "Aurora vendor"
@@ -143,8 +163,9 @@ verify_audio_pack() {
         jq -r '[.launch.file, .launch.rendering.ta_da_source, .correct[].file, .quest_complete.file] | unique[]' "$aurora_manifest"
     )
     assert_equal "$(count_files "$aurora_root" '*.m4a')" "8" "Aurora clip count"
-    assert_equal "$(count_files "$audio_root" '*.m4a')" "1008" "total bundled M4A clips"
-    assert_equal "$(stable_tree_digest "$audio_root" '*.m4a')" "$expected_audio_digest" "complete audio digest"
+    assert_equal "$(count_files "$audio_root" '*.mp3')" "4000" "total bundled MP3 clips"
+    assert_equal "$(count_files "$audio_root" '*.m4a')" "8" "total bundled M4A clips"
+    assert_equal "$(stable_audio_tree_digest "$audio_root")" "$expected_audio_digest" "complete audio digest"
 }
 
 verify_preset_catalog() {
@@ -311,11 +332,12 @@ if grep -Eiq 'https?://|URLSession|jsdelivr|cdn\.' "$picture_service"; then
     fail "picture service contains a runtime network/CDN path"
 fi
 
-if plutil -extract TadaWordsTeacherAudioEndpoint raw "$production_plist" >/dev/null 2>&1; then
-    fail "production plist configures a runtime teacher-audio endpoint"
-fi
+assert_equal \
+    "$(plutil -extract TadaWordsTeacherAudioEndpoint raw "$production_plist")" \
+    "$expected_teacher_audio_endpoint" \
+    "production teacher-audio endpoint"
 
-echo "source inventory verified: $expected_version ($expected_build), 1,008 M4A, 74 offline Twemoji PNGs, 12 zodiac avatar exports, four package JSON files plus one app schema JSON, no custom fonts"
+echo "source inventory verified: $expected_version ($expected_build), 4,000 Bella MP3, 8 Aurora M4A, 74 offline Twemoji PNGs, 12 zodiac avatar exports, four package JSON files plus one app schema JSON, no custom fonts"
 echo "content-rights evidence pointers and in-app Twemoji attribution verified; #32 and #33 are reconciled for this exact content set"
 
 if [[ "$#" -eq 0 ]]; then
@@ -338,9 +360,10 @@ assert_equal "$(plutil -extract CFBundleShortVersionString raw "$app_info")" "$e
 assert_equal "$(plutil -extract CFBundleVersion raw "$app_info")" "$expected_build" "archive build"
 assert_equal "$(plutil -extract CFBundleIdentifier raw "$app_info")" "$expected_bundle_id" "archive bundle ID"
 assert_equal "$(plutil -extract TadaWordsGitCommit raw "$app_info")" "$expected_commit" "archive embedded commit"
-if plutil -extract TadaWordsTeacherAudioEndpoint raw "$app_info" >/dev/null 2>&1; then
-    fail "archive configures a runtime teacher-audio endpoint"
-fi
+assert_equal \
+    "$(plutil -extract TadaWordsTeacherAudioEndpoint raw "$app_info")" \
+    "$expected_teacher_audio_endpoint" \
+    "archive teacher-audio endpoint"
 
 archive_audio_root="$(find "$app_path" -type d -path '*/Audio' -print -quit)"
 archive_picture_root="$(find "$app_path" -type d -path '*/PictureHints/Twemoji-17.0.3' -print -quit)"

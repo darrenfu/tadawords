@@ -49,9 +49,10 @@ be replaced with exact signed-release evidence during submission preparation:
   gates before entering answers in App Store Connect.
 - **Content-rights representation and copyright:** start from the finalized
   content-rights inventory. #32 and #33 preserve the Cartesia and Pawgoo owner
-  evidence for its exact enumerated content set; rerun the archive verifier and
-  reconcile any retained-audio, provider-term, or marketing-asset delta before
-  submitting a representation.
+  evidence, while the owner-approved ElevenLabs Creator subscription and Bella
+  voice/model contract cover the exact teacher-audio set. Rerun the archive
+  verifier and reconcile any retained-audio, provider-term, or marketing-asset
+  delta before submitting a representation.
 - **Family Sync reviewer steps and public claim:** add only after #19/#41 pass
   against production CloudKit and the exact signed release candidate.
 - **Pawgoo wording:** issue #54 owns alignment and deployment evidence for the
@@ -134,7 +135,7 @@ PARENT-CONTROLLED SETUP
 Word management, progress reports, reminders, profile controls, and app settings stay inside a protected Parent area.
 
 PRIVATE BY DESIGN
-Core practice is offline-first. Tada Words contains no advertising or third-party analytics. Raw speech recordings are not saved or uploaded to Pawgoo. Speech, camera, photo, and handwriting recognition use Apple frameworks on the device. Teacher-word audio comes from the app bundle or offline Apple speech; no runtime teacher-audio endpoint is configured.
+Core practice is offline-first. Tada Words contains no advertising or third-party analytics. Raw speech recordings are not saved or uploaded to Pawgoo. Speech, camera, photo, and handwriting recognition use Apple frameworks on the device. A parent may prepare an approved isolated teacher word through Pawgoo; no child name, Profile, recording, transcript, or learning history is sent.
 
 Learn more at pawgoo.app/en/tadawords.
 ```
@@ -298,7 +299,7 @@ exact RC preflight must confirm that these symbols and tests still apply.
 | Privacy Policy, Support, and qualified local data-control guidance are available inside the Parent area | [`GuardianTodayView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianTodayView.swift); [`GuardianRootView.swift`](../Sources/TadaWordsGuardianFeatures/GuardianRootView.swift) | [`GuardianParentNavigationTests.swift`](../Tests/TadaWordsGuardianFeaturesTests/GuardianParentNavigationTests.swift); critical Parent navigation UI tests | Links need a network connection. The sole remaining Profile cannot currently be deleted and there is no final-Profile/delete-all path; #19 must close that gap before complete erasure is claimed. Public copy remains gated by #54 |
 | Eligible concrete-word picture hints load from the app bundle without a runtime picture CDN request | [`AppleWordPictureHintService.swift`](../Sources/TadaWordsApplePlatform/AppleWordPictureHintService.swift); [`WordPictureHints.swift`](../Sources/TadaWordsDomain/WordPictureHints.swift); bundled `PictureHints/Twemoji-17.0.3` resources | [`AppleWordPictureHintServiceTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleWordPictureHintServiceTests.swift); [`WordPictureHintTests.swift`](../Tests/TadaWordsDomainTests/WordPictureHintTests.swift); release content inventory | Abstract/ineligible words intentionally have no picture; Twemoji attribution is present and must remain |
 | The app targets iPhone and iPad | [`project.yml`](../project.yml) (`TARGETED_DEVICE_FAMILY: "1,2"`); [`AppleInterfaceOrientationController.swift`](../Sources/TadaWordsApplePlatform/AppleInterfaceOrientationController.swift) | [`ResponsiveLayoutPolicyTests.swift`](../Tests/TadaWordsFeaturesTests/ResponsiveLayoutPolicyTests.swift); [`AppleInterfaceOrientationPolicyTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleInterfaceOrientationPolicyTests.swift); critical UI matrix | Store screenshots and #22 acceptance are required for both device families |
-| Core practice is offline-first; raw speech recordings are not persisted or uploaded to Pawgoo | [`AppleSpeechRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechRecognitionService.swift); [`BundledTeacherWordAudioProvider.swift`](../Sources/TadaWordsApplePlatform/BundledTeacherWordAudioProvider.swift); [`KeychainDeviceVoiceprintRepository.swift`](../Sources/TadaWordsApplePlatform/KeychainDeviceVoiceprintRepository.swift); [`TadaWordsApp.swift`](../Apps/TadaWordsApp/TadaWordsApp.swift) | [`AppleSpeechAdapterTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleSpeechAdapterTests.swift); [`BundledTeacherWordAudioProviderTests.swift`](../Tests/TadaWordsApplePlatformTests/BundledTeacherWordAudioProviderTests.swift); repository tests | Family Sync requires parent opt-in and an available iCloud account. The remote audio client is dormant: neither shipping plist configures `TadaWordsTeacherAudioEndpoint`, so current teacher audio uses the app bundle or offline Apple speech. Do not call the entire app fully offline |
+| Core practice is offline-first; raw speech recordings are not persisted or uploaded to Pawgoo | [`AppleSpeechRecognitionService.swift`](../Sources/TadaWordsApplePlatform/AppleSpeechRecognitionService.swift); [`BundledTeacherWordAudioProvider.swift`](../Sources/TadaWordsApplePlatform/BundledTeacherWordAudioProvider.swift); [`TeacherWordAudioPipeline.swift`](../Sources/TadaWordsApplePlatform/TeacherWordAudioPipeline.swift); [`KeychainDeviceVoiceprintRepository.swift`](../Sources/TadaWordsApplePlatform/KeychainDeviceVoiceprintRepository.swift); [`TadaWordsApp.swift`](../Apps/TadaWordsApp/TadaWordsApp.swift) | [`AppleSpeechAdapterTests.swift`](../Tests/TadaWordsApplePlatformTests/AppleSpeechAdapterTests.swift); [`BundledTeacherWordAudioProviderTests.swift`](../Tests/TadaWordsApplePlatformTests/BundledTeacherWordAudioProviderTests.swift); [`TeacherAudioPreparationTests.swift`](../Tests/TadaWordsContentTests/TeacherAudioPreparationTests.swift); repository tests | Release uses only `https://audio.pawgoo.app` to prepare an approved isolated word in Parent mode; Debug uses its isolated development hostname and LocalQA remains endpoint-free. Bundled/cache playback and child Quest remain local, and catalog misses use Apple speech |
 | No advertising, third-party analytics, or IAP code is present in the audited baseline | [`Package.swift`](../Package.swift) has no external package dependencies; no StoreKit/ad/analytics integration appears in `Apps/` or `Sources/` | Repeat dependency and symbol scan on the exact RC | Final privacy answers remain conditional under the merged inventory and #17; 1.0 price is fixed at Free |
 
 The audited baseline also contains the required Family Sync source contract:
@@ -319,9 +320,10 @@ final-Profile/delete-all, and human gates pass.
   but its exact signed-build, operating-practice, CloudKit, support-retention,
   Pawgoo-access, and public-copy gates must pass before submission.
 - **Unchanged content rights across later release candidates:** the finalized
-  inventory is the source of truth for its exact enumerated set. A later
-  archive, marketing asset, provider-term, or storefront delta must be
-  reconciled before reusing the representation.
+  inventory is the source of truth for its exact enumerated Cartesia,
+  ElevenLabs, Pawgoo, and licensed-asset set. A later archive, marketing asset,
+  provider-term, or storefront delta must be reconciled before reusing the
+  representation.
 - **Complete Profile deletion or Delete All App Data:** the Parent area offers
   Profile deletion guidance, but it cannot delete the sole remaining Profile
   and has no complete delete-all reset. Issue #19 owns the required behavior
@@ -364,16 +366,19 @@ does not close the content-consistency gate.
       physical-device, destructive test-only erasure, and human acceptance.
 - [ ] Start from the merged App Privacy inventory; verify every SDK, CloudKit
       path, device-local data class, Pawgoo-access practice, support-retention
-      practice, and shipping configuration. Confirm that
-      `TadaWordsTeacherAudioEndpoint` remains absent.
+      practice, and shipping configuration. Keep
+      Release `TadaWordsTeacherAudioEndpoint` matches only
+      `https://audio.pawgoo.app`, Debug matches only the isolated development
+      Worker, and LocalQA remains endpoint-free.
 - [ ] Confirm merged #15/#16 behavior on the exact RC, then reconcile the
       in-app links, product page, privacy policy, support page, review notes,
       bundled picture-hint claim, and offline wording.
 - [ ] Start from the finalized content-rights inventory; confirm the exact
-      archive retains the #32-reconciled generated-audio pack and the
-      #33-attested original/generated asset set. Re-open the evidence review for
-      any content, provider-term, screenshot, marketing-asset, or storefront
-      delta.
+      archive retains the eight #32-reconciled Aurora files, the exact
+      ElevenLabs subscription/voice/model contract for every retained Bella
+      asset, and the #33-attested original/generated asset set. Re-open the
+      evidence review for any content, provider-term, screenshot,
+      marketing-asset, or storefront delta.
 - [ ] Resolve #19 with a final-Profile/delete-all route and production
       destructive evidence before claiming complete in-app or CloudKit erasure.
 - [ ] Confirm the #76 conservative 1.0 fallback remains enforced: no Parent

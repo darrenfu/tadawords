@@ -98,6 +98,7 @@ public struct TadaWordsApplicationView: View {
     private let familySyncCapability: FamilySyncCapability
     private let familySyncAccessManagement: (@MainActor (ProfileID) async throws -> Void)?
     private let interfaceOrientationController: any InterfaceOrientationControlling
+    private let teacherAudioPreparer: (any TeacherWordAudioPreparing)?
 
     /// Preview-only convenience. Production callers must use the initializer
     /// that accepts an Application Support directory and a default profile.
@@ -134,6 +135,7 @@ public struct TadaWordsApplicationView: View {
         familySyncCapability = .deviceOnly
         familySyncAccessManagement = nil
         self.interfaceOrientationController = interfaceOrientationController
+        teacherAudioPreparer = nil
         _bootstrapModel = StateObject(
             wrappedValue: ApplicationBootstrapModel(
                 bootstrapper: UnavailableApplicationBootstrapper()
@@ -165,6 +167,7 @@ public struct TadaWordsApplicationView: View {
         notificationScheduler: (any LearningNotificationScheduling)? = nil,
         voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)? = nil,
         voiceprintRepository: (any DeviceVoiceprintRepository)? = nil,
+        teacherAudioPreparer: (any TeacherWordAudioPreparing)? = nil,
         profileMutationGate: ProfileScopedMutationGate = ProfileScopedMutationGate(),
         sensitiveActionAuthorizer: any SensitiveGuardianActionAuthorizing =
             AllowSensitiveGuardianActions(),
@@ -181,6 +184,7 @@ public struct TadaWordsApplicationView: View {
             familySyncTransport: resolvedFamilySyncTransport,
             notificationScheduler: notificationScheduler,
             voiceprintRepository: voiceprintRepository,
+            teacherAudioPreparer: teacherAudioPreparer,
             profileMutationGate: profileMutationGate
         )
         launchMode = .production
@@ -205,6 +209,7 @@ public struct TadaWordsApplicationView: View {
         self.notificationScheduler = notificationScheduler
         self.voiceprintEnrollmentService = voiceprintEnrollmentService
         self.voiceprintRepository = voiceprintRepository
+        self.teacherAudioPreparer = teacherAudioPreparer
         self.sensitiveActionAuthorizer = sensitiveActionAuthorizer
         familySyncCapability = resolvedFamilySyncTransport.capability
         self.familySyncAccessManagement = familySyncAccessManagement
@@ -391,6 +396,7 @@ public struct TadaWordsApplicationView: View {
                             initialProfileID: initialProfileID,
                             clock: environment.clock,
                             timeZone: environment.timeZone,
+                            teacherAudioPreparer: teacherAudioPreparer,
                             audioPromptService: audioPromptService,
                             audioExperienceService: audioExperienceService,
                             speechRecognitionService: speechRecognitionService,

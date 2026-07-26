@@ -5,7 +5,7 @@ import TadaWordsDomain
 /// Apple-platform text-to-speech adapter. Feature code depends only on
 /// `AudioPromptService`, so recorded human audio can replace this implementation
 /// without changing a quest view.
-public actor SystemAudioPromptService: AudioPromptService {
+public actor SystemAudioPromptService: FallbackAudioPromptService {
     private let synthesizer: AVSpeechSynthesizer
     private let playbackDelegate: SpeechPlaybackDelegate
     private let audioPlaybackDelegate: AudioClipPlaybackDelegate
@@ -32,14 +32,17 @@ public actor SystemAudioPromptService: AudioPromptService {
         _ = profileID
         guard await audioExperienceService.prepareForVoicePrompt() else { return }
         do {
-            let spokenText = prompt.audioCue.spokenContext ?? prompt.displayText
-            let role: SpokenAudioRole =
-                prompt.learningMode == .write ? .writeLearning : .learning
-            try await playTeacherAudioOrFallback(
-                request: TeacherWordAudioRequest(prompt: prompt),
-                fallbackText: spokenText,
-                fallbackRole: role
-            )
+            let request = TeacherWordAudioRequest(prompt: prompt)
+            do {
+                try await playTeacherAudio(request: request)
+            } catch TeacherWordAudioError.catalogMissAppleFallback {
+                try await playPreparedText(
+                    request.spokenText,
+                    role: TeacherAudioFallbackPolicy.spokenRole(
+                        for: request.usage
+                    )
+                )
+            }
             await audioExperienceService.finishVoicePrompt()
         } catch {
             await audioExperienceService.finishVoicePrompt()
@@ -64,28 +67,35 @@ public actor SystemAudioPromptService: AudioPromptService {
         }
     }
 
-    private func playTeacherAudioOrFallback(
-        request: TeacherWordAudioRequest,
-        fallbackText: String,
-        fallbackRole: SpokenAudioRole
+    public func playFallback(
+        _ prompt: WordPrompt,
+        for profileID: ProfileID
     ) async throws {
-        if let teacherWordAudioProvider {
-            do {
-                let clip = try await teacherWordAudioProvider.audio(for: request)
-                try await playAudioClip(clip)
-                return
-            } catch {
-                if error is CancellationError {
-                    throw error
-                }
-                // A missing endpoint, offline device, or remote playback
-                // failure must not block a child's quest. This is explicitly
-                // the single Apple system-voice fallback, never a direct
-                // runtime vendor call from the child's device.
-            }
+        _ = profileID
+        let request = TeacherWordAudioRequest(prompt: prompt)
+        guard await audioExperienceService.prepareForVoicePrompt() else { return }
+        do {
+            try await playPreparedText(
+                request.spokenText,
+                role: TeacherAudioFallbackPolicy.spokenRole(
+                    for: request.usage
+                )
+            )
+            await audioExperienceService.finishVoicePrompt()
+        } catch {
+            await audioExperienceService.finishVoicePrompt()
+            throw error
         }
+    }
 
-        try await playPreparedText(fallbackText, role: fallbackRole)
+    private func playTeacherAudio(
+        request: TeacherWordAudioRequest
+    ) async throws {
+        guard let teacherWordAudioProvider else {
+            throw TeacherWordAudioError.unavailableOfflineClip
+        }
+        let clip = try await teacherWordAudioProvider.audio(for: request)
+        try await playAudioClip(clip)
     }
 
     private func playPreparedText(
@@ -130,6 +140,8 @@ public actor SystemAudioPromptService: AudioPromptService {
 
         let player = try AVAudioPlayer(data: clip.audioData)
         player.delegate = audioPlaybackDelegate
+        player.enableRate = true
+        player.rate = Float(TeacherWordAudioRequest.clientPlaybackRate)
         player.prepareToPlay()
         audioPlayer = player
         let cancellationToken = SendableAudioPlayer(player)
@@ -181,6 +193,19 @@ public actor SystemAudioPromptService: AudioPromptService {
     private func cancelCurrentAudioClip() {
         guard let audioPlayer else { return }
         cancelAudioPlayback(for: audioPlayer)
+    }
+}
+
+enum TeacherAudioFallbackPolicy {
+    static func spokenRole(
+        for usage: TeacherWordAudioUsage
+    ) -> SpokenAudioRole {
+        switch usage {
+        case .readHint:
+            .learning
+        case .writePrompt:
+            .writeLearning
+        }
     }
 }
 

@@ -60,6 +60,7 @@
 		8FC055EE962E853CEC0DFBEC /* TadaWords.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TadaWords.entitlements; sourceTree = "<group>"; };
 		ADF5058F6A89AE36C0B071D8 /* Tada Words */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "Tada Words"; path = .; sourceTree = SOURCE_ROOT; };
 		B08D5E6984A29CBBE4D69349 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		B14A3659BF0B5955EA3A939A /* InfoDebug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = InfoDebug.plist; sourceTree = "<group>"; };
 		B328DA329096362FEE9C4A5A /* TadaWordsPhotoEditorTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = TadaWordsPhotoEditorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA0C975618AD883EE0E444E4 /* TadaWordsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TadaWordsApp.swift; sourceTree = "<group>"; };
 		DA0C94788DA19C566F474CB1 /* Tada Words.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Tada Words.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -106,6 +107,7 @@
 				48AC9F95D72A19D6CCCB9EDB /* Assets.xcassets */,
 				3CB801DBC532A0987AE32FE0 /* FamilySyncSimulatorTestSupport.swift */,
 				7E606E231BC91D0F6148BB0C /* Info.plist */,
+				B14A3659BF0B5955EA3A939A /* InfoDebug.plist */,
 				5E2B0B9B2C6B662DF6B7A976 /* PersistenceSchemaCompatibility.json */,
 				B08D5E6984A29CBBE4D69349 /* PrivacyInfo.xcprivacy */,
 				8FC055EE962E853CEC0DFBEC /* TadaWords.entitlements */,
@@ -562,13 +564,13 @@
 				CODE_SIGN_ENTITLEMENTS = Apps/TadaWordsApp/TadaWordsLocalQA.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026072415;
+				CURRENT_PROJECT_VERSION = 2026072505;
 				INFOPLIST_FILE = Apps/TadaWordsApp/InfoLocalQA.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.7.41;
+				MARKETING_VERSION = 0.7.48;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tadawords.app.localqa;
 				PRODUCT_NAME = "Tada Words QA";
 				SDKROOT = iphoneos;
@@ -617,13 +619,14 @@
 		960924C43AC52D0920D362BC /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APP_ATTEST_ENVIRONMENT = production;
 				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Apps/TadaWordsApp/TadaWords.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026072415;
+				CURRENT_PROJECT_VERSION = 2026072505;
 				DEVELOPMENT_TEAM = 7R78Q4HP86;
 				ICLOUD_CONTAINER_ENVIRONMENT = Production;
 				INFOPLIST_FILE = Apps/TadaWordsApp/Info.plist;
@@ -631,7 +634,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.7.41;
+				MARKETING_VERSION = 0.7.48;
 				PRODUCT_BUNDLE_IDENTIFIER = app.tadawords.app;
 				PRODUCT_NAME = "Tada Words";
 				SDKROOT = iphoneos;
@@ -661,21 +664,22 @@
 		B51FCDF510BBCE9DEFEC32A9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APP_ATTEST_ENVIRONMENT = development;
 				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Apps/TadaWordsApp/TadaWords.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026072415;
+				CURRENT_PROJECT_VERSION = 2026072505;
 				DEVELOPMENT_TEAM = 7R78Q4HP86;
 				ICLOUD_CONTAINER_ENVIRONMENT = Development;
-				INFOPLIST_FILE = Apps/TadaWordsApp/Info.plist;
+				INFOPLIST_FILE = Apps/TadaWordsApp/InfoDebug.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.7.41;
+				MARKETING_VERSION = 0.7.48;
 				PRODUCT_BUNDLE_IDENTIFIER = app.tadawords.app;
 				PRODUCT_NAME = "Tada Words";
 				SDKROOT = iphoneos;

@@ -18,6 +18,7 @@ LOCAL_DERIVED_DATA="$ROOT/.build/local-qa-readiness-derived-data"
 PAWGOO_TEAM="7R78Q4HP86"
 NORMAL_BUNDLE_ID="app.tadawords.app"
 NORMAL_UI_TEST_BUNDLE_ID="app.tadawords.app.uitests"
+PRODUCTION_TEACHER_AUDIO_ENDPOINT="https://audio.pawgoo.app"
 LOCAL_BUNDLE_ID="com.tadawords.app.localqa"
 LOCAL_UI_TEST_BUNDLE_ID="com.tadawords.app.uitests"
 STATUS=0
@@ -109,6 +110,9 @@ test "$(plutil -extract aps-environment raw -o - "$ENTITLEMENTS" 2>/dev/null)" \
 test "$(plutil -extract 'com\.apple\.developer\.icloud-container-environment' raw -o - "$ENTITLEMENTS" 2>/dev/null)" \
     = '$(ICLOUD_CONTAINER_ENVIRONMENT)' \
     || fail "production CloudKit entitlement must bind to ICLOUD_CONTAINER_ENVIRONMENT"
+test "$(plutil -extract 'com\.apple\.developer\.devicecheck\.appattest-environment' raw -o - "$ENTITLEMENTS" 2>/dev/null)" \
+    = '$(APP_ATTEST_ENVIRONMENT)' \
+    || fail "App Attest entitlement must bind to APP_ATTEST_ENVIRONMENT"
 test "$(plutil -extract 'keychain-access-groups.0' raw -o - "$ENTITLEMENTS" 2>/dev/null)" \
     = '$(AppIdentifierPrefix)app.tadawords.app' \
     || fail "normal app keychain access must stay bound to the PawGoo app identifier"
@@ -193,12 +197,23 @@ for configuration in Debug Release; do
         || fail "normal $configuration must be pinned to PawGoo"
     if test "$configuration" = Debug; then
         EXPECTED_ICLOUD_ENVIRONMENT=Development
+        EXPECTED_APP_ATTEST_ENVIRONMENT=development
+        printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
+            | grep -q 'INFOPLIST_FILE = Apps/TadaWordsApp/InfoDebug.plist' \
+            || fail "normal Debug teacher-audio Info.plist is incorrect"
     else
         EXPECTED_ICLOUD_ENVIRONMENT=Production
+        EXPECTED_APP_ATTEST_ENVIRONMENT=production
+        printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
+            | grep -q 'INFOPLIST_FILE = Apps/TadaWordsApp/Info.plist' \
+            || fail "normal Release teacher-audio Info.plist is incorrect"
     fi
     printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
         | grep -q "ICLOUD_CONTAINER_ENVIRONMENT = $EXPECTED_ICLOUD_ENVIRONMENT" \
         || fail "normal $configuration CloudKit environment is incorrect"
+    printf '%s\n' "$NORMAL_BUILD_SETTINGS" \
+        | grep -q "APP_ATTEST_ENVIRONMENT = $EXPECTED_APP_ATTEST_ENVIRONMENT" \
+        || fail "normal $configuration App Attest environment is incorrect"
 
     UI_TEST_BUILD_SETTINGS=$(
         xcodebuild \
@@ -239,6 +254,14 @@ fi
 if printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
     | grep -Eq '^[[:space:]]*ICLOUD_CONTAINER_ENVIRONMENT = [^[:space:]]+'; then
     fail "LocalQA must not inherit a CloudKit environment build setting"
+fi
+if printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
+    | grep -Eq '^[[:space:]]*APP_ATTEST_ENVIRONMENT = [^[:space:]]+'; then
+    fail "LocalQA must not inherit an App Attest environment build setting"
+fi
+if printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
+    | grep -Eq '^[[:space:]]*INFOPLIST_KEY_TadaWordsTeacherAudioEndpoint ='; then
+    fail "LocalQA must remain teacher-audio endpoint-free"
 fi
 printf '%s\n' "$LOCAL_BUILD_SETTINGS" \
     | grep -q 'PRODUCT_NAME = Tada Words QA' \
@@ -285,6 +308,9 @@ done
 pass "Release builds succeeded for iPhone 17 Pro Max and iPad Pro 13-inch"
 
 BUILT_APP="$DERIVED_DATA/Build/Products/Release-iphonesimulator/Tada Words.app"
+test "$(plutil -extract TadaWordsTeacherAudioEndpoint raw -o - "$BUILT_APP/Info.plist")" \
+    = "$PRODUCTION_TEACHER_AUDIO_ENDPOINT" \
+    || fail "the normal Release app does not contain the verified production teacher-audio endpoint"
 test "$(plutil -extract CFBundleIdentifier raw -o - "$BUILT_APP/Info.plist")" \
     = "$NORMAL_BUNDLE_ID" \
     || fail "the normal built app has the wrong PawGoo bundle identifier"
@@ -294,7 +320,7 @@ test -f "$BUILT_APP/PrivacyInfo.xcprivacy" \
     || fail "the built app does not contain PrivacyInfo.xcprivacy"
 find "$BUILT_APP" -maxdepth 1 -type f -name 'AppIcon*.png' -print -quit | grep -q . \
     || fail "the asset compiler did not emit an app icon"
-pass "the built app contains its privacy manifest and compiled app icon"
+pass "the built app contains the verified production endpoint, privacy manifest, and compiled app icon"
 
 rm -rf "$LOCAL_DERIVED_DATA"
 xcodebuild \

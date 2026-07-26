@@ -288,7 +288,7 @@ public enum FamilySyncAcceptanceCoverageMatrix {
             return unitOnlyCoverage(
                 "Tests/TadaWordsApplePlatformTests/RemoteTeacherWordAudioProviderTests.swift",
                 summary:
-                    "Disposable teacher-audio cache is unit tested; sync-boundary integration remains pending."
+                    "Device-local persistent teacher-audio cache and backup exclusion are unit tested; sync-boundary integration remains pending."
             )
         }
         if fieldPath == "cache.musicAndSoundEffects" {

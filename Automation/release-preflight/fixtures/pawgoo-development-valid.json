@@ -12,6 +12,7 @@
   "entitlements": {
     "application-identifier": "7R78Q4HP86.app.tadawords.app",
     "aps-environment": "development",
+    "com.apple.developer.devicecheck.appattest-environment": "development",
     "com.apple.developer.icloud-container-environment": "Development",
     "com.apple.developer.icloud-container-identifiers": [
       "iCloud.com.tadawords.app"
@@ -33,6 +34,10 @@
     "Entitlements": {
       "application-identifier": "7R78Q4HP86.app.tadawords.app",
       "aps-environment": "development",
+      "com.apple.developer.devicecheck.appattest-environment": [
+        "development",
+        "production"
+      ],
       "com.apple.developer.icloud-container-development-container-identifiers": [
         "iCloud.com.tadawords.app"
       ],
