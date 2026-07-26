@@ -80,8 +80,8 @@ The Phase 1 screenshot set covered:
 - iPhone last-played Profile, Moonpetal Lobby, Read, and Result
 - iPad last-played Profile, Moonpetal Lobby, Paws Read, and Result
 
-The temporary Phase 1 and pre-refinement image files were removed in the
-v0.7.29 repository cleanup after the audit conclusions were recorded here.
+The temporary Phase 1 and pre-refinement image files were removed by the
+Issue #114 repository cleanup after the audit conclusions were recorded here.
 
 Headless simulator screenshots can store a rotated or letterboxed framebuffer even when the built orientation declarations are correct. Do not crop those images and treat them as full-screen rotation evidence.
 

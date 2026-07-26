@@ -44,8 +44,8 @@ make check
 | iPad Pro 13-inch (M5) LocalQA simulator build | Pass |
 | Built-product orientation declarations | iPhone contains Portrait plus both Landscapes; iPad contains all four; `UIRequiresFullScreen` is true and runtime policy restricts child routes to Landscape |
 | Route-orientation policy tests | Pass; Parents is flexible and child routes restore Landscape |
-| iPad simulator visual evidence | Historical captures showed a tall/portrait Parent launch and landscape child Read route. The temporary image files were removed in the v0.7.29 repository cleanup. |
-| iPhone child visual evidence | Historical readable landscape captures showed the last-played Profile emphasis, compact Lobby utility dock, enlarged Read hierarchy, and enlarged Result hierarchy. The temporary image files were removed in the v0.7.29 repository cleanup. |
+| iPad simulator visual evidence | Historical captures showed a tall/portrait Parent launch and landscape child Read route. The temporary image files were removed by the Issue #114 repository cleanup. |
+| iPhone child visual evidence | Historical readable landscape captures showed the last-played Profile emphasis, compact Lobby utility dock, enlarged Read hierarchy, and enlarged Result hierarchy. The temporary image files were removed by the Issue #114 repository cleanup. |
 | iPhone simulator orientation capture | Inconclusive because raw framebuffer captures can appear rotated or letterboxed; physical rotation remains required |
 | Built-product CloudKit sharing declaration | `CKSharingSupported` is true |
 | Child-speech fixture integrity and Apple transcription | Pass; checksum valid and output is `Bye.` |

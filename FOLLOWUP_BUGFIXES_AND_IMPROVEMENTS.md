@@ -9,24 +9,6 @@ This is the single source of truth for work discovered after the original V1
 design. Product/design documents describe the current intended behavior; this
 log records why it changed, which version contains it, and how it was verified.
 
-## v0.7.43 — 2026-07-25
-
-Target release: `v0.7.43`
-
-Branch: `codex/qa-artifacts-cleanup-v0.7.29`
-
-Build: `2026072417`
-
-Overall state: Issue #114 removes obsolete tracked QA screenshot and result
-directories while retaining the root-level audit records. This repository-only
-cleanup is validated by source checks and does not require runtime testing.
-
-- Removed every tracked child directory below `QAArtifacts/`.
-- Retained the two root-level audit Markdown files.
-- Replaced stale screenshot links with durable historical descriptions.
-- Added a contract test that prevents future child directories under
-  `QAArtifacts/`.
-
 ## v0.7.33 — App Store release alignment
 
 - Standardized the product age range to 3–8 across profile creation, child
@@ -300,7 +282,7 @@ Overall state: production fix, automated regression, signed iPhone and iPad inst
   picker/sort, and Read/Write completion dismissal.
 - Historical iPhone Moonpetal and iPad Dino captures confirmed that lower story
   art remained clear of foreground Quest cards after the ambient motion cycle.
-  The temporary screenshot files were removed in the v0.7.43 repository cleanup.
+  The temporary screenshot files were removed by the Issue #114 repository cleanup.
 - Fresh LocalQA simulator builds pass for iPhone 17 Pro Max and iPad Pro 13-inch
   (M5). Signed `Tada Words QA` v0.3.1 (`2026071402`) was installed and launched on
   the connected iPhone.
@@ -1769,7 +1751,7 @@ DeviceTests 2/2：错误词拒绝和`of/go`大小写变体。
 - 相同的iPad通过了LocalQA关键XCUITest目标7/7：OCR添加全部，
 全部删除/恢复、明确预设批准、顺序删除/排序、照片选择器/排序以及Read/Write完成解雇。
 - 历史 iPhone 月瓣和 iPad 恐龙截图确认：等待环境动画周期后，底层场景艺术仍明显避开前景任务卡。
-  临时截图文件已在 v0.7.43 仓库清理中移除。
+  临时截图文件已由 Issue #114 仓库清理移除。
 - 适用于 iPhone 17 Pro Max 和 iPad Pro 13 英寸的全新LocalQA 模拟器构建通行证
 （M5）。已签名的 `Tada Words QA` v0.3.1 (`2026071402`) 已在连接的 iPhone 上安装并启动。
 - 团队 `6S245NCUPQ` 签署了 `Tada Words QA` v0.3.1 (`2026071403`) 已安装并
