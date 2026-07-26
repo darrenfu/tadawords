@@ -118,7 +118,7 @@ exit "${FAKE_CODEX_EXIT:-0}"
             return []
         return [json.loads(line) for line in self.call_log.read_text().splitlines()]
 
-    def test_claimable_batch_is_reserved_before_sol_ultra_and_durable_ack(self):
+    def test_claimable_batch_is_reserved_before_terra_medium_and_durable_ack(self):
         result = self.run_worker(FAKE_CLAIMABLE="1")
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -134,8 +134,8 @@ exit "${FAKE_CODEX_EXIT:-0}"
         self.assertIn("--control-repo", acknowledge)
         self.assertIn("--require-durable-outcome", acknowledge)
         arguments = self.codex_args.read_text().splitlines()
-        self.assertIn("gpt-5.6-sol", arguments)
-        self.assertIn('model_reasoning_effort="ultra"', arguments)
+        self.assertIn("gpt-5.6-terra", arguments)
+        self.assertIn('model_reasoning_effort="medium"', arguments)
 
     def test_reconciliation_runs_then_reinspects_without_starting_codex(self):
         result = self.run_worker(FAKE_RECONCILIATION="1")
@@ -251,7 +251,7 @@ class InstallerTests(unittest.TestCase):
                     {
                         "models": [
                             {
-                                "slug": "gpt-5.6-sol",
+                                "slug": "gpt-5.6-terra",
                                 "supported_reasoning_levels": [
                                     {"effort": "medium"},
                                     {"effort": "ultra"},
@@ -329,7 +329,8 @@ printf '%s\\n' '{"type":"turn.completed"}'
             backup = backups[0]
             self.assertEqual((backup / "bin" / "run.sh").read_text(), "old-run\n")
             self.assertTrue((backup / "manifest.sha256").stat().st_size > 0)
-            self.assertIn("TADA_AGENT_REASONING_EFFORT='ultra'", (bin_dir / "agent.env").read_text())
+            self.assertIn("TADA_AGENT_MODEL='gpt-5.6-terra'", (bin_dir / "agent.env").read_text())
+            self.assertIn("TADA_AGENT_REASONING_EFFORT='medium'", (bin_dir / "agent.env").read_text())
             self.assertIn("TADA_AGENT_MAX_ACTIVE_BATCHES='1'", (bin_dir / "agent.env").read_text())
             self.assertEqual(stat.S_IMODE((bin_dir / "agent.env").stat().st_mode), 0o600)
             with launch_agent.open("rb") as stream:

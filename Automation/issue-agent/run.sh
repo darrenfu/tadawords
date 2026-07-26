@@ -15,8 +15,8 @@ fi
 : "${TADA_AGENT_STATE_DIR:=/Users/macmini-dofu/Library/Application Support/TadaWordsIssueAgent/state}"
 : "${TADA_AGENT_LOG_DIR:=/Users/macmini-dofu/Library/Logs/TadaWordsIssueAgent}"
 : "${TADA_AGENT_MAX_ACTIVE_BATCHES:=1}"
-: "${TADA_AGENT_MODEL:=gpt-5.6-sol}"
-: "${TADA_AGENT_REASONING_EFFORT:=ultra}"
+: "${TADA_AGENT_MODEL:=gpt-5.6-terra}"
+: "${TADA_AGENT_REASONING_EFFORT:=medium}"
 if test -z "${TADA_AGENT_CODEX_BIN:-}"; then
     TADA_AGENT_CODEX_BIN=$(command -v codex)
 fi

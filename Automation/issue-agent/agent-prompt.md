@@ -19,6 +19,10 @@ skip fresh checks. Re-fetch GitHub and Git state before every mutation.
   exact-HEAD, evidence, blocker, product-decision, and target-environment gate
   remains mandatory. `/merge <sha>` is optional and compatible.
 - Never perform destructive device, account, signing, or data operations.
+- Use no subagents for routine work. Never delegate a write. A bounded complex
+  review may use at most two direct, non-nested, read-only subagents.
+- One PR/branch has one writer. Acquire its `pr-writer` lease before editing and
+  stop if another owner holds it.
 - If no snapshot event is still actionable, make no changes and exit.
 
 ## Event handling order
@@ -87,9 +91,11 @@ skip fresh checks. Re-fetch GitHub and Git state before every mutation.
    closed-but-unmerged PR is
    not a durable merge outcome. Do not acknowledge the event or claim completion
    until all post-merge checks pass.
-2. For `changes_requested`, reopen the existing batch worktree, implement only
-   the requested in-scope changes, push a new HEAD, invalidate old device and
-   approval evidence, rerun the affected full gates, and repeat device delivery.
+2. For `changes_requested`, reopen the existing batch worktree, verify the
+   writer lease, implement only the requested in-scope changes, and push a new
+   HEAD. Invalidate evidence for the prior HEAD, then rerun only the gates
+   required by the PR's declared R0-R4 tier. Repeat R4 artifact/device delivery
+   only after the next immutable candidate is frozen.
 3. For `resume_requested` or `issue_resume_requested`, confirm the named blocker
    is actually resolved before continuing.
 4. For `stale_claim`, inspect GitHub, branches, worktrees, running processes, and
@@ -163,45 +169,53 @@ Before claiming the first Issue:
 An `agent-ready` Issue with concrete acceptance criteria is prior human approval
 to implement that bounded scope. If a generally applicable design/review skill
 would normally pause for approval, perform its detailed audit only after the
-Issue, branch, version, and worktree are reserved. Pause before claiming only
+Issue, branch, and worktree are reserved. Pause before claiming only
 when the scan discovers a new material product choice, risk, or scope ambiguity
 that the Issue does not already resolve.
 
 The first pickup mutation is to add `agent-reclaimed`. Also add the legacy
-`agent-claimed` label while compatibility requires it, then add `batch:<id>` and
-`release:vX.Y.Z`; remove `agent-ready` only after the reclaim is visible on a
-fresh read. Create missing batch/release labels with concise descriptions.
+`agent-claimed` label while compatibility requires it, then add `batch:<id>`;
+remove `agent-ready` only after the reclaim is visible on a fresh read. Add a
+`release:vX.Y.Z` label only for an explicitly promoted R4 candidate. Create
+missing batch/release labels with concise descriptions.
 
-## Version reservation and worktree
+## Branch, worktree, writer lease, and version promotion
 
-Read the canonical main version/build from both source Plists and `project.yml`.
-Also scan tags, remote branches, open PRs, release labels, and batch reservations.
-Treat only explicit reservation labels/fields and live PR/ref names as version
-reservations; version examples in ordinary Issue prose are not reservations.
-Read the snapshot's repository-owned release policy before mutation. While the
-first public App Store release is incomplete, fail closed on any current,
-reserved, or proposed version above `v1.0.0`; reserving exactly `v1.0.0` still
-requires the owner's separate major-version authorization.
-Every PR must increment SemVer. Choose PATCH for compatible fixes/docs/internal
-automation and MINOR for a coherent backward-compatible capability. Breaking
-strategy requires human approval.
+Create one `agent/<bounded-description>` branch and one dedicated worktree.
+Push the branch before editing so remote ownership is visible. Acquire
+`pr-writer:<branch>` with `Scripts/delivery-lease.py` and record Issue, branch,
+HEAD, owner/session, and expiry. If the push or lease loses a race, remove only
+the new local worktree/branch and stop; never alter the winning batch.
 
-Create one branch named `agent/batch-<area>-vX.Y.Z` and one worktree named
-`batch-<area>-vX.Y.Z`. Push the new branch before editing to reserve the version.
-If the push fails because the ref or version was claimed, remove only the new
-local worktree/branch, recompute, and retry. Do not alter another batch.
-
-Use a monotonically increasing `YYYYMMDDNN` build number. Synchronize production
-and LocalQA Plists, `project.yml`, the generated Xcode project, and release notes.
-Regenerate only with `make generate` so a worktree name cannot leak into the
-Xcode project. Build with `TADA_GIT_COMMIT` equal to the full PR HEAD.
+Ordinary R0-R3 PRs do not increment SemVer or build metadata merely because a
+PR exists. Read the canonical version/build and repository release policy only
+when promoting an R4 candidate or when the owner explicitly requests a
+versioned artifact. For R4, scan tags, remote branches, open PRs, release labels,
+and reservations; fail closed on an unauthorized major version; reserve a
+monotonic build; synchronize both Plists, `project.yml`, the generated Xcode
+project, and release notes. Regenerate only with `make generate`. Build R4 with
+`TADA_GIT_COMMIT` equal to the full frozen HEAD.
 
 ## Delivery
 
-Implement the bounded batch and add regression coverage. Run strict lint, all
-Swift tests, relevant integration tests, and the critical UI/E2E matrix on both
-an iPhone and an iPad simulator. Open one draft PR with separate `Closes #N`
-lines and complete the repository PR template with exact evidence.
+Declare the highest applicable tier before implementation:
+
+- R0: docs/internal automation that cannot affect app package/runtime;
+- R1: pure domain logic and deterministic state machines;
+- R2: ordinary SwiftUI, layout, animation, and audio presentation;
+- R3: hardware/platform/persistence/signing-adjacent behavior;
+- R4: immutable release candidate, Family Sync, or distribution artifact.
+
+Implement the bounded batch and add regression coverage. Use `make
+check-changed` during development, `make check-pr` for the normal PR gate, and
+`make check-rc` only for R4 or scheduled validation. Open one draft PR with
+separate `Closes #N` lines and complete the tiered repository PR template.
+
+Do not start expensive simulator/device gates while behavior or acceptance
+criteria are changing. Freeze scope and full HEAD first. If HEAD is unchanged,
+read existing evidence instead of rerunning tests, builds, signing, devices, or
+audits. At the first context compaction, write a <=2 KB checkpoint and stop so a
+fresh session can resume.
 
 Before acknowledging the event, re-fetch a durable GitHub outcome: a closed
 Issue, a linked open PR or live remote branch owner, a pushed batch reservation,
@@ -209,31 +223,31 @@ or an explicit blocker/clarification label plus evidence comment. A successful
 Codex process exit without one of those outcomes is not acknowledgement and
 must remain eligible for recovery on the next poll.
 
-After simulator gates pass, build and sign the isolated LocalQA app from the PR
-HEAD. Run `Scripts/verify-signed-app-identity.sh` before each install. Install on
-at least one available paired iPhone and one available paired iPad without
-uninstalling or clearing data. Record installation, launch smoke, automated
-device checks, and remaining human checks separately. Do not call installation
-success human acceptance.
+R0 and R1 require no physical device. R2 may use at most one representative
+device after scope freeze when sensory judgment is necessary. R3 uses only the
+affected device classes; two devices are required only for cross-device scope.
+R4 uses the approved iPhone and iPad.
 
-Code batches may coexist in separate worktrees, but physical-device deployment
-is a single global critical section. Before Xcode device build/install/test,
-check for another active `xcodebuild`, `devicectl`, XCTest run, or user-driven
-device deployment. If the device lane is not confidently idle, stop with exact
-evidence instead of racing it. Re-read on-device version/build after every
-install and test; any unexpected replacement invalidates the device evidence.
+Before physical work, acquire the exact `heavy-xcode`, `signing-archive`,
+`iphone`, `ipad`, or `testflight` leases. For R3/R4 signed artifacts, run
+`Scripts/verify-signed-app-identity.sh` before installation. Never uninstall or
+clear data. Record installation, launch smoke, automated checks, and human
+acceptance separately.
+
+Code batches may coexist in separate worktrees, but one Mac has only one heavy
+Xcode/UI lane. Physical-device deployment remains exclusive per device.
+Family Sync has one coordinator holding both device leases and controlling the
+whole sequence. Re-read on-device version/build after every install or test;
+unexpected replacement invalidates that device evidence.
 
 If Developer Mode, trust, signing, provisioning, OTP, account state, or device
 availability blocks delivery, apply `agent-blocked`, comment exact evidence and
 safe recovery steps, leave the PR draft, and stop.
 
-Only after all applicable current-HEAD gates pass may you mark the PR ready and
-apply `awaiting-human-review`. Device rows may be `N/A` only when the diff
-cannot affect runtime/signing/persistence/package behavior and changes no app
-or LocalQA version/build metadata, source/generated Plist, `project.yml`,
-generated Xcode project, entitlement, resource, or package input. Otherwise
-run the exact signed simulator and one-iPhone-plus-one-iPad gates; never use a
-docs/automation label to bypass them. Do not stop solely to request another
-merge comment: re-fetch and execute the exact-HEAD automatic merge protocol in
-this run, or leave the deterministic candidate for the next poll if an
-external gate is still pending.
+Only after all gates required by the declared tier pass may you mark the PR
+ready and apply `awaiting-human-review`. R0 is invalid if the diff changes
+runtime/signing/persistence/package behavior, app or LocalQA version/build
+metadata, Plists, `project.yml`, generated Xcode project, entitlements, or
+resources. Do not stop solely to request another merge comment: re-fetch and
+execute the exact-HEAD automatic merge protocol, or leave the deterministic
+candidate for the next poll if an external gate is pending.
