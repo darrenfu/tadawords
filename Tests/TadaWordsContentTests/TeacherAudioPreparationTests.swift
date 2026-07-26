@@ -49,30 +49,86 @@ final class TeacherAudioPreparationTests: XCTestCase {
         }
     }
 
-    func testFailedPreparationLeavesPoolUnchangedForParentRetry() async throws {
+    func testPreparationFailuresNeverBlockDifferentValidNewWords() async throws {
+        let repository = InMemoryWordPoolRepository()
+        let cases: [(word: String, failure: AudioPreparationFailure)] = [
+            ("isabella", .teacher(.serverRejected(statusCode: 503))),
+            ("marigold", .teacher(.serverRejected(statusCode: 429))),
+            ("quokka", .teacher(.appAttestUnavailable)),
+            ("zephyr", .teacher(.invalidResponse)),
+            ("aluminum", .teacher(.invalidAudioChecksum)),
+            ("flibbertigibbet", .offline),
+        ]
+
+        for testCase in cases {
+            let preparer = RecordingAudioPreparer(failure: testCase.failure)
+            let importer = ManualWordPoolImporter(
+                repository: repository,
+                audioPreparer: preparer
+            )
+            let result = try await importer.importBatch(
+                testCase.word,
+                profileID: ContentTestFixture.profileID,
+                learningMode: .read,
+                addedAt: ContentTestFixture.day
+            )
+
+            XCTAssertEqual(result.inserted.map(\.normalizedText), [testCase.word])
+            let preparedWords = await preparer.preparedWords
+            XCTAssertEqual(preparedWords, [testCase.word])
+        }
+
+        let entries = try await repository.entries(
+            for: ContentTestFixture.profileID,
+            learningMode: .read,
+            includingInactive: true
+        )
+        XCTAssertEqual(Set(entries.map(\.normalizedText)), Set(cases.map(\.word)))
+    }
+
+    func testPreparationFailureDoesNotPartiallyRejectANewWordBatch() async throws {
         let repository = InMemoryWordPoolRepository()
         let preparer = RecordingAudioPreparer(
-            error: TeacherWordAudioError.serverRejected(statusCode: 503)
+            failure: .teacher(.serverRejected(statusCode: 503))
         )
         let importer = ManualWordPoolImporter(
             repository: repository,
             audioPreparer: preparer
         )
 
+        let result = try await importer.importBatch(
+            "isabella periwinkle narwhal",
+            profileID: ContentTestFixture.profileID,
+            learningMode: .write,
+            addedAt: ContentTestFixture.day
+        )
+
+        XCTAssertEqual(
+            result.inserted.map(\.normalizedText),
+            ["isabella", "periwinkle", "narwhal"]
+        )
+        XCTAssertTrue(result.rejected.isEmpty)
+    }
+
+    func testCancellationStillPreventsThePoolCommit() async throws {
+        let repository = InMemoryWordPoolRepository()
+        let importer = ManualWordPoolImporter(
+            repository: repository,
+            audioPreparer: RecordingAudioPreparer(failure: .cancelled)
+        )
+
         do {
             _ = try await importer.importBatch(
-                "cat dog",
+                "isabella",
                 profileID: ContentTestFixture.profileID,
                 learningMode: .read,
                 addedAt: ContentTestFixture.day
             )
-            XCTFail("Expected preparation to fail")
-        } catch {
-            XCTAssertEqual(
-                error as? TeacherWordAudioError,
-                .serverRejected(statusCode: 503)
-            )
+            XCTFail("Cancellation must stop the import")
+        } catch is CancellationError {
+            // Expected.
         }
+
         let entries = try await repository.entries(
             for: ContentTestFixture.profileID,
             learningMode: .read,
@@ -103,19 +159,34 @@ final class TeacherAudioPreparationTests: XCTestCase {
 }
 
 private actor RecordingAudioPreparer: TeacherWordAudioPreparing {
-    private let error: TeacherWordAudioError?
+    private let failure: AudioPreparationFailure?
     private(set) var preparedWords: [String] = []
 
-    init(error: TeacherWordAudioError? = nil) {
-        self.error = error
+    init(failure: AudioPreparationFailure? = nil) {
+        self.failure = failure
     }
 
     func prepare(_ prompts: [WordPrompt]) async throws {
-        if let error { throw error }
         preparedWords = prompts.map(\.normalizedText)
+        switch failure {
+        case .teacher(let error):
+            throw error
+        case .offline:
+            throw URLError(.notConnectedToInternet)
+        case .cancelled:
+            throw CancellationError()
+        case nil:
+            break
+        }
     }
 
     func requirePrepared(_ prompts: [WordPrompt]) async throws {
         _ = prompts
     }
+}
+
+private enum AudioPreparationFailure: Sendable {
+    case teacher(TeacherWordAudioError)
+    case offline
+    case cancelled
 }

@@ -128,8 +128,9 @@ public protocol TeacherWordAudioCaching: Sendable {
 }
 
 /// Resolves from the exact local cache or downloads and durably stores the
-/// canonical clip before reporting success. A failed store stays visible so a
-/// Parent flow can never commit an unprepared word to the active pool.
+/// canonical clip before reporting success. A failed store stays visible to
+/// callers; parent import flows may treat preparation as best effort so any
+/// valid word remains addable and playback can use Apple speech fallback.
 public actor CachingTeacherWordAudioProvider: TeacherWordAudioProviding {
     private let upstream: any TeacherWordAudioProviding
     private let cache: any TeacherWordAudioCaching

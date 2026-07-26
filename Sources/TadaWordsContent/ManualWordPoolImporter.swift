@@ -58,11 +58,18 @@ public struct ManualWordPoolImporter: Sendable {
                 positionInBatch: parsedWord.inputPosition
             )
         }
-        // Membership may become active once its teacher audio is bundled,
-        // atomically cached, or PawGoo explicitly confirms the word is outside
-        // the Bella catalog and therefore eligible for on-device Apple speech.
-        // Every other preparation failure leaves the pool unchanged.
-        try await audioPreparer?.prepare(drafts.map(\.prompt))
+        // Teacher audio is prepared eagerly when possible, but it is never a
+        // membership gate. Any valid parent word must remain addable during a
+        // PawGoo, App Attest, network, or cache failure; playback owns the
+        // transient notice and Apple speech fallback for an unprepared word.
+        do {
+            try await audioPreparer?.prepare(drafts.map(\.prompt))
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // Best effort by product contract. The repository commit below
+            // remains atomic and independent from external audio availability.
+        }
         let outcomes = try await repository.upsert(drafts)
 
         var inserted: [WordPoolEntry] = []

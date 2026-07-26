@@ -724,7 +724,7 @@ final class RemoteTeacherWordAudioProviderTests: XCTestCase {
 
         do {
             try await pipeline.prepare([prompt])
-            XCTFail("Operational failures must leave the pool unchanged")
+            XCTFail("The pipeline must expose operational failures to its caller")
         } catch {
             XCTAssertEqual(
                 error as? TeacherWordAudioError,
