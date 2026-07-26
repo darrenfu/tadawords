@@ -263,6 +263,7 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         guard !prompts.isEmpty else {
             throw QuestContentError.noReviewDue
         }
+        await prepareTeacherAudioWithoutBlocking(prompts)
         return PreparedQuest(
             plan: plan,
             orderedPrompts: prompts,
@@ -329,6 +330,7 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
         )
         let selected = selectedEntries.map(\.prompt)
         guard !selected.isEmpty else { throw QuestContentError.emptyPool }
+        await prepareTeacherAudioWithoutBlocking(selected)
         let plan = QuestPlan(
             profileID: profile.id,
             configuration: modeConfiguration.questConfiguration,
@@ -349,6 +351,17 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
             ),
             interfacePreferences: settings.interface
         )
+    }
+
+    private func prepareTeacherAudioWithoutBlocking(
+        _ prompts: [WordPrompt]
+    ) async {
+        do {
+            try await teacherAudioPreparer?.prepare(prompts)
+        } catch {
+            // An online Bella failure must never block a child from starting
+            // practice. Playback owns the transient warning and Apple fallback.
+        }
     }
 
     private func activeEntries(

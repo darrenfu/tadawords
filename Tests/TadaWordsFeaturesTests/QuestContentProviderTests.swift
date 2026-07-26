@@ -6,7 +6,7 @@ import XCTest
 @testable import TadaWordsFeatures
 
 final class QuestContentProviderTests: XCTestCase {
-    func testUnpreparedSyncedWordDoesNotBlockChildQuest() async throws {
+    func testTeacherAudioPreparationFailureDoesNotBlockChildQuest() async throws {
         let fixture = ProviderFixture()
         _ = try await ManualWordPoolImporter(
             repository: fixture.wordPool
@@ -33,6 +33,37 @@ final class QuestContentProviderTests: XCTestCase {
         )
 
         XCTAssertEqual(prepared.orderedPrompts.map(\.normalizedText), ["cat"])
+    }
+
+    func testQuestPreparesSelectedTeacherAudio() async throws {
+        let fixture = ProviderFixture()
+        _ = try await ManualWordPoolImporter(
+            repository: fixture.wordPool
+        ).importBatch(
+            "cat dog",
+            profileID: fixture.profile.id,
+            learningMode: .read,
+            addedAt: fixture.clock.now
+        )
+        let recorder = RecordingAudioPreparer()
+        let provider = RepositoryBackedQuestContentProvider(
+            wordPoolRepository: fixture.wordPool,
+            wordProgressRepository: fixture.records,
+            practiceSettingsRepository: fixture.settings,
+            attemptEventRepository: fixture.records,
+            teacherAudioPreparer: recorder,
+            deviceClass: .tablet,
+            clock: fixture.clock,
+            timeZone: TestFixture.utc
+        )
+
+        let prepared = try await provider.prepareQuest(
+            for: .read,
+            profile: fixture.profile
+        )
+
+        let preparedWords = await recorder.preparedWords
+        XCTAssertEqual(preparedWords, prepared.orderedPrompts.map(\.normalizedText))
     }
 
     func testGuardianEnteredPoolBecomesDefaultOrderedDailyNewWords() async throws {
@@ -715,11 +746,24 @@ final class QuestContentProviderTests: XCTestCase {
 private struct UnpreparedAudioGate: TeacherWordAudioPreparing {
     func prepare(_ prompts: [WordPrompt]) async throws {
         _ = prompts
+        throw TeacherWordAudioError.unavailableOfflineClip
     }
 
     func requirePrepared(_ prompts: [WordPrompt]) async throws {
         _ = prompts
         throw TeacherWordAudioError.unavailableOfflineClip
+    }
+}
+
+private actor RecordingAudioPreparer: TeacherWordAudioPreparing {
+    private(set) var preparedWords: [String] = []
+
+    func prepare(_ prompts: [WordPrompt]) async throws {
+        preparedWords = prompts.map(\.normalizedText)
+    }
+
+    func requirePrepared(_ prompts: [WordPrompt]) async throws {
+        _ = prompts
     }
 }
 
