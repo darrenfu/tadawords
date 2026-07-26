@@ -432,8 +432,8 @@ struct QuestResultView: View {
                 .frame(minHeight: max(4, size * 0.11))
             }
         }
-        .accessibilityIdentifier("quest-result.star-count")
         .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("quest-result.star-count")
         .accessibilityLabel("\(result.earnedStarCount) stars earned")
     }
 
