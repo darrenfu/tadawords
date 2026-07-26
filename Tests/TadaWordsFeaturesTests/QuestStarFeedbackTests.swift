@@ -52,6 +52,58 @@ final class QuestStarFeedbackTests: XCTestCase {
         XCTAssertNotEqual(trajectory.control.x, trajectory.source.x)
     }
 
+    func testTrajectoryUsesTheApprovedDemoBend() {
+        let trajectory = QuestStarTrajectory(
+            source: CGPoint(x: 110, y: 496),
+            target: CGPoint(x: 132, y: 18),
+            viewportSize: CGSize(width: 220, height: 800),
+            targetSlot: 3
+        )
+
+        XCTAssertEqual(trajectory.control.x, 32.12, accuracy: 0.001)
+        XCTAssertEqual(trajectory.control.y, 223.54, accuracy: 0.001)
+    }
+
+    func testEveryFlightFrameRecomputesTheBezierPosition() {
+        let trajectory = QuestStarTrajectory(
+            source: CGPoint(x: 110, y: 496),
+            target: CGPoint(x: 132, y: 18),
+            viewportSize: CGSize(width: 220, height: 800),
+            targetSlot: 3
+        )
+
+        let frame = QuestStarFlightMotion.frame(
+            rawProgress: 0.5,
+            trajectory: trajectory
+        )
+        let linearMidpoint = CGPoint(
+            x: (trajectory.source.x + trajectory.target.x) / 2,
+            y: (trajectory.source.y + trajectory.target.y) / 2
+        )
+
+        XCTAssertEqual(frame.pathProgress, 0.875, accuracy: 0.001)
+        XCTAssertEqual(
+            frame.center.x,
+            trajectory.point(at: frame.pathProgress).x,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            frame.center.y,
+            trajectory.point(at: frame.pathProgress).y,
+            accuracy: 0.001
+        )
+        XCTAssertNotEqual(frame.center, linearMidpoint)
+    }
+
+    func testTrailLayersEndAtTheStarAndFadeOverDifferentLengths() {
+        let ranges = QuestStarFlightMotion.trailRanges(pathProgress: 0.75)
+
+        XCTAssertEqual(ranges.map(\.upperBound), [0.75, 0.75, 0.75])
+        XCTAssertEqual(ranges[0].lowerBound, 0.41, accuracy: 0.001)
+        XCTAssertEqual(ranges[1].lowerBound, 0.51, accuracy: 0.001)
+        XCTAssertEqual(ranges[2].lowerBound, 0.65, accuracy: 0.001)
+    }
+
     func testMissFloorIsTenPercentAboveBottomWithVisibleBounce() {
         let trajectory = QuestStarTrajectory(
             source: CGPoint(x: 90, y: 496),

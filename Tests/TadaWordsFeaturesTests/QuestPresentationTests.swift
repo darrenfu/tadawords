@@ -79,6 +79,69 @@ final class QuestPresentationTests: XCTestCase {
         XCTAssertEqual(result.earnedStarCount, 4)
     }
 
+    func testQuestResultStarCountFlipsFromOneThroughEarnedCount() {
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.steps(earnedCount: 5),
+            [1, 2, 3, 4, 5]
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.totalDurationMilliseconds(
+                earnedCount: 5
+            ),
+            600
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.millisecondsPerFlip,
+            120
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.initialDisplayedCount(
+                earnedCount: 5,
+                reduceMotion: false
+            ),
+            1
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.initialDisplayedCount(
+                earnedCount: 5,
+                reduceMotion: true
+            ),
+            5
+        )
+    }
+
+    func testQuestResultStarCountSynchronizesCardDotAndTempoPerStep() {
+        let timeline = QuestResultStarCountAnimation.timeline(
+            earnedCount: 3
+        )
+
+        XCTAssertEqual(timeline.map(\.displayedCount), [1, 2, 3])
+        XCTAssertEqual(timeline.map(\.activeDotCount), [1, 2, 3])
+        XCTAssertEqual(
+            timeline.map(\.cue),
+            [.star(index: 0), .star(index: 1), .star(index: 2)]
+        )
+    }
+
+    func testZeroEarnedStarsDoesNotManufactureATempoOrDot() {
+        XCTAssertTrue(
+            QuestResultStarCountAnimation.steps(earnedCount: 0).isEmpty
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.totalDurationMilliseconds(
+                earnedCount: 0
+            ),
+            0
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.initialDisplayedCount(
+                earnedCount: 0,
+                reduceMotion: false
+            ),
+            0
+        )
+    }
+
     func testPracticePowerUpResultExposesReplayAction() {
         let result = QuestResultViewState(
             mode: .read,

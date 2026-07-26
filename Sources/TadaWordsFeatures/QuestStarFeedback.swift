@@ -113,9 +113,14 @@ struct QuestStarTrajectory: Equatable, Sendable {
         let safeHeight = max(180, viewportSize.height)
         self.source = source
         let horizontalDelta = target.x - source.x
-        let alternatingBend: CGFloat = targetSlot.isMultiple(of: 2) ? 44 : -44
+        let bend: CGFloat =
+            if abs(horizontalDelta) < 48 {
+                targetSlot.isMultiple(of: 2) ? 88 : -88
+            } else {
+                horizontalDelta.sign == .minus ? -72 : 72
+            }
         control = CGPoint(
-            x: source.x + horizontalDelta * 0.46 + alternatingBend,
+            x: source.x + horizontalDelta * 0.46 + bend,
             y: target.y + (source.y - target.y) * 0.43
         )
         self.target = target
@@ -142,6 +147,52 @@ struct QuestStarTrajectory: Equatable, Sendable {
         path.move(to: source)
         path.addQuadCurve(to: target, control: control)
         return path
+    }
+}
+
+struct QuestStarFlightFrame: Equatable, Sendable {
+    let pathProgress: CGFloat
+    let center: CGPoint
+    let scale: CGFloat
+    let opacity: CGFloat
+}
+
+enum QuestStarFlightMotion {
+    static func frame(
+        rawProgress: CGFloat,
+        trajectory: QuestStarTrajectory
+    ) -> QuestStarFlightFrame {
+        let raw = min(1, max(0, rawProgress))
+        let pathProgress = 1 - pow(1 - raw, 3)
+        let scale =
+            if raw < 0.80 {
+                0.76 + 0.27 * sin((raw / 0.80) * .pi / 2)
+            } else {
+                1.03 - ((raw - 0.80) / 0.20) * 0.57
+            }
+        let opacity: CGFloat =
+            if raw < 0.08 {
+                raw / 0.08
+            } else if raw > 0.96 {
+                CGFloat(0.46)
+            } else {
+                CGFloat(1)
+            }
+        return QuestStarFlightFrame(
+            pathProgress: pathProgress,
+            center: trajectory.point(at: pathProgress),
+            scale: scale,
+            opacity: opacity
+        )
+    }
+
+    static func trailRanges(
+        pathProgress: CGFloat
+    ) -> [ClosedRange<CGFloat>] {
+        let head = min(1, max(0, pathProgress))
+        return [0.34, 0.24, 0.10].map { length in
+            max(0, head - length)...head
+        }
     }
 }
 
@@ -279,11 +330,6 @@ struct QuestStarProgressBar: View {
     }
 }
 
-private struct QuestStarOverlayTaskKey: Equatable {
-    let eventID: UUID?
-    let targetFrame: CGRect?
-}
-
 struct QuestStarFeedbackOverlay: View {
     let event: QuestStarFeedbackEvent?
     let targetSlotFrame: CGRect?
@@ -302,19 +348,10 @@ struct QuestStarFeedbackOverlay: View {
         ZStack(alignment: .topLeading) {
             if let activeEvent, let trajectory = activeTrajectory {
                 if activeEvent.kind == .earned {
-                    fadingTrail(trajectory: trajectory)
-                    rewardStar
-                        .position(trajectory.point(at: flightProgress))
-                        .scaleEffect(
-                            flightProgress < 0.80
-                                ? 0.78 + flightProgress * 0.31
-                                : max(
-                                    0.52,
-                                    1.09 - (flightProgress - 0.80) * 2.85
-                                )
-                        )
-                        .rotationEffect(.degrees(-16 + 38 * flightProgress))
-                        .opacity(transientOpacity)
+                    QuestStarEarnedFlightView(
+                        trajectory: trajectory,
+                        progress: flightProgress
+                    )
                 } else {
                     missedStar
                         .position(x: trajectory.target.x, y: fallingY)
@@ -330,50 +367,10 @@ struct QuestStarFeedbackOverlay: View {
         )
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-        .task(
-            id: QuestStarOverlayTaskKey(
-                eventID: event?.id,
-                targetFrame: targetSlotFrame
-            )
-        ) {
+        .task(id: event?.id) {
             guard let event, let targetSlotFrame else { return }
             await animate(event, targetSlotFrame: targetSlotFrame)
         }
-    }
-
-    private func fadingTrail(trajectory: QuestStarTrajectory) -> some View {
-        Canvas { context, _ in
-            guard flightProgress > 0 else { return }
-            let segmentLength: CGFloat = 0.026
-            let segmentGap: CGFloat = 0.018
-            for segment in 0..<12 {
-                let end = flightProgress - CGFloat(segment) * segmentGap
-                guard end > 0 else { continue }
-                let start = max(0, end - segmentLength)
-                let opacity = 0.62 * (1 - CGFloat(segment) / 12)
-                context.stroke(
-                    trajectory.path.trimmedPath(from: start, to: min(1, end)),
-                    with: .color(Color.orange.opacity(opacity)),
-                    style: StrokeStyle(
-                        lineWidth: segment < 3 ? 3.2 : 2.2,
-                        lineCap: .round
-                    )
-                )
-            }
-        }
-    }
-
-    private var rewardStar: some View {
-        Image(systemName: "star.fill")
-            .font(.system(size: 54, weight: .bold))
-            .foregroundStyle(
-                LinearGradient(
-                    colors: [.white, .yellow, .orange],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .shadow(color: Color.orange.opacity(0.38), radius: 7, y: 4)
     }
 
     private var missedStar: some View {
@@ -427,7 +424,7 @@ struct QuestStarFeedbackOverlay: View {
         case .earned:
             flightProgress = 0
             transientOpacity = 1
-            withAnimation(.easeOut(duration: 0.66)) {
+            withAnimation(.linear(duration: 0.66)) {
                 flightProgress = 1
             }
             do {
@@ -491,5 +488,77 @@ struct QuestStarFeedbackOverlay: View {
         fallingY = 0
         transientOpacity = 0
         transientScale = 1
+    }
+}
+
+private struct QuestStarEarnedFlightView: View, @MainActor Animatable {
+    let trajectory: QuestStarTrajectory
+    var progress: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        let frame = QuestStarFlightMotion.frame(
+            rawProgress: progress,
+            trajectory: trajectory
+        )
+        ZStack(alignment: .topLeading) {
+            fadingTrail(pathProgress: frame.pathProgress)
+            Image(systemName: "star.fill")
+                .font(.system(size: 54, weight: .bold))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [.white, .yellow, .orange],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: Color.orange.opacity(0.38), radius: 7, y: 4)
+                .position(frame.center)
+                .scaleEffect(frame.scale)
+                .rotationEffect(.degrees(-16 + 38 * frame.pathProgress))
+                .opacity(frame.opacity)
+        }
+    }
+
+    private func fadingTrail(pathProgress: CGFloat) -> some View {
+        Canvas { context, _ in
+            guard pathProgress > 0 else { return }
+            let ranges = QuestStarFlightMotion.trailRanges(
+                pathProgress: pathProgress
+            )
+            let styles: [(width: CGFloat, opacity: CGFloat, blur: CGFloat)] = [
+                (9, 0.10, 2.5),
+                (5, 0.24, 0),
+                (3, 0.58, 0),
+            ]
+            for (range, style) in zip(ranges, styles) {
+                var layer = context
+                if style.blur > 0 {
+                    layer.addFilter(.blur(radius: style.blur))
+                }
+                layer.stroke(
+                    trajectory.path.trimmedPath(
+                        from: range.lowerBound,
+                        to: range.upperBound
+                    ),
+                    with: .linearGradient(
+                        Gradient(colors: [
+                            Color.orange.opacity(0),
+                            Color.yellow.opacity(style.opacity),
+                        ]),
+                        startPoint: trajectory.point(at: range.lowerBound),
+                        endPoint: trajectory.point(at: range.upperBound)
+                    ),
+                    style: StrokeStyle(
+                        lineWidth: style.width,
+                        lineCap: .round
+                    )
+                )
+            }
+        }
     }
 }
