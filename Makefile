@@ -1,4 +1,4 @@
-.PHONY: generate format lint test test-automation test-release-preflight release-preflight check
+.PHONY: generate format lint test test-automation test-release-preflight release-preflight check-changed check-pr check-rc check
 
 TEAM_ID ?= 7R78Q4HP86
 
@@ -32,4 +32,19 @@ release-preflight:
 		--expected-team "$(TEAM_ID)" \
 		--manifest "$(or $(MANIFEST),.build/release-candidate-manifest.json)"
 
-check: lint test test-automation test-release-preflight
+check-changed:
+	python3 Scripts/delivery-checks.py \
+		--mode changed \
+		--base "$(or $(BASE_REF),origin/main)" \
+		$(if $(TEST_FILTER),--swift-test-filter "$(TEST_FILTER)",)
+
+check-pr:
+	python3 Scripts/delivery-checks.py \
+		--mode pr \
+		--base "$(or $(BASE_REF),origin/main)"
+
+check-rc:
+	python3 Scripts/delivery-checks.py --mode rc
+
+# Compatibility alias. A normal PR is not a release candidate.
+check: check-pr

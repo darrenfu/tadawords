@@ -1,13 +1,20 @@
-## Release batch
+## Change batch
 
 - Batch ID:
 - Included Issues:
   - Closes #
+- Risk tier: R0 / R1 / R2 / R3 / R4
+- Tier rationale:
+- Current HEAD SHA:
+- Risk:
+- Scope frozen: yes / no
+- PR writer lease owner:
+
+### Versioned artifact (R4 or explicitly requested only)
+
 - Previous version:
 - New version:
 - Build number:
-- Current HEAD SHA:
-- Risk:
 
 ## Outcome
 
@@ -20,23 +27,29 @@ test surface, and rollback boundary.
 - Explicitly excluded:
 - Follow-up Issues:
 
-## Automated evidence
+## Development and PR evidence
 
-- [ ] Strict format/lint
-- [ ] Swift unit and integration tests
+- [ ] `make check-changed` focused checks
+- [ ] `make check-pr` normal PR gate
 - [ ] Regression tests for every included bug
-- [ ] iPhone simulator build and relevant E2E
-- [ ] iPad simulator build and relevant E2E
+- [ ] Simulator evidence required by the declared tier
+- [ ] HEAD-unchanged evidence was reused rather than rerun
 
-List exact commands, totals, failures, artifact paths, and the tested HEAD SHA.
+List exact commands, totals, artifact/evidence paths, and the tested HEAD SHA.
+
+### R4 evidence
+
+- [ ] `make check-rc`
+- [ ] Frozen exact-HEAD archive/export identity
+- [ ] Required iPhone and iPad simulator matrix
+- [ ] TestFlight/App Store state, if applicable
 
 ## Physical-device evidence
 
-Mark each device row `N/A` only when the diff cannot affect app runtime,
-signing, persistence, or packaged content and changes no app/LocalQA
-version/build metadata, source/generated Plist, `project.yml`, generated Xcode
-project, entitlement, resource, or package input. Otherwise provide exact-HEAD
-signed evidence for one iPhone and one iPad.
+R0/R1 use no physical device. R2 may use at most one representative experience
+check after scope freeze. R3 uses only affected device classes; two devices are
+required only for cross-device behavior. R4 requires the approved iPhone and
+iPad. Record `N/A` with the tier rationale.
 
 ### iPhone
 
@@ -82,7 +95,9 @@ only after every row above is reverified. The owner may optionally comment:
 `/merge <current HEAD SHA>`
 
 The command is compatible but is not required and never substitutes for a
-gate. Any new commit invalidates previous evidence and merge readiness.
+gate. Any new commit invalidates evidence for the previous HEAD; rerun only
+checks applicable to the declared tier. Full archive/device evidence is
+collected only for a frozen R4 HEAD.
 Automatic mutation must go through `issue_agent.py guarded-merge`; direct merge,
 admin bypass, update-branch, rebase, and `git push main` are forbidden.
 GitHub has no PR-metadata CAS, so the repository-wide remote merge lease is the
