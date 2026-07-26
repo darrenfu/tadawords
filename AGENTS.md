@@ -65,7 +65,7 @@ versioned artifact.
 
 - Open one draft PR with separate `Closes #N` lines. Record tier, exact HEAD,
   checks, limitations, and rollback.
-- Standing authorization removes only the mandatory merge comment. `/merge
+- The standing authorization removes only the mandatory merge comment. `/merge
   <sha>` is optional and cannot replace a gate.
 - Immediately before merge, re-fetch and require a ready, mergeable, clean,
   direct-to-`main`, non-stacked PR. Verify exact HEAD, base OID, PR-body SHA-256,
