@@ -22,6 +22,9 @@ struct QuestResultView: View {
         self.audioExperienceService = audioExperienceService
         self.onReplay = onReplay
         self.onContinue = onContinue
+        _displayedEarnedStarCount = State(
+            initialValue: result.earnedStarCount > 0 ? 1 : 0
+        )
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -29,6 +32,8 @@ struct QuestResultView: View {
     @State private var revealPhase = 0
     @State private var displayedEarnedStarCount = 0
     @State private var activeTempoDotCount = 0
+    @State private var starCountFlipAngle: Double = 0
+    @State private var starCountNumberOpacity: Double = 1
     @AccessibilityFocusState private var resultSummaryIsFocused: Bool
 
     var body: some View {
@@ -373,7 +378,8 @@ struct QuestResultView: View {
     }
 
     private func earnedStarSummary(size: CGFloat) -> some View {
-        HStack(spacing: 8) {
+        let metrics = QuestResultStarCountLayout.metrics(starSize: size)
+        return HStack(spacing: 13) {
             Image(systemName: "star.fill")
                 .font(.system(size: size, weight: .bold))
                 .foregroundStyle(Color.yellow)
@@ -385,39 +391,42 @@ struct QuestResultView: View {
             Text("×")
                 .font(
                     .system(
-                        size: size * 0.72,
+                        size: metrics.rootSize * 0.55,
                         weight: .heavy,
                         design: .rounded
                     )
                 )
-                .foregroundStyle(theme.ink)
+                .foregroundStyle(theme.secondary.opacity(0.72))
 
-            VStack(spacing: max(3, size * 0.10)) {
+            VStack(spacing: 7) {
                 QuestResultFlipNumberCard(
                     number: displayedEarnedStarCount,
-                    size: size,
-                    ink: theme.ink,
-                    accent: theme.secondary,
-                    surface: theme.surface
+                    cardSize: metrics.cardSize,
+                    flipAngle: starCountFlipAngle,
+                    numberOpacity: starCountNumberOpacity
                 )
 
-                HStack(spacing: max(3, size * 0.08)) {
+                HStack(spacing: metrics.dotSpacing) {
                     ForEach(
                         0..<max(0, result.earnedStarCount),
                         id: \.self
                     ) { index in
-                        Circle()
+                        Capsule()
                             .fill(
                                 index < activeTempoDotCount
-                                    ? Color.yellow
-                                    : theme.ink.opacity(0.13)
+                                    ? Color(red: 1, green: 0.84, blue: 0.40)
+                                    : theme.secondary.opacity(0.34)
                             )
                             .frame(
-                                width: max(4, size * 0.11),
-                                height: max(4, size * 0.11)
+                                width: metrics.dotSize.width,
+                                height: metrics.dotSize.height
                             )
                             .scaleEffect(
-                                index < activeTempoDotCount ? 1 : 0.72
+                                x: index < activeTempoDotCount ? 1 : 0.72,
+                                y: index == activeTempoDotCount - 1
+                                    ? 1.28
+                                    : (index < activeTempoDotCount ? 1 : 0.72),
+                                anchor: .bottom
                             )
                             .animation(
                                 .easeOut(
@@ -429,12 +438,13 @@ struct QuestResultView: View {
                             )
                     }
                 }
-                .frame(minHeight: max(4, size * 0.11))
+                .frame(minHeight: metrics.dotSize.height * 1.28)
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("quest-result.star-count")
         .accessibilityLabel("\(result.earnedStarCount) stars earned")
+        .accessibilityValue("\(displayedEarnedStarCount)")
     }
 
     private func revealResults() async {
@@ -480,29 +490,65 @@ struct QuestResultView: View {
         if reduceMotion {
             displayedEarnedStarCount = result.earnedStarCount
             activeTempoDotCount = result.earnedStarCount
+            starCountFlipAngle = 0
+            starCountNumberOpacity = 1
+            for step in timeline {
+                Task {
+                    await audioExperienceService.play(step.cue)
+                }
+                try? await Task.sleep(for: .milliseconds(40))
+            }
+            return
         }
 
-        for step in timeline {
-            guard !Task.isCancelled else { return }
-            if !reduceMotion {
-                withAnimation(
-                    .easeInOut(
-                        duration:
-                            QuestResultStarCountAnimation.flipDurationSeconds
-                    )
-                ) {
-                    displayedEarnedStarCount = step.displayedCount
-                    activeTempoDotCount = step.activeDotCount
-                }
-            }
-            await audioExperienceService.play(step.cue)
-            try? await Task.sleep(
-                for: .milliseconds(
-                    reduceMotion
-                        ? 40
-                        : QuestResultStarCountAnimation.millisecondsPerFlip
-                )
+        guard let firstStep = timeline.first else { return }
+        displayedEarnedStarCount = firstStep.displayedCount
+        withAnimation(
+            .easeOut(
+                duration: QuestResultStarCountAnimation.flipDurationSeconds
             )
+        ) {
+            activeTempoDotCount = firstStep.activeDotCount
+        }
+        Task {
+            await audioExperienceService.play(firstStep.cue)
+        }
+
+        for step in timeline.dropFirst() {
+            guard !Task.isCancelled else { return }
+            withAnimation(
+                .timingCurve(0.55, 0.05, 0.85, 0.35, duration: 0.05)
+            ) {
+                starCountFlipAngle = -88
+                starCountNumberOpacity = 0.28
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+
+            withTransaction(Transaction(animation: nil)) {
+                displayedEarnedStarCount = step.displayedCount
+                starCountFlipAngle = 88
+                starCountNumberOpacity = 0.28
+            }
+            withAnimation(
+                .timingCurve(0.18, 0.82, 0.22, 1, duration: 0.07)
+            ) {
+                starCountFlipAngle = 0
+                starCountNumberOpacity = 1
+            }
+            try? await Task.sleep(for: .milliseconds(70))
+            guard !Task.isCancelled else { return }
+
+            withAnimation(
+                .easeOut(
+                    duration: QuestResultStarCountAnimation.flipDurationSeconds
+                )
+            ) {
+                activeTempoDotCount = step.activeDotCount
+            }
+            Task {
+                await audioExperienceService.play(step.cue)
+            }
         }
     }
 
@@ -624,13 +670,15 @@ enum QuestResultStarCountAnimation {
             QuestResultStarCountAnimationStep(
                 displayedCount: count,
                 activeDotCount: count,
-                cue: .star(index: count - 1)
+                cue: .star(index: count - 1),
+                landingMilliseconds: (count - 1) * millisecondsPerFlip
             )
         }
     }
 
     static func totalDurationMilliseconds(earnedCount: Int) -> Int {
-        steps(earnedCount: earnedCount).count * millisecondsPerFlip
+        max(0, steps(earnedCount: earnedCount).count - 1)
+            * millisecondsPerFlip
     }
 }
 
@@ -638,94 +686,111 @@ struct QuestResultStarCountAnimationStep: Equatable, Sendable {
     let displayedCount: Int
     let activeDotCount: Int
     let cue: FunctionalAudioCue
+    let landingMilliseconds: Int
 }
 
-private struct QuestResultFlipNumberCard: View {
-    let number: Int
-    let size: CGFloat
-    let ink: Color
-    let accent: Color
-    let surface: Color
+struct QuestResultStarCountLayoutMetrics: Equatable, Sendable {
+    let rootSize: CGFloat
+    let cardSize: CGSize
+    let dotSize: CGSize
+    let dotSpacing: CGFloat
+}
 
-    var body: some View {
-        ZStack {
-            RoundedRectangle(
-                cornerRadius: max(8, size * 0.22),
-                style: .continuous
-            )
-            .fill(surface.opacity(0.94))
-            .overlay {
-                RoundedRectangle(
-                    cornerRadius: max(8, size * 0.22),
-                    style: .continuous
-                )
-                .strokeBorder(accent.opacity(0.24), lineWidth: 1)
-            }
-            .shadow(color: accent.opacity(0.16), radius: 5, y: 3)
-
-            ZStack {
-                Text("\(number)")
-                    .font(
-                        .system(
-                            size: size * 0.70,
-                            weight: .heavy,
-                            design: .rounded
-                        )
-                    )
-                    .monospacedDigit()
-                    .foregroundStyle(ink)
-                    .id(number)
-                    .transition(
-                        .asymmetric(
-                            insertion: .modifier(
-                                active: QuestResultFlipModifier(
-                                    angle: 88,
-                                    opacity: 0
-                                ),
-                                identity: QuestResultFlipModifier(
-                                    angle: 0,
-                                    opacity: 1
-                                )
-                            ),
-                            removal: .modifier(
-                                active: QuestResultFlipModifier(
-                                    angle: -88,
-                                    opacity: 0
-                                ),
-                                identity: QuestResultFlipModifier(
-                                    angle: 0,
-                                    opacity: 1
-                                )
-                            )
-                        )
-                    )
-            }
-            .clipped()
-        }
-        .frame(
-            minWidth: max(44, size * 1.12),
-            minHeight: max(40, size * 0.92)
-        )
-        .animation(
-            .easeInOut(
-                duration: QuestResultStarCountAnimation.flipDurationSeconds
+enum QuestResultStarCountLayout {
+    static func metrics(starSize: CGFloat) -> QuestResultStarCountLayoutMetrics {
+        let rootSize = starSize / 0.78
+        return QuestResultStarCountLayoutMetrics(
+            rootSize: rootSize,
+            cardSize: CGSize(
+                width: rootSize * 1.02,
+                height: rootSize * 0.92
             ),
-            value: number
+            dotSize: CGSize(width: 7, height: 9),
+            dotSpacing: 7
         )
     }
 }
 
-private struct QuestResultFlipModifier: ViewModifier {
-    let angle: Double
-    let opacity: Double
+private struct QuestResultFlipNumberCard: View {
+    let number: Int
+    let cardSize: CGSize
+    let flipAngle: Double
+    let numberOpacity: Double
 
-    func body(content: Content) -> some View {
-        content
-            .rotation3DEffect(
-                .degrees(angle),
-                axis: (x: 1, y: 0, z: 0),
-                perspective: 0.62
+    var body: some View {
+        ZStack {
+            RoundedRectangle(
+                cornerRadius: cardSize.height * 0.2065,
+                style: .continuous
             )
-            .opacity(opacity)
+            .fill(
+                LinearGradient(
+                    stops: [
+                        .init(
+                            color: Color(
+                                red: 1,
+                                green: 0.988,
+                                blue: 0.906
+                            ),
+                            location: 0.492
+                        ),
+                        .init(
+                            color: Color(
+                                red: 0.933,
+                                green: 0.875,
+                                blue: 0.655
+                            ),
+                            location: 0.508
+                        ),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: cardSize.height * 0.2065,
+                    style: .continuous
+                )
+                .strokeBorder(Color.white.opacity(0.72), lineWidth: 1)
+            }
+            .shadow(
+                color: Color(red: 0.05, green: 0.03, blue: 0.17)
+                    .opacity(0.26),
+                radius: 9,
+                y: 5
+            )
+
+            Rectangle()
+                .fill(Color(red: 0.286, green: 0.192, blue: 0.094).opacity(0.18))
+                .frame(height: 1)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.50))
+                        .frame(height: 1)
+                        .offset(y: 1)
+                }
+
+            Text("\(number)")
+                .font(
+                    .system(
+                        size: cardSize.height * 0.76,
+                        weight: .heavy,
+                        design: .rounded
+                    )
+                )
+                .monospacedDigit()
+                .foregroundStyle(
+                    Color(red: 0.231, green: 0.137, blue: 0.373)
+                )
+                .rotation3DEffect(
+                    .degrees(flipAngle),
+                    axis: (x: 1, y: 0, z: 0),
+                    perspective: 0.62
+                )
+                .opacity(numberOpacity)
+        }
+        .frame(width: cardSize.width, height: cardSize.height)
+        .clipped()
     }
 }

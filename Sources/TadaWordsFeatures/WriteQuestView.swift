@@ -179,8 +179,7 @@ struct WriteQuestView: View {
         )
         _attemptState = State(
             initialValue: QuestAttemptStateMachine(
-                policy: .write,
-                incorrectAttemptLimit: session.incorrectAttemptLimit
+                policy: .write
             )
         )
         _completionFeedbackLifecycle = State(
@@ -791,6 +790,9 @@ struct WriteQuestView: View {
             timing: pendingAttemptTiming,
             replayCount: attemptReplayCount
         )
+        let shouldShowGuidedWord =
+            attemptState.prepareGuidedImitationAttempt()
+            || attemptState.usedGuidance
         presentStarFeedback(for: result.decision)
         let feedbackPlayback = playFeedback(for: result.decision)
         if let message = currentFeedback?.message {
@@ -801,7 +803,7 @@ struct WriteQuestView: View {
             showCompletion(summary, after: feedbackPlayback)
         } else {
             if case .feedback(.tryAgain) = attemptState.phase {
-                showGuidedWord = false
+                showGuidedWord = shouldShowGuidedWord
                 if shouldOfferPictureHint {
                     loadPictureHint()
                 }
@@ -983,8 +985,7 @@ struct WriteQuestView: View {
         feedbackPlaybackTask = nil
 
         attemptState = QuestAttemptStateMachine(
-            policy: .write,
-            incorrectAttemptLimit: session.incorrectAttemptLimit
+            policy: .write
         )
         strokes.removeAll(keepingCapacity: true)
         isPaused = false
@@ -1006,6 +1007,9 @@ struct WriteQuestView: View {
     }
 
     private func retryMessage(remainingAttempts: Int) -> String {
+        if attemptState.usedGuidance {
+            return "Look at the word above and write it one more time."
+        }
         if remainingAttempts == 1 {
             return "Nice work trying. Clear and write it one more time."
         }

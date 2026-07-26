@@ -95,6 +95,28 @@ final class QuestStarFeedbackTests: XCTestCase {
         XCTAssertNotEqual(frame.center, linearMidpoint)
     }
 
+    func testFlightRenderingPinsTheStarAtTheSlotAfterArrival() {
+        let trajectory = QuestStarTrajectory(
+            source: CGPoint(x: 110, y: 496),
+            target: CGPoint(x: 132, y: 18),
+            viewportSize: CGSize(width: 220, height: 800),
+            targetSlot: 3
+        )
+
+        let arrival = QuestStarFlightMotion.frame(
+            rawProgress: 1,
+            trajectory: trajectory
+        )
+        let afterArrival = QuestStarFlightMotion.frame(
+            rawProgress: 1.25,
+            trajectory: trajectory
+        )
+
+        XCTAssertEqual(arrival.center, trajectory.target)
+        XCTAssertEqual(afterArrival.center, trajectory.target)
+        XCTAssertEqual(afterArrival.pathProgress, 1)
+    }
+
     func testTrailLayersEndAtTheStarAndFadeOverDifferentLengths() {
         let ranges = QuestStarFlightMotion.trailRanges(pathProgress: 0.75)
 

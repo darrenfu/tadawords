@@ -492,6 +492,8 @@ struct QuestStarFeedbackOverlay: View {
 }
 
 private struct QuestStarEarnedFlightView: View, @MainActor Animatable {
+    private static let starSymbolID = "quest-earned-flight-star"
+
     let trajectory: QuestStarTrajectory
     var progress: CGFloat
 
@@ -505,8 +507,28 @@ private struct QuestStarEarnedFlightView: View, @MainActor Animatable {
             rawProgress: progress,
             trajectory: trajectory
         )
-        ZStack(alignment: .topLeading) {
-            fadingTrail(pathProgress: frame.pathProgress)
+        Canvas { context, _ in
+            drawTrail(
+                context: &context,
+                pathProgress: frame.pathProgress
+            )
+
+            guard
+                let star = context.resolveSymbol(
+                    id: Self.starSymbolID
+                )
+            else {
+                return
+            }
+            var starLayer = context
+            starLayer.opacity = frame.opacity
+            starLayer.translateBy(x: frame.center.x, y: frame.center.y)
+            starLayer.rotate(
+                by: .degrees(-16 + 38 * frame.pathProgress)
+            )
+            starLayer.scaleBy(x: frame.scale, y: frame.scale)
+            starLayer.draw(star, at: .zero, anchor: .center)
+        } symbols: {
             Image(systemName: "star.fill")
                 .font(.system(size: 54, weight: .bold))
                 .foregroundStyle(
@@ -517,48 +539,47 @@ private struct QuestStarEarnedFlightView: View, @MainActor Animatable {
                     )
                 )
                 .shadow(color: Color.orange.opacity(0.38), radius: 7, y: 4)
-                .position(frame.center)
-                .scaleEffect(frame.scale)
-                .rotationEffect(.degrees(-16 + 38 * frame.pathProgress))
-                .opacity(frame.opacity)
+                .tag(Self.starSymbolID)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func fadingTrail(pathProgress: CGFloat) -> some View {
-        Canvas { context, _ in
-            guard pathProgress > 0 else { return }
-            let ranges = QuestStarFlightMotion.trailRanges(
-                pathProgress: pathProgress
-            )
-            let styles: [(width: CGFloat, opacity: CGFloat, blur: CGFloat)] = [
-                (9, 0.10, 2.5),
-                (5, 0.24, 0),
-                (3, 0.58, 0),
-            ]
-            for (range, style) in zip(ranges, styles) {
-                var layer = context
-                if style.blur > 0 {
-                    layer.addFilter(.blur(radius: style.blur))
-                }
-                layer.stroke(
-                    trajectory.path.trimmedPath(
-                        from: range.lowerBound,
-                        to: range.upperBound
-                    ),
-                    with: .linearGradient(
-                        Gradient(colors: [
-                            Color.orange.opacity(0),
-                            Color.yellow.opacity(style.opacity),
-                        ]),
-                        startPoint: trajectory.point(at: range.lowerBound),
-                        endPoint: trajectory.point(at: range.upperBound)
-                    ),
-                    style: StrokeStyle(
-                        lineWidth: style.width,
-                        lineCap: .round
-                    )
-                )
+    private func drawTrail(
+        context: inout GraphicsContext,
+        pathProgress: CGFloat
+    ) {
+        guard pathProgress > 0 else { return }
+        let ranges = QuestStarFlightMotion.trailRanges(
+            pathProgress: pathProgress
+        )
+        let styles: [(width: CGFloat, opacity: CGFloat, blur: CGFloat)] = [
+            (9, 0.10, 2.5),
+            (5, 0.24, 0),
+            (3, 0.58, 0),
+        ]
+        for (range, style) in zip(ranges, styles) {
+            var layer = context
+            if style.blur > 0 {
+                layer.addFilter(.blur(radius: style.blur))
             }
+            layer.stroke(
+                trajectory.path.trimmedPath(
+                    from: range.lowerBound,
+                    to: range.upperBound
+                ),
+                with: .linearGradient(
+                    Gradient(colors: [
+                        Color.orange.opacity(0),
+                        Color.yellow.opacity(style.opacity),
+                    ]),
+                    startPoint: trajectory.point(at: range.lowerBound),
+                    endPoint: trajectory.point(at: range.upperBound)
+                ),
+                style: StrokeStyle(
+                    lineWidth: style.width,
+                    lineCap: .round
+                )
+            )
         }
     }
 }

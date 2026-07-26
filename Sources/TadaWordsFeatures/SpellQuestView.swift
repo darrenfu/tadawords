@@ -191,8 +191,7 @@ struct SpellQuestView: View {
         _questTimer = ObservedObject(wrappedValue: questTimer)
         _attemptState = State(
             initialValue: QuestAttemptStateMachine(
-                policy: .write,
-                incorrectAttemptLimit: session.incorrectAttemptLimit
+                policy: .write
             )
         )
         let letterCount = SpellingAnswerEvaluator().letterCount(
@@ -456,6 +455,9 @@ struct SpellQuestView: View {
         else {
             return nil
         }
+        if attemptState.usedGuidance {
+            return "Look at the word above and spell it one more time."
+        }
         return remainingAttempts == 1
             ? "Try spelling it one more time."
             : "Try again. You have \(remainingAttempts) more tries."
@@ -536,6 +538,10 @@ struct SpellQuestView: View {
             timing: timing,
             replayCount: attemptReplayCount
         )
+        let shouldShowGuidedWord =
+            attemptState.prepareGuidedImitationAttempt()
+            || attemptState.usedGuidance
+        showGuidedWord = shouldShowGuidedWord
         presentStarFeedback(for: decision)
         feedbackPlaybackTask?.cancel()
         let cue = QuestAttemptFeedbackPolicy.presentation(for: decision).cue
@@ -682,8 +688,7 @@ struct SpellQuestView: View {
         completionTask = nil
         feedbackPlaybackTask = nil
         attemptState = QuestAttemptStateMachine(
-            policy: .write,
-            incorrectAttemptLimit: session.incorrectAttemptLimit
+            policy: .write
         )
         inputState = LetterKeyboardInputState(
             maximumLetterCount: evaluator.letterCount(

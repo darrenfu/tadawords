@@ -88,7 +88,7 @@ final class QuestPresentationTests: XCTestCase {
             QuestResultStarCountAnimation.totalDurationMilliseconds(
                 earnedCount: 5
             ),
-            600
+            480
         )
         XCTAssertEqual(
             QuestResultStarCountAnimation.millisecondsPerFlip,
@@ -121,6 +121,19 @@ final class QuestPresentationTests: XCTestCase {
             timeline.map(\.cue),
             [.star(index: 0), .star(index: 1), .star(index: 2)]
         )
+        XCTAssertEqual(timeline.map(\.landingMilliseconds), [0, 120, 240])
+    }
+
+    func testQuestResultCounterUsesApprovedDemoProportions() {
+        let compact = QuestResultStarCountLayout.metrics(starSize: 30)
+        let regular = QuestResultStarCountLayout.metrics(starSize: 44)
+
+        XCTAssertEqual(compact.cardSize.width, 39.230_769, accuracy: 0.001)
+        XCTAssertEqual(compact.cardSize.height, 35.384_615, accuracy: 0.001)
+        XCTAssertEqual(regular.cardSize.width, 57.538_461, accuracy: 0.001)
+        XCTAssertEqual(regular.cardSize.height, 51.897_435, accuracy: 0.001)
+        XCTAssertEqual(compact.dotSize, CGSize(width: 7, height: 9))
+        XCTAssertEqual(compact.dotSpacing, 7)
     }
 
     func testZeroEarnedStarsDoesNotManufactureATempoOrDot() {

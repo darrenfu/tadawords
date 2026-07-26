@@ -40,6 +40,15 @@ enum QuestAttemptCompletion: Equatable, Sendable {
 enum QuestAttemptPolicy: Equatable, Sendable {
     case read
     case write
+
+    var fixedIncorrectAttemptLimit: Int {
+        switch self {
+        case .read:
+            2
+        case .write:
+            3
+        }
+    }
 }
 
 enum QuestAttemptPhase: Equatable, Sendable {
@@ -82,7 +91,8 @@ struct QuestAttemptSummary: Equatable, Sendable {
 
 /// Owns the evidence boundary for one word encounter.
 ///
-/// Read and Write default to two incorrect answers. A correct response
+/// Read allows two incorrect answers. Write allows two independent answers,
+/// then reveals the target for one guided imitation attempt. A correct response
 /// completes immediately at any point. In Read, an unclear or timed-out
 /// recording consumes the retry budget without becoming accuracy evidence.
 /// Other technical failures, and uncertain Write recognition, do not consume
@@ -102,15 +112,16 @@ struct QuestAttemptStateMachine: Equatable, Sendable {
 
     init(
         policy: QuestAttemptPolicy = .read,
-        incorrectAttemptLimit: Int =
-            LearningRouteSettings.defaultIncorrectAttemptLimit
+        incorrectAttemptLimit: Int? = nil
     ) {
         self.policy = policy
+        let resolvedIncorrectAttemptLimit =
+            incorrectAttemptLimit ?? policy.fixedIncorrectAttemptLimit
         self.incorrectAttemptLimit = min(
             LearningRouteSettings.incorrectAttemptLimitRange.upperBound,
             max(
                 LearningRouteSettings.incorrectAttemptLimitRange.lowerBound,
-                incorrectAttemptLimit
+                resolvedIncorrectAttemptLimit
             )
         )
     }
@@ -162,6 +173,21 @@ struct QuestAttemptStateMachine: Equatable, Sendable {
                 confidence: nil
             )
         )
+    }
+
+    @discardableResult
+    mutating func prepareGuidedImitationAttempt() -> Bool {
+        guard policy == .write, incorrectAttemptCount == 2 else {
+            return false
+        }
+        guard case .feedback(.tryAgain(let remainingAttempts)) = phase,
+            remainingAttempts == 1,
+            !usedGuidance
+        else {
+            return false
+        }
+        useGuidance()
+        return true
     }
 
     mutating func markStudyExposure() {

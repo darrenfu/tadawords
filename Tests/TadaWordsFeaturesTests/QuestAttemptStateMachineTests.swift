@@ -157,12 +157,12 @@ final class QuestAttemptStateMachineTests: XCTestCase {
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.technicalFailure(.permissionDenied)))
         XCTAssertEqual(machine.validAttemptCount, 0)
-        XCTAssertEqual(machine.remainingIncorrectAttemptCount, 2)
+        XCTAssertEqual(machine.remainingIncorrectAttemptCount, 3)
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.uncertain))
         XCTAssertEqual(machine.validAttemptCount, 0)
-        XCTAssertEqual(machine.remainingIncorrectAttemptCount, 2)
+        XCTAssertEqual(machine.remainingIncorrectAttemptCount, 3)
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.matched))
@@ -304,24 +304,56 @@ final class QuestAttemptStateMachineTests: XCTestCase {
         XCTAssertFalse(machine.canSkipAfterTechnicalIssues)
     }
 
-    func testWriteDoesNotExposeAnswerBeforeFinalIncorrectResponse() throws {
+    func testWriteRevealsAnswerAfterSecondWrongAndAllowsGuidedThirdAttempt() throws {
         var machine = QuestAttemptStateMachine(policy: .write)
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.notMatched))
 
-        XCTAssertEqual(machine.phase, .feedback(.tryAgain(remainingAttempts: 1)))
+        XCTAssertEqual(machine.phase, .feedback(.tryAgain(remainingAttempts: 2)))
         XCTAssertEqual(machine.submissionCount, 1)
-        XCTAssertEqual(machine.remainingIncorrectAttemptCount, 1)
+        XCTAssertEqual(machine.remainingIncorrectAttemptCount, 2)
         XCTAssertEqual(machine.records.map(\.evidence), [.firstIndependentAttempt])
         XCTAssertFalse(machine.usedGuidance)
+        XCTAssertFalse(machine.prepareGuidedImitationAttempt())
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.notMatched))
 
+        XCTAssertEqual(machine.phase, .feedback(.tryAgain(remainingAttempts: 1)))
+        XCTAssertTrue(machine.prepareGuidedImitationAttempt())
+        XCTAssertTrue(machine.usedGuidance)
+        XCTAssertEqual(
+            machine.records.map(\.evidence),
+            [.firstIndependentAttempt, .unaidedRetry, .helped]
+        )
+
+        XCTAssertTrue(machine.beginAttempt())
+        machine.receive(result(.matched))
+
+        let summary = try XCTUnwrap(machine.completedSummary)
+        XCTAssertEqual(summary.completion, .completedWithGuidance)
+        XCTAssertEqual(summary.validAttemptCount, 3)
+        XCTAssertTrue(summary.earnsItemStar)
+        XCTAssertEqual(summary.records.last?.evidence, .guidedRetry)
+        XCTAssertFalse(machine.beginAttempt())
+    }
+
+    func testWriteThirdWrongCompletesAsNeedsPractice() throws {
+        var machine = QuestAttemptStateMachine(policy: .write)
+
+        for attempt in 1...3 {
+            XCTAssertTrue(machine.beginAttempt())
+            machine.receive(result(.notMatched))
+            if attempt == 2 {
+                XCTAssertTrue(machine.prepareGuidedImitationAttempt())
+            }
+        }
+
         let summary = try XCTUnwrap(machine.completedSummary)
         XCTAssertEqual(summary.completion, .needsPractice)
-        XCTAssertEqual(summary.validAttemptCount, 2)
+        XCTAssertEqual(summary.validAttemptCount, 3)
+        XCTAssertFalse(summary.earnsItemStar)
         XCTAssertFalse(machine.beginAttempt())
     }
 

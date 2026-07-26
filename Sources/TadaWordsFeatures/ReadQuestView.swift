@@ -70,10 +70,7 @@ struct ReadQuestView: View {
             wrappedValue: questTimer
         )
         _attemptState = State(
-            initialValue: QuestAttemptStateMachine(
-                policy: .read,
-                incorrectAttemptLimit: session.incorrectAttemptLimit
-            )
+            initialValue: QuestAttemptStateMachine(policy: .read)
         )
         _responseClock = State(
             initialValue: AttemptResponseClock(
@@ -805,10 +802,7 @@ struct ReadQuestView: View {
         hintPlaybackTask = nil
         starFeedbackEvent = nil
 
-        attemptState = QuestAttemptStateMachine(
-            policy: .read,
-            incorrectAttemptLimit: session.incorrectAttemptLimit
-        )
+        attemptState = QuestAttemptStateMachine(policy: .read)
         isListening = false
         isPaused = false
         isCheckingPermission = false
