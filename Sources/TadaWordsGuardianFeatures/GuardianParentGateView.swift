@@ -26,6 +26,9 @@ struct GuardianParentGateView: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            answerIsFocused = true
+        }
     }
 
     private var regularLayout: some View {

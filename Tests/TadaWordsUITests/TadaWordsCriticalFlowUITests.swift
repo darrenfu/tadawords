@@ -640,7 +640,8 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
 
         let answer = app.textFields["Answer"]
         XCTAssertTrue(answer.waitForExistence(timeout: 3))
-        answer.tap()
+        // The parent gate owns initial focus, so the flow must accept typing
+        // immediately after the single tap on Parents.
         answer.typeText(String(factors[0] * factors[1]))
     }
 
