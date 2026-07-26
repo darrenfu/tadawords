@@ -1,6 +1,7 @@
 import Foundation
 import TadaWordsContent
 import TadaWordsDomain
+import TadaWordsLearning
 import XCTest
 
 @testable import TadaWordsFeatures
@@ -848,6 +849,69 @@ final class TadaWordsAppModelTests: XCTestCase {
         XCTAssertEqual(replayResult.runKind, .practiceAgain)
         XCTAssertEqual(replayResult.replayWordCount, 0)
         XCTAssertFalse(replayResult.showsReplayAction)
+    }
+
+    func testRetrySuccessEarnsItemStarWhileLearningEvidenceRemainsStrict()
+        async throws
+    {
+        let fixture = try ModelFixture(wordCount: 1)
+        await fixture.model.prepareQuestAndWait(.read)
+        let firstSession = try questSession(from: fixture.model.destination)
+        var machine = QuestAttemptStateMachine(policy: .read)
+
+        XCTAssertTrue(machine.beginAttempt())
+        machine.receive(
+            RecognitionResult(decision: .notMatched),
+            replayCount: 1
+        )
+        machine.useGuidance()
+        XCTAssertTrue(machine.beginAttempt())
+        machine.receive(
+            RecognitionResult(decision: .matched),
+            replayCount: 2
+        )
+        let summary = try XCTUnwrap(machine.completedSummary)
+
+        XCTAssertTrue(summary.earnsItemStar)
+        XCTAssertEqual(summary.firstIndependentOutcome, .incorrect)
+        XCTAssertEqual(summary.finalResponseOutcome, .correct)
+        XCTAssertEqual(summary.promptReplayCount, 3)
+        XCTAssertEqual(summary.guidanceExposureCount, 1)
+
+        await fixture.model.finishItemAndWait(firstSession, summary: summary)
+
+        let result = try resultState(from: fixture.model.destination)
+        XCTAssertEqual(result.earnedStarCount, 1)
+        let savedAttempts = try await fixture.records.attempts(
+            for: fixture.profile.id,
+            wordPromptID: firstSession.prompt.id
+        )
+        XCTAssertEqual(
+            savedAttempts.map(\.evidence),
+            [.firstIndependentAttempt, .helped, .guidedRetry]
+        )
+        XCTAssertEqual(
+            savedAttempts.map(\.outcome),
+            [.incorrect, .skipped, .correct]
+        )
+
+        let storedProgress = try await fixture.records.progress(
+            for: fixture.profile.id,
+            wordPromptID: firstSession.prompt.id
+        )
+        let progress = try XCTUnwrap(storedProgress)
+        XCTAssertEqual(progress.firstIndependentAttemptCount, 1)
+        XCTAssertEqual(progress.firstIndependentCorrectCount, 0)
+        XCTAssertEqual(progress.totalReplayCount, 3)
+        XCTAssertEqual(progress.helpedAttemptCount, 1)
+        XCTAssertEqual(
+            WordMasteryEvaluator().status(
+                for: progress,
+                asOf: TestFixture.now,
+                timeZone: .gmt
+            ),
+            .learning
+        )
     }
 
     func testPerfectQuestOffersNoReplayAndStillKeepsResultVisible() async throws {

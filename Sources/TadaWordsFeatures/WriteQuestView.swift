@@ -816,6 +816,11 @@ struct WriteQuestView: View {
     }
 
     private func presentStarFeedback(for decision: RecognitionDecision) {
+        if decision == .matched,
+            attemptState.completedSummary?.earnsItemStar != true
+        {
+            return
+        }
         guard
             let kind = QuestAttemptFeedbackPolicy.presentation(
                 for: decision

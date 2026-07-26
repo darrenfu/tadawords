@@ -59,6 +59,42 @@ final class SpellQuestTests: XCTestCase {
         XCTAssertFalse(state.removeLast())
     }
 
+    func testPhysicalKeyboardMapsLettersDeleteAndReturnToChildKeyboardActions() {
+        let policy = LetterKeyboardPhysicalInputPolicy()
+
+        XCTAssertEqual(
+            policy.action(characters: "A"),
+            .append("a")
+        )
+        XCTAssertEqual(
+            policy.action(characters: "z"),
+            .append("z")
+        )
+        XCTAssertEqual(
+            policy.action(characters: "", isDelete: true),
+            .delete
+        )
+        XCTAssertEqual(
+            policy.action(characters: "\r", isSubmit: true),
+            .submit
+        )
+    }
+
+    func testPhysicalKeyboardRejectsSymbolsMultipleCharactersAndCommands() {
+        let policy = LetterKeyboardPhysicalInputPolicy()
+
+        XCTAssertNil(policy.action(characters: "1"))
+        XCTAssertNil(policy.action(characters: "-"))
+        XCTAssertNil(policy.action(characters: "é"))
+        XCTAssertNil(policy.action(characters: "ab"))
+        XCTAssertNil(
+            policy.action(
+                characters: "a",
+                hasCommandModifier: true
+            )
+        )
+    }
+
     func testTypedAndHandwrittenWriteUseSeparatePaceContexts() throws {
         let prompt = try WordPrompt(
             learningMode: .write,

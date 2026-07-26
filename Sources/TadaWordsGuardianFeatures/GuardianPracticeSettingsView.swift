@@ -87,7 +87,7 @@ struct GuardianPracticeSettingsView: View {
                 Text("Plan each practice route")
                     .font(.system(.title3, design: .rounded, weight: .bold))
                 Text(
-                    "Choose word counts, order, wrong answers allowed per word, and when Rescue time begins."
+                    "Choose word counts, order, and when Rescue time begins."
                 )
                 .font(.system(.body, design: .rounded, weight: .medium))
                 .foregroundStyle(GuardianSemanticTokens.secondaryForeground)

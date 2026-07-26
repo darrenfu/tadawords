@@ -29,6 +29,9 @@ final class QuestAttemptStateMachineTests: XCTestCase {
 
         let summary = try XCTUnwrap(machine.completedSummary)
         XCTAssertEqual(summary.completion, .completedAfterRetry)
+        XCTAssertTrue(summary.earnsItemStar)
+        XCTAssertEqual(summary.firstIndependentOutcome, .incorrect)
+        XCTAssertEqual(summary.finalResponseOutcome, .correct)
         XCTAssertEqual(summary.validAttemptCount, 2)
         XCTAssertEqual(
             summary.records.map(\.evidence),
@@ -48,6 +51,7 @@ final class QuestAttemptStateMachineTests: XCTestCase {
 
         let summary = try XCTUnwrap(machine.completedSummary)
         XCTAssertEqual(summary.completion, .needsPractice)
+        XCTAssertFalse(summary.earnsItemStar)
         XCTAssertEqual(summary.validAttemptCount, 2)
         XCTAssertEqual(machine.incorrectAttemptCount, 2)
         XCTAssertEqual(machine.remainingIncorrectAttemptCount, 0)
@@ -184,10 +188,13 @@ final class QuestAttemptStateMachineTests: XCTestCase {
 
         machine.useGuidance()
         XCTAssertTrue(machine.beginAttempt())
-        machine.receive(result(.matched))
+        machine.receive(result(.matched), replayCount: 2)
 
         let summary = try XCTUnwrap(machine.completedSummary)
         XCTAssertEqual(summary.completion, .completedWithGuidance)
+        XCTAssertTrue(summary.earnsItemStar)
+        XCTAssertEqual(summary.promptReplayCount, 2)
+        XCTAssertEqual(summary.guidanceExposureCount, 1)
         XCTAssertTrue(summary.usedGuidance)
         XCTAssertEqual(summary.validAttemptCount, 1)
         XCTAssertEqual(summary.records.map(\.evidence), [.helped, .guidedRetry])

@@ -54,6 +54,30 @@ struct QuestAttemptSummary: Equatable, Sendable {
     let records: [QuestAttemptRecord]
     let validAttemptCount: Int
     let usedGuidance: Bool
+
+    /// Child reward is based on eventual success, independently of the strict
+    /// first-response and guidance evidence used by mastery and scheduling.
+    var earnsItemStar: Bool {
+        finalResponseOutcome?.isCorrect == true
+    }
+
+    var firstIndependentOutcome: AttemptOutcome? {
+        records.first { $0.evidence == .firstIndependentAttempt }?.outcome
+    }
+
+    var finalResponseOutcome: AttemptOutcome? {
+        records.last { $0.outcome.isScorableResponse }?.outcome
+    }
+
+    var promptReplayCount: Int {
+        records.reduce(into: 0) { count, record in
+            count += record.replayCount
+        }
+    }
+
+    var guidanceExposureCount: Int {
+        records.count { $0.evidence == .helped }
+    }
 }
 
 /// Owns the evidence boundary for one word encounter.

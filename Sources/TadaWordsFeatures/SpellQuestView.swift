@@ -68,6 +68,41 @@ struct LetterKeyboardInputState: Equatable, Sendable {
     }
 }
 
+enum LetterKeyboardPhysicalInputAction: Equatable, Sendable {
+    case append(Character)
+    case delete
+    case submit
+}
+
+/// Converts hardware-keyboard presses into the same constrained actions as the
+/// on-screen child keyboard. System text entry remains disabled: only A-Z,
+/// Delete/Backspace, and Return are accepted.
+struct LetterKeyboardPhysicalInputPolicy: Sendable {
+    func action(
+        characters: String,
+        isDelete: Bool = false,
+        isSubmit: Bool = false,
+        hasCommandModifier: Bool = false
+    ) -> LetterKeyboardPhysicalInputAction? {
+        guard !hasCommandModifier else { return nil }
+        if isDelete {
+            return .delete
+        }
+        if isSubmit {
+            return .submit
+        }
+
+        guard characters.unicodeScalars.count == 1,
+            let scalar = characters.unicodeScalars.first,
+            (65...90).contains(scalar.value)
+                || (97...122).contains(scalar.value)
+        else {
+            return nil
+        }
+        return .append(Character(characters.lowercased()))
+    }
+}
+
 struct SpellQuestLayoutMetrics: Equatable, Sendable {
     let isHeightConstrained: Bool
 
@@ -132,8 +167,10 @@ struct SpellQuestView: View {
     @State private var keyFeedbackTrigger = 0
     @State private var starFeedbackEvent: QuestStarFeedbackEvent?
     @State private var starSlotFrames: [Int: CGRect] = [:]
+    @FocusState private var acceptsPhysicalKeyboardInput: Bool
 
     private let evaluator = SpellingAnswerEvaluator()
+    private let physicalKeyboardPolicy = LetterKeyboardPhysicalInputPolicy()
 
     init(
         session: QuestSession,
@@ -205,6 +242,15 @@ struct SpellQuestView: View {
                             .frame(maxWidth: 980, maxHeight: .infinity)
                             .padding(.horizontal, metrics.horizontalPadding)
                             .padding(.bottom, metrics.bottomPadding)
+                            .focusable()
+                            .focused($acceptsPhysicalKeyboardInput)
+                            .focusEffectDisabled()
+                            .onKeyPress { press in
+                                handlePhysicalKeyboardPress(press)
+                            }
+                            .onTapGesture {
+                                acceptsPhysicalKeyboardInput = true
+                            }
                     }
                     .hiddenFromAccessibility(when: isPaused)
 
@@ -246,6 +292,7 @@ struct SpellQuestView: View {
         }
         .task(id: session.prompt.id) {
             resetForCurrentWordIfNeeded()
+            acceptsPhysicalKeyboardInput = true
             guard !didPlayInitialPrompt else { return }
             didPlayInitialPrompt = true
             playPrompt(countsAsReplay: false)
@@ -426,6 +473,37 @@ struct SpellQuestView: View {
         Task { await audioExperienceService.play(.click) }
     }
 
+    private func handlePhysicalKeyboardPress(
+        _ press: KeyPress
+    ) -> KeyPress.Result {
+        guard !isPaused, !isPlayingPrompt, !isCompleted else {
+            return .ignored
+        }
+        let blockedModifiers: EventModifiers = [.command, .control, .option]
+        guard
+            let action = physicalKeyboardPolicy.action(
+                characters: press.characters,
+                isDelete: press.key == .delete || press.key == .deleteForward,
+                isSubmit: press.key == .return,
+                hasCommandModifier: !press.modifiers
+                    .intersection(blockedModifiers)
+                    .isEmpty
+            )
+        else {
+            return .ignored
+        }
+
+        switch action {
+        case .append(let letter):
+            append(letter)
+        case .delete:
+            removeLast()
+        case .submit:
+            submit()
+        }
+        return .handled
+    }
+
     private func removeLast() {
         guard inputState.removeLast() else { return }
         keyFeedbackTrigger += 1
@@ -479,6 +557,11 @@ struct SpellQuestView: View {
     }
 
     private func presentStarFeedback(for decision: RecognitionDecision) {
+        if decision == .matched,
+            attemptState.completedSummary?.earnsItemStar != true
+        {
+            return
+        }
         guard
             let kind = QuestAttemptFeedbackPolicy.presentation(
                 for: decision
@@ -519,11 +602,13 @@ struct SpellQuestView: View {
         questTimer.suspend(for: .userPause)
         questTimer.resume(from: .promptPlayback)
         isPaused = true
+        acceptsPhysicalKeyboardInput = false
     }
 
     private func resume() {
         isPaused = false
         questTimer.resume(from: .userPause)
+        acceptsPhysicalKeyboardInput = true
     }
 
     private func resetResponseClock() {
@@ -612,6 +697,7 @@ struct SpellQuestView: View {
         replayCountSinceLastAttempt = 0
         promptPauseSeconds = 0
         starFeedbackEvent = nil
+        acceptsPhysicalKeyboardInput = true
         responseClock.reset(at: questTimer.elapsedSeconds)
         questTimer.resume(from: .promptPlayback)
     }
