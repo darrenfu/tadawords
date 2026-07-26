@@ -124,18 +124,24 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
     func testReadQuestResultShowsExactEarnedStarCount() throws {
         launchDemo(startingAt: "moonpetal-read")
 
+        let progress = element(label: "Quest progress")
         for nextItem in 2...5 {
             XCTAssertTrue(startListeningButton.waitForExistence(timeout: 8))
             startListeningButton.tap()
-            assertReadSuccessDismissesAndAdvances(toItem: nextItem)
+            XCTAssertTrue(
+                waitUntil(timeout: 6) {
+                    (progress.value as? String)?.hasPrefix(
+                        "Item \(nextItem) of "
+                    ) == true
+                },
+                "Read Practice should advance to item \(nextItem)."
+            )
         }
 
         XCTAssertTrue(startListeningButton.waitForExistence(timeout: 8))
         startListeningButton.tap()
 
-        let starCount = app.descendants(matching: .any)[
-            "quest-result.star-count"
-        ]
+        let starCount = app.otherElements["quest-result.star-count"]
         XCTAssertTrue(
             starCount.waitForExistence(timeout: 12),
             "Completing all five words should reveal the Quest Board star count."
