@@ -85,8 +85,7 @@ final class FamilySyncUIReceiptRefreshHarnessTests: XCTestCase {
                     newWordLimit: 0,
                     reviewWordLimit: 1,
                     contentOrder: .reviewThenNew,
-                    emergencyAfterSeconds: 225,
-                    incorrectAttemptLimit: 4
+                    emergencyAfterSeconds: 225
                 )
             )
         )
@@ -117,7 +116,7 @@ final class FamilySyncUIReceiptRefreshHarnessTests: XCTestCase {
         XCTAssertEqual(session.prompt.normalizedText, "dog")
         XCTAssertEqual(session.source, .review)
         XCTAssertEqual(session.timer.emergencyAfter, 225)
-        XCTAssertEqual(session.incorrectAttemptLimit, 4)
+        XCTAssertEqual(session.incorrectAttemptLimit, 2)
     }
 
     func testCommittedReceiptDoesNotRebuildOrInterruptActiveQuest()
@@ -149,8 +148,7 @@ final class FamilySyncUIReceiptRefreshHarnessTests: XCTestCase {
                     newWordLimit: 5,
                     reviewWordLimit: 5,
                     contentOrder: .newThenReview,
-                    emergencyAfterSeconds: 180,
-                    incorrectAttemptLimit: 5
+                    emergencyAfterSeconds: 180
                 )
             )
         )

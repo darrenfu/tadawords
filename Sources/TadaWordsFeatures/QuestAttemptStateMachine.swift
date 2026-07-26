@@ -58,10 +58,11 @@ struct QuestAttemptSummary: Equatable, Sendable {
 
 /// Owns the evidence boundary for one word encounter.
 ///
-/// Read and Write each accept a parent-configured number of incorrect answers.
-/// A correct response completes immediately at any point. Technical failures
-/// and uncertain recognition consume neither the incorrect-answer budget nor
-/// independent accuracy evidence.
+/// Read and Write default to two incorrect answers. A correct response
+/// completes immediately at any point. In Read, an unclear or timed-out
+/// recording consumes the retry budget without becoming accuracy evidence.
+/// Other technical failures, and uncertain Write recognition, do not consume
+/// the budget.
 struct QuestAttemptStateMachine: Equatable, Sendable {
     static let technicalIssueSkipThreshold = 3
 
@@ -170,25 +171,45 @@ struct QuestAttemptStateMachine: Equatable, Sendable {
 
         switch result.decision {
         case .technicalFailure(let reason):
-            receiveTechnicalFailure(
-                reason,
-                confidence: result.confidence,
-                timing: timing,
-                replayCount: replayCount
-            )
+            if policy == .read, reason.countsAsReadListeningMiss {
+                receiveReadListeningMiss(
+                    evidence: .technicalRetry,
+                    outcome: .technicalFailure(reason),
+                    confidence: result.confidence,
+                    timing: timing,
+                    replayCount: replayCount
+                )
+            } else {
+                receiveTechnicalFailure(
+                    reason,
+                    confidence: result.confidence,
+                    timing: timing,
+                    replayCount: replayCount
+                )
+            }
 
         case .uncertain:
-            consecutiveTechnicalIssueCount += 1
-            records.append(
-                QuestAttemptRecord(
+            if policy == .read {
+                receiveReadListeningMiss(
                     evidence: .recognitionUncertain,
                     outcome: .recognitionUncertain,
                     confidence: result.confidence,
                     timing: timing,
                     replayCount: replayCount
                 )
-            )
-            phase = .feedback(.recognitionUncertain)
+            } else {
+                consecutiveTechnicalIssueCount += 1
+                records.append(
+                    QuestAttemptRecord(
+                        evidence: .recognitionUncertain,
+                        outcome: .recognitionUncertain,
+                        confidence: result.confidence,
+                        timing: timing,
+                        replayCount: replayCount
+                    )
+                )
+                phase = .feedback(.recognitionUncertain)
+            }
 
         case .matched, .notMatched:
             receiveValidResponse(
@@ -279,14 +300,56 @@ struct QuestAttemptStateMachine: Equatable, Sendable {
         phase = .feedback(.technicalRetry(reason))
     }
 
+    private mutating func receiveReadListeningMiss(
+        evidence: EncounterEvidence,
+        outcome: AttemptOutcome,
+        confidence: RecognitionConfidence?,
+        timing: AttemptTiming,
+        replayCount: Int
+    ) {
+        consecutiveTechnicalIssueCount = 0
+        records.append(
+            QuestAttemptRecord(
+                evidence: evidence,
+                outcome: outcome,
+                confidence: confidence,
+                timing: timing,
+                replayCount: replayCount
+            )
+        )
+        submissionCount += 1
+        incorrectAttemptCount += 1
+        if incorrectAttemptCount >= incorrectAttemptLimit {
+            phase = .completed(.needsPractice)
+        } else {
+            phase = .feedback(
+                .tryAgain(
+                    remainingAttempts: remainingIncorrectAttemptCount
+                )
+            )
+        }
+    }
+
     private func completionForCorrectResponse() -> QuestAttemptCompletion {
         if usedGuidance {
             return .completedWithGuidance
         }
-        if validAttemptCount == 1 {
+        if submissionCount == 1 {
             return .independentSuccess
         }
         return .completedAfterRetry
+    }
+}
+
+extension TechnicalFailureReason {
+    var countsAsReadListeningMiss: Bool {
+        switch self {
+        case .noUsableAudio, .timedOut:
+            true
+        case .permissionDenied, .wrongSpeaker, .onDeviceRecognitionUnavailable,
+            .serviceUnavailable, .corruptedInput:
+            false
+        }
     }
 }
 

@@ -331,15 +331,13 @@ final class GuardianParentNavigationTests: XCTestCase {
                 newWordLimit: 2,
                 reviewWordLimit: 3,
                 contentOrder: .newThenReview,
-                emergencyAfterSeconds: 120,
-                incorrectAttemptLimit: 1
+                emergencyAfterSeconds: 120
             ),
             write: LearningRouteSettings(
                 newWordLimit: 4,
                 reviewWordLimit: 5,
                 contentOrder: .newThenReview,
-                emergencyAfterSeconds: 180,
-                incorrectAttemptLimit: 3
+                emergencyAfterSeconds: 180
             ),
             audio: AudioPreferences(
                 voiceEnabled: false,
@@ -355,15 +353,13 @@ final class GuardianParentNavigationTests: XCTestCase {
                 newWordLimit: 6,
                 reviewWordLimit: 7,
                 contentOrder: .reviewThenNew,
-                emergencyAfterSeconds: 240,
-                incorrectAttemptLimit: 4
+                emergencyAfterSeconds: 240
             ),
             write: LearningRouteSettings(
                 newWordLimit: 8,
                 reviewWordLimit: 9,
                 contentOrder: .reviewThenNew,
-                emergencyAfterSeconds: 300,
-                incorrectAttemptLimit: 5
+                emergencyAfterSeconds: 300
             ),
             audio: .default,
             notifications: LearningNotificationPreferences(

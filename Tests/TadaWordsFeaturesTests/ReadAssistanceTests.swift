@@ -3,6 +3,13 @@ import XCTest
 @testable import TadaWordsFeatures
 
 final class ReadAssistanceTests: XCTestCase {
+    func testReadCaptureAllowsSixSeconds() {
+        XCTAssertEqual(
+            ReadSpeechCapturePolicy.maximumRecordingDuration.seconds,
+            6
+        )
+    }
+
     func testHelpStaysHiddenUntilTwoValidWrongAnswers() {
         XCTAssertFalse(
             ReadAssistancePolicy.shouldReveal(

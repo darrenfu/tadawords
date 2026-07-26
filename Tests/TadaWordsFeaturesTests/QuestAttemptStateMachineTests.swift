@@ -54,6 +54,66 @@ final class QuestAttemptStateMachineTests: XCTestCase {
         XCTAssertFalse(machine.beginAttempt())
     }
 
+    func testReadUncertainRecognitionConsumesRetryBudget() throws {
+        var machine = QuestAttemptStateMachine(policy: .read)
+
+        XCTAssertTrue(machine.beginAttempt())
+        machine.receive(result(.uncertain))
+        XCTAssertEqual(machine.phase, .feedback(.tryAgain(remainingAttempts: 1)))
+        XCTAssertEqual(machine.submissionCount, 1)
+        XCTAssertEqual(machine.incorrectAttemptCount, 1)
+        XCTAssertEqual(machine.validAttemptCount, 0)
+
+        XCTAssertTrue(machine.beginAttempt())
+        machine.receive(result(.uncertain))
+
+        let summary = try XCTUnwrap(machine.completedSummary)
+        XCTAssertEqual(summary.completion, .needsPractice)
+        XCTAssertEqual(machine.submissionCount, 2)
+        XCTAssertEqual(machine.incorrectAttemptCount, 2)
+        XCTAssertEqual(summary.validAttemptCount, 0)
+        XCTAssertEqual(
+            summary.records.map(\.evidence),
+            [.recognitionUncertain, .recognitionUncertain]
+        )
+    }
+
+    func testReadAudibilityFailuresConsumeRetryBudget() throws {
+        var machine = QuestAttemptStateMachine(policy: .read)
+
+        XCTAssertTrue(machine.beginAttempt())
+        machine.receive(result(.technicalFailure(.timedOut)))
+        XCTAssertEqual(machine.phase, .feedback(.tryAgain(remainingAttempts: 1)))
+
+        XCTAssertTrue(machine.beginAttempt())
+        machine.receive(result(.technicalFailure(.noUsableAudio)))
+
+        let summary = try XCTUnwrap(machine.completedSummary)
+        XCTAssertEqual(summary.completion, .needsPractice)
+        XCTAssertEqual(machine.incorrectAttemptCount, 2)
+        XCTAssertEqual(summary.validAttemptCount, 0)
+        XCTAssertEqual(
+            summary.records.map(\.outcome),
+            [
+                .technicalFailure(.timedOut),
+                .technicalFailure(.noUsableAudio),
+            ]
+        )
+    }
+
+    func testCorrectAfterUnclearReadIsCompletedAfterRetry() throws {
+        var machine = QuestAttemptStateMachine(policy: .read)
+
+        XCTAssertTrue(machine.beginAttempt())
+        machine.receive(result(.uncertain))
+        XCTAssertTrue(machine.beginAttempt())
+        machine.receive(result(.matched))
+
+        let summary = try XCTUnwrap(machine.completedSummary)
+        XCTAssertEqual(summary.completion, .completedAfterRetry)
+        XCTAssertEqual(summary.validAttemptCount, 1)
+    }
+
     func testCustomFiveIncorrectAnswerLimitIsHonored() throws {
         var machine = QuestAttemptStateMachine(incorrectAttemptLimit: 5)
 
@@ -72,7 +132,7 @@ final class QuestAttemptStateMachineTests: XCTestCase {
         XCTAssertEqual(machine.incorrectAttemptCount, 5)
     }
 
-    func testIncorrectAnswerLimitClampsToParentRange() {
+    func testIncorrectAnswerLimitClampsToInternalSafetyRange() {
         XCTAssertEqual(
             QuestAttemptStateMachine(incorrectAttemptLimit: 0)
                 .incorrectAttemptLimit,
@@ -85,8 +145,10 @@ final class QuestAttemptStateMachineTests: XCTestCase {
         )
     }
 
-    func testTechnicalAndUncertainResultsDoNotConsumeAttemptsOrBecomeWrongEvidence() throws {
-        var machine = QuestAttemptStateMachine()
+    func testWriteTechnicalAndUncertainResultsDoNotConsumeAttemptsOrBecomeWrongEvidence()
+        throws
+    {
+        var machine = QuestAttemptStateMachine(policy: .write)
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.technicalFailure(.permissionDenied)))
@@ -222,7 +284,7 @@ final class QuestAttemptStateMachineTests: XCTestCase {
     }
 
     func testValidResponseResetsTechnicalIssueStreak() {
-        var machine = QuestAttemptStateMachine()
+        var machine = QuestAttemptStateMachine(policy: .write)
 
         XCTAssertTrue(machine.beginAttempt())
         machine.receive(result(.uncertain))

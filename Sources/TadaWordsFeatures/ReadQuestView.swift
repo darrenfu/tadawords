@@ -2,6 +2,10 @@ import SwiftUI
 import TadaWordsDesignSystem
 import TadaWordsDomain
 
+enum ReadSpeechCapturePolicy {
+    static let maximumRecordingDuration = ElapsedTime(seconds: 6)
+}
+
 struct ReadQuestView: View {
     let session: QuestSession
     let theme: TadaWorldTheme
@@ -526,7 +530,8 @@ struct ReadQuestView: View {
         let request = SpeechRecognitionRequest(
             profileID: session.profileID,
             prompt: session.prompt,
-            maximumRecordingDuration: ElapsedTime(seconds: 5),
+            maximumRecordingDuration:
+                ReadSpeechCapturePolicy.maximumRecordingDuration,
             speakerFilterPolicy: .useWhenAvailable,
             noiseSuppressionEnabled: true
         )

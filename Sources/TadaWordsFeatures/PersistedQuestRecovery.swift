@@ -134,16 +134,24 @@ struct PersistedQuestRecoveryResolver: Sendable {
                     return true
                 }
 
-            case (.technicalRetry, .technicalFailure):
-                consecutiveTechnicalIssueCount += 1
-                if consecutiveTechnicalIssueCount
-                    >= QuestAttemptStateMachine.technicalIssueSkipThreshold
-                {
-                    return true
+            case (.technicalRetry, .technicalFailure(let reason)):
+                if policy == .read, reason.countsAsReadListeningMiss {
+                    submissionCount += 1
+                    consecutiveTechnicalIssueCount = 0
+                    if submissionCount >= effectiveIncorrectAttemptLimit {
+                        return true
+                    }
+                } else {
+                    consecutiveTechnicalIssueCount += 1
+                    if consecutiveTechnicalIssueCount
+                        >= QuestAttemptStateMachine.technicalIssueSkipThreshold
+                    {
+                        return true
+                    }
                 }
 
             case (.recognitionUncertain, .recognitionUncertain):
-                if usesLegacyWriteAnswerExposure {
+                if policy == .read || usesLegacyWriteAnswerExposure {
                     submissionCount += 1
                     consecutiveTechnicalIssueCount = 0
                     if submissionCount >= effectiveIncorrectAttemptLimit {
