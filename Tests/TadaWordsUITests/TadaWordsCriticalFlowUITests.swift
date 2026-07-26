@@ -141,11 +141,6 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
             "Completing all five words should reveal the Quest Board star count."
         )
         XCTAssertEqual(starCount.label, "5 stars earned")
-
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Quest Board - five earned stars"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
     }
 
     /// Parent Home uses ordinary back navigation while restoring the gate for
