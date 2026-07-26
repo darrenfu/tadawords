@@ -213,6 +213,24 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
         )
     }
 
+    func testQAArtifactsContainsNoChildDirectories() throws {
+        let artifactsURL = repositoryRoot.appendingPathComponent("QAArtifacts")
+        let children = try FileManager.default.contentsOfDirectory(
+            at: artifactsURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        for child in children {
+            let values = try child.resourceValues(forKeys: [.isDirectoryKey])
+            XCTAssertNotEqual(
+                values.isDirectory,
+                true,
+                "QAArtifacts must not contain child directories: \(child.lastPathComponent)"
+            )
+        }
+    }
+
     private var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

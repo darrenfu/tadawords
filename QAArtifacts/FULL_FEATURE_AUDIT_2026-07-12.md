@@ -44,8 +44,8 @@ make check
 | iPad Pro 13-inch (M5) LocalQA simulator build | Pass |
 | Built-product orientation declarations | iPhone contains Portrait plus both Landscapes; iPad contains all four; `UIRequiresFullScreen` is true and runtime policy restricts child routes to Landscape |
 | Route-orientation policy tests | Pass; Parents is flexible and child routes restore Landscape |
-| iPad simulator visual evidence | The Parent launch uses a tall/portrait window and child Read uses a landscape window. The fresh Phase 1 set covers Profile, Lobby, Read, and Result under `QAArtifacts/v0.2-phase1-2026-07-13/`; the older route-shape evidence remains under `QAArtifacts/v0.2-2026-07-12/`. |
-| iPhone child visual evidence | Rotated, readable landscape captures under `QAArtifacts/v0.2-phase1-2026-07-13/` show the last-played Profile emphasis, compact Lobby utility dock, enlarged Read hierarchy, and enlarged Result hierarchy. These are UI evidence, not raw rotation-policy evidence. |
+| iPad simulator visual evidence | Historical captures showed a tall/portrait Parent launch and landscape child Read route. The temporary image files were removed by the Issue #114 repository cleanup. |
+| iPhone child visual evidence | Historical readable landscape captures showed the last-played Profile emphasis, compact Lobby utility dock, enlarged Read hierarchy, and enlarged Result hierarchy. The temporary image files were removed by the Issue #114 repository cleanup. |
 | iPhone simulator orientation capture | Inconclusive because raw framebuffer captures can appear rotated or letterboxed; physical rotation remains required |
 | Built-product CloudKit sharing declaration | `CKSharingSupported` is true |
 | Child-speech fixture integrity and Apple transcription | Pass; checksum valid and output is `Bye.` |
@@ -96,7 +96,7 @@ in historical cleanup notes only.
 | Automatic endpointing and voice processing | Code complete; device acceptance open | Voice-processing audio session and partial-transcript stability |
 | Apple transcript punctuation | Fixed and fixture checked | Target `bye` accepts Apple output `Bye.` without weakening exact spelling |
 | Per-Profile voiceprint match | Device Alpha code complete | Enrollment, Keychain template, on-device feature extraction, conservative match policy, and speech integration |
-| Theme-safe word color | v0.2 code complete; visual acceptance open | Stable per-item selection from each World's high-contrast palette; retries and Help do not flicker or encode correctness. Readable iPhone evidence: `QAArtifacts/v0.2-2026-07-12/iPhone17ProMax-moonpetal-read.jpg` |
+| Theme-safe word color | v0.2 code complete; visual acceptance open | Stable per-item selection from each World's high-contrast palette; retries and Help do not flicker or encode correctness. Historical readable iPhone evidence was reviewed before the temporary image cleanup. |
 
 The voiceprint route treats mismatch as a technical retry. It does not prove that only the child was recorded. Validate same-child, different-speaker, noise, distance, and device variation before tuning its thresholds.
 
@@ -160,7 +160,7 @@ The voiceprint route treats mismatch as a technical retry. It does not prove tha
 |---|---|---|
 | Route-based iPhone and iPad orientation | v0.2 automated pass; device acceptance open | Code, plist, and policy tests pass. iPad simulator window shapes support the expected Parent/child split; iPhone raw framebuffer evidence is inconclusive. Child routes use Left/Right Landscape; Parents uses all-but-upside-down on iPhone and all orientations on iPad, then restores Landscape on exit |
 | iPhone 17 Pro Max support | Release simulator passed; physical-device acceptance open | Release build, install, launch, and onboarding capture passed; signed physical-device checks remain |
-| Lobby `Badge` relocation | v0.2 automated pass; device tap open | The readable iPhone landscape capture at `QAArtifacts/v0.2-2026-07-12/iPhone17ProMax-moonpetal-lobby.jpg` shows the four-item header fits and the old bottom Collection strip is absent; tap-through still needs physical phone/tablet confirmation |
+| Lobby `Badge` relocation | v0.2 automated pass; device tap open | Historical readable iPhone landscape evidence showed that the four-item header fits and the old bottom Collection strip is absent; tap-through still needs physical phone/tablet confirmation |
 | Light appearance | Code complete | App-root policy covers bootstrap, child, and Guardian routes |
 | 44-point targets and compact layouts | Code complete | Shared tokens, scroll fallbacks, and compact landscape variants |
 | VoiceOver feedback and focus | Code complete; device acceptance open | Transient announcements, result summary, and modal saving focus |
