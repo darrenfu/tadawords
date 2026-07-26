@@ -22,11 +22,18 @@ struct QuestResultView: View {
         self.audioExperienceService = audioExperienceService
         self.onReplay = onReplay
         self.onContinue = onContinue
+        _displayedEarnedStarCount = State(
+            initialValue: result.earnedStarCount > 0 ? 1 : 0
+        )
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var revealPhase = 0
+    @State private var displayedEarnedStarCount = 0
+    @State private var activeTempoDotCount = 0
+    @State private var starCountFlipAngle: Double = 0
+    @State private var starCountNumberOpacity: Double = 1
     @AccessibilityFocusState private var resultSummaryIsFocused: Bool
 
     var body: some View {
@@ -194,13 +201,9 @@ struct QuestResultView: View {
     private var achievementPanel: some View {
         TadaPanel(theme: theme) {
             VStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                TadaStarRow(
-                    earned: result.earnedStarCount,
-                    tint: theme.secondary,
-                    size: 44
-                )
-                .opacity(revealPhase >= 2 ? 1 : 0)
-                .accessibilityHidden(revealPhase < 2)
+                earnedStarSummary(size: 44)
+                    .opacity(revealPhase >= 2 ? 1 : 0)
+                    .accessibilityHidden(revealPhase < 2)
 
                 HStack(spacing: 12) {
                     ResultMetric(symbol: "checkmark.circle.fill", value: "Complete", theme: theme)
@@ -276,13 +279,9 @@ struct QuestResultView: View {
         TadaPanel(theme: theme) {
             VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
                 HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                    TadaStarRow(
-                        earned: result.earnedStarCount,
-                        tint: theme.secondary,
-                        size: 30
-                    )
-                    .opacity(revealPhase >= 2 ? 1 : 0)
-                    .accessibilityHidden(revealPhase < 2)
+                    earnedStarSummary(size: 30)
+                        .opacity(revealPhase >= 2 ? 1 : 0)
+                        .accessibilityHidden(revealPhase < 2)
                 }
 
                 HStack(spacing: TadaPrimitiveTokens.Spacing.small) {
@@ -378,6 +377,73 @@ struct QuestResultView: View {
         .accessibilityHidden(true)
     }
 
+    private func earnedStarSummary(size: CGFloat) -> some View {
+        let metrics = QuestResultStarCountLayout.metrics(starSize: size)
+        return VStack(spacing: 7) {
+            HStack(alignment: .center, spacing: 13) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: size, weight: .bold))
+                    .foregroundStyle(Color.yellow)
+                    .shadow(
+                        color: Color.orange.opacity(0.28),
+                        radius: 6,
+                        y: 3
+                    )
+                    .frame(
+                        width: metrics.rootSize * 0.78,
+                        height: metrics.rootSize * 0.92
+                    )
+                Text("×")
+                    .font(
+                        .system(
+                            size: metrics.rootSize * 0.55,
+                            weight: .heavy,
+                            design: .rounded
+                        )
+                    )
+                    .foregroundStyle(theme.secondary.opacity(0.72))
+                    .frame(height: metrics.cardSize.height)
+
+                QuestResultFlipNumberCard(
+                    number: displayedEarnedStarCount,
+                    cardSize: metrics.cardSize,
+                    flipAngle: starCountFlipAngle,
+                    numberOpacity: starCountNumberOpacity
+                )
+            }
+            .offset(y: -2)
+
+            HStack(spacing: metrics.dotSpacing) {
+                ForEach(
+                    0..<max(0, result.earnedStarCount),
+                    id: \.self
+                ) { index in
+                    let phase = QuestResultStarCountAnimation.dotPhase(
+                        index: index,
+                        activeDotCount: activeTempoDotCount
+                    )
+                    QuestResultTempoDot(
+                        size: metrics.dotSize,
+                        isActive: phase != .inactive,
+                        isHit: phase == .hit,
+                        activeColor: Color(
+                            red: 1,
+                            green: 0.84,
+                            blue: 0.40
+                        ),
+                        inactiveColor: theme.secondary.opacity(0.34),
+                        animatesHit: !reduceMotion
+                    )
+                }
+            }
+            .frame(minHeight: metrics.dotSize.height * 2.1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("quest-result.star-count")
+        .accessibilityLabel("\(result.earnedStarCount) stars earned")
+        .accessibilityValue("\(displayedEarnedStarCount)")
+    }
+
     private func revealResults() async {
         guard revealPhase == 0 else { return }
         let delay = reduceMotion ? 40 : 210
@@ -385,21 +451,125 @@ struct QuestResultView: View {
         for phase in 1...5 {
             try? await Task.sleep(for: .milliseconds(delay))
             guard !Task.isCancelled else { return }
+            if phase == 2 {
+                displayedEarnedStarCount =
+                    QuestResultStarCountAnimation.initialDisplayedCount(
+                        earnedCount: result.earnedStarCount,
+                        reduceMotion: reduceMotion
+                    )
+                activeTempoDotCount = 0
+            }
             withAnimation(
                 .easeOut(duration: reduceMotion ? 0.01 : TadaPrimitiveTokens.Motion.celebration)
             ) {
                 revealPhase = phase
             }
-            if phase == 2 {
-                for starIndex in 0..<result.earnedStarCount {
-                    await audioExperienceService.play(.star(index: starIndex))
-                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 40 : 105))
-                }
-            } else if phase == 4 {
-                await audioExperienceService.play(.reward)
-            } else if phase == 5 {
+            if phase == 5 {
                 resultSummaryIsFocused = true
                 announceForAccessibility(resultAccessibilitySummary)
+            }
+        }
+
+        let boardRevealDurationMilliseconds =
+            reduceMotion
+            ? 10
+            : Int(TadaPrimitiveTokens.Motion.celebration * 1_000)
+        try? await Task.sleep(
+            for: .milliseconds(boardRevealDurationMilliseconds)
+        )
+        guard !Task.isCancelled else { return }
+        try? await Task.sleep(
+            for: .milliseconds(
+                QuestResultStarCountAnimation.postBoardDelayMilliseconds
+            )
+        )
+        guard !Task.isCancelled else { return }
+        await revealEarnedStarCount()
+    }
+
+    private func revealEarnedStarCount() async {
+        let timeline = QuestResultStarCountAnimation.timeline(
+            earnedCount: result.earnedStarCount
+        )
+        guard !timeline.isEmpty else {
+            displayedEarnedStarCount = 0
+            activeTempoDotCount = 0
+            return
+        }
+
+        if reduceMotion {
+            displayedEarnedStarCount = result.earnedStarCount
+            activeTempoDotCount = result.earnedStarCount
+            starCountFlipAngle = 0
+            starCountNumberOpacity = 1
+            for step in timeline {
+                Task {
+                    await audioExperienceService.play(step.cue)
+                }
+                try? await Task.sleep(for: .milliseconds(40))
+            }
+            return
+        }
+
+        guard let firstStep = timeline.first else { return }
+        displayedEarnedStarCount = firstStep.displayedCount
+        activeTempoDotCount = firstStep.activeDotCount
+        Task {
+            await audioExperienceService.play(firstStep.cue)
+        }
+
+        for step in timeline.dropFirst() {
+            guard !Task.isCancelled else { return }
+            withAnimation(
+                .timingCurve(
+                    0.55,
+                    0.05,
+                    0.85,
+                    0.35,
+                    duration:
+                        QuestResultStarCountAnimation
+                        .exitDurationSeconds
+                )
+            ) {
+                starCountFlipAngle = -88
+                starCountNumberOpacity = 0.28
+            }
+            try? await Task.sleep(
+                for: .milliseconds(
+                    QuestResultStarCountAnimation.exitDurationMilliseconds
+                )
+            )
+            guard !Task.isCancelled else { return }
+
+            withTransaction(Transaction(animation: nil)) {
+                displayedEarnedStarCount = step.displayedCount
+                starCountFlipAngle = 88
+                starCountNumberOpacity = 0.28
+            }
+            withAnimation(
+                .timingCurve(
+                    0.18,
+                    0.82,
+                    0.22,
+                    1,
+                    duration:
+                        QuestResultStarCountAnimation
+                        .enterDurationSeconds
+                )
+            ) {
+                starCountFlipAngle = 0
+                starCountNumberOpacity = 1
+            }
+            try? await Task.sleep(
+                for: .milliseconds(
+                    QuestResultStarCountAnimation.enterDurationMilliseconds
+                )
+            )
+            guard !Task.isCancelled else { return }
+
+            activeTempoDotCount = step.activeDotCount
+            Task {
+                await audioExperienceService.play(step.cue)
             }
         }
     }
@@ -432,7 +602,7 @@ struct QuestResultView: View {
                 "First try accuracy \($0) percent."
             } ?? "First try accuracy not scored."
         return
-            "\(completionTitle). \(result.earnedStarCount) of 3 stars. \(result.points) points. \(accuracySummary) \(result.paceLabel)."
+            "\(completionTitle). \(result.earnedStarCount) stars earned. \(result.points) points. \(accuracySummary) \(result.paceLabel)."
     }
 
     private var completionTitle: String {
@@ -495,5 +665,218 @@ enum QuestResultLayoutMode: Equatable {
 
     static func resolve(hasCompactHeight: Bool) -> QuestResultLayoutMode {
         hasCompactHeight ? .compactLandscape : .standard
+    }
+}
+
+enum QuestResultStarCountAnimation {
+    static let postBoardDelayMilliseconds = 200
+    static let exitDurationMilliseconds = 75
+    static let enterDurationMilliseconds = 105
+    static let millisecondsPerFlip =
+        exitDurationMilliseconds + enterDurationMilliseconds
+    static let exitDurationSeconds =
+        Double(exitDurationMilliseconds) / 1_000
+    static let enterDurationSeconds =
+        Double(enterDurationMilliseconds) / 1_000
+    static func steps(earnedCount: Int) -> [Int] {
+        guard earnedCount > 0 else { return [] }
+        return Array(1...earnedCount)
+    }
+
+    static func initialDisplayedCount(
+        earnedCount: Int,
+        reduceMotion: Bool
+    ) -> Int {
+        guard earnedCount > 0 else { return 0 }
+        return reduceMotion ? earnedCount : 1
+    }
+
+    static func timeline(
+        earnedCount: Int
+    ) -> [QuestResultStarCountAnimationStep] {
+        steps(earnedCount: earnedCount).map { count in
+            QuestResultStarCountAnimationStep(
+                displayedCount: count,
+                activeDotCount: count,
+                cue: .star(index: count - 1),
+                landingMilliseconds:
+                    postBoardDelayMilliseconds
+                    + (count - 1) * millisecondsPerFlip
+            )
+        }
+    }
+
+    static func totalDurationMilliseconds(earnedCount: Int) -> Int {
+        max(0, steps(earnedCount: earnedCount).count - 1)
+            * millisecondsPerFlip
+    }
+
+    static func dotPhase(
+        index: Int,
+        activeDotCount: Int
+    ) -> QuestResultTempoDotPhase {
+        guard index >= 0, index < activeDotCount else {
+            return .inactive
+        }
+        return index == activeDotCount - 1 ? .hit : .active
+    }
+}
+
+struct QuestResultStarCountAnimationStep: Equatable, Sendable {
+    let displayedCount: Int
+    let activeDotCount: Int
+    let cue: FunctionalAudioCue
+    let landingMilliseconds: Int
+}
+
+enum QuestResultTempoDotPhase: Equatable, Sendable {
+    case inactive
+    case active
+    case hit
+}
+
+struct QuestResultStarCountLayoutMetrics: Equatable, Sendable {
+    let rootSize: CGFloat
+    let cardSize: CGSize
+    let dotSize: CGSize
+    let dotSpacing: CGFloat
+}
+
+enum QuestResultStarCountLayout {
+    static func metrics(starSize: CGFloat) -> QuestResultStarCountLayoutMetrics {
+        let rootSize = starSize / 0.78
+        return QuestResultStarCountLayoutMetrics(
+            rootSize: rootSize,
+            cardSize: CGSize(
+                width: rootSize * 1.02,
+                height: rootSize * 0.92
+            ),
+            dotSize: CGSize(width: 7, height: 9),
+            dotSpacing: 7
+        )
+    }
+}
+
+private struct QuestResultTempoDot: View {
+    let size: CGSize
+    let isActive: Bool
+    let isHit: Bool
+    let activeColor: Color
+    let inactiveColor: Color
+    let animatesHit: Bool
+
+    @State private var verticalScale: CGFloat = 1
+    @State private var opacity: Double = 1
+
+    var body: some View {
+        Capsule()
+            .fill(isActive ? activeColor : inactiveColor)
+            .frame(width: size.width, height: size.height)
+            .scaleEffect(x: 1, y: verticalScale, anchor: .bottom)
+            .opacity(opacity)
+            .onChange(of: isHit) { _, didHit in
+                guard didHit, animatesHit else { return }
+                withTransaction(Transaction(animation: nil)) {
+                    verticalScale = 0.45
+                    opacity = 0.45
+                }
+                withAnimation(
+                    .timingCurve(0.20, 1.50, 0.40, 1, duration: 0.16)
+                ) {
+                    verticalScale = 2.1
+                    opacity = 1
+                }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(160))
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        verticalScale = 1
+                        opacity = 0.9
+                    }
+                }
+            }
+    }
+}
+
+private struct QuestResultFlipNumberCard: View {
+    let number: Int
+    let cardSize: CGSize
+    let flipAngle: Double
+    let numberOpacity: Double
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(
+                cornerRadius: cardSize.height * 0.2065,
+                style: .continuous
+            )
+            .fill(
+                LinearGradient(
+                    stops: [
+                        .init(
+                            color: Color(
+                                red: 1,
+                                green: 0.988,
+                                blue: 0.906
+                            ),
+                            location: 0.492
+                        ),
+                        .init(
+                            color: Color(
+                                red: 0.933,
+                                green: 0.875,
+                                blue: 0.655
+                            ),
+                            location: 0.508
+                        ),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: cardSize.height * 0.2065,
+                    style: .continuous
+                )
+                .strokeBorder(Color.white.opacity(0.72), lineWidth: 1)
+            }
+            .shadow(
+                color: Color(red: 0.05, green: 0.03, blue: 0.17)
+                    .opacity(0.26),
+                radius: 9,
+                y: 5
+            )
+
+            Rectangle()
+                .fill(Color(red: 0.286, green: 0.192, blue: 0.094).opacity(0.18))
+                .frame(height: 1)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.50))
+                        .frame(height: 1)
+                        .offset(y: 1)
+                }
+
+            Text("\(number)")
+                .font(
+                    .system(
+                        size: cardSize.height * 0.76,
+                        weight: .heavy,
+                        design: .rounded
+                    )
+                )
+                .monospacedDigit()
+                .foregroundStyle(
+                    Color(red: 0.231, green: 0.137, blue: 0.373)
+                )
+                .rotation3DEffect(
+                    .degrees(flipAngle),
+                    axis: (x: 1, y: 0, z: 0),
+                    perspective: 0.62
+                )
+                .opacity(numberOpacity)
+        }
+        .frame(width: cardSize.width, height: cardSize.height)
+        .clipped()
     }
 }

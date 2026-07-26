@@ -5,6 +5,7 @@ enum ProceduralWaveform: Hashable, Sendable {
     case sine
     case softTriangle
     case wooden
+    case marimba
 }
 
 enum ProceduralInstrument: Hashable, Sendable {

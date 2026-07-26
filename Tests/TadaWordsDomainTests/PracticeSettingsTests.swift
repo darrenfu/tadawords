@@ -149,13 +149,12 @@ final class PracticeSettingsTests: XCTestCase {
         )
     }
 
-    func testInitializationAndDecodingClampUnsafeValues() throws {
+    func testInitializationClampsUnsafeValuesAndIgnoresLegacyAttemptLimit() throws {
         XCTAssertEqual(LearningRouteSettings.wordLimitRange, 0...20)
         XCTAssertEqual(
             LearningRouteSettings.emergencyAfterSecondsRange,
             60...3_600
         )
-
         let initialized = LearningRouteSettings(
             newWordLimit: -5,
             reviewWordLimit: -2,
@@ -172,7 +171,8 @@ final class PracticeSettingsTests: XCTestCase {
               "newWordLimit": -10,
               "reviewWordLimit": -20,
               "contentOrder": "newThenReview",
-              "emergencyAfterSeconds": -30
+              "emergencyAfterSeconds": -30,
+              "incorrectAttemptLimit": 5
             }
             """.utf8
         )
@@ -189,6 +189,11 @@ final class PracticeSettingsTests: XCTestCase {
                 emergencyAfterSeconds: 60
             )
         )
+        let reencoded = try JSONEncoder().encode(decoded)
+        let reencodedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: reencoded) as? [String: Any]
+        )
+        XCTAssertNil(reencodedObject["incorrectAttemptLimit"])
 
         let saturated = LearningRouteSettings(
             newWordLimit: Int.max,
@@ -205,6 +210,7 @@ final class PracticeSettingsTests: XCTestCase {
         XCTAssertEqual(saturated.emergencyAfterSeconds, 3_600)
         XCTAssertEqual(configuration.questConfiguration.attentionBudget, 40)
         XCTAssertEqual(configuration.emergencyAfterSeconds, 3_600)
+        XCTAssertEqual(configuration.incorrectAttemptLimit, 2)
     }
 
     func testProfileSettingsCodableRoundTripPreservesIdentityAndRoutes()

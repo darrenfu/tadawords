@@ -153,8 +153,10 @@ struct QuestSession: Identifiable {
     let source: QuestItemSource
     let currentItem: Int
     let totalItems: Int
+    let earnedItemCount: Int
     let timer: QuestTimerModel
     let interfacePreferences: PracticeInterfacePreferences
+    let incorrectAttemptLimit: Int
 
     init(
         id: QuestID,
@@ -165,8 +167,11 @@ struct QuestSession: Identifiable {
         source: QuestItemSource,
         currentItem: Int,
         totalItems: Int,
+        earnedItemCount: Int = 0,
         timer: QuestTimerModel,
-        interfacePreferences: PracticeInterfacePreferences
+        interfacePreferences: PracticeInterfacePreferences,
+        incorrectAttemptLimit: Int =
+            LearningRouteSettings.defaultIncorrectAttemptLimit
     ) {
         self.id = id
         self.profileID = profileID
@@ -176,8 +181,16 @@ struct QuestSession: Identifiable {
         self.source = source
         self.currentItem = currentItem
         self.totalItems = totalItems
+        self.earnedItemCount = max(0, min(earnedItemCount, totalItems))
         self.timer = timer
         self.interfacePreferences = interfacePreferences
+        self.incorrectAttemptLimit = min(
+            LearningRouteSettings.incorrectAttemptLimitRange.upperBound,
+            max(
+                LearningRouteSettings.incorrectAttemptLimitRange.lowerBound,
+                incorrectAttemptLimit
+            )
+        )
     }
 }
 
@@ -237,23 +250,29 @@ struct QuestResultViewState {
     let runKind: DailyQuestRunKind
     let rewardGrant: RewardGrant?
     let replayWordCount: Int
+    let correctWordCount: Int
 
     init(
         mode: LearningMode,
         score: QuestScore,
         runKind: DailyQuestRunKind = .today,
         rewardGrant: RewardGrant? = nil,
-        replayWordCount: Int = 0
+        replayWordCount: Int = 0,
+        correctWordCount: Int? = nil
     ) {
         self.mode = mode
         self.score = score
         self.runKind = runKind
         self.rewardGrant = rewardGrant
         self.replayWordCount = max(0, replayWordCount)
+        self.correctWordCount = max(
+            0,
+            correctWordCount ?? score.firstIndependentCorrectCount
+        )
     }
 
     var earnedStarCount: Int {
-        score.stars.count
+        correctWordCount
     }
 
     var points: Int {

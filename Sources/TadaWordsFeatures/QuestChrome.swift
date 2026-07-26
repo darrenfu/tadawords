@@ -51,6 +51,8 @@ struct QuestChrome: View {
     let mode: LearningMode
     let currentItem: Int
     let totalItems: Int
+    let earnedStars: Int
+    let starFeedback: QuestStarFeedbackEvent?
     let elapsedText: String
     let isEmergency: Bool
     let theme: TadaWorldTheme
@@ -85,14 +87,7 @@ struct QuestChrome: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(mode.title) quest")
 
-            ProgressView(value: Double(currentItem), total: Double(totalItems))
-                .tint(modeTokens.accent)
-                .frame(maxWidth: 320)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(theme.surface.opacity(0.62), in: Capsule())
-                .accessibilityLabel("Quest progress")
-                .accessibilityValue("Item \(currentItem) of \(totalItems)")
+            starProgress
 
             Text("\(currentItem) of \(totalItems)")
                 .font(.system(.caption, design: .rounded, weight: .semibold))
@@ -116,14 +111,7 @@ struct QuestChrome: View {
             TadaModeMark(tokens: modeTokens, size: 34)
                 .accessibilityLabel("\(mode.title) quest")
 
-            ProgressView(value: Double(currentItem), total: Double(totalItems))
-                .tint(modeTokens.accent)
-                .frame(minWidth: 96, maxWidth: 220)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 8)
-                .background(theme.surface.opacity(0.62), in: Capsule())
-                .accessibilityLabel("Quest progress")
-                .accessibilityValue("Item \(currentItem) of \(totalItems)")
+            starProgress
 
             Spacer(minLength: 0)
             rescueBadge
@@ -138,6 +126,22 @@ struct QuestChrome: View {
             destinationHint: "Returns to the Kid Lobby",
             accessibilityIdentifier: "quest.back",
             action: onBack
+        )
+    }
+
+    private var starProgress: some View {
+        QuestStarProgressBar(
+            earnedStarCount: earnedStars,
+            totalStarCount: totalItems,
+            feedbackEvent: starFeedback,
+            accent: modeTokens.accent,
+            surface: theme.surface
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Quest progress")
+        .accessibilityValue(
+            "Item \(currentItem) of \(totalItems). "
+                + "\(earnedStars) of \(totalItems) stars"
         )
     }
 

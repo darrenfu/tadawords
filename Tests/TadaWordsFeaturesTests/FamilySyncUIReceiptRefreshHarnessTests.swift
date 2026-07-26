@@ -116,6 +116,7 @@ final class FamilySyncUIReceiptRefreshHarnessTests: XCTestCase {
         XCTAssertEqual(session.prompt.normalizedText, "dog")
         XCTAssertEqual(session.source, .review)
         XCTAssertEqual(session.timer.emergencyAfter, 225)
+        XCTAssertEqual(session.incorrectAttemptLimit, 2)
     }
 
     func testCommittedReceiptDoesNotRebuildOrInterruptActiveQuest()
@@ -140,6 +141,17 @@ final class FamilySyncUIReceiptRefreshHarnessTests: XCTestCase {
         )
         try await fixture.profiles.save(remoteProfile)
         _ = try await fixture.addWord("dog")
+        try await fixture.settings.save(
+            ProfilePracticeSettings(
+                profileID: fixture.profile.id,
+                read: LearningRouteSettings(
+                    newWordLimit: 5,
+                    reviewWordLimit: 5,
+                    contentOrder: .newThenReview,
+                    emergencyAfterSeconds: 180
+                )
+            )
+        )
 
         await fixture.model.refreshAfterExternalSyncAndWait()
 
@@ -149,6 +161,7 @@ final class FamilySyncUIReceiptRefreshHarnessTests: XCTestCase {
         XCTAssertEqual(after.prompt.id, before.prompt.id)
         XCTAssertTrue(after.timer === timer)
         XCTAssertTrue(after.timer.isRunning)
+        XCTAssertEqual(after.incorrectAttemptLimit, before.incorrectAttemptLimit)
         XCTAssertEqual(fixture.model.selectedProfile, remoteProfile)
     }
 

@@ -1,6 +1,8 @@
 public struct LearningRouteSettings: Codable, Hashable, Sendable {
     public static let wordLimitRange: ClosedRange<Int> = 0...20
     public static let emergencyAfterSecondsRange: ClosedRange<Int> = 60...3_600
+    public static let incorrectAttemptLimitRange: ClosedRange<Int> = 1...5
+    public static let defaultIncorrectAttemptLimit = 2
 
     public let newWordLimit: Int
     public let reviewWordLimit: Int
@@ -104,10 +106,13 @@ public struct LearningRouteSettings: Codable, Hashable, Sendable {
 public struct PracticeModeConfiguration: Hashable, Sendable {
     public let questConfiguration: QuestConfiguration
     public let emergencyAfterSeconds: Int
+    public let incorrectAttemptLimit: Int
 
     public init(
         questConfiguration: QuestConfiguration,
-        emergencyAfterSeconds: Int
+        emergencyAfterSeconds: Int,
+        incorrectAttemptLimit: Int =
+            LearningRouteSettings.defaultIncorrectAttemptLimit
     ) {
         self.questConfiguration = questConfiguration
         self.emergencyAfterSeconds = min(
@@ -115,6 +120,13 @@ public struct PracticeModeConfiguration: Hashable, Sendable {
             max(
                 LearningRouteSettings.emergencyAfterSecondsRange.lowerBound,
                 emergencyAfterSeconds
+            )
+        )
+        self.incorrectAttemptLimit = min(
+            LearningRouteSettings.incorrectAttemptLimitRange.upperBound,
+            max(
+                LearningRouteSettings.incorrectAttemptLimitRange.lowerBound,
+                incorrectAttemptLimit
             )
         )
     }

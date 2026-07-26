@@ -81,6 +81,32 @@ struct VoicePromptAudioSessionState {
     }
 }
 
+struct FunctionalAudioPlaybackPolicy {
+    static func playerVolume(for cue: FunctionalAudioCue) -> Float {
+        switch cue {
+        case .click:
+            0.28
+        case .correct:
+            0.62
+        case .validRetry:
+            0.48
+        case .technicalRetry:
+            0.38
+        case .star:
+            0.58
+        case .reward:
+            0.60
+        case .writing:
+            0.18
+        }
+    }
+
+    static func duration(of buffer: AVAudioPCMBuffer) -> TimeInterval {
+        guard buffer.format.sampleRate > 0 else { return 0 }
+        return Double(buffer.frameLength) / buffer.format.sampleRate
+    }
+}
+
 /// Hybrid audio layer. Original world scores and effects remain synthesized in
 /// memory; the launch mark and brief transition voices come from the versioned
 /// Aurora bundle and never require a runtime network request.
@@ -114,7 +140,6 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     private var spokenAccentPlayer: AVAudioPlayer?
     private var spokenAccentGeneration = 0
     private var spokenAccentOwnsVoicePrompt = false
-    private var correctAccentIndex = 0
 
     public init() {
         voiceAccentLibrary = .production()
@@ -253,23 +278,31 @@ public actor AppleAudioExperienceService: AudioExperienceService {
         }
 
         if AudioPreferencePolicy.shouldPlay(cue, preferences: preferences),
-            startEngineIfNeeded()
+            prepareEngineForEffectPlayback()
         {
             stopWritingAudio()
             effectPlayer.stop()
-            effectPlayer.volume = adjustedVolume(0.20)
+            effectPlayer.volume = adjustedVolume(
+                FunctionalAudioPlaybackPolicy.playerVolume(for: cue)
+            )
+            let buffer = ProceduralAudioFactory.effect(
+                cue: cue,
+                world: world,
+                sampleRate: Self.sampleRate
+            )
             effectPlayer.scheduleBuffer(
-                ProceduralAudioFactory.effect(
-                    cue: cue,
-                    world: world,
-                    sampleRate: Self.sampleRate
-                ),
+                buffer,
                 at: nil,
                 options: [],
                 completionCallbackType: .dataConsumed,
                 completionHandler: nil
             )
             effectPlayer.play()
+            try? await Task.sleep(
+                for: .seconds(
+                    FunctionalAudioPlaybackPolicy.duration(of: buffer)
+                )
+            )
         }
 
         guard let accentURL = spokenAccentURL(for: cue) else { return }
@@ -342,25 +375,10 @@ public actor AppleAudioExperienceService: AudioExperienceService {
     }
 
     private func spokenAccentURL(for cue: FunctionalAudioCue) -> URL? {
-        guard SpokenAccentPolicy.allows(cue, preferences: preferences) else {
-            return nil
-        }
-
-        switch cue {
-        case .correct:
-            guard !voiceAccentLibrary.correct.isEmpty else { return nil }
-            let url = voiceAccentLibrary.correct[
-                correctAccentIndex % voiceAccentLibrary.correct.count
-            ]
-            correctAccentIndex =
-                (correctAccentIndex + 1)
-                % voiceAccentLibrary.correct.count
-            return url
-        case .reward:
-            return voiceAccentLibrary.questComplete
-        case .click, .validRetry, .technicalRetry, .star, .writing:
-            return nil
-        }
+        _ = cue
+        // Per-answer and quest-completion transitions are intentionally
+        // non-verbal. Prompt pronunciation remains owned by the prompt service.
+        return nil
     }
 
     @discardableResult
@@ -613,6 +631,23 @@ public actor AppleAudioExperienceService: AudioExperienceService {
             // block word practice. Leaving both players stopped also ensures
             // a later activation retries engine startup instead of mistaking
             // a scheduled-but-silent node for live music.
+            return false
+        }
+    }
+
+    private func prepareEngineForEffectPlayback() -> Bool {
+        do {
+            // Prompt playback and speech recognition both change the shared
+            // iOS audio session. Re-assert the app policy for every discrete
+            // effect even when AVAudioEngine itself still reports running.
+            try activateAudioSession()
+            if !engine.isRunning {
+                engine.prepare()
+                try engine.start()
+            }
+            return engine.isRunning
+        } catch {
+            engine.stop()
             return false
         }
     }

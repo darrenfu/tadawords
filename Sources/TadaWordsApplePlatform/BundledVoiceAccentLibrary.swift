@@ -6,13 +6,9 @@ enum SpokenAccentPolicy {
         _ cue: FunctionalAudioCue,
         preferences: AudioPreferences
     ) -> Bool {
-        guard preferences.voiceEnabled, !preferences.reducedSoundEnabled else {
-            return false
-        }
-        return switch cue {
-        case .correct, .reward: true
-        case .click, .validRetry, .technicalRetry, .star, .writing: false
-        }
+        // Quest transitions are intentionally non-verbal. Voice remains
+        // available for word prompts, but never layers praise over feedback.
+        false
     }
 }
 

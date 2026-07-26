@@ -2,6 +2,10 @@ import SwiftUI
 import TadaWordsDesignSystem
 import TadaWordsDomain
 
+enum ReadSpeechCapturePolicy {
+    static let maximumRecordingDuration = ElapsedTime(seconds: 6)
+}
+
 struct ReadQuestView: View {
     let session: QuestSession
     let theme: TadaWorldTheme
@@ -37,6 +41,8 @@ struct ReadQuestView: View {
     @State private var pendingAttemptTiming = AttemptTiming.unmeasured
     @State private var replayCountSinceLastAttempt = 0
     @State private var isPlayingPronunciationHint = false
+    @State private var starFeedbackEvent: QuestStarFeedbackEvent?
+    @State private var starSlotFrames: [Int: CGRect] = [:]
 
     init(
         session: QuestSession,
@@ -63,6 +69,9 @@ struct ReadQuestView: View {
         _questTimer = ObservedObject(
             wrappedValue: questTimer
         )
+        _attemptState = State(
+            initialValue: QuestAttemptStateMachine(policy: .read)
+        )
         _responseClock = State(
             initialValue: AttemptResponseClock(
                 startingAt: questTimer.elapsedSeconds
@@ -77,38 +86,63 @@ struct ReadQuestView: View {
 
     var body: some View {
         TadaWorldBackground(theme: theme, sceneStyle: .quest) {
-            ZStack {
-                VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
-                    QuestChrome(
-                        mode: .read,
-                        currentItem: session.currentItem,
-                        totalItems: session.totalItems,
-                        elapsedText: questTimer.elapsedText,
-                        isEmergency: questTimer.isEmergency,
+            GeometryReader { proxy in
+                ZStack {
+                    VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                        QuestChrome(
+                            mode: .read,
+                            currentItem: session.currentItem,
+                            totalItems: session.totalItems,
+                            earnedStars: session.earnedItemCount,
+                            starFeedback: starFeedbackEvent,
+                            elapsedText: questTimer.elapsedText,
+                            isEmergency: questTimer.isEmergency,
+                            theme: theme,
+                            onBack: onBack,
+                            onPause: pause
+                        )
+                        .zIndex(3)
+
+                        readingStage
+                    }
+                    .padding(.vertical, TadaPrimitiveTokens.Spacing.small)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .hiddenFromAccessibility(when: isPaused)
+
+                    TadaEmergencyAtmosphere(
                         theme: theme,
-                        onBack: onBack,
-                        onPause: pause
+                        isActive: questTimer.isEmergency
                     )
 
-                    readingStage
+                    if let pendingCompletion =
+                        completionFeedbackLifecycle
+                        .visibleFeedback(for: session.prompt.id)
+                    {
+                        completionFeedback(for: pendingCompletion)
+                            .transition(.scale(scale: 0.88).combined(with: .opacity))
+                            .zIndex(2)
+                    }
+
+                    if isPaused {
+                        QuestPauseOverlay(
+                            theme: theme,
+                            onResume: resume,
+                            onExit: onBack
+                        )
+                    }
+
+                    QuestStarFeedbackOverlay(
+                        event: starFeedbackEvent,
+                        targetSlotFrame: starFeedbackEvent.flatMap {
+                            starSlotFrames[$0.targetSlot]
+                        },
+                        viewportFrame: proxy.frame(in: .global),
+                        accent: theme.primary
+                    )
+                    .zIndex(5)
                 }
-                .padding(.vertical, TadaPrimitiveTokens.Spacing.small)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .hiddenFromAccessibility(when: isPaused)
-
-                TadaEmergencyAtmosphere(theme: theme, isActive: questTimer.isEmergency)
-
-                if let pendingCompletion =
-                    completionFeedbackLifecycle
-                    .visibleFeedback(for: session.prompt.id)
-                {
-                    completionFeedback(for: pendingCompletion)
-                        .transition(.scale(scale: 0.88).combined(with: .opacity))
-                        .zIndex(2)
-                }
-
-                if isPaused {
-                    QuestPauseOverlay(theme: theme, onResume: resume, onExit: onBack)
+                .onPreferenceChange(QuestStarSlotFramesPreferenceKey.self) {
+                    starSlotFrames = $0
                 }
             }
         }
@@ -419,12 +453,6 @@ struct ReadQuestView: View {
                 symbol: "arrow.clockwise.circle.fill",
                 kind: .tryAgain
             )
-        case .rewriteAfterAnswer:
-            return ReadFeedback(
-                message: "Listen, then try once more.",
-                symbol: "speaker.wave.2.fill",
-                kind: .tryAgain
-            )
         case .recognitionUncertain:
             return ReadFeedback(
                 message: "I’m not sure I heard that. Please try again.",
@@ -499,7 +527,8 @@ struct ReadQuestView: View {
         let request = SpeechRecognitionRequest(
             profileID: session.profileID,
             prompt: session.prompt,
-            maximumRecordingDuration: ElapsedTime(seconds: 5),
+            maximumRecordingDuration:
+                ReadSpeechCapturePolicy.maximumRecordingDuration,
             speakerFilterPolicy: .useWhenAvailable,
             noiseSuppressionEnabled: true
         )
@@ -532,25 +561,24 @@ struct ReadQuestView: View {
     }
 
     private func receive(_ result: RecognitionResult) {
+        guard case .evaluating = attemptState.phase else { return }
         isListening = false
-        let feedbackPlayback = playFeedback(for: result.decision)
         attemptState.receive(
             result,
             timing: pendingAttemptTiming,
             replayCount: replayCountSinceLastAttempt
         )
+        presentStarFeedback(for: result.decision)
+        let feedbackPlayback = playFeedback(for: result.decision)
         replayCountSinceLastAttempt = 0
         if let message = currentFeedback?.message {
             announceForAccessibility(message)
         }
         if let summary = attemptState.completedSummary {
-            if summary.completion == .needsPractice,
-                summary.records.contains(where: { $0.outcome == .incorrect })
-            {
-                playAnswerThenComplete(summary, after: feedbackPlayback)
-            } else {
-                showCompletion(summary, after: feedbackPlayback)
-            }
+            playPronunciationThenComplete(
+                summary,
+                after: feedbackPlayback
+            )
         } else {
             // Every retry starts a fresh response-time window. Recognition,
             // permission, and prior speaking time must not leak into the next
@@ -563,18 +591,27 @@ struct ReadQuestView: View {
         }
     }
 
+    private func presentStarFeedback(for decision: RecognitionDecision) {
+        if decision == .matched,
+            attemptState.completedSummary?.earnsItemStar != true
+        {
+            return
+        }
+        guard
+            let kind = QuestAttemptFeedbackPolicy.presentation(
+                for: decision
+            ).kind
+        else { return }
+        starFeedbackEvent = QuestStarFeedbackEvent(
+            kind: kind,
+            targetSlot: min(session.earnedItemCount, session.totalItems - 1)
+        )
+    }
+
     private func playFeedback(
         for decision: RecognitionDecision
     ) -> Task<Void, Never> {
-        let cue: FunctionalAudioCue
-        switch decision {
-        case .matched:
-            cue = .correct
-        case .notMatched:
-            cue = .validRetry
-        case .uncertain, .technicalFailure:
-            cue = .technicalRetry
-        }
+        let cue = QuestAttemptFeedbackPolicy.presentation(for: decision).cue
         feedbackPlaybackTask?.cancel()
         let task = Task {
             await audioExperienceService.play(cue)
@@ -583,7 +620,7 @@ struct ReadQuestView: View {
         return task
     }
 
-    private func playAnswerThenComplete(
+    private func playPronunciationThenComplete(
         _ summary: QuestAttemptSummary,
         after feedbackPlayback: Task<Void, Never>
     ) {
@@ -713,7 +750,7 @@ struct ReadQuestView: View {
             do {
                 try await QuestAdvanceTimingPolicy.waitBeforeAdvance(
                     minimumFeedbackVisibility: .milliseconds(
-                        reduceMotion ? 40 : 430
+                        reduceMotion ? 40 : 780
                     ),
                     feedbackPlayback: feedbackPlayback,
                     hasNextItem: session.currentItem < session.totalItems
@@ -755,12 +792,15 @@ struct ReadQuestView: View {
 
         listeningTask?.cancel()
         completionTask?.cancel()
+        feedbackPlaybackTask?.cancel()
         answerPlaybackTask?.cancel()
         hintPlaybackTask?.cancel()
         listeningTask = nil
         completionTask = nil
+        feedbackPlaybackTask = nil
         answerPlaybackTask = nil
         hintPlaybackTask = nil
+        starFeedbackEvent = nil
 
         attemptState = QuestAttemptStateMachine(policy: .read)
         isListening = false

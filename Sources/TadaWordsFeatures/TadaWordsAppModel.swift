@@ -913,6 +913,7 @@ final class TadaWordsAppModel: ObservableObject {
                 deviceClass: request.seed.deviceClass,
                 personalPaceBands: request.seed.personalPaceBands,
                 interfacePreferences: request.seed.interfacePreferences,
+                incorrectAttemptLimit: request.seed.incorrectAttemptLimit,
                 emergencyAfter: request.seed.emergencyAfter,
                 timer: timer
             )
@@ -1076,7 +1077,8 @@ final class TadaWordsAppModel: ObservableObject {
             }
             let recovery = try PersistedQuestRecoveryResolver().resolve(
                 plan: effectivePlan,
-                attempts: storedAttempts
+                attempts: storedAttempts,
+                incorrectAttemptLimit: candidate.incorrectAttemptLimit
             )
             for completedPrompt in prompts.prefix(recovery.nextItemIndex) {
                 try await rebuildAndSaveProgress(
@@ -1102,6 +1104,7 @@ final class TadaWordsAppModel: ObservableObject {
                 deviceClass: candidate.deviceClass,
                 personalPaceBands: candidate.personalPaceBands,
                 interfacePreferences: candidate.interfacePreferences,
+                incorrectAttemptLimit: candidate.incorrectAttemptLimit,
                 emergencyAfter: candidate.emergencyAfter,
                 timer: timer,
                 currentIndex: recovery.nextItemIndex,
@@ -1405,6 +1408,11 @@ final class TadaWordsAppModel: ObservableObject {
     private func showCurrentItem() {
         guard let quest = activeQuest else { return }
         guard quest.currentIndex < quest.prompts.count else { return }
+        let earnedWordIDs = Set(
+            quest.attempts.compactMap { attempt in
+                attempt.outcome.isCorrect ? attempt.wordPromptID : nil
+            }
+        )
 
         destination = .quest(
             QuestSession(
@@ -1416,8 +1424,10 @@ final class TadaWordsAppModel: ObservableObject {
                 source: quest.currentItem.source,
                 currentItem: quest.currentIndex + 1,
                 totalItems: quest.prompts.count,
+                earnedItemCount: earnedWordIDs.count,
                 timer: quest.timer,
-                interfacePreferences: quest.interfacePreferences
+                interfacePreferences: quest.interfacePreferences,
+                incorrectAttemptLimit: quest.incorrectAttemptLimit
             )
         )
     }
@@ -1454,6 +1464,11 @@ final class TadaWordsAppModel: ObservableObject {
             completedAt: pending.completionRecordedAt
         )
         let replayPrompts = focusedReplayPrompts(for: quest)
+        let correctWordCount = Set(
+            quest.attempts.compactMap { attempt in
+                attempt.outcome.isCorrect ? attempt.wordPromptID : nil
+            }
+        ).count
         focusedReplaySeed =
             replayPrompts.isEmpty
             ? nil
@@ -1465,6 +1480,7 @@ final class TadaWordsAppModel: ObservableObject {
                 deviceClass: quest.deviceClass,
                 personalPaceBands: quest.personalPaceBands,
                 interfacePreferences: quest.interfacePreferences,
+                incorrectAttemptLimit: quest.incorrectAttemptLimit,
                 emergencyAfter: quest.emergencyAfter,
                 writeInputMethod: quest.writeInputMethod
             )
@@ -1475,7 +1491,8 @@ final class TadaWordsAppModel: ObservableObject {
                 score: score,
                 runKind: quest.launch.runKind,
                 rewardGrant: writeResult.rewardGrant,
-                replayWordCount: replayPrompts.count
+                replayWordCount: replayPrompts.count,
+                correctWordCount: correctWordCount
             )
         )
     }
@@ -1778,6 +1795,7 @@ private struct FocusedReplaySeed: Sendable {
     let deviceClass: DeviceClass
     let personalPaceBands: [PersonalPaceBand]
     let interfacePreferences: PracticeInterfacePreferences
+    let incorrectAttemptLimit: Int
     let emergencyAfter: TimeInterval
     let writeInputMethod: WriteQuestInputMethod
 }
@@ -1793,6 +1811,7 @@ private struct ActiveQuest {
     let deviceClass: DeviceClass
     let personalPaceBands: [PersonalPaceBand]
     let interfacePreferences: PracticeInterfacePreferences
+    let incorrectAttemptLimit: Int
     let emergencyAfter: TimeInterval
     let timer: QuestTimerModel
     var currentIndex = 0

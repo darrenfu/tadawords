@@ -63,6 +63,130 @@ final class QuestPresentationTests: XCTestCase {
         XCTAssertEqual(result.firstTryAccuracyPercentage, 67)
     }
 
+    func testFinalEarnedStarsUseCorrectWordCountInsteadOfThreeStarRating() {
+        let result = QuestResultViewState(
+            mode: .read,
+            score: QuestScore(
+                points: 50,
+                firstIndependentCorrectCount: 2,
+                firstIndependentAttemptCount: 5,
+                stars: QuestStars(earned: [.completion]),
+                personalPaceAssessment: .withinPersonalBand
+            ),
+            correctWordCount: 4
+        )
+
+        XCTAssertEqual(result.earnedStarCount, 4)
+    }
+
+    func testQuestResultStarCountFlipsFromOneThroughEarnedCount() {
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.steps(earnedCount: 5),
+            [1, 2, 3, 4, 5]
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.totalDurationMilliseconds(
+                earnedCount: 5
+            ),
+            720
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.millisecondsPerFlip,
+            180
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.postBoardDelayMilliseconds,
+            200
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.exitDurationMilliseconds,
+            75
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.enterDurationMilliseconds,
+            105
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.initialDisplayedCount(
+                earnedCount: 5,
+                reduceMotion: false
+            ),
+            1
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.initialDisplayedCount(
+                earnedCount: 5,
+                reduceMotion: true
+            ),
+            5
+        )
+    }
+
+    func testQuestResultStarCountSynchronizesCardDotAndTempoPerStep() {
+        let timeline = QuestResultStarCountAnimation.timeline(
+            earnedCount: 3
+        )
+
+        XCTAssertEqual(timeline.map(\.displayedCount), [1, 2, 3])
+        XCTAssertEqual(timeline.map(\.activeDotCount), [1, 2, 3])
+        XCTAssertEqual(
+            timeline.map(\.cue),
+            [.star(index: 0), .star(index: 1), .star(index: 2)]
+        )
+        XCTAssertEqual(timeline.map(\.landingMilliseconds), [200, 380, 560])
+    }
+
+    func testQuestResultYellowDotHitTravelsOnePositionPerCount() {
+        let phases = (1...3).map { activeDotCount in
+            (0..<3).map { index in
+                QuestResultStarCountAnimation.dotPhase(
+                    index: index,
+                    activeDotCount: activeDotCount
+                )
+            }
+        }
+
+        XCTAssertEqual(
+            phases,
+            [
+                [.hit, .inactive, .inactive],
+                [.active, .hit, .inactive],
+                [.active, .active, .hit],
+            ]
+        )
+    }
+
+    func testQuestResultCounterUsesApprovedDemoProportions() {
+        let compact = QuestResultStarCountLayout.metrics(starSize: 30)
+        let regular = QuestResultStarCountLayout.metrics(starSize: 44)
+
+        XCTAssertEqual(compact.cardSize.width, 39.230_769, accuracy: 0.001)
+        XCTAssertEqual(compact.cardSize.height, 35.384_615, accuracy: 0.001)
+        XCTAssertEqual(regular.cardSize.width, 57.538_461, accuracy: 0.001)
+        XCTAssertEqual(regular.cardSize.height, 51.897_435, accuracy: 0.001)
+        XCTAssertEqual(compact.dotSize, CGSize(width: 7, height: 9))
+        XCTAssertEqual(compact.dotSpacing, 7)
+    }
+
+    func testZeroEarnedStarsDoesNotManufactureATempoOrDot() {
+        XCTAssertTrue(
+            QuestResultStarCountAnimation.steps(earnedCount: 0).isEmpty
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.totalDurationMilliseconds(
+                earnedCount: 0
+            ),
+            0
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.initialDisplayedCount(
+                earnedCount: 0,
+                reduceMotion: false
+            ),
+            0
+        )
+    }
+
     func testPracticePowerUpResultExposesReplayAction() {
         let result = QuestResultViewState(
             mode: .read,

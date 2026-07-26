@@ -55,6 +55,7 @@ struct PreparedQuest: Equatable, Sendable {
     let deviceClass: DeviceClass
     let personalPaceBands: [PersonalPaceBand]
     let interfacePreferences: PracticeInterfacePreferences
+    let incorrectAttemptLimit: Int
 
     init(
         plan: QuestPlan,
@@ -62,7 +63,9 @@ struct PreparedQuest: Equatable, Sendable {
         emergencyAfter: TimeInterval,
         deviceClass: DeviceClass = .tablet,
         personalPaceBands: [PersonalPaceBand] = [],
-        interfacePreferences: PracticeInterfacePreferences = .default
+        interfacePreferences: PracticeInterfacePreferences = .default,
+        incorrectAttemptLimit: Int =
+            LearningRouteSettings.defaultIncorrectAttemptLimit
     ) {
         self.plan = plan
         self.orderedPrompts = orderedPrompts
@@ -70,6 +73,13 @@ struct PreparedQuest: Equatable, Sendable {
         self.deviceClass = deviceClass
         self.personalPaceBands = personalPaceBands
         self.interfacePreferences = interfacePreferences
+        self.incorrectAttemptLimit = min(
+            LearningRouteSettings.incorrectAttemptLimitRange.upperBound,
+            max(
+                LearningRouteSettings.incorrectAttemptLimitRange.lowerBound,
+                incorrectAttemptLimit
+            )
+        )
     }
 
     func asFreestyle(prompts: [WordPrompt]) -> PreparedQuest {
@@ -90,7 +100,8 @@ struct PreparedQuest: Equatable, Sendable {
             emergencyAfter: emergencyAfter,
             deviceClass: deviceClass,
             personalPaceBands: personalPaceBands,
-            interfacePreferences: interfacePreferences
+            interfacePreferences: interfacePreferences,
+            incorrectAttemptLimit: incorrectAttemptLimit
         )
     }
 }
@@ -272,7 +283,8 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
             ),
             deviceClass: deviceClass,
             personalPaceBands: personalPaceBands,
-            interfacePreferences: settings.interface
+            interfacePreferences: settings.interface,
+            incorrectAttemptLimit: modeConfiguration.incorrectAttemptLimit
         )
     }
 
@@ -349,7 +361,8 @@ struct RepositoryBackedQuestContentProvider: QuestContentProviding {
                 profileID: profile.id,
                 mode: mode
             ),
-            interfacePreferences: settings.interface
+            interfacePreferences: settings.interface,
+            incorrectAttemptLimit: modeConfiguration.incorrectAttemptLimit
         )
     }
 

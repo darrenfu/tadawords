@@ -148,6 +148,8 @@ struct WriteQuestView: View {
     @State private var isShowingToolbox = false
     @State private var pictureHintAsset: WordPictureHintAsset?
     @State private var isShowingPictureHint = false
+    @State private var starFeedbackEvent: QuestStarFeedbackEvent?
+    @State private var starSlotFrames: [Int: CGRect] = [:]
 
     init(
         session: QuestSession,
@@ -176,7 +178,9 @@ struct WriteQuestView: View {
             wrappedValue: questTimer
         )
         _attemptState = State(
-            initialValue: QuestAttemptStateMachine(policy: .write)
+            initialValue: QuestAttemptStateMachine(
+                policy: .write
+            )
         )
         _completionFeedbackLifecycle = State(
             initialValue: QuestItemFeedbackLifecycle(
@@ -197,53 +201,74 @@ struct WriteQuestView: View {
 
     var body: some View {
         TadaWorldBackground(theme: theme, sceneStyle: .quest) {
-            ZStack {
-                VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
-                    QuestChrome(
-                        mode: .write,
-                        currentItem: session.currentItem,
-                        totalItems: session.totalItems,
-                        elapsedText: questTimer.elapsedText,
-                        isEmergency: questTimer.isEmergency,
-                        theme: theme,
-                        onBack: onBack,
-                        onPause: pause
-                    )
-
-                    GeometryReader { proxy in
-                        let isCompact = proxy.size.width < 760
-                        let horizontalPadding: CGFloat = isCompact ? 10 : 24
-                        writingLayout(
-                            isCompact: isCompact,
-                            availableWidth: max(
-                                1,
-                                proxy.size.width - (horizontalPadding * 2)
-                            )
+            GeometryReader { viewport in
+                ZStack {
+                    VStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                        QuestChrome(
+                            mode: .write,
+                            currentItem: session.currentItem,
+                            totalItems: session.totalItems,
+                            earnedStars: session.earnedItemCount,
+                            starFeedback: starFeedbackEvent,
+                            elapsedText: questTimer.elapsedText,
+                            isEmergency: questTimer.isEmergency,
+                            theme: theme,
+                            onBack: onBack,
+                            onPause: pause
                         )
-                        .padding(.horizontal, horizontalPadding)
-                        .padding(.bottom, 10)
+                        .zIndex(3)
+
+                        GeometryReader { proxy in
+                            let isCompact = proxy.size.width < 760
+                            let horizontalPadding: CGFloat = isCompact ? 10 : 24
+                            writingLayout(
+                                isCompact: isCompact,
+                                availableWidth: max(
+                                    1,
+                                    proxy.size.width - (horizontalPadding * 2)
+                                )
+                            )
+                            .padding(.horizontal, horizontalPadding)
+                            .padding(.bottom, 10)
+                        }
                     }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .hiddenFromAccessibility(when: isPaused)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .hiddenFromAccessibility(when: isPaused)
 
-                TadaEmergencyAtmosphere(theme: theme, isActive: questTimer.isEmergency)
-
-                if let pendingCompletion =
-                    completionFeedbackLifecycle
-                    .visibleFeedback(for: session.prompt.id)
-                {
-                    completionFeedback(for: pendingCompletion)
-                        .transition(.scale(scale: 0.88).combined(with: .opacity))
-                        .zIndex(2)
-                }
-
-                if isPaused {
-                    QuestPauseOverlay(
+                    TadaEmergencyAtmosphere(
                         theme: theme,
-                        onResume: resume,
-                        onExit: onBack
+                        isActive: questTimer.isEmergency
                     )
+
+                    if let pendingCompletion =
+                        completionFeedbackLifecycle
+                        .visibleFeedback(for: session.prompt.id)
+                    {
+                        completionFeedback(for: pendingCompletion)
+                            .transition(.scale(scale: 0.88).combined(with: .opacity))
+                            .zIndex(2)
+                    }
+
+                    if isPaused {
+                        QuestPauseOverlay(
+                            theme: theme,
+                            onResume: resume,
+                            onExit: onBack
+                        )
+                    }
+
+                    QuestStarFeedbackOverlay(
+                        event: starFeedbackEvent,
+                        targetSlotFrame: starFeedbackEvent.flatMap {
+                            starSlotFrames[$0.targetSlot]
+                        },
+                        viewportFrame: viewport.frame(in: .global),
+                        accent: theme.primary
+                    )
+                    .zIndex(5)
+                }
+                .onPreferenceChange(QuestStarSlotFramesPreferenceKey.self) {
+                    starSlotFrames = $0
                 }
             }
         }
@@ -588,12 +613,6 @@ struct WriteQuestView: View {
                 symbol: "pencil.and.scribble",
                 kind: .tryAgain
             )
-        case .rewriteAfterAnswer:
-            return WriteFeedback(
-                message: "Try writing it one more time.",
-                symbol: "textformat.abc",
-                kind: .tryAgain
-            )
         case .recognitionUncertain:
             return WriteFeedback(
                 message: "I’m not sure about that writing. You can try again.",
@@ -757,13 +776,13 @@ struct WriteQuestView: View {
     }
 
     private func receive(_ result: RecognitionResult) {
+        guard case .evaluating = attemptState.phase else { return }
         let shouldOfferPictureHint = WritePictureHintRequestPolicy.shouldRequest(
             decision: result.decision,
             validAttemptCount: attemptState.validAttemptCount,
             usedGuidance: attemptState.usedGuidance
         )
         isChecking = false
-        let feedbackPlayback = playFeedback(for: result.decision)
         let attemptReplayCount = replayCountSinceLastAttempt
         replayCountSinceLastAttempt = 0
         attemptState.receive(
@@ -771,6 +790,11 @@ struct WriteQuestView: View {
             timing: pendingAttemptTiming,
             replayCount: attemptReplayCount
         )
+        let shouldShowGuidedWord =
+            attemptState.prepareGuidedImitationAttempt()
+            || attemptState.usedGuidance
+        presentStarFeedback(for: result.decision)
+        let feedbackPlayback = playFeedback(for: result.decision)
         if let message = currentFeedback?.message {
             announceForAccessibility(message)
         }
@@ -778,8 +802,8 @@ struct WriteQuestView: View {
         if let summary = attemptState.completedSummary {
             showCompletion(summary, after: feedbackPlayback)
         } else {
-            if case .feedback(.rewriteAfterAnswer) = attemptState.phase {
-                showGuidedWord = false
+            if case .feedback(.tryAgain) = attemptState.phase {
+                showGuidedWord = shouldShowGuidedWord
                 if shouldOfferPictureHint {
                     loadPictureHint()
                 }
@@ -793,18 +817,27 @@ struct WriteQuestView: View {
         }
     }
 
+    private func presentStarFeedback(for decision: RecognitionDecision) {
+        if decision == .matched,
+            attemptState.completedSummary?.earnsItemStar != true
+        {
+            return
+        }
+        guard
+            let kind = QuestAttemptFeedbackPolicy.presentation(
+                for: decision
+            ).kind
+        else { return }
+        starFeedbackEvent = QuestStarFeedbackEvent(
+            kind: kind,
+            targetSlot: min(session.earnedItemCount, session.totalItems - 1)
+        )
+    }
+
     private func playFeedback(
         for decision: RecognitionDecision
     ) -> Task<Void, Never> {
-        let cue: FunctionalAudioCue
-        switch decision {
-        case .matched:
-            cue = .correct
-        case .notMatched:
-            cue = .validRetry
-        case .uncertain, .technicalFailure:
-            cue = .technicalRetry
-        }
+        let cue = QuestAttemptFeedbackPolicy.presentation(for: decision).cue
         feedbackPlaybackTask?.cancel()
         let task = Task {
             await audioExperienceService.play(cue)
@@ -876,7 +909,7 @@ struct WriteQuestView: View {
         let completedItemID = session.prompt.id
         let announcement =
             summary.completion == .needsPractice
-            ? "We’ll practice this one again."
+            ? "The correct spelling is \(session.prompt.displayText)."
             : "You got it!"
         var didPresent = false
         withAnimation(
@@ -896,8 +929,9 @@ struct WriteQuestView: View {
         completionTask = Task { @MainActor in
             do {
                 try await QuestAdvanceTimingPolicy.waitBeforeAdvance(
-                    minimumFeedbackVisibility:
-                        WriteQuestTimingPolicy.completionFeedbackVisibility,
+                    minimumFeedbackVisibility: reduceMotion
+                        ? .milliseconds(40)
+                        : WriteQuestTimingPolicy.completionFeedbackVisibility,
                     feedbackPlayback: feedbackPlayback,
                     hasNextItem: session.currentItem < session.totalItems
                 )
@@ -918,7 +952,7 @@ struct WriteQuestView: View {
             kind: isSuccess ? .success : .tryAgain,
             message: isSuccess
                 ? "Beautiful writing!"
-                : "We’ll practice this one again."
+                : "Correct spelling: \(session.prompt.displayText)"
         )
     }
 
@@ -943,12 +977,16 @@ struct WriteQuestView: View {
         recognitionTask?.cancel()
         pictureHintTask?.cancel()
         completionTask?.cancel()
+        feedbackPlaybackTask?.cancel()
         promptPlaybackTask = nil
         recognitionTask = nil
         pictureHintTask = nil
         completionTask = nil
+        feedbackPlaybackTask = nil
 
-        attemptState = QuestAttemptStateMachine(policy: .write)
+        attemptState = QuestAttemptStateMachine(
+            policy: .write
+        )
         strokes.removeAll(keepingCapacity: true)
         isPaused = false
         isChecking = false
@@ -963,11 +1001,15 @@ struct WriteQuestView: View {
         isShowingToolbox = false
         pictureHintAsset = nil
         isShowingPictureHint = false
+        starFeedbackEvent = nil
         questTimer.resume(from: .promptPlayback)
         questTimer.resume(from: .handwritingRecognition)
     }
 
     private func retryMessage(remainingAttempts: Int) -> String {
+        if attemptState.usedGuidance {
+            return "Look at the word above and write it one more time."
+        }
         if remainingAttempts == 1 {
             return "Nice work trying. Clear and write it one more time."
         }

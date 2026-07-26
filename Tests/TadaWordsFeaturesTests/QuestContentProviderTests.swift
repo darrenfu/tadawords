@@ -627,6 +627,7 @@ final class QuestContentProviderTests: XCTestCase {
             [entries[0].prompt.id] + entries[3...4].map(\.prompt.id)
         )
         XCTAssertEqual(prepared.emergencyAfter, 75)
+        XCTAssertEqual(prepared.incorrectAttemptLimit, 2)
     }
 
     func testZeroReviewLimitDefersDueWordsAndKeepsConfiguredNewCapacity() async throws {

@@ -24,7 +24,6 @@ struct QuestAttemptRecord: Equatable, Sendable {
 
 enum QuestAttemptFeedback: Equatable, Sendable {
     case tryAgain(remainingAttempts: Int)
-    case rewriteAfterAnswer
     case technicalRetry(TechnicalFailureReason)
     case recognitionUncertain
 }
@@ -42,12 +41,12 @@ enum QuestAttemptPolicy: Equatable, Sendable {
     case read
     case write
 
-    var maximumSubmissionCount: Int {
+    var fixedIncorrectAttemptLimit: Int {
         switch self {
         case .read:
-            QuestAttemptStateMachine.maximumValidAttemptCount
-        case .write:
             2
+        case .write:
+            3
         }
     }
 }
@@ -64,38 +63,71 @@ struct QuestAttemptSummary: Equatable, Sendable {
     let records: [QuestAttemptRecord]
     let validAttemptCount: Int
     let usedGuidance: Bool
+
+    /// Child reward is based on eventual success, independently of the strict
+    /// first-response and guidance evidence used by mastery and scheduling.
+    var earnsItemStar: Bool {
+        finalResponseOutcome?.isCorrect == true
+    }
+
+    var firstIndependentOutcome: AttemptOutcome? {
+        records.first { $0.evidence == .firstIndependentAttempt }?.outcome
+    }
+
+    var finalResponseOutcome: AttemptOutcome? {
+        records.last { $0.outcome.isScorableResponse }?.outcome
+    }
+
+    var promptReplayCount: Int {
+        records.reduce(into: 0) { count, record in
+            count += record.replayCount
+        }
+    }
+
+    var guidanceExposureCount: Int {
+        records.count { $0.evidence == .helped }
+    }
 }
 
 /// Owns the evidence boundary for one word encounter.
 ///
-/// Read receives one independent attempt and at most two valid retries. Write
-/// receives one submission, immediate answer feedback after an incorrect or
-/// uncertain result, and exactly one guided rewrite. Technical failures consume
-/// neither policy. Once an answer is exposed, later responses remain guided and
-/// cannot establish long-term mastery.
+/// Read allows two incorrect answers. Write allows two independent answers,
+/// then reveals the target for one guided imitation attempt. A correct response
+/// completes immediately at any point. In Read, an unclear or timed-out
+/// recording consumes the retry budget without becoming accuracy evidence.
+/// Other technical failures, and uncertain Write recognition, do not consume
+/// the budget.
 struct QuestAttemptStateMachine: Equatable, Sendable {
-    static let maximumValidAttemptCount = 3
     static let technicalIssueSkipThreshold = 3
 
     let policy: QuestAttemptPolicy
+    let incorrectAttemptLimit: Int
     private(set) var phase: QuestAttemptPhase = .ready
     private(set) var records: [QuestAttemptRecord] = []
     private(set) var validAttemptCount = 0
     private(set) var submissionCount = 0
+    private(set) var incorrectAttemptCount = 0
     private(set) var usedGuidance = false
     private(set) var consecutiveTechnicalIssueCount = 0
 
-    init(policy: QuestAttemptPolicy = .read) {
+    init(
+        policy: QuestAttemptPolicy = .read,
+        incorrectAttemptLimit: Int? = nil
+    ) {
         self.policy = policy
+        let resolvedIncorrectAttemptLimit =
+            incorrectAttemptLimit ?? policy.fixedIncorrectAttemptLimit
+        self.incorrectAttemptLimit = min(
+            LearningRouteSettings.incorrectAttemptLimitRange.upperBound,
+            max(
+                LearningRouteSettings.incorrectAttemptLimitRange.lowerBound,
+                resolvedIncorrectAttemptLimit
+            )
+        )
     }
 
-    var remainingValidAttemptCount: Int {
-        switch policy {
-        case .read:
-            max(0, Self.maximumValidAttemptCount - validAttemptCount)
-        case .write:
-            max(0, policy.maximumSubmissionCount - submissionCount)
-        }
+    var remainingIncorrectAttemptCount: Int {
+        max(0, incorrectAttemptLimit - incorrectAttemptCount)
     }
 
     var canSkipAfterTechnicalIssues: Bool {
@@ -106,15 +138,13 @@ struct QuestAttemptStateMachine: Equatable, Sendable {
         switch feedback {
         case .technicalRetry, .recognitionUncertain:
             return true
-        case .tryAgain, .rewriteAfterAnswer:
+        case .tryAgain:
             return false
         }
     }
 
     @discardableResult
     mutating func beginAttempt() -> Bool {
-        guard submissionCount < policy.maximumSubmissionCount else { return false }
-
         switch phase {
         case .ready, .feedback:
             phase = .evaluating
@@ -143,6 +173,21 @@ struct QuestAttemptStateMachine: Equatable, Sendable {
                 confidence: nil
             )
         )
+    }
+
+    @discardableResult
+    mutating func prepareGuidedImitationAttempt() -> Bool {
+        guard policy == .write, incorrectAttemptCount == 2 else {
+            return false
+        }
+        guard case .feedback(.tryAgain(let remainingAttempts)) = phase,
+            remainingAttempts == 1,
+            !usedGuidance
+        else {
+            return false
+        }
+        useGuidance()
+        return true
     }
 
     mutating func markStudyExposure() {
@@ -176,33 +221,45 @@ struct QuestAttemptStateMachine: Equatable, Sendable {
 
         switch result.decision {
         case .technicalFailure(let reason):
-            receiveTechnicalFailure(
-                reason,
-                confidence: result.confidence,
-                timing: timing,
-                replayCount: replayCount
-            )
-
-        case .uncertain:
-            if policy == .write {
-                receiveUncertainWriting(
+            if policy == .read, reason.countsAsReadListeningMiss {
+                receiveReadListeningMiss(
+                    evidence: .technicalRetry,
+                    outcome: .technicalFailure(reason),
                     confidence: result.confidence,
                     timing: timing,
                     replayCount: replayCount
                 )
-                return
+            } else {
+                receiveTechnicalFailure(
+                    reason,
+                    confidence: result.confidence,
+                    timing: timing,
+                    replayCount: replayCount
+                )
             }
-            consecutiveTechnicalIssueCount += 1
-            records.append(
-                QuestAttemptRecord(
+
+        case .uncertain:
+            if policy == .read {
+                receiveReadListeningMiss(
                     evidence: .recognitionUncertain,
                     outcome: .recognitionUncertain,
                     confidence: result.confidence,
                     timing: timing,
                     replayCount: replayCount
                 )
-            )
-            phase = .feedback(.recognitionUncertain)
+            } else {
+                consecutiveTechnicalIssueCount += 1
+                records.append(
+                    QuestAttemptRecord(
+                        evidence: .recognitionUncertain,
+                        outcome: .recognitionUncertain,
+                        confidence: result.confidence,
+                        timing: timing,
+                        replayCount: replayCount
+                    )
+                )
+                phase = .feedback(.recognitionUncertain)
+            }
 
         case .matched, .notMatched:
             receiveValidResponse(
@@ -260,51 +317,18 @@ struct QuestAttemptStateMachine: Equatable, Sendable {
 
         if outcome.isCorrect {
             phase = .completed(completionForCorrectResponse())
-        } else if submissionCount >= policy.maximumSubmissionCount {
-            phase = .completed(.needsPractice)
-        } else if policy == .write {
-            exposeAnswerForRewrite()
         } else {
-            phase = .feedback(
-                .tryAgain(remainingAttempts: remainingValidAttemptCount)
-            )
+            incorrectAttemptCount += 1
+            if incorrectAttemptCount >= incorrectAttemptLimit {
+                phase = .completed(.needsPractice)
+            } else {
+                phase = .feedback(
+                    .tryAgain(
+                        remainingAttempts: remainingIncorrectAttemptCount
+                    )
+                )
+            }
         }
-    }
-
-    private mutating func receiveUncertainWriting(
-        confidence: RecognitionConfidence?,
-        timing: AttemptTiming,
-        replayCount: Int
-    ) {
-        consecutiveTechnicalIssueCount = 0
-        submissionCount += 1
-        records.append(
-            QuestAttemptRecord(
-                evidence: .recognitionUncertain,
-                outcome: .recognitionUncertain,
-                confidence: confidence,
-                timing: timing,
-                replayCount: replayCount
-            )
-        )
-
-        if submissionCount >= policy.maximumSubmissionCount {
-            phase = .completed(.needsPractice)
-        } else {
-            exposeAnswerForRewrite()
-        }
-    }
-
-    private mutating func exposeAnswerForRewrite() {
-        usedGuidance = true
-        records.append(
-            QuestAttemptRecord(
-                evidence: .feedbackExposed,
-                outcome: .skipped,
-                confidence: nil
-            )
-        )
-        phase = .feedback(.rewriteAfterAnswer)
     }
 
     private mutating func receiveTechnicalFailure(
@@ -326,14 +350,56 @@ struct QuestAttemptStateMachine: Equatable, Sendable {
         phase = .feedback(.technicalRetry(reason))
     }
 
+    private mutating func receiveReadListeningMiss(
+        evidence: EncounterEvidence,
+        outcome: AttemptOutcome,
+        confidence: RecognitionConfidence?,
+        timing: AttemptTiming,
+        replayCount: Int
+    ) {
+        consecutiveTechnicalIssueCount = 0
+        records.append(
+            QuestAttemptRecord(
+                evidence: evidence,
+                outcome: outcome,
+                confidence: confidence,
+                timing: timing,
+                replayCount: replayCount
+            )
+        )
+        submissionCount += 1
+        incorrectAttemptCount += 1
+        if incorrectAttemptCount >= incorrectAttemptLimit {
+            phase = .completed(.needsPractice)
+        } else {
+            phase = .feedback(
+                .tryAgain(
+                    remainingAttempts: remainingIncorrectAttemptCount
+                )
+            )
+        }
+    }
+
     private func completionForCorrectResponse() -> QuestAttemptCompletion {
         if usedGuidance {
             return .completedWithGuidance
         }
-        if validAttemptCount == 1 {
+        if submissionCount == 1 {
             return .independentSuccess
         }
         return .completedAfterRetry
+    }
+}
+
+extension TechnicalFailureReason {
+    var countsAsReadListeningMiss: Bool {
+        switch self {
+        case .noUsableAudio, .timedOut:
+            true
+        case .permissionDenied, .wrongSpeaker, .onDeviceRecognitionUnavailable,
+            .serviceUnavailable, .corruptedInput:
+            false
+        }
     }
 }
 

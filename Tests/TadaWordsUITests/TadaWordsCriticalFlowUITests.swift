@@ -104,6 +104,60 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         )
     }
 
+    /// Two independent spelling misses reveal the target without advancing.
+    /// The child can then imitate the visible word on a third guided attempt.
+    func testSpellSecondMissRevealsWordAndAllowsGuidedThirdAttempt() throws {
+        launchDemo(startingAt: "moonpetal")
+
+        let writeQuest = app.descendants(matching: .any)["child-lobby.quest.write"]
+        XCTAssertTrue(writeQuest.waitForExistence(timeout: 8))
+        writeQuest.tap()
+
+        let spellWithLetters = app.descendants(matching: .any)[
+            "write-method.letterKeyboard"
+        ]
+        XCTAssertTrue(spellWithLetters.waitForExistence(timeout: 5))
+        spellWithLetters.tap()
+
+        let aKey = app.buttons["spell.key.A"]
+        let done = app.buttons["spell.done"]
+        XCTAssertTrue(aKey.waitForExistence(timeout: 8))
+
+        for _ in 0..<2 {
+            for _ in 0..<4 {
+                XCTAssertTrue(waitUntil(timeout: 5) { aKey.isEnabled })
+                tapCenter(of: aKey)
+            }
+            XCTAssertTrue(waitUntil(timeout: 3) { done.isEnabled })
+            tapCenter(of: done)
+        }
+
+        XCTAssertTrue(
+            element(label: "Example spelling: look").waitForExistence(timeout: 5),
+            "The second independent miss should reveal the answer for imitation."
+        )
+        XCTAssertTrue(
+            waitUntil(timeout: 5) { aKey.isEnabled },
+            "The revealed answer must not complete or disable the third attempt."
+        )
+
+        for letter in "LOOK" {
+            let key = app.buttons["spell.key.\(letter)"]
+            XCTAssertTrue(waitUntil(timeout: 5) { key.isEnabled })
+            tapCenter(of: key)
+        }
+        XCTAssertTrue(waitUntil(timeout: 3) { done.isEnabled })
+        tapCenter(of: done)
+
+        let progress = element(label: "Quest progress")
+        XCTAssertTrue(
+            waitUntil(timeout: 5) {
+                (progress.value as? String)?.hasPrefix("Item 2 of ") == true
+            },
+            "A correct guided third attempt should advance to item 2."
+        )
+    }
+
     /// The same completion lifecycle powers Read Practice. This uses the
     /// deterministic demo speech recognizer and verifies two asynchronous
     /// recognition completions cannot leave "You got it!" over the next word.
@@ -117,6 +171,47 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         XCTAssertTrue(startListeningButton.waitForExistence(timeout: 5))
         startListeningButton.tap()
         assertReadSuccessDismissesAndAdvances(toItem: 3)
+    }
+
+    /// Exercises the real result-board reveal after all five deterministic
+    /// demo answers so the final card uses the exact earned-word count.
+    func testReadQuestResultShowsExactEarnedStarCount() throws {
+        launchDemo(startingAt: "moonpetal-read")
+
+        let progress = element(label: "Quest progress")
+        for nextItem in 2...5 {
+            XCTAssertTrue(startListeningButton.waitForExistence(timeout: 8))
+            startListeningButton.tap()
+            XCTAssertTrue(
+                waitUntil(timeout: 6) {
+                    (progress.value as? String)?.hasPrefix(
+                        "Item \(nextItem) of "
+                    ) == true
+                },
+                "Read Practice should advance to item \(nextItem)."
+            )
+        }
+
+        XCTAssertTrue(startListeningButton.waitForExistence(timeout: 8))
+        startListeningButton.tap()
+
+        let starCount = app.otherElements["quest-result.star-count"]
+        XCTAssertTrue(
+            starCount.waitForExistence(timeout: 12),
+            "Completing all five words should reveal the Quest Board star count."
+        )
+        XCTAssertEqual(starCount.label, "5 stars earned")
+        XCTAssertNotEqual(
+            starCount.value as? String,
+            "0",
+            "A nonzero result must begin at 1, never flash 0."
+        )
+        XCTAssertTrue(
+            waitUntil(timeout: 5) {
+                (starCount.value as? String) == "5"
+            },
+            "The visible flip card should finish counting through 5."
+        )
     }
 
     /// Parent Home uses ordinary back navigation while restoring the gate for
@@ -640,7 +735,8 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
 
         let answer = app.textFields["Answer"]
         XCTAssertTrue(answer.waitForExistence(timeout: 3))
-        answer.tap()
+        // The parent gate owns initial focus, so the flow must accept typing
+        // immediately after the single tap on Parents.
         answer.typeText(String(factors[0] * factors[1]))
     }
 

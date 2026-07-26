@@ -70,24 +70,29 @@ enum ProceduralAudioFactory {
                 0.18
             )
         case .correct:
-            recipe = (
-                0.58,
-                [
-                    (frequency(forMIDINote: tonic + 12), 0, 0.17),
-                    (frequency(forMIDINote: tonic + 16), 0.12, 0.18),
-                    (frequency(forMIDINote: tonic + 19), 0.25, 0.20),
-                    (frequency(forMIDINote: tonic + 24), 0.39, 0.18),
+            return makeSimpleBuffer(
+                duration: 0.58,
+                sampleRate: sampleRate,
+                notes: [
+                    (frequency(forMIDINote: tonic + 12), 0, 0.22),
+                    (frequency(forMIDINote: tonic + 16), 0.085, 0.23),
+                    (frequency(forMIDINote: tonic + 19), 0.17, 0.24),
+                    (frequency(forMIDINote: tonic + 24), 0.255, 0.27),
                 ],
-                0.34
+                waveform: .marimba,
+                gain: 0.34
             )
         case .validRetry:
-            recipe = (
-                0.42,
-                [
-                    (frequency(forMIDINote: tonic + 14), 0, 0.16),
-                    (frequency(forMIDINote: tonic + 12), 0.19, 0.19),
+            return makeSimpleBuffer(
+                duration: 0.46,
+                sampleRate: sampleRate,
+                notes: [
+                    (frequency(forMIDINote: tonic + 17), 0, 0.20),
+                    (frequency(forMIDINote: tonic + 14), 0.11, 0.21),
+                    (frequency(forMIDINote: tonic + 12), 0.23, 0.20),
                 ],
-                0.17
+                waveform: .marimba,
+                gain: 0.25
             )
         case .technicalRetry:
             recipe = (0.30, [(330, 0, 0.08), (330, 0.16, 0.08)], 0.14)
@@ -95,25 +100,29 @@ enum ProceduralAudioFactory {
             let step = max(0, min(2, index))
             let scaleDegree = palette.scaleSemitones[step + 1]
             let starNote = tonic + 12 + scaleDegree
-            recipe = (
-                0.38,
-                [
+            return makeSimpleBuffer(
+                duration: 0.38,
+                sampleRate: sampleRate,
+                notes: [
                     (frequency(forMIDINote: starNote), 0, 0.24),
                     (frequency(forMIDINote: starNote + 7), 0.13, 0.21),
                 ],
-                0.30
+                waveform: .marimba,
+                gain: 0.30
             )
         case .reward:
-            recipe = (
-                1.04,
-                [
+            return makeSimpleBuffer(
+                duration: 1.04,
+                sampleRate: sampleRate,
+                notes: [
                     (frequency(forMIDINote: tonic + 12), 0, 0.22),
                     (frequency(forMIDINote: tonic + 16), 0.15, 0.24),
                     (frequency(forMIDINote: tonic + 19), 0.31, 0.27),
                     (frequency(forMIDINote: tonic + 24), 0.50, 0.36),
                     (frequency(forMIDINote: tonic + 28), 0.74, 0.26),
                 ],
-                0.34
+                waveform: .marimba,
+                gain: 0.34
             )
         case .writing(let tool):
             return writingEffect(tool: tool, sampleRate: sampleRate)
@@ -125,6 +134,15 @@ enum ProceduralAudioFactory {
             waveform: palette.waveform,
             gain: recipe.gain
         )
+    }
+
+    static func usesXylophoneTimbre(for cue: FunctionalAudioCue) -> Bool {
+        switch cue {
+        case .correct, .validRetry, .star, .reward:
+            true
+        case .click, .technicalRetry, .writing:
+            false
+        }
     }
 
     /// A tiny, voice-safe texture for one accepted handwriting-move sample.
@@ -423,10 +441,13 @@ enum ProceduralAudioFactory {
                 let localTime = Double(frame - startFrame) / sampleRate
                 let progress = localTime / note.duration
                 let attack = min(1, localTime / 0.018)
-                let decay = pow(
-                    max(0, 1 - progress),
-                    waveform == .softTriangle ? 2.8 : 1.8
-                )
+                let decayExponent: Double =
+                    switch waveform {
+                    case .marimba: 3.35
+                    case .softTriangle: 2.8
+                    case .sine, .wooden: 1.8
+                    }
+                let decay = pow(max(0, 1 - progress), decayExponent)
                 let value =
                     oscillator(
                         phase: 2 * Double.pi * note.pitch * localTime,
@@ -520,6 +541,9 @@ enum ProceduralAudioFactory {
         case .wooden:
             sin(phase) * 0.72 + sin(phase * 2.01) * 0.18
                 + sin(phase * 3.98) * 0.06
+        case .marimba:
+            sin(phase) * 0.68 + sin(phase * 3.98) * 0.18
+                + sin(phase * 9.15) * 0.05
         }
     }
 

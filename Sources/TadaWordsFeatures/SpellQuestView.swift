@@ -68,6 +68,41 @@ struct LetterKeyboardInputState: Equatable, Sendable {
     }
 }
 
+enum LetterKeyboardPhysicalInputAction: Equatable, Sendable {
+    case append(Character)
+    case delete
+    case submit
+}
+
+/// Converts hardware-keyboard presses into the same constrained actions as the
+/// on-screen child keyboard. System text entry remains disabled: only A-Z,
+/// Delete/Backspace, and Return are accepted.
+struct LetterKeyboardPhysicalInputPolicy: Sendable {
+    func action(
+        characters: String,
+        isDelete: Bool = false,
+        isSubmit: Bool = false,
+        hasCommandModifier: Bool = false
+    ) -> LetterKeyboardPhysicalInputAction? {
+        guard !hasCommandModifier else { return nil }
+        if isDelete {
+            return .delete
+        }
+        if isSubmit {
+            return .submit
+        }
+
+        guard characters.unicodeScalars.count == 1,
+            let scalar = characters.unicodeScalars.first,
+            (65...90).contains(scalar.value)
+                || (97...122).contains(scalar.value)
+        else {
+            return nil
+        }
+        return .append(Character(characters.lowercased()))
+    }
+}
+
 struct SpellQuestLayoutMetrics: Equatable, Sendable {
     let isHeightConstrained: Bool
 
@@ -115,7 +150,7 @@ struct SpellQuestView: View {
 
     @ObservedObject private var questTimer: QuestTimerModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var attemptState = QuestAttemptStateMachine(policy: .write)
+    @State private var attemptState: QuestAttemptStateMachine
     @State private var inputState: LetterKeyboardInputState
     @State private var isPaused = false
     @State private var isPlayingPrompt = false
@@ -123,14 +158,19 @@ struct SpellQuestView: View {
     @State private var showGuidedWord = false
     @State private var promptPlaybackTask: Task<Void, Never>?
     @State private var completionTask: Task<Void, Never>?
+    @State private var feedbackPlaybackTask: Task<Void, Never>?
     @State private var completionFeedbackLifecycle:
         QuestItemFeedbackLifecycle<WordPromptID, QuestAttemptSummary>
     @State private var replayCountSinceLastAttempt = 0
     @State private var promptPauseSeconds: TimeInterval = 0
     @State private var responseClock: AttemptResponseClock
     @State private var keyFeedbackTrigger = 0
+    @State private var starFeedbackEvent: QuestStarFeedbackEvent?
+    @State private var starSlotFrames: [Int: CGRect] = [:]
+    @FocusState private var acceptsPhysicalKeyboardInput: Bool
 
     private let evaluator = SpellingAnswerEvaluator()
+    private let physicalKeyboardPolicy = LetterKeyboardPhysicalInputPolicy()
 
     init(
         session: QuestSession,
@@ -149,6 +189,11 @@ struct SpellQuestView: View {
         self.onBack = onBack
         self.onComplete = onComplete
         _questTimer = ObservedObject(wrappedValue: questTimer)
+        _attemptState = State(
+            initialValue: QuestAttemptStateMachine(
+                policy: .write
+            )
+        )
         let letterCount = SpellingAnswerEvaluator().letterCount(
             in: session.prompt.normalizedText
         )
@@ -181,6 +226,8 @@ struct SpellQuestView: View {
                             mode: .write,
                             currentItem: session.currentItem,
                             totalItems: session.totalItems,
+                            earnedStars: session.earnedItemCount,
+                            starFeedback: starFeedbackEvent,
                             elapsedText: questTimer.elapsedText,
                             isEmergency: questTimer.isEmergency,
                             theme: theme,
@@ -188,11 +235,21 @@ struct SpellQuestView: View {
                             onBack: onBack,
                             onPause: pause
                         )
+                        .zIndex(3)
 
                         spellingBoard(metrics: metrics)
                             .frame(maxWidth: 980, maxHeight: .infinity)
                             .padding(.horizontal, metrics.horizontalPadding)
                             .padding(.bottom, metrics.bottomPadding)
+                            .focusable()
+                            .focused($acceptsPhysicalKeyboardInput)
+                            .focusEffectDisabled()
+                            .onKeyPress { press in
+                                handlePhysicalKeyboardPress(press)
+                            }
+                            .onTapGesture {
+                                acceptsPhysicalKeyboardInput = true
+                            }
                     }
                     .hiddenFromAccessibility(when: isPaused)
 
@@ -216,11 +273,25 @@ struct SpellQuestView: View {
                             onExit: onBack
                         )
                     }
+
+                    QuestStarFeedbackOverlay(
+                        event: starFeedbackEvent,
+                        targetSlotFrame: starFeedbackEvent.flatMap {
+                            starSlotFrames[$0.targetSlot]
+                        },
+                        viewportFrame: proxy.frame(in: .global),
+                        accent: theme.primary
+                    )
+                    .zIndex(5)
+                }
+                .onPreferenceChange(QuestStarSlotFramesPreferenceKey.self) {
+                    starSlotFrames = $0
                 }
             }
         }
         .task(id: session.prompt.id) {
             resetForCurrentWordIfNeeded()
+            acceptsPhysicalKeyboardInput = true
             guard !didPlayInitialPrompt else { return }
             didPlayInitialPrompt = true
             playPrompt(countsAsReplay: false)
@@ -231,6 +302,7 @@ struct SpellQuestView: View {
         .onDisappear {
             promptPlaybackTask?.cancel()
             completionTask?.cancel()
+            feedbackPlaybackTask?.cancel()
             attemptState.cancelAttempt()
             questTimer.resume(from: .promptPlayback)
             Task { await audioExperienceService.setEmergencyMode(false) }
@@ -377,10 +449,18 @@ struct SpellQuestView: View {
     }
 
     private var feedbackMessage: String? {
-        guard case .feedback(.rewriteAfterAnswer) = attemptState.phase else {
+        guard
+            case .feedback(.tryAgain(let remainingAttempts)) =
+                attemptState.phase
+        else {
             return nil
         }
-        return "Look, then spell it one more time."
+        if attemptState.usedGuidance {
+            return "Look at the word above and spell it one more time."
+        }
+        return remainingAttempts == 1
+            ? "Try spelling it one more time."
+            : "Try again. You have \(remainingAttempts) more tries."
     }
 
     private func letter(at index: Int) -> String {
@@ -393,6 +473,37 @@ struct SpellQuestView: View {
         guard inputState.append(letter) else { return }
         keyFeedbackTrigger += 1
         Task { await audioExperienceService.play(.click) }
+    }
+
+    private func handlePhysicalKeyboardPress(
+        _ press: KeyPress
+    ) -> KeyPress.Result {
+        guard !isPaused, !isPlayingPrompt, !isCompleted else {
+            return .ignored
+        }
+        let blockedModifiers: EventModifiers = [.command, .control, .option]
+        guard
+            let action = physicalKeyboardPolicy.action(
+                characters: press.characters,
+                isDelete: press.key == .delete || press.key == .deleteForward,
+                isSubmit: press.key == .return,
+                hasCommandModifier: !press.modifiers
+                    .intersection(blockedModifiers)
+                    .isEmpty
+            )
+        else {
+            return .ignored
+        }
+
+        switch action {
+        case .append(let letter):
+            append(letter)
+        case .delete:
+            removeLast()
+        case .submit:
+            submit()
+        }
+        return .handled
     }
 
     private func removeLast() {
@@ -427,22 +538,45 @@ struct SpellQuestView: View {
             timing: timing,
             replayCount: attemptReplayCount
         )
-        Task {
-            await audioExperienceService.play(
-                decision == .matched ? .correct : .validRetry
-            )
+        let shouldShowGuidedWord =
+            attemptState.prepareGuidedImitationAttempt()
+            || attemptState.usedGuidance
+        showGuidedWord = shouldShowGuidedWord
+        presentStarFeedback(for: decision)
+        feedbackPlaybackTask?.cancel()
+        let cue = QuestAttemptFeedbackPolicy.presentation(for: decision).cue
+        let feedbackPlayback = Task {
+            await audioExperienceService.play(cue)
         }
+        feedbackPlaybackTask = feedbackPlayback
 
         if let summary = attemptState.completedSummary {
-            showCompletion(summary)
-        } else if case .feedback(.rewriteAfterAnswer) = attemptState.phase {
-            showGuidedWord = true
+            showGuidedWord = summary.completion == .needsPractice
+            showCompletion(summary, after: feedbackPlayback)
+        } else if case .feedback(.tryAgain) = attemptState.phase {
             inputState.clear()
             resetResponseClock()
             announceForAccessibility(
-                "The word is \(session.prompt.displayText). Spell it one more time."
+                feedbackMessage ?? "Try spelling it again."
             )
         }
+    }
+
+    private func presentStarFeedback(for decision: RecognitionDecision) {
+        if decision == .matched,
+            attemptState.completedSummary?.earnsItemStar != true
+        {
+            return
+        }
+        guard
+            let kind = QuestAttemptFeedbackPolicy.presentation(
+                for: decision
+            ).kind
+        else { return }
+        starFeedbackEvent = QuestStarFeedbackEvent(
+            kind: kind,
+            targetSlot: min(session.earnedItemCount, session.totalItems - 1)
+        )
     }
 
     private func playPrompt(countsAsReplay: Bool = true) {
@@ -474,11 +608,13 @@ struct SpellQuestView: View {
         questTimer.suspend(for: .userPause)
         questTimer.resume(from: .promptPlayback)
         isPaused = true
+        acceptsPhysicalKeyboardInput = false
     }
 
     private func resume() {
         isPaused = false
         questTimer.resume(from: .userPause)
+        acceptsPhysicalKeyboardInput = true
     }
 
     private func resetResponseClock() {
@@ -486,7 +622,10 @@ struct SpellQuestView: View {
         promptPauseSeconds = 0
     }
 
-    private func showCompletion(_ summary: QuestAttemptSummary) {
+    private func showCompletion(
+        _ summary: QuestAttemptSummary,
+        after feedbackPlayback: Task<Void, Never>? = nil
+    ) {
         let completedItemID = session.prompt.id
         var didPresent = false
         withAnimation(
@@ -503,14 +642,18 @@ struct SpellQuestView: View {
         guard didPresent else { return }
         announceForAccessibility(
             summary.completion == .needsPractice
-                ? "We’ll practice this one again."
+                ? "The correct spelling is \(session.prompt.displayText)."
                 : "You got it!"
         )
         completionTask?.cancel()
         completionTask = Task { @MainActor in
             do {
-                try await Task.sleep(
-                    for: WriteQuestTimingPolicy.completionFeedbackVisibility
+                try await QuestAdvanceTimingPolicy.waitBeforeAdvance(
+                    minimumFeedbackVisibility: reduceMotion
+                        ? .milliseconds(40)
+                        : WriteQuestTimingPolicy.completionFeedbackVisibility,
+                    feedbackPlayback: feedbackPlayback,
+                    hasNextItem: session.currentItem < session.totalItems
                 )
             } catch {
                 return
@@ -530,7 +673,7 @@ struct SpellQuestView: View {
             kind: isSuccess ? .success : .tryAgain,
             message: isSuccess
                 ? "Great spelling!"
-                : "We’ll practice this one again."
+                : "Correct spelling: \(session.prompt.displayText)"
         )
     }
 
@@ -540,9 +683,13 @@ struct SpellQuestView: View {
         }
         promptPlaybackTask?.cancel()
         completionTask?.cancel()
+        feedbackPlaybackTask?.cancel()
         promptPlaybackTask = nil
         completionTask = nil
-        attemptState = QuestAttemptStateMachine(policy: .write)
+        feedbackPlaybackTask = nil
+        attemptState = QuestAttemptStateMachine(
+            policy: .write
+        )
         inputState = LetterKeyboardInputState(
             maximumLetterCount: evaluator.letterCount(
                 in: session.prompt.normalizedText
@@ -554,6 +701,8 @@ struct SpellQuestView: View {
         showGuidedWord = false
         replayCountSinceLastAttempt = 0
         promptPauseSeconds = 0
+        starFeedbackEvent = nil
+        acceptsPhysicalKeyboardInput = true
         responseClock.reset(at: questTimer.elapsedSeconds)
         questTimer.resume(from: .promptPlayback)
     }

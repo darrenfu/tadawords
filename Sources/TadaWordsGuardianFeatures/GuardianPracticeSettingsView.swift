@@ -87,7 +87,7 @@ struct GuardianPracticeSettingsView: View {
                 Text("Plan each practice route")
                     .font(.system(.title3, design: .rounded, weight: .bold))
                 Text(
-                    "Choose how many new and review words appear, their order, and when Rescue time begins."
+                    "Choose word counts, order, and when Rescue time begins."
                 )
                 .font(.system(.body, design: .rounded, weight: .medium))
                 .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
@@ -392,8 +392,6 @@ private struct GuardianRouteSettingsCard: View {
                     accessibilityName: "review-word limit",
                     value: $draft.reviewWordLimit
                 )
-
-                Divider()
 
                 VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.small) {
                     Text("Quest order")

@@ -399,6 +399,54 @@ final class ProceduralAudioTests: XCTestCase {
         }
     }
 
+    func testCorrectCueUsesShortBouncyMarimbaShape() {
+        let correct = ProceduralAudioFactory.effect(
+            cue: .correct,
+            world: .moonpetalKingdom,
+            sampleRate: 44_100
+        )
+
+        XCTAssertEqual(correct.frameLength, 25_578)
+        XCTAssertGreaterThan(
+            meanAmplitude(in: correct, from: 0.01, to: 0.08),
+            meanAmplitude(in: correct, from: 0.50, to: 0.57) * 2
+        )
+    }
+
+    func testFunctionalFeedbackMixIsAudibleAndPlaybackDurationMatchesBuffer() {
+        let correct = ProceduralAudioFactory.effect(
+            cue: .correct,
+            world: .moonpetalKingdom,
+            sampleRate: 44_100
+        )
+
+        XCTAssertGreaterThan(
+            FunctionalAudioPlaybackPolicy.playerVolume(for: .correct),
+            0.5
+        )
+        XCTAssertGreaterThan(
+            FunctionalAudioPlaybackPolicy.playerVolume(for: .validRetry),
+            0.4
+        )
+        XCTAssertEqual(
+            FunctionalAudioPlaybackPolicy.duration(of: correct),
+            0.58,
+            accuracy: 0.001
+        )
+    }
+
+    func testAllStarFeedbackAndCompletionCuesUseXylophoneTimbre() {
+        XCTAssertTrue(ProceduralAudioFactory.usesXylophoneTimbre(for: .correct))
+        XCTAssertTrue(ProceduralAudioFactory.usesXylophoneTimbre(for: .validRetry))
+        XCTAssertTrue(
+            ProceduralAudioFactory.usesXylophoneTimbre(for: .star(index: 0))
+        )
+        XCTAssertTrue(ProceduralAudioFactory.usesXylophoneTimbre(for: .reward))
+        XCTAssertFalse(
+            ProceduralAudioFactory.usesXylophoneTimbre(for: .technicalRetry)
+        )
+    }
+
     func testVoicePromptDuckingIsConservativeAndCrossfadeKeepsConstantGain() {
         XCTAssertLessThan(
             AmbientMixPolicy.duckedVolume,
@@ -487,6 +535,27 @@ final class ProceduralAudioTests: XCTestCase {
                 max($0, abs(channels[channelIndex][$1]))
             }
         }
+    }
+
+    private func meanAmplitude(
+        in buffer: AVAudioPCMBuffer,
+        from startTime: Double,
+        to endTime: Double
+    ) -> Double {
+        guard let channels = buffer.floatChannelData else { return 0 }
+        let sampleRate = buffer.format.sampleRate
+        let start = max(0, Int(startTime * sampleRate))
+        let end = min(Int(buffer.frameLength), Int(endTime * sampleRate))
+        guard end > start else { return 0 }
+        var sum = 0.0
+        var count = 0
+        for channelIndex in 0..<Int(buffer.format.channelCount) {
+            for frame in stride(from: start, to: end, by: 8) {
+                sum += Double(abs(channels[channelIndex][frame]))
+                count += 1
+            }
+        }
+        return count == 0 ? 0 : sum / Double(count)
     }
 
     private func fingerprint(_ buffer: AVAudioPCMBuffer) -> Int {

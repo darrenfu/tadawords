@@ -45,6 +45,47 @@ final class PersistedQuestRecoveryTests: XCTestCase {
         }
     }
 
+    func testReadSecondUncertainAttemptIsATerminalCheckpoint() throws {
+        let fixture = try Fixture(mode: .read)
+        let first = [fixture.uncertainAttempt(number: 1)]
+        let second = first + [fixture.uncertainAttempt(number: 2)]
+
+        let partial = try PersistedQuestRecoveryResolver().resolve(
+            plan: fixture.plan,
+            attempts: first
+        )
+        let complete = try PersistedQuestRecoveryResolver().resolve(
+            plan: fixture.plan,
+            attempts: second
+        )
+
+        XCTAssertEqual(partial.nextItemIndex, 0)
+        XCTAssertEqual(complete.nextItemIndex, 1)
+    }
+
+    func testReadSecondAudibilityFailureIsATerminalCheckpoint() throws {
+        let fixture = try Fixture(mode: .read)
+        let first = [
+            fixture.technicalAttempt(number: 1, reason: .timedOut)
+        ]
+        let second =
+            first + [
+                fixture.technicalAttempt(number: 2, reason: .noUsableAudio)
+            ]
+
+        let partial = try PersistedQuestRecoveryResolver().resolve(
+            plan: fixture.plan,
+            attempts: first
+        )
+        let complete = try PersistedQuestRecoveryResolver().resolve(
+            plan: fixture.plan,
+            attempts: second
+        )
+
+        XCTAssertEqual(partial.nextItemIndex, 0)
+        XCTAssertEqual(complete.nextItemIndex, 1)
+    }
+
     func testWriteTwoIncorrectSubmissionsAreATerminalCheckpoint() throws {
         let fixture = try Fixture(mode: .write)
         let attempts = [
@@ -75,6 +116,50 @@ final class PersistedQuestRecoveryTests: XCTestCase {
         )
 
         XCTAssertEqual(recovery.nextItemIndex, 1)
+    }
+
+    func testConfiguredIncorrectAttemptLimitControlsRecoveryCheckpoint() throws {
+        let fixture = try Fixture(mode: .write)
+        let firstTwo = [
+            fixture.incorrectAttempt(number: 1, evidence: .firstIndependentAttempt),
+            fixture.incorrectAttempt(number: 2, evidence: .unaidedRetry),
+        ]
+
+        let partial = try PersistedQuestRecoveryResolver().resolve(
+            plan: fixture.plan,
+            attempts: firstTwo,
+            incorrectAttemptLimit: 3
+        )
+        let complete = try PersistedQuestRecoveryResolver().resolve(
+            plan: fixture.plan,
+            attempts: firstTwo + [
+                fixture.incorrectAttempt(number: 3, evidence: .unaidedRetry)
+            ],
+            incorrectAttemptLimit: 3
+        )
+
+        XCTAssertEqual(partial.nextItemIndex, 0)
+        XCTAssertEqual(complete.nextItemIndex, 1)
+    }
+
+    func testNewWriteUncertainEventsRemainTechnicalUntilThirdIssue() throws {
+        let fixture = try Fixture(mode: .write)
+        let firstTwo = [
+            fixture.uncertainAttempt(number: 1),
+            fixture.uncertainAttempt(number: 2),
+        ]
+
+        let partial = try PersistedQuestRecoveryResolver().resolve(
+            plan: fixture.plan,
+            attempts: firstTwo
+        )
+        let complete = try PersistedQuestRecoveryResolver().resolve(
+            plan: fixture.plan,
+            attempts: firstTwo + [fixture.uncertainAttempt(number: 3)]
+        )
+
+        XCTAssertEqual(partial.nextItemIndex, 0)
+        XCTAssertEqual(complete.nextItemIndex, 1)
     }
 
     private struct Fixture {
@@ -115,7 +200,10 @@ final class PersistedQuestRecoveryTests: XCTestCase {
             )
         }
 
-        func technicalAttempt(number: Int) -> AttemptEvent {
+        func technicalAttempt(
+            number: Int,
+            reason: TechnicalFailureReason = .serviceUnavailable
+        ) -> AttemptEvent {
             AttemptEvent(
                 id: attemptID(number),
                 questID: questID,
@@ -123,7 +211,7 @@ final class PersistedQuestRecoveryTests: XCTestCase {
                 wordPromptID: prompt.id,
                 learningMode: .read,
                 evidence: .technicalRetry,
-                outcome: .technicalFailure(.serviceUnavailable),
+                outcome: .technicalFailure(reason),
                 occurredAt: Date(timeIntervalSince1970: TimeInterval(number))
             )
         }
