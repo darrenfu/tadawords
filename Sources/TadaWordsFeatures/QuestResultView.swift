@@ -379,67 +379,64 @@ struct QuestResultView: View {
 
     private func earnedStarSummary(size: CGFloat) -> some View {
         let metrics = QuestResultStarCountLayout.metrics(starSize: size)
-        return HStack(spacing: 13) {
-            Image(systemName: "star.fill")
-                .font(.system(size: size, weight: .bold))
-                .foregroundStyle(Color.yellow)
-                .shadow(
-                    color: Color.orange.opacity(0.28),
-                    radius: 6,
-                    y: 3
-                )
-            Text("×")
-                .font(
-                    .system(
-                        size: metrics.rootSize * 0.55,
-                        weight: .heavy,
-                        design: .rounded
+        return VStack(spacing: 7) {
+            HStack(alignment: .center, spacing: 13) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: size, weight: .bold))
+                    .foregroundStyle(Color.yellow)
+                    .shadow(
+                        color: Color.orange.opacity(0.28),
+                        radius: 6,
+                        y: 3
                     )
-                )
-                .foregroundStyle(theme.secondary.opacity(0.72))
+                    .frame(
+                        width: metrics.rootSize * 0.78,
+                        height: metrics.rootSize * 0.92
+                    )
+                Text("×")
+                    .font(
+                        .system(
+                            size: metrics.rootSize * 0.55,
+                            weight: .heavy,
+                            design: .rounded
+                        )
+                    )
+                    .foregroundStyle(theme.secondary.opacity(0.72))
+                    .frame(height: metrics.cardSize.height)
 
-            VStack(spacing: 7) {
                 QuestResultFlipNumberCard(
                     number: displayedEarnedStarCount,
                     cardSize: metrics.cardSize,
                     flipAngle: starCountFlipAngle,
                     numberOpacity: starCountNumberOpacity
                 )
-
-                HStack(spacing: metrics.dotSpacing) {
-                    ForEach(
-                        0..<max(0, result.earnedStarCount),
-                        id: \.self
-                    ) { index in
-                        Capsule()
-                            .fill(
-                                index < activeTempoDotCount
-                                    ? Color(red: 1, green: 0.84, blue: 0.40)
-                                    : theme.secondary.opacity(0.34)
-                            )
-                            .frame(
-                                width: metrics.dotSize.width,
-                                height: metrics.dotSize.height
-                            )
-                            .scaleEffect(
-                                x: index < activeTempoDotCount ? 1 : 0.72,
-                                y: index == activeTempoDotCount - 1
-                                    ? 1.28
-                                    : (index < activeTempoDotCount ? 1 : 0.72),
-                                anchor: .bottom
-                            )
-                            .animation(
-                                .easeOut(
-                                    duration:
-                                        QuestResultStarCountAnimation
-                                        .flipDurationSeconds
-                                ),
-                                value: activeTempoDotCount
-                            )
-                    }
-                }
-                .frame(minHeight: metrics.dotSize.height * 1.28)
             }
+            .offset(y: -2)
+
+            HStack(spacing: metrics.dotSpacing) {
+                ForEach(
+                    0..<max(0, result.earnedStarCount),
+                    id: \.self
+                ) { index in
+                    let phase = QuestResultStarCountAnimation.dotPhase(
+                        index: index,
+                        activeDotCount: activeTempoDotCount
+                    )
+                    QuestResultTempoDot(
+                        size: metrics.dotSize,
+                        isActive: phase != .inactive,
+                        isHit: phase == .hit,
+                        activeColor: Color(
+                            red: 1,
+                            green: 0.84,
+                            blue: 0.40
+                        ),
+                        inactiveColor: theme.secondary.opacity(0.34),
+                        animatesHit: !reduceMotion
+                    )
+                }
+            }
+            .frame(minHeight: metrics.dotSize.height * 2.1)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("quest-result.star-count")
@@ -503,13 +500,7 @@ struct QuestResultView: View {
 
         guard let firstStep = timeline.first else { return }
         displayedEarnedStarCount = firstStep.displayedCount
-        withAnimation(
-            .easeOut(
-                duration: QuestResultStarCountAnimation.flipDurationSeconds
-            )
-        ) {
-            activeTempoDotCount = firstStep.activeDotCount
-        }
+        activeTempoDotCount = firstStep.activeDotCount
         Task {
             await audioExperienceService.play(firstStep.cue)
         }
@@ -517,12 +508,24 @@ struct QuestResultView: View {
         for step in timeline.dropFirst() {
             guard !Task.isCancelled else { return }
             withAnimation(
-                .timingCurve(0.55, 0.05, 0.85, 0.35, duration: 0.05)
+                .timingCurve(
+                    0.55,
+                    0.05,
+                    0.85,
+                    0.35,
+                    duration:
+                        QuestResultStarCountAnimation
+                        .exitDurationSeconds
+                )
             ) {
                 starCountFlipAngle = -88
                 starCountNumberOpacity = 0.28
             }
-            try? await Task.sleep(for: .milliseconds(50))
+            try? await Task.sleep(
+                for: .milliseconds(
+                    QuestResultStarCountAnimation.exitDurationMilliseconds
+                )
+            )
             guard !Task.isCancelled else { return }
 
             withTransaction(Transaction(animation: nil)) {
@@ -531,21 +534,27 @@ struct QuestResultView: View {
                 starCountNumberOpacity = 0.28
             }
             withAnimation(
-                .timingCurve(0.18, 0.82, 0.22, 1, duration: 0.07)
+                .timingCurve(
+                    0.18,
+                    0.82,
+                    0.22,
+                    1,
+                    duration:
+                        QuestResultStarCountAnimation
+                        .enterDurationSeconds
+                )
             ) {
                 starCountFlipAngle = 0
                 starCountNumberOpacity = 1
             }
-            try? await Task.sleep(for: .milliseconds(70))
+            try? await Task.sleep(
+                for: .milliseconds(
+                    QuestResultStarCountAnimation.enterDurationMilliseconds
+                )
+            )
             guard !Task.isCancelled else { return }
 
-            withAnimation(
-                .easeOut(
-                    duration: QuestResultStarCountAnimation.flipDurationSeconds
-                )
-            ) {
-                activeTempoDotCount = step.activeDotCount
-            }
+            activeTempoDotCount = step.activeDotCount
             Task {
                 await audioExperienceService.play(step.cue)
             }
@@ -647,9 +656,14 @@ enum QuestResultLayoutMode: Equatable {
 }
 
 enum QuestResultStarCountAnimation {
-    static let millisecondsPerFlip = 120
-    static let flipDurationSeconds = 0.12
-
+    static let exitDurationMilliseconds = 70
+    static let enterDurationMilliseconds = 100
+    static let millisecondsPerFlip =
+        exitDurationMilliseconds + enterDurationMilliseconds
+    static let exitDurationSeconds =
+        Double(exitDurationMilliseconds) / 1_000
+    static let enterDurationSeconds =
+        Double(enterDurationMilliseconds) / 1_000
     static func steps(earnedCount: Int) -> [Int] {
         guard earnedCount > 0 else { return [] }
         return Array(1...earnedCount)
@@ -680,6 +694,16 @@ enum QuestResultStarCountAnimation {
         max(0, steps(earnedCount: earnedCount).count - 1)
             * millisecondsPerFlip
     }
+
+    static func dotPhase(
+        index: Int,
+        activeDotCount: Int
+    ) -> QuestResultTempoDotPhase {
+        guard index >= 0, index < activeDotCount else {
+            return .inactive
+        }
+        return index == activeDotCount - 1 ? .hit : .active
+    }
 }
 
 struct QuestResultStarCountAnimationStep: Equatable, Sendable {
@@ -687,6 +711,12 @@ struct QuestResultStarCountAnimationStep: Equatable, Sendable {
     let activeDotCount: Int
     let cue: FunctionalAudioCue
     let landingMilliseconds: Int
+}
+
+enum QuestResultTempoDotPhase: Equatable, Sendable {
+    case inactive
+    case active
+    case hit
 }
 
 struct QuestResultStarCountLayoutMetrics: Equatable, Sendable {
@@ -708,6 +738,46 @@ enum QuestResultStarCountLayout {
             dotSize: CGSize(width: 7, height: 9),
             dotSpacing: 7
         )
+    }
+}
+
+private struct QuestResultTempoDot: View {
+    let size: CGSize
+    let isActive: Bool
+    let isHit: Bool
+    let activeColor: Color
+    let inactiveColor: Color
+    let animatesHit: Bool
+
+    @State private var verticalScale: CGFloat = 1
+    @State private var opacity: Double = 1
+
+    var body: some View {
+        Capsule()
+            .fill(isActive ? activeColor : inactiveColor)
+            .frame(width: size.width, height: size.height)
+            .scaleEffect(x: 1, y: verticalScale, anchor: .bottom)
+            .opacity(opacity)
+            .onChange(of: isHit) { _, didHit in
+                guard didHit, animatesHit else { return }
+                withTransaction(Transaction(animation: nil)) {
+                    verticalScale = 0.45
+                    opacity = 0.45
+                }
+                withAnimation(
+                    .timingCurve(0.20, 1.50, 0.40, 1, duration: 0.16)
+                ) {
+                    verticalScale = 2.1
+                    opacity = 1
+                }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(160))
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        verticalScale = 1
+                        opacity = 0.9
+                    }
+                }
+            }
     }
 }
 

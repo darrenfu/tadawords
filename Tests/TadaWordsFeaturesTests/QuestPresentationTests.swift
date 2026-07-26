@@ -88,11 +88,19 @@ final class QuestPresentationTests: XCTestCase {
             QuestResultStarCountAnimation.totalDurationMilliseconds(
                 earnedCount: 5
             ),
-            480
+            680
         )
         XCTAssertEqual(
             QuestResultStarCountAnimation.millisecondsPerFlip,
-            120
+            170
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.exitDurationMilliseconds,
+            70
+        )
+        XCTAssertEqual(
+            QuestResultStarCountAnimation.enterDurationMilliseconds,
+            100
         )
         XCTAssertEqual(
             QuestResultStarCountAnimation.initialDisplayedCount(
@@ -121,7 +129,27 @@ final class QuestPresentationTests: XCTestCase {
             timeline.map(\.cue),
             [.star(index: 0), .star(index: 1), .star(index: 2)]
         )
-        XCTAssertEqual(timeline.map(\.landingMilliseconds), [0, 120, 240])
+        XCTAssertEqual(timeline.map(\.landingMilliseconds), [0, 170, 340])
+    }
+
+    func testQuestResultYellowDotHitTravelsOnePositionPerCount() {
+        let phases = (1...3).map { activeDotCount in
+            (0..<3).map { index in
+                QuestResultStarCountAnimation.dotPhase(
+                    index: index,
+                    activeDotCount: activeDotCount
+                )
+            }
+        }
+
+        XCTAssertEqual(
+            phases,
+            [
+                [.hit, .inactive, .inactive],
+                [.active, .hit, .inactive],
+                [.active, .active, .hit],
+            ]
+        )
     }
 
     func testQuestResultCounterUsesApprovedDemoProportions() {
