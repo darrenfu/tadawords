@@ -119,6 +119,35 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         assertReadSuccessDismissesAndAdvances(toItem: 3)
     }
 
+    /// Exercises the real result-board reveal after all five deterministic
+    /// demo answers so the final card uses the exact earned-word count.
+    func testReadQuestResultShowsExactEarnedStarCount() throws {
+        launchDemo(startingAt: "moonpetal-read")
+
+        for nextItem in 2...5 {
+            XCTAssertTrue(startListeningButton.waitForExistence(timeout: 8))
+            startListeningButton.tap()
+            assertReadSuccessDismissesAndAdvances(toItem: nextItem)
+        }
+
+        XCTAssertTrue(startListeningButton.waitForExistence(timeout: 8))
+        startListeningButton.tap()
+
+        let starCount = app.descendants(matching: .any)[
+            "quest-result.star-count"
+        ]
+        XCTAssertTrue(
+            starCount.waitForExistence(timeout: 12),
+            "Completing all five words should reveal the Quest Board star count."
+        )
+        XCTAssertEqual(starCount.label, "5 stars earned")
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Quest Board - five earned stars"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     /// Parent Home uses ordinary back navigation while restoring the gate for
     /// the next visit; the old lock control is no longer presented.
     func testParentHomeBackReturnsToPreviousChildPage() throws {
