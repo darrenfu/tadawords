@@ -669,9 +669,9 @@ enum QuestResultLayoutMode: Equatable {
 }
 
 enum QuestResultStarCountAnimation {
-    static let postBoardDelayMilliseconds = 500
-    static let exitDurationMilliseconds = 90
-    static let enterDurationMilliseconds = 130
+    static let postBoardDelayMilliseconds = 200
+    static let exitDurationMilliseconds = 75
+    static let enterDurationMilliseconds = 105
     static let millisecondsPerFlip =
         exitDurationMilliseconds + enterDurationMilliseconds
     static let exitDurationSeconds =

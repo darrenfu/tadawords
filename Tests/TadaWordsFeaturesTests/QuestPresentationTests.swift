@@ -88,23 +88,23 @@ final class QuestPresentationTests: XCTestCase {
             QuestResultStarCountAnimation.totalDurationMilliseconds(
                 earnedCount: 5
             ),
-            880
+            720
         )
         XCTAssertEqual(
             QuestResultStarCountAnimation.millisecondsPerFlip,
-            220
+            180
         )
         XCTAssertEqual(
             QuestResultStarCountAnimation.postBoardDelayMilliseconds,
-            500
+            200
         )
         XCTAssertEqual(
             QuestResultStarCountAnimation.exitDurationMilliseconds,
-            90
+            75
         )
         XCTAssertEqual(
             QuestResultStarCountAnimation.enterDurationMilliseconds,
-            130
+            105
         )
         XCTAssertEqual(
             QuestResultStarCountAnimation.initialDisplayedCount(
@@ -133,7 +133,7 @@ final class QuestPresentationTests: XCTestCase {
             timeline.map(\.cue),
             [.star(index: 0), .star(index: 1), .star(index: 2)]
         )
-        XCTAssertEqual(timeline.map(\.landingMilliseconds), [500, 720, 940])
+        XCTAssertEqual(timeline.map(\.landingMilliseconds), [200, 380, 560])
     }
 
     func testQuestResultYellowDotHitTravelsOnePositionPerCount() {
