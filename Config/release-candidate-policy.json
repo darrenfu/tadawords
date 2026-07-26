@@ -124,7 +124,7 @@
     "Apps/TadaWordsApp/InfoLocalQA.plist",
     "Apps/TadaWordsApp/PrivacyInfo.xcprivacy",
     "Apps/TadaWordsApp/TadaWords.entitlements",
-    "Sources/TadaWordsApplePlatform/Resources/Audio/TeacherWords/ElevenLabs-Teacher-500-v1/manifest.json",
+    "Sources/TadaWordsApplePlatform/Resources/Audio/TeacherWords/ElevenLabs-Teacher-2000-v1/manifest.json",
     "Sources/TadaWordsApplePlatform/Resources/Audio/VoiceAccents/Aurora-v1/manifest.json",
     "Sources/TadaWordsContent/Resources/PresetWords.json"
   ],
@@ -133,9 +133,9 @@
     "Assets.car",
     "AppIcon*.png",
     "**/PresetWords.json",
-    "**/ElevenLabs-Teacher-500-v1/manifest.json",
-    "**/ElevenLabs-Teacher-500-v1/read-hint/*.mp3",
-    "**/ElevenLabs-Teacher-500-v1/write-prompt/*.mp3",
+    "**/ElevenLabs-Teacher-2000-v1/manifest.json",
+    "**/ElevenLabs-Teacher-2000-v1/read-hint/*.mp3",
+    "**/ElevenLabs-Teacher-2000-v1/write-prompt/*.mp3",
     "**/Aurora-v1/manifest.json",
     "**/Aurora-v1/*.m4a"
   ]

@@ -139,8 +139,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 "<string>https://audio.pawgoo.app</string>"
             )
         )
-        XCTAssertTrue(productionPlist.contains("<string>0.7.45</string>"))
-        XCTAssertTrue(productionPlist.contains("<string>2026072419</string>"))
+        XCTAssertTrue(productionPlist.contains("<string>0.7.47</string>"))
+        XCTAssertTrue(productionPlist.contains("<string>2026072504</string>"))
         XCTAssertFalse(productionPlist.contains("voice setup"))
 
         for plistPath in ["Apps/TadaWordsApp/InfoLocalQA.plist"] {
@@ -149,8 +149,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.45</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072419</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.47</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072504</string>"))
             XCTAssertFalse(plist.contains("voice setup"))
         }
 
@@ -165,15 +165,15 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 "<string>https://audio-dev.pawgoo.app</string>"
             )
         )
-        XCTAssertTrue(debugPlist.contains("<string>0.7.45</string>"))
-        XCTAssertTrue(debugPlist.contains("<string>2026072419</string>"))
+        XCTAssertTrue(debugPlist.contains("<string>0.7.47</string>"))
+        XCTAssertTrue(debugPlist.contains("<string>2026072504</string>"))
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.45"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072419"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.47"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072504"))
 
         let appComposition = try String(
             contentsOf: repositoryRoot.appendingPathComponent(
@@ -277,6 +277,40 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
         )
         let bundled = try XCTUnwrap(manifest["words"] as? [String])
         XCTAssertTrue(Set(bundled).isSubset(of: Set(offline)))
+
+        let releasePolicyURL = repositoryRoot.appendingPathComponent(
+            "Config/release-candidate-policy.json"
+        )
+        let releasePolicy = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: releasePolicyURL))
+                as? [String: Any]
+        )
+        let requiredSourceFiles = try XCTUnwrap(
+            releasePolicy["required_source_files"] as? [String]
+        )
+        let requiredAppResources = try XCTUnwrap(
+            releasePolicy["required_app_resources"] as? [String]
+        )
+        XCTAssertTrue(
+            requiredSourceFiles.contains {
+                $0.contains("ElevenLabs-Teacher-2000-v1/manifest.json")
+            }
+        )
+        XCTAssertTrue(
+            requiredAppResources.contains {
+                $0.contains("ElevenLabs-Teacher-2000-v1/read-hint/*.mp3")
+            }
+        )
+        XCTAssertTrue(
+            requiredAppResources.contains {
+                $0.contains("ElevenLabs-Teacher-2000-v1/write-prompt/*.mp3")
+            }
+        )
+        XCTAssertFalse(
+            (requiredSourceFiles + requiredAppResources).contains {
+                $0.contains("ElevenLabs-Teacher-500-v1")
+            }
+        )
 
         for excluded in [
             "fuck", "shit", "bitch", "porn", "rape", "sex", "sexual",
