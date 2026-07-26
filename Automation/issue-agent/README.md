@@ -24,9 +24,12 @@ explicitly authorized a different bound.
 Installation prefers the CLI bundled with the installed ChatGPT/Codex app over
 an older shell `PATH` copy, then parses the unattended approval/sandbox flags
 and runs one cached model round trip before loading the LaunchAgent. The worker
-uses an isolated config plus the explicit `gpt-5.6-sol` default, so unrelated
+uses an isolated config plus the explicit `gpt-5.6-terra` default, so unrelated
 user plugins and a stale local model setting cannot strand actionable Issues.
-Reasoning defaults to `ultra` (Sol Ultra) for unattended pickup and delivery.
+Reasoning defaults to `medium` for unattended pickup and routine delivery.
+Bounded architecture, synchronization, security, signing, or final release
+decisions may explicitly override this with Terra/high or Sol/high. Ultra is
+never the unattended default.
 Set `TADA_AGENT_CODEX_BIN`,
 `TADA_AGENT_MODEL`, or `TADA_AGENT_REASONING_EFFORT` before installation to
 override them. The model probe reruns only when the selected CLI version, model,
@@ -52,7 +55,8 @@ session:
 3. Check open PRs, PRs merged to `origin/main`, and `origin/*` implementation
    branches for exact ownership or completion evidence.
 4. Re-fetch the Issue, then make `agent-reclaimed` the first pickup mutation.
-5. Reserve and push the batch branch before editing implementation files.
+5. Reserve and push the batch branch, then acquire its PR-writer lease before
+   editing implementation files.
 
 An open PR gets `implementation-in-pr` plus a comment naming its exact URL and
 HEAD, then is skipped. A live implementation branch gets a comment naming its
@@ -121,9 +125,10 @@ canonical closing-reference digest, and verified branch-protection contract
 digest. The repository
 owner's standing authorization permits Codex to squash-merge that candidate
 without a separate GitHub comment, but only after a fresh exact-HEAD preflight
-confirms mergeable/clean state, required checks, applicable simulator and signed
-artifact/device evidence, dependencies, and every remaining product or risk
-gate. A new commit produces a new event ID and invalidates all prior evidence.
+confirms mergeable/clean state, required checks, evidence applicable to the
+declared R0-R4 tier, dependencies, and every remaining product or risk gate. A
+new commit produces a new event ID and invalidates evidence for the prior HEAD;
+full archive/device evidence is required only for a frozen R4 candidate.
 Stacked and other non-`main` PRs never produce automatic candidates. A base edit
 or any PR-body edit invalidates the candidate even when the commit SHA is
 unchanged; the worker must re-fetch the full body digest and exact closing set
@@ -141,8 +146,8 @@ history, resolved conversations, no force push/deletion, and the required
 [`main-branch-protection.json`](main-branch-protection.json). The worker never
 uses an admin bypass, update-branch, or automatic rebase.
 
-After all applicable local, simulator, signed-artifact, device, and product
-gates pass, the agent must call `issue_agent.py guarded-merge`; direct merge
+After all checks and evidence applicable to the declared tier pass, the agent
+must call `issue_agent.py guarded-merge`; direct merge
 commands are forbidden. The core command re-fetches the complete candidate,
 durably records preparation, atomically acquires
 `refs/heads/agent-leases/merge-critical`, posts the exact-HEAD gate status,

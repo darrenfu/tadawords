@@ -3,19 +3,18 @@
 [Back to module index](README.md)
 
 Open one draft PR for the batch and link every Issue with separate `Closes`
-lines. The PR must report previous/new versions, build number, HEAD SHA, batch
-ID, included Issues, risk, test evidence, device evidence, limitations,
-rollback, and manual acceptance steps.
+lines. Record tier, HEAD SHA, included Issues, applicable evidence,
+limitations, rollback, and manual acceptance. Record version/build/artifact
+identity only when the PR owns a versioned artifact.
 
 Stop before implementation for high-risk changes, destructive data work,
 security/privacy/auth/payment work, public API or persistence changes, major
 dependencies, architectural changes, or ambiguous product choices.
 
-After all applicable gates pass, mark the PR ready and apply
+After all gates applicable to the declared tier pass, mark the PR ready and apply
 `awaiting-human-review`; this is the merge-candidate marker, not proof that the
-gates still pass. A new commit invalidates every earlier build, check, device
-result, and approval. Remove or disregard merge readiness, rebuild, and rerun
-the full applicable matrix for the new HEAD.
+gates still pass. A new commit invalidates prior-HEAD evidence; remove or
+disregard readiness and rerun only the matrix applicable to the new HEAD's tier.
 
 Immediately before squash merge, re-fetch the PR and verify all of the
 following against its unchanged full HEAD SHA:

@@ -1,27 +1,18 @@
-# Versioning and project generation
+# Risk tiers, versioning, and project generation
 
 [Back to module index](README.md)
 
-Every PR increments `vMAJOR.MINOR.PATCH`, including documentation and internal
-automation PRs. Use PATCH for compatible fixes, docs, and small polish; MINOR
-for a coherent backward-compatible capability; and require human approval for
-breaking version strategy. The build number is independently monotonic.
+Classify every PR R0-R4 by behavior; mixed changes use the highest tier. The
+table in root `AGENTS.md` is mandatory. R0 is allowed only when package,
+runtime, persistent data, signing, resources, Plists, `project.yml`, and
+generated Xcode settings are unaffected.
 
-Before creating a worktree, inspect the default branch, source Plists,
-`project.yml`, generated Xcode settings, remote branches, open PRs, release
-labels, tags, and active batch reservations. Atomically reserve an unused
-version by pushing the newly created batch branch. If that push loses a race,
-remove the local worktree, recompute, and try a new version. Never reuse a
-version already present in any active reservation.
+Ordinary R0-R3 PRs do not increment SemVer or build solely because a PR exists.
+Reserve and synchronize marketing/build identity only for an R4 promotion or
+an explicitly requested versioned artifact.
 
-Synchronize the version and build across:
-
-- `Apps/TadaWordsApp/Info.plist`
-- `Apps/TadaWordsApp/InfoLocalQA.plist`
-- `project.yml`
-- the generated Xcode project
-- release notes or status documentation that names the build
-
-Regenerate the project only with `make generate` or
-`Scripts/generate-xcode-project.sh`. Direct `xcodegen generate` in a release
-worktree leaks the worktree directory name into the project file.
+For R4, inspect current `main`, Plists, project settings, remote reservations,
+PRs, tags, and labels before choosing a monotonically increasing build.
+Synchronize production and LocalQA Plists, `project.yml`, generated project,
+and release notes. Regenerate only with `make generate`; direct `xcodegen
+generate` in a worktree can leak the worktree path.

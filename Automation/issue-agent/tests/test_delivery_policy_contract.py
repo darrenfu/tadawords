@@ -114,31 +114,65 @@ class DeliveryPolicyContractTests(unittest.TestCase):
             with self.subTest(required=required):
                 self.assertIn(required, documents)
 
-    def test_device_na_exception_excludes_every_packaged_metadata_change(self):
+    def test_risk_tiers_replace_uniform_device_and_version_gates(self):
         agents = "\n".join(
             (
                 self.document("AGENTS.md"),
+                self.document("Docs/AgentProtocol/02-versioning-and-generation.md"),
                 self.document("Docs/AgentProtocol/03-verification.md"),
             )
         )
         template = self.document(".github/pull_request_template.md")
         prompt = self.document("Automation/issue-agent/agent-prompt.md")
-        release_notes = self.document("FOLLOWUP_BUGFIXES_AND_IMPROVEMENTS.md")
+        pipeline = self.document("Docs/DEVELOPMENT_PIPELINE.md")
+        makefile = self.document("Makefile")
 
-        for document in (agents, template, prompt):
+        for document in (agents, template, prompt, pipeline):
             with self.subTest(document=document[:40]):
                 normalized = " ".join(document.split()).casefold()
-                self.assertIn("version/build metadata", normalized)
-                self.assertIn("generated xcode project", normalized)
-        self.assertNotIn(
-            "Simulator and physical-device testing are intentionally not applicable",
-            release_notes,
-        )
-        normalized_release_notes = " ".join(release_notes.split())
-        self.assertIn(
-            "signed LocalQA iPhone and iPad evidence is pending",
-            normalized_release_notes,
-        )
+                for tier in ("r0", "r1", "r2", "r3", "r4"):
+                    self.assertIn(tier, normalized)
+        self.assertNotIn("Every PR must increment SemVer", prompt)
+        self.assertIn("do not increment SemVer", prompt)
+        self.assertIn("check-changed", makefile)
+        self.assertIn("check-pr", makefile)
+        self.assertIn("check-rc", makefile)
+
+    def test_writer_session_compaction_and_evidence_reuse_are_mandatory(self):
+        documents = "\n".join(
+            self.document(path)
+            for path in (
+                "AGENTS.md",
+                "Docs/DEVELOPMENT_PIPELINE.md",
+                "Automation/issue-agent/agent-prompt.md",
+            )
+        ).casefold()
+
+        for required in (
+            "one writer",
+            "pr-writer",
+            "first context compaction",
+            "2 kb",
+            "unchanged",
+            "reuse",
+            "no subagents",
+            "non-nested",
+            "heavy-xcode",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, documents)
+
+    def test_unattended_default_is_terra_medium_not_ultra(self):
+        runner = self.document("Automation/issue-agent/run.sh")
+        installer = self.document("Automation/issue-agent/install-launch-agent.sh")
+        readme = self.document("Automation/issue-agent/README.md")
+
+        for document in (runner, installer):
+            self.assertIn("gpt-5.6-terra", document)
+            self.assertIn("medium", document)
+            self.assertNotIn("gpt-5.6-sol}", document)
+            self.assertNotIn("REASONING_EFFORT:=ultra", document)
+        self.assertIn("Ultra is\nnever the unattended default", readme)
 
 
 if __name__ == "__main__":

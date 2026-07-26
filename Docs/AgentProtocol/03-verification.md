@@ -2,26 +2,19 @@
 
 [Back to module index](README.md)
 
-For a bug, add a failing regression test before the fix when practical. Do not
-expand scope silently; create a related Issue for adjacent work.
+For a bug, add a failing regression test first when practical. Run focused
+checks during implementation, then freeze scope before expensive validation.
 
-Before a PR becomes ready for human review, run:
+- `make check-changed`: focused development feedback.
+- `make check-pr`: normal PR gate, selected by changed paths.
+- `make check-rc`: R4, scheduled/nightly validation, or explicit final audit.
 
-1. strict formatting and static checks;
-2. Swift unit and integration tests;
-3. relevant regression tests;
-4. iPhone simulator build and critical E2E;
-5. iPad simulator build and critical E2E;
-6. signed LocalQA installation on at least one physical iPhone and one physical
-   iPad when devices and signing are available;
-7. per-device launch smoke tests and relevant automated device tests.
+R0 runs relevant lint and changed-path automation tests, with no simulator,
+signing, archive, or device gate. R1-R3 run only the source, simulator, and
+affected-device gates required by their tier. R4 runs the full applicable
+release-candidate matrix.
 
-For a true documentation or internal-automation-only batch that cannot affect
-app runtime, signing, persistence, or packaged content, record the simulator
-and physical-device rows as not applicable with a concrete rationale. This
-exception is forbidden if the diff changes any app or LocalQA version/build
-metadata, source or generated Plist, `project.yml`, generated Xcode project,
-entitlement, resource, or other package input. Do not mutate devices merely to
-satisfy an irrelevant checklist. Any such metadata/package change, as well as
-any app/runtime/platform change, keeps the applicable simulator and signed
-one-iPhone-plus-one-iPad gates.
+Record evidence by full commit SHA, tier, command, environment, result, and
+artifact identity when applicable. A new commit invalidates old-HEAD evidence
+but reruns only the new tier's gates. When HEAD and environment are unchanged,
+reuse evidence; never rerun a passing gate merely to answer status.
