@@ -248,6 +248,24 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         XCTAssertTrue(back.waitForExistence(timeout: 5))
         assertTopLeftBackButtonAlignsWithParentGate(back)
 
+        for feature in [
+            ("guardian.app.sound-accessibility", "Sound & Accessibility"),
+            ("guardian.app.notifications", "Notifications"),
+            ("guardian.app.speech-permissions", "Speech & Microphone"),
+            ("guardian.app.sync", "Family Sync"),
+            ("guardian.app.third-party-notices", "Third-Party Notices"),
+        ] {
+            let button = app.buttons[feature.0]
+            for _ in 0..<4 where !button.exists {
+                app.scrollViews.firstMatch.swipeUp()
+            }
+            XCTAssertTrue(button.waitForExistence(timeout: 5))
+            XCTAssertTrue(
+                button.label.hasPrefix(feature.1),
+                "\(feature.1) must remain a visible App & Family feature."
+            )
+        }
+
         let privacy = element(label: "Privacy Policy")
         let support = element(label: "Support")
         let localDeletion = element(labelPrefix: "Delete a local profile.")

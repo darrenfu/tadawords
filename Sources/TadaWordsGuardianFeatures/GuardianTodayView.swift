@@ -474,6 +474,44 @@ struct GuardianProgressAndPerformanceView: View {
     }
 }
 
+enum GuardianAppAndFamilyFeature: CaseIterable, Equatable {
+    case soundAndAccessibility
+    case notifications
+    case speechAndMicrophone
+    case familySync
+    case thirdPartyNotices
+
+    var title: String {
+        switch self {
+        case .soundAndAccessibility:
+            "Sound & Accessibility"
+        case .notifications:
+            "Notifications"
+        case .speechAndMicrophone:
+            "Speech & Microphone"
+        case .familySync:
+            "Family Sync"
+        case .thirdPartyNotices:
+            "Third-Party Notices"
+        }
+    }
+
+    var accessibilityIdentifier: String {
+        switch self {
+        case .soundAndAccessibility:
+            "guardian.app.sound-accessibility"
+        case .notifications:
+            "guardian.app.notifications"
+        case .speechAndMicrophone:
+            "guardian.app.speech-permissions"
+        case .familySync:
+            "guardian.app.sync"
+        case .thirdPartyNotices:
+            "guardian.app.third-party-notices"
+        }
+    }
+}
+
 struct GuardianAppAndFamilyView: View {
     let snapshot: GuardianDashboardSnapshot
     let syncState: GuardianSyncState
@@ -501,50 +539,53 @@ struct GuardianAppAndFamilyView: View {
                 spacing: GuardianPrimitiveTokens.Spacing.small
             ) {
                 GuardianAppNavigationTile(
-                    title: "Sound",
+                    title: GuardianAppAndFamilyFeature.soundAndAccessibility.title,
                     summary: audioSummary,
                     symbol: "speaker.wave.2.fill",
                     tint: GuardianPrimitiveTokens.ColorValue.indigo,
-                    accessibilityIdentifier: "guardian.app.sound-accessibility",
+                    accessibilityIdentifier: GuardianAppAndFamilyFeature
+                        .soundAndAccessibility.accessibilityIdentifier,
                     action: onOpenSoundAndAccessibility
                 )
                 GuardianAppNavigationTile(
-                    title: "Notifications",
+                    title: GuardianAppAndFamilyFeature.notifications.title,
                     summary: snapshot.practiceSettings.notifications
                         .hasEnabledNotifications
-                        ? "Reminders on"
-                        : "Reminders off",
+                        ? "Family reminders are on"
+                        : "Family reminders are off",
                     symbol: "bell.badge.fill",
                     tint: GuardianPrimitiveTokens.ColorValue.orange,
-                    accessibilityIdentifier: "guardian.app.notifications",
+                    accessibilityIdentifier: GuardianAppAndFamilyFeature.notifications
+                        .accessibilityIdentifier,
                     action: onOpenNotifications
                 )
                 GuardianAppNavigationTile(
-                    title: "Speech",
+                    title: GuardianAppAndFamilyFeature.speechAndMicrophone.title,
                     summary: GuardianSpeechPermissionPresentation.tileSummary(
                         for: speechPermissionState
                     ),
                     symbol: "waveform.badge.mic",
                     tint: GuardianPrimitiveTokens.ColorValue.indigo,
-                    accessibilityIdentifier: "guardian.app.speech-permissions",
+                    accessibilityIdentifier: GuardianAppAndFamilyFeature
+                        .speechAndMicrophone.accessibilityIdentifier,
                     action: onOpenSpeechPermissions
                 )
                 GuardianAppNavigationTile(
-                    title: syncState == .thisDeviceOnly ? "Storage" : "Family Sync",
-                    summary: syncState.title,
-                    symbol: syncState == .thisDeviceOnly
-                        ? "externaldrive.fill"
-                        : "person.2.badge.gearshape.fill",
+                    title: GuardianAppAndFamilyFeature.familySync.title,
+                    summary: familySyncSummary,
+                    symbol: "person.2.badge.gearshape.fill",
                     tint: GuardianPrimitiveTokens.ColorValue.teal,
-                    accessibilityIdentifier: "guardian.app.sync",
+                    accessibilityIdentifier: GuardianAppAndFamilyFeature.familySync
+                        .accessibilityIdentifier,
                     action: onOpenFamilySync
                 )
                 GuardianAppNavigationTile(
-                    title: "Credits",
-                    summary: "Licenses available offline",
+                    title: GuardianAppAndFamilyFeature.thirdPartyNotices.title,
+                    summary: "Licenses and credits available offline",
                     symbol: "doc.text.magnifyingglass",
                     tint: GuardianPrimitiveTokens.ColorValue.blue,
-                    accessibilityIdentifier: "guardian.app.third-party-notices",
+                    accessibilityIdentifier: GuardianAppAndFamilyFeature
+                        .thirdPartyNotices.accessibilityIdentifier,
                     action: onOpenThirdPartyNotices
                 )
             }
@@ -556,7 +597,17 @@ struct GuardianAppAndFamilyView: View {
         let audio = snapshot.practiceSettings.audio
         let music = audio.musicEnabled ? "Music on" : "Music off"
         let voice = audio.voiceEnabled ? "Voice on" : "Voice off"
-        return "\(music) · \(voice)"
+        let hand =
+            snapshot.practiceSettings.interface.leftHandedLayoutEnabled
+            ? "Left-handed controls"
+            : "Right-handed controls"
+        return "\(music) · \(voice) · \(hand)"
+    }
+
+    private var familySyncSummary: String {
+        syncState == .thisDeviceOnly
+            ? "Share profiles and progress across family devices"
+            : syncState.title
     }
 }
 
@@ -578,13 +629,13 @@ private struct GuardianAppNavigationTile: View {
                 Text(title)
                     .font(.system(.headline, design: .rounded, weight: .bold))
                     .foregroundStyle(GuardianSemanticTokens.foreground)
-                    .lineLimit(1)
+                    .lineLimit(2)
                 Text(summary)
                     .font(.system(.caption, design: .rounded, weight: .semibold))
                     .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
-                    .lineLimit(2)
+                    .lineLimit(3)
             }
-            .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 108, alignment: .leading)
             .padding(GuardianPrimitiveTokens.Spacing.medium)
             .background(
                 tint.opacity(0.10),
@@ -596,6 +647,7 @@ private struct GuardianAppNavigationTile: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title). \(summary)")
         .accessibilityHint("Opens \(title)")
         .accessibilityIdentifier(accessibilityIdentifier)
     }
@@ -726,8 +778,12 @@ private struct GuardianParentResourceLink: View {
                 Text(resource.title)
                     .font(.system(.subheadline, design: .rounded, weight: .bold))
                     .lineLimit(1)
+                Text(resource.summary)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    .lineLimit(2)
             }
-            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
             .padding(GuardianPrimitiveTokens.Spacing.small)
         }
         .buttonStyle(.plain)
@@ -761,8 +817,12 @@ private struct GuardianDataControlGuide: View {
             Text(title)
                 .font(.system(.subheadline, design: .rounded, weight: .bold))
                 .lineLimit(1)
+            Text(detail)
+                .font(.system(.caption, design: .rounded, weight: .medium))
+                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                .lineLimit(3)
         }
-        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
         .padding(GuardianPrimitiveTokens.Spacing.small)
         .background(
             GuardianSemanticTokens.primary.opacity(0.08),

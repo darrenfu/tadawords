@@ -58,6 +58,34 @@ final class GuardianParentNavigationTests: XCTestCase {
         )
     }
 
+    func testAppAndFamilyPreservesEveryFeatureEntryAndFullName() {
+        XCTAssertEqual(
+            GuardianAppAndFamilyFeature.allCases,
+            [
+                .soundAndAccessibility,
+                .notifications,
+                .speechAndMicrophone,
+                .familySync,
+                .thirdPartyNotices,
+            ]
+        )
+        XCTAssertEqual(
+            GuardianAppAndFamilyFeature.allCases.map(\.title),
+            [
+                "Sound & Accessibility",
+                "Notifications",
+                "Speech & Microphone",
+                "Family Sync",
+                "Third-Party Notices",
+            ]
+        )
+        XCTAssertEqual(
+            Set(GuardianAppAndFamilyFeature.allCases.map(\.accessibilityIdentifier))
+                .count,
+            GuardianAppAndFamilyFeature.allCases.count
+        )
+    }
+
     func testFeaturePagesReturnToTheirOwningCategory() {
         XCTAssertEqual(
             GuardianDestination.quickAdd.parentSectionForBack,
