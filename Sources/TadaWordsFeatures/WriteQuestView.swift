@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import TadaWordsDesignSystem
 import TadaWordsDomain
@@ -72,6 +73,12 @@ enum WriteQuestControlLayoutPolicy {
 enum WriteQuestTimingPolicy {
     /// Keeps the transient completion card readable instead of flashing past.
     static let completionFeedbackVisibility: Duration = .milliseconds(830)
+}
+
+enum WriteQuestSpellingPresentation {
+    static func revealedWord(_ displayText: String) -> String {
+        displayText.uppercased(with: Locale(identifier: "en_US_POSIX"))
+    }
 }
 
 enum WritePictureHintRequestPolicy {
@@ -445,15 +452,19 @@ struct WriteQuestView: View {
 
                 VStack(spacing: 0) {
                     if showGuidedWord {
-                        Text(session.prompt.displayText)
-                            .font(.system(.title2, design: .rounded, weight: .bold))
-                            .foregroundStyle(theme.primary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
-                            .background(theme.surface.opacity(0.94), in: Capsule())
-                            .accessibilityLabel(
-                                "Example spelling: \(session.prompt.displayText)"
+                        Text(
+                            WriteQuestSpellingPresentation.revealedWord(
+                                session.prompt.displayText
                             )
+                        )
+                        .font(.system(.title2, design: .rounded, weight: .bold))
+                        .foregroundStyle(theme.primary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(theme.surface.opacity(0.94), in: Capsule())
+                        .accessibilityLabel(
+                            "Example spelling: \(WriteQuestSpellingPresentation.revealedWord(session.prompt.displayText))"
+                        )
                     }
 
                     Spacer(minLength: 0)
@@ -952,7 +963,7 @@ struct WriteQuestView: View {
             kind: isSuccess ? .success : .tryAgain,
             message: isSuccess
                 ? "Beautiful writing!"
-                : "Correct spelling: \(session.prompt.displayText)"
+                : "Correct spelling: \(WriteQuestSpellingPresentation.revealedWord(session.prompt.displayText))"
         )
     }
 

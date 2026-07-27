@@ -110,8 +110,7 @@ struct GuardianThirdPartyNoticesView: View {
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
-            .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
-            .padding(.vertical, GuardianPrimitiveTokens.Spacing.large)
+            .guardianParentPageInsets()
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)

@@ -12,18 +12,28 @@ struct GuardianParentGateView: View {
     @AccessibilityFocusState private var errorIsFocused: Bool
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                ViewThatFits(in: .vertical) {
-                    regularLayout
-                        .frame(minHeight: proxy.size.height)
-                    compactLayout
-                        .frame(minHeight: proxy.size.height)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(GuardianPrimitiveTokens.Spacing.large)
+        VStack(spacing: 0) {
+            HStack {
+                GuardianBackButton(action: onExit)
+                    .accessibilityIdentifier("guardian.parent-gate.back")
+                Spacer()
             }
-            .scrollDismissesKeyboard(.interactively)
+            .padding(.horizontal, GuardianParentPageLayout.horizontalInset)
+            .padding(.top, GuardianParentPageLayout.verticalInset)
+
+            GeometryReader { proxy in
+                ScrollView {
+                    ViewThatFits(in: .vertical) {
+                        regularLayout
+                            .frame(minHeight: proxy.size.height)
+                        compactLayout
+                            .frame(minHeight: proxy.size.height)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(GuardianPrimitiveTokens.Spacing.large)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
@@ -55,25 +65,20 @@ struct GuardianParentGateView: View {
     }
 
     private var heading: some View {
-        VStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
-            Text("Parents only")
-                .font(.system(.largeTitle, design: .rounded, weight: .bold))
-            Text("Solve this to manage word pools and daily settings.")
-                .font(.system(.body, design: .rounded, weight: .medium))
-                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
-        }
+        Text("Parents only")
+            .font(.system(.largeTitle, design: .rounded, weight: .bold))
     }
 
     private var challengeForm: some View {
         VStack(spacing: GuardianPrimitiveTokens.Spacing.medium) {
-            Text(challenge.question)
-                .font(.system(size: 34, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .accessibilityLabel(challenge.accessibilityQuestion)
+            HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+                Text("\(challenge.left) × \(challenge.right) =")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .accessibilityLabel(challenge.accessibilityQuestion)
 
-            numericAnswerField
+                numericAnswerField
+            }
 
             if showsError {
                 Text("Not quite. Try again.")
@@ -82,19 +87,6 @@ struct GuardianParentGateView: View {
                     .accessibilityAddTraits(.isStaticText)
                     .accessibilityFocused($errorIsFocused)
             }
-
-            Label("Unlocks automatically", systemImage: "bolt.fill")
-                .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
-                .accessibilityHint("The answer is checked after the last digit")
-
-            Button(action: onExit) {
-                Label("Back to Tada Words", systemImage: "chevron.left")
-                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                    .frame(minHeight: TadaPrimitiveTokens.TouchTarget.minimum)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
         }
     }
 
@@ -103,7 +95,7 @@ struct GuardianParentGateView: View {
             .font(.system(.title2, design: .rounded, weight: .semibold))
             .multilineTextAlignment(.center)
             .textFieldStyle(.roundedBorder)
-            .frame(maxWidth: 220)
+            .frame(width: 92)
             .focused($answerIsFocused)
             .onSubmit(validateAnswer)
             .onChange(of: answer) { _, newValue in

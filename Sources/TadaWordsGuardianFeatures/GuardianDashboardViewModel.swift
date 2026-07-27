@@ -150,6 +150,7 @@ final class GuardianDashboardViewModel: ObservableObject {
     private var voiceprintPromptTask: Task<Void, Never>?
     private var pendingProfileAutoSave: (profileID: ProfileID, draft: GuardianProfileDraft)?
     private var profileAutoSaveTask: Task<Void, Never>?
+    private var returnsFromProfileEditorToDashboard = false
     private var externalSyncRefreshGeneration: UInt64 = 0
     private var syncPresentationRefreshGeneration: UInt64 = 0
 
@@ -288,13 +289,18 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func showNewProfile() {
+        returnsFromProfileEditorToDashboard = false
         destination = .profileEditor(nil)
     }
 
     @discardableResult
     func returnFromProfileEditor() -> Bool {
         guard familySnapshot?.profiles.isEmpty == true else {
-            showProfiles()
+            if returnsFromProfileEditorToDashboard {
+                showDashboard()
+            } else {
+                showProfiles()
+            }
             return false
         }
         lockGuardianArea()
@@ -302,6 +308,12 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func showEditProfile(_ profile: KidProfile) {
+        returnsFromProfileEditorToDashboard = false
+        destination = .profileEditor(profile)
+    }
+
+    func showEditProfileFromDashboard(_ profile: KidProfile) {
+        returnsFromProfileEditorToDashboard = true
         destination = .profileEditor(profile)
     }
 

@@ -3,6 +3,7 @@ import XCTest
 @MainActor
 final class TadaWordsCriticalFlowUITests: XCTestCase {
     private var app: XCUIApplication!
+    private var parentGateBackFrame: CGRect?
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -12,6 +13,7 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
     override func tearDownWithError() throws {
         app?.terminate()
         app = nil
+        parentGateBackFrame = nil
     }
 
     /// Regression coverage for the P0 where the success layer remained over
@@ -223,6 +225,7 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         let back = app.buttons["guardian.home.back"]
         XCTAssertTrue(back.waitForExistence(timeout: 8))
         XCTAssertFalse(app.buttons["guardian.home.lock"].exists)
+        assertTopLeftBackButtonAlignsWithParentGate(back)
 
         back.tap()
 
@@ -240,6 +243,10 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         let appAndFamily = app.buttons["guardian.home.app-and-family"]
         XCTAssertTrue(appAndFamily.waitForExistence(timeout: 8))
         appAndFamily.tap()
+
+        let back = app.buttons["guardian.navigation.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        assertTopLeftBackButtonAlignsWithParentGate(back)
 
         let privacy = element(label: "Privacy Policy")
         let support = element(label: "Support")
@@ -720,6 +727,10 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         XCTAssertTrue(parents.waitForExistence(timeout: 8))
         parents.tap()
 
+        let back = app.buttons["guardian.parent-gate.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        parentGateBackFrame = back.frame
+
         let question = app.staticTexts.matching(
             NSPredicate(format: "label BEGINSWITH %@", "What is ")
         ).firstMatch
@@ -738,6 +749,21 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         // The parent gate owns initial focus, so the flow must accept typing
         // immediately after the single tap on Parents.
         answer.typeText(String(factors[0] * factors[1]))
+    }
+
+    private func assertTopLeftBackButtonAlignsWithParentGate(
+        _ back: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard let parentGateBackFrame else {
+            XCTFail("The Parent Gate back button frame was not captured.", file: file, line: line)
+            return
+        }
+        XCTAssertEqual(
+            back.frame.minX, parentGateBackFrame.minX, accuracy: 1, file: file, line: line)
+        XCTAssertEqual(
+            back.frame.minY, parentGateBackFrame.minY, accuracy: 1, file: file, line: line)
     }
 
     private func element(label: String) -> XCUIElement {

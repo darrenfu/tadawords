@@ -176,11 +176,15 @@ public struct GuardianRootView: View {
             )
 
         case .dashboard:
-            if let snapshot = model.snapshot {
+            if let snapshot = model.snapshot,
+                let family = model.familySnapshot
+            {
                 GuardianTodayView(
                     snapshot: snapshot,
+                    family: family,
                     onBack: returnToPreviousPage,
-                    onOpenProfiles: model.showProfiles,
+                    onSelectProfile: model.selectProfile,
+                    onEditProfile: model.showEditProfileFromDashboard,
                     onOpenWordsAndPractice: model.showWordsAndPractice,
                     onOpenProgressAndPerformance: model.showProgressAndPerformance,
                     onOpenAppAndFamily: model.showAppAndFamily,

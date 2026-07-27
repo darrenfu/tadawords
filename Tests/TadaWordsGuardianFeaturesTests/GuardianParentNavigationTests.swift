@@ -30,6 +30,34 @@ final class GuardianParentNavigationTests: XCTestCase {
         XCTAssertEqual(model.transitionKey, "parent-section-appAndFamily")
     }
 
+    @MainActor
+    func testDashboardProfileEditReturnsDirectlyToDashboard() async throws {
+        let store = DemoGuardianFamilyStore()
+        let family = try await store.familySnapshot()
+        let profile = try XCTUnwrap(family.profiles.first)
+        let model = GuardianDashboardViewModel(
+            store: store,
+            audioPromptService: NavigationTestAudioPromptService()
+        )
+
+        model.showEditProfileFromDashboard(profile)
+        XCTAssertEqual(model.transitionKey, "profile-editor-\(profile.id)")
+
+        XCTAssertFalse(model.returnFromProfileEditor())
+        XCTAssertEqual(model.transitionKey, "dashboard")
+    }
+
+    func testAllParentPagesUseTheSameTopLeftInsets() {
+        XCTAssertEqual(
+            GuardianParentPageLayout.horizontalInset,
+            GuardianPrimitiveTokens.Spacing.medium
+        )
+        XCTAssertEqual(
+            GuardianParentPageLayout.verticalInset,
+            GuardianPrimitiveTokens.Spacing.medium
+        )
+    }
+
     func testFeaturePagesReturnToTheirOwningCategory() {
         XCTAssertEqual(
             GuardianDestination.quickAdd.parentSectionForBack,

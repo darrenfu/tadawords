@@ -147,8 +147,7 @@ struct GuardianWordManagerView: View {
                     }
                 }
                 .frame(maxWidth: 1_100, alignment: .leading)
-                .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
-                .padding(.vertical, GuardianPrimitiveTokens.Spacing.medium)
+                .guardianParentPageInsets()
                 .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.immediately)
