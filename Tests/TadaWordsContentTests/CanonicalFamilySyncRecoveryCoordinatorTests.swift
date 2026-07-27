@@ -121,6 +121,79 @@ final class CanonicalFamilySyncRecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(callCount, 0)
     }
 
+    func testDifferentInstallationNeverCallsDestructiveTransport() async throws {
+        let fixture = CanonicalRecoveryFixture()
+        let store = CanonicalRecoveryStore(records: fixture.records(count: 4))
+        let transport = CanonicalRecoveryTransport()
+        let coordinator = CanonicalFamilySyncRecoveryCoordinator(
+            store: store,
+            transport: transport,
+            journal: VolatileFamilySyncJournalRepository(),
+            installationID: fixture.installationID
+        )
+        let plan = try await coordinator.canonicalRecoveryPlan()
+        let wrongPlan = FamilySyncCanonicalRecoveryPlan(
+            profileIDs: plan.profileIDs,
+            recordCount: plan.recordCount,
+            recordCountsByKind: plan.recordCountsByKind,
+            recordSetFingerprint: plan.recordSetFingerprint,
+            installationID: "different-installation"
+        )
+
+        await assertThrowsErrorAsync(
+            try await coordinator.recoverCanonicalLocalData(
+                authorization: .init(
+                    expectedPlan: wrongPlan,
+                    verifiedBackupSHA256: fixture.backupSHA256
+                )
+            )
+        ) {
+            XCTAssertEqual(
+                $0 as? FamilySyncCanonicalRecoveryError,
+                .installationMismatch
+            )
+        }
+        let callCount = await transport.callCount()
+        XCTAssertEqual(callCount, 0)
+    }
+
+    func testTransportInterruptionKeepsEveryOutboxEntryPending() async throws {
+        let fixture = CanonicalRecoveryFixture()
+        let records = fixture.records(count: 8)
+        let store = CanonicalRecoveryStore(records: records)
+        let journal = VolatileFamilySyncJournalRepository()
+        let versioned = await journal.reconcileLocalRecords(
+            records,
+            deviceID: fixture.installationID,
+            now: fixture.now
+        )
+        await store.replace(versioned)
+        let transport = CanonicalRecoveryTransport(
+            replacementError: CanonicalRecoveryTestError.interrupted
+        )
+        let coordinator = CanonicalFamilySyncRecoveryCoordinator(
+            store: store,
+            transport: transport,
+            journal: journal,
+            installationID: fixture.installationID
+        )
+        let plan = try await coordinator.canonicalRecoveryPlan()
+
+        await assertThrowsErrorAsync(
+            try await coordinator.recoverCanonicalLocalData(
+                authorization: .init(
+                    expectedPlan: plan,
+                    verifiedBackupSHA256: fixture.backupSHA256
+                )
+            )
+        )
+        let pending = await journal.pendingChanges(
+            using: versioned,
+            now: fixture.now
+        )
+        XCTAssertEqual(pending.count, versioned.count)
+    }
+
     func testRemoteMismatchDoesNotAcknowledgeLocalOutbox() async throws {
         let fixture = CanonicalRecoveryFixture()
         let records = fixture.records(count: 8)
@@ -246,13 +319,16 @@ private actor CanonicalRecoveryTransport:
     private var calls = 0
     private var received: [FamilySyncRecord] = []
     private let receiptOverride: FamilySyncCanonicalRecoveryReceipt?
+    private let replacementError: (any Error & Sendable)?
     private let onReplace: @Sendable () async -> Void
 
     init(
         receiptOverride: FamilySyncCanonicalRecoveryReceipt? = nil,
+        replacementError: (any Error & Sendable)? = nil,
         onReplace: @escaping @Sendable () async -> Void = {}
     ) {
         self.receiptOverride = receiptOverride
+        self.replacementError = replacementError
         self.onReplace = onReplace
     }
 
@@ -279,6 +355,7 @@ private actor CanonicalRecoveryTransport:
         calls += 1
         received = records
         await onReplace()
+        if let replacementError { throw replacementError }
         return receiptOverride
             ?? .init(
                 verifiedRemoteFingerprint: authorization.expectedPlan
@@ -289,6 +366,10 @@ private actor CanonicalRecoveryTransport:
 
     func callCount() -> Int { calls }
     func receivedRecords() -> [FamilySyncRecord] { received }
+}
+
+private enum CanonicalRecoveryTestError: Error, Sendable {
+    case interrupted
 }
 
 private struct CanonicalRecoveryFixture {

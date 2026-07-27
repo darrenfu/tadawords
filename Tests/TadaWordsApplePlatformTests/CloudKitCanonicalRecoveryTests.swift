@@ -53,6 +53,33 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
         XCTAssertNotNil(try store.pendingCanonicalRecovery())
     }
 
+    func testCorruptPendingRecoveryMarkerFailsClosedAfterRestart() throws {
+        let fixture = try CloudKitCanonicalRecoveryFixture()
+        defer { fixture.remove() }
+        let store = CloudKitFamilyMetadataStore(snapshotURL: fixture.url)
+        try store.confirm(accountRecordName: fixture.account)
+        _ = try store.prepareCanonicalRecovery(
+            authorization: fixture.authorization,
+            originAccountRecordName: fixture.account
+        )
+        let data = try Data(contentsOf: fixture.url)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        var marker = try XCTUnwrap(
+            object["pendingCanonicalRecovery"] as? [String: Any]
+        )
+        marker["recordCount"] = 0
+        object["pendingCanonicalRecovery"] = marker
+        try JSONSerialization.data(withJSONObject: object).write(
+            to: fixture.url,
+            options: .atomic
+        )
+
+        let restarted = CloudKitFamilyMetadataStore(snapshotURL: fixture.url)
+        XCTAssertThrowsError(try restarted.pendingCanonicalRecovery())
+    }
+
     func testExecutorNeverCompletesMarkerBeforeRemoteVerification() async throws {
         let probe = CloudKitCanonicalRecoveryProbe()
 
