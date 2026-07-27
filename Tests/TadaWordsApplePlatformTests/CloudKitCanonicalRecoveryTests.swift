@@ -1,3 +1,4 @@
+@preconcurrency import CloudKit
 import Foundation
 import TadaWordsDomain
 import XCTest
@@ -129,6 +130,53 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
             ]
         )
     }
+
+    func testAccountSwitchAtFinalFenceNeverCompletesMarker() async throws {
+        let probe = CloudKitCanonicalRecoveryProbe()
+        let accountChecks = CloudKitCanonicalRecoveryCounter()
+
+        await assertThrowsErrorAsync {
+            try await CloudKitCanonicalRecoveryExecutor().recover(
+                prepareDurableMarker: { probe.note("prepare") },
+                verifyOriginAccount: {
+                    probe.note("account")
+                    if accountChecks.increment() == 3 {
+                        throw CloudKitFamilySyncError.accountBindingMismatch
+                    }
+                },
+                replaceProfiles: { probe.note("replace") },
+                verifyRemoteManifest: {
+                    probe.note("verify")
+                },
+                completeDurableMarker: { probe.note("complete") }
+            ) as Void
+        }
+
+        XCTAssertEqual(
+            probe.events(),
+            ["prepare", "account", "replace", "account", "verify", "account"]
+        )
+    }
+
+    func testSharedAndTerminalBindingsCannotEnterPrivateReplacement() {
+        let fixture = CloudKitCanonicalRecoveryBindingFixture()
+        for state in [
+            ProfileCloudBindingState.sharedParticipant,
+            .revoked,
+            .ownerDeleted,
+            .participantLeft,
+        ] {
+            XCTAssertThrowsError(
+                try CloudKitCanonicalRecoveryBindingProof()
+                    .requirePrivateReplacement(
+                        binding: fixture.binding(state: state),
+                        expectedZoneID: fixture.zoneID,
+                        expectedRootRecordID: fixture.rootID,
+                        isAuthorizedForConfirmedAccount: true
+                    )
+            )
+        }
+    }
 }
 
 private struct CloudKitCanonicalRecoveryFixture {
@@ -196,6 +244,43 @@ private final class CloudKitCanonicalRecoveryProbe: @unchecked Sendable {
     }
     func events() -> [String] {
         lock.withLock { recorded }
+    }
+}
+
+private final class CloudKitCanonicalRecoveryCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func increment() -> Int {
+        lock.withLock {
+            value += 1
+            return value
+        }
+    }
+}
+
+private struct CloudKitCanonicalRecoveryBindingFixture {
+    let profileID = ProfileID(
+        rawValue: UUID(
+            uuidString: "2821E4F6-B2AC-45D0-9A77-59A2322B4E7E"
+        )!
+    )
+    let zoneID = CKRecordZone.ID(
+        zoneName: "TadaProfile-2821E4F6-B2AC-45D0-9A77-59A2322B4E7E",
+        ownerName: CKCurrentUserDefaultName
+    )
+    var rootID: CKRecord.ID {
+        CKRecord.ID(recordName: "ProfileRoot", zoneID: zoneID)
+    }
+
+    func binding(state: ProfileCloudBindingState) -> ProfileCloudBinding {
+        ProfileCloudBinding(
+            profileID: profileID,
+            state: state,
+            zoneName: zoneID.zoneName,
+            ownerName: zoneID.ownerName,
+            rootRecordName: rootID.recordName,
+            originAccountRecordName: "owner-account"
+        )
     }
 }
 

@@ -33,6 +33,30 @@ struct CloudKitCanonicalRecoveryExecutor {
     }
 }
 
+struct CloudKitCanonicalRecoveryBindingProof {
+    func requirePrivateReplacement(
+        binding: ProfileCloudBinding,
+        expectedZoneID: CKRecordZone.ID,
+        expectedRootRecordID: CKRecord.ID,
+        isAuthorizedForConfirmedAccount: Bool
+    ) throws {
+        switch binding.state {
+        case .unbound:
+            return
+        case .privateOwner:
+            guard binding.zoneID == expectedZoneID,
+                binding.rootRecordID == nil
+                    || binding.rootRecordID == expectedRootRecordID,
+                isAuthorizedForConfirmedAccount
+            else {
+                throw CloudKitFamilySyncError.accountBindingMismatch
+            }
+        case .sharedParticipant, .revoked, .ownerDeleted, .participantLeft:
+            throw CloudKitFamilySyncError.accountBindingMismatch
+        }
+    }
+}
+
 /// Makes the owner-ledger recovery barrier explicit and testable. The remote
 /// payload zone must be absent before a terminal binding can ever be written;
 /// receipt plus terminal route are committed atomically after that proof.
@@ -2261,19 +2285,13 @@ public actor CloudKitFamilySyncTransport:
         let zoneID = privateZoneID(for: profileID)
         let rootID = privateRootRecordID(for: profileID)
         let existing = metadataStore.binding(for: profileID)
-        switch existing.state {
-        case .unbound:
-            break
-        case .privateOwner:
-            guard existing.zoneID == zoneID,
-                existing.rootRecordID == nil || existing.rootRecordID == rootID,
+        try CloudKitCanonicalRecoveryBindingProof().requirePrivateReplacement(
+            binding: existing,
+            expectedZoneID: zoneID,
+            expectedRootRecordID: rootID,
+            isAuthorizedForConfirmedAccount:
                 metadataStore.isBindingAuthorizedForConfirmedAccount(existing)
-            else {
-                throw CloudKitFamilySyncError.accountBindingMismatch
-            }
-        case .sharedParticipant, .revoked, .ownerDeleted, .participantLeft:
-            throw CloudKitFamilySyncError.accountBindingMismatch
-        }
+        )
 
         try await requireCurrentAccountRecordName(accountRecordName)
         let deletion = try await privateDatabase.modifyRecordZones(
