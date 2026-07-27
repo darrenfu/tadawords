@@ -588,9 +588,29 @@ struct GuardianFamilySyncView: View {
                             }
                         }
                         if presentation.showsSyncAction {
-                            Button("Sync now", action: onSyncNow)
-                                .buttonStyle(.borderedProminent)
-                                .accessibilityIdentifier("guardian.sync.now")
+                            HStack {
+                                Button("Sync Now", action: onSyncNow)
+                                    .buttonStyle(.borderedProminent)
+                                    .accessibilityIdentifier("guardian.sync.now")
+                                if showsCanonicalRecovery,
+                                    canonicalRecoveryPlan != nil
+                                {
+                                    Button("Resolve Conflict") {
+                                        confirmsCanonicalRecovery = true
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(
+                                        isCanonicalRecoveryRunning
+                                            || canonicalRecoveryBackupSHA256
+                                                .trimmingCharacters(
+                                                    in: .whitespacesAndNewlines
+                                                ).count != 64
+                                    )
+                                    .accessibilityIdentifier(
+                                        "guardian.sync.canonical-recovery.start"
+                                    )
+                                }
+                            }
                         }
                         ShareLink(
                             item: GuardianFamilySyncDiagnosticReport(
@@ -644,12 +664,12 @@ struct GuardianFamilySyncView: View {
                     GuardianCard {
                         VStack(alignment: .leading, spacing: 12) {
                             Label(
-                                "Use this iPad as the source",
+                                "Resolve Family Sync conflict",
                                 systemImage: "externaldrive.badge.checkmark"
                             )
                             .font(.system(.title3, design: .rounded, weight: .bold))
                             Text(
-                                "This replaces conflicting iCloud copies with \(canonicalRecoveryPlan.recordCount) local records, including \(canonicalRecoveryPlan.recordCountsByKind[.wordPoolEntry, default: 0]) words, for \(canonicalRecoveryPlan.profileIDs.count) child profiles. Profile IDs and every local word stay unchanged. Snapshot \(canonicalRecoveryPlan.recordSetFingerprint.value.prefix(12))."
+                                "This verifies and publishes \(canonicalRecoveryPlan.recordCount) local records, including \(canonicalRecoveryPlan.recordCountsByKind[.wordPoolEntry, default: 0]) words, for \(canonicalRecoveryPlan.profileIDs.count) child profiles as a new versioned sync snapshot. Other updated devices adopt it before uploading. Profile IDs and every local word stay unchanged. Snapshot \(canonicalRecoveryPlan.recordSetFingerprint.value.prefix(12))."
                             )
                             .foregroundStyle(
                                 GuardianSemanticTokens.secondaryForeground
@@ -662,23 +682,8 @@ struct GuardianFamilySyncView: View {
                             .accessibilityIdentifier(
                                 "guardian.sync.canonical-recovery.backup"
                             )
-                            Button("Replace iCloud with this iPad") {
-                                confirmsCanonicalRecovery = true
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.red)
-                            .disabled(
-                                isCanonicalRecoveryRunning
-                                    || canonicalRecoveryBackupSHA256
-                                        .trimmingCharacters(
-                                            in: .whitespacesAndNewlines
-                                        ).count != 64
-                            )
-                            .accessibilityIdentifier(
-                                "guardian.sync.canonical-recovery.start"
-                            )
                             if isCanonicalRecoveryRunning {
-                                ProgressView("Verifying every iCloud record…")
+                                ProgressView("Publishing verified sync version…")
                             }
                             if let canonicalRecoveryMessage {
                                 Text(canonicalRecoveryMessage)
@@ -692,20 +697,20 @@ struct GuardianFamilySyncView: View {
                         }
                     }
                     .confirmationDialog(
-                        "Replace conflicting iCloud Family Sync data?",
+                        "Use this iPad to resolve the conflict?",
                         isPresented: $confirmsCanonicalRecovery,
                         titleVisibility: .visible
                     ) {
                         Button(
-                            "Use this iPad’s local data",
-                            role: .destructive,
+                            "Publish This iPad’s Data",
                             action: onRecoverCanonicalData
                         )
                         Button("Cancel", role: .cancel) {}
                     } message: {
                         Text(
-                            "Only continue after backing up this iPad. Other "
-                                + "conflicting iCloud copies will be replaced."
+                            "A verified, versioned sync snapshot will become "
+                                + "active. Other updated devices will adopt it "
+                                + "before they upload."
                         )
                     }
                 }

@@ -370,7 +370,7 @@ final class GuardianDashboardViewModel: ObservableObject {
         Task {
             guard
                 await sensitiveActionAuthorizer.authorize(
-                    .replaceFamilySyncData
+                    .resolveFamilySyncConflict
                 )
             else { return }
             isCanonicalRecoveryRunning = true
@@ -384,8 +384,8 @@ final class GuardianDashboardViewModel: ObservableObject {
                     )
                 )
                 canonicalRecoveryMessage =
-                    "Verified \(receipt.recoveredRecordCount) records in iCloud. "
-                    + "This iPad is now the Family Sync source."
+                    "Published and verified \(receipt.recoveredRecordCount) records. "
+                    + "This iPad’s versioned sync snapshot is now active."
                 if let familySyncCoordinator {
                     syncStatus = await familySyncCoordinator.synchronize()
                 }

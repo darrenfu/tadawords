@@ -88,7 +88,7 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
             try await CloudKitCanonicalRecoveryExecutor().recover(
                 prepareDurableMarker: { probe.note("prepare") },
                 verifyOriginAccount: { probe.note("account") },
-                replaceProfiles: { probe.note("replace") },
+                publishProfiles: { probe.note("publish") },
                 verifyRemoteManifest: {
                     probe.note("verify")
                     throw FamilySyncCanonicalRecoveryError
@@ -101,7 +101,7 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
         let events = probe.events()
         XCTAssertEqual(
             events,
-            ["prepare", "account", "replace", "account", "verify"]
+            ["prepare", "account", "publish", "account", "verify"]
         )
     }
 
@@ -112,7 +112,7 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
         let value: Int = try await CloudKitCanonicalRecoveryExecutor().recover(
             prepareDurableMarker: { probe.note("prepare") },
             verifyOriginAccount: { probe.note("account") },
-            replaceProfiles: { probe.note("replace") },
+            publishProfiles: { probe.note("publish") },
             verifyRemoteManifest: {
                 probe.note("verify")
                 return 220
@@ -125,7 +125,7 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
         XCTAssertEqual(
             events,
             [
-                "prepare", "account", "replace", "account", "verify",
+                "prepare", "account", "publish", "account", "verify",
                 "account", "complete",
             ]
         )
@@ -144,7 +144,7 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
                         throw CloudKitFamilySyncError.accountBindingMismatch
                     }
                 },
-                replaceProfiles: { probe.note("replace") },
+                publishProfiles: { probe.note("publish") },
                 verifyRemoteManifest: {
                     probe.note("verify")
                 },
@@ -154,11 +154,66 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
 
         XCTAssertEqual(
             probe.events(),
-            ["prepare", "account", "replace", "account", "verify", "account"]
+            ["prepare", "account", "publish", "account", "verify", "account"]
         )
     }
 
-    func testSharedAndTerminalBindingsCannotEnterPrivateReplacement() {
+    func testGenerationPointerIsVerifiedBeforeLegacyZoneProjection()
+        async throws
+    {
+        let probe = CloudKitCanonicalRecoveryProbe()
+        let value: Int =
+            try await CloudKitCanonicalGenerationActivationExecutor()
+            .activate(
+                stageSnapshot: { probe.note("stage") },
+                activatePointer: { probe.note("activate") },
+                verifyActiveSnapshot: {
+                    probe.note("verify")
+                    return 220
+                },
+                projectLegacyZones: { recordCount in
+                    XCTAssertEqual(recordCount, 220)
+                    probe.note("project")
+                }
+            )
+
+        XCTAssertEqual(value, 220)
+        XCTAssertEqual(
+            probe.events(),
+            ["stage", "activate", "verify", "project"]
+        )
+    }
+
+    func testProjectionFailureLeavesPointerActivationAsRetryBoundary()
+        async
+    {
+        let probe = CloudKitCanonicalRecoveryProbe()
+
+        await assertThrowsErrorAsync {
+            _ =
+                try await CloudKitCanonicalGenerationActivationExecutor()
+                .activate(
+                    stageSnapshot: { probe.note("stage") },
+                    activatePointer: { probe.note("activate") },
+                    verifyActiveSnapshot: {
+                        probe.note("verify")
+                        return 220
+                    },
+                    projectLegacyZones: { _ in
+                        probe.note("project")
+                        throw FamilySyncCanonicalRecoveryError
+                            .remoteVerificationFailed
+                    }
+                ) as Int
+        }
+
+        XCTAssertEqual(
+            probe.events(),
+            ["stage", "activate", "verify", "project"]
+        )
+    }
+
+    func testSharedAndTerminalBindingsCannotEnterPrivateOwnerPublication() {
         let fixture = CloudKitCanonicalRecoveryBindingFixture()
         for state in [
             ProfileCloudBindingState.sharedParticipant,
@@ -168,7 +223,7 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
         ] {
             XCTAssertThrowsError(
                 try CloudKitCanonicalRecoveryBindingProof()
-                    .requirePrivateReplacement(
+                    .requirePrivateOwnerPublication(
                         binding: fixture.binding(state: state),
                         expectedZoneID: fixture.zoneID,
                         expectedRootRecordID: fixture.rootID,
@@ -176,6 +231,39 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
                     )
             )
         }
+    }
+
+    func testAppliedGenerationClearsSupersededConflictStateDurably()
+        throws
+    {
+        let fixture = try CloudKitCanonicalRecoveryFixture()
+        defer { fixture.remove() }
+        let store = CloudKitFamilyMetadataStore(snapshotURL: fixture.url)
+        try store.confirm(accountRecordName: fixture.account)
+        try store.quarantine(
+            CloudKitFamilyQuarantineEntry(
+                id: UUID(),
+                scope: .privateDatabase,
+                recordName: "attempt-conflict",
+                zoneName: "TadaProfile-conflict",
+                ownerName: CKCurrentUserDefaultName,
+                reason: .conflict,
+                envelopeData: Data("stale".utf8),
+                quarantinedAt: fixture.now
+            )
+        )
+        XCTAssertEqual(store.quarantinedCount(), 1)
+
+        try store.markCanonicalGenerationApplied("generation-1")
+
+        let restarted = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.url
+        )
+        XCTAssertEqual(
+            try restarted.appliedCanonicalGenerationID(),
+            "generation-1"
+        )
+        XCTAssertEqual(restarted.quarantinedCount(), 0)
     }
 }
 

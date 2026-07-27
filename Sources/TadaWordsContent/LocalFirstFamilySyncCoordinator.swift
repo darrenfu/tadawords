@@ -31,6 +31,13 @@ public protocol FamilySyncRecordStore: Sendable {
         expected: FamilySyncRecordSetFingerprint
     ) async throws -> Bool
 
+    /// Replaces the complete synchronized Profile set with a verified
+    /// canonical generation. Production implementations make this crash
+    /// replayable and remove synchronized records absent from the snapshot.
+    func replaceWithCanonicalSnapshot(
+        _ snapshot: FamilySyncCanonicalGenerationSnapshot
+    ) async throws
+
     func isProfileDeleted(_ profileID: ProfileID) async throws -> Bool
 }
 
@@ -67,6 +74,18 @@ extension FamilySyncRecordStore {
         }
         try await apply(records, for: profileID)
         return true
+    }
+
+    public func replaceWithCanonicalSnapshot(
+        _ snapshot: FamilySyncCanonicalGenerationSnapshot
+    ) async throws {
+        try snapshot.validate()
+        for profileID in snapshot.profileIDs {
+            try await apply(
+                snapshot.records.filter { $0.profileID == profileID },
+                for: profileID
+            )
+        }
     }
 }
 
@@ -454,6 +473,14 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
 
         var dueChanges: [FamilySyncPendingOperation] = []
         do {
+            if try await adoptActiveCanonicalGenerationIfNeeded(at: now) {
+                // Re-enumerate the exact adopted Profile set and rebuild the
+                // normal journal view in a fresh pass. No pre-adoption outbox
+                // entry may reach CloudKit.
+                needsAnotherPass = true
+                currentStatus = .syncing(pendingCount: 0)
+                return currentStatus
+            }
             var terminalProfileIDs = Set<ProfileID>()
             for profileID in profileIDs
             where try await store.isProfileDeleted(profileID) {
@@ -960,6 +987,30 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                 || lhs.isDeleted != rhs.isDeleted
                 || lhs.logicalRevision != rhs.logicalRevision
         }
+    }
+
+    private func adoptActiveCanonicalGenerationIfNeeded(
+        at date: Date
+    ) async throws -> Bool {
+        guard
+            let canonicalTransport =
+                transport as? any FamilySyncCanonicalRecoveryTransport,
+            let snapshot =
+                try await canonicalTransport.activeCanonicalGeneration(),
+            !(try await canonicalTransport.isCanonicalGenerationApplied(
+                snapshot.generationID
+            ))
+        else {
+            return false
+        }
+        try snapshot.validate()
+        try await store.replaceWithCanonicalSnapshot(snapshot)
+        try await journalRepository.adoptCanonicalSnapshot(snapshot, at: date)
+        try await canonicalTransport.markCanonicalGenerationApplied(
+            snapshot.generationID
+        )
+        explicitlyRequestedProfileIDs.formUnion(snapshot.profileIDs)
+        return true
     }
 
     private func recordProfileErasureAttempts(

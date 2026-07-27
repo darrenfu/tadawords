@@ -34,8 +34,8 @@ public actor AppleSensitiveGuardianActionAuthorizer:
             "Confirm changes to family sync."
         case .manageGuardians:
             "Confirm changes to family access."
-        case .replaceFamilySyncData:
-            "Confirm replacing iCloud Family Sync data with this iPad’s verified local backup."
+        case .resolveFamilySyncConflict:
+            "Confirm publishing this iPad’s verified Family Sync version to resolve the conflict."
         }
     }
 }

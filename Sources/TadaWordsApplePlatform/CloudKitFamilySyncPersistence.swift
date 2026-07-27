@@ -532,8 +532,11 @@ private struct CloudKitFamilyMetadataSnapshot: Codable {
     var acknowledgedTerminalRemovals: [CloudKitAcknowledgedTerminalRemoval]? = []
     // Optional for snapshots written before owner-authorized canonical
     // recovery existed. The marker contains only integrity metadata and
-    // blocks ordinary sync while a destructive replacement is incomplete.
+    // blocks ordinary sync while canonical publication is incomplete.
     var pendingCanonicalRecovery: CloudKitPendingCanonicalRecovery?
+    // Optional for schema-v2 snapshots written before canonical generations.
+    // This is advanced only after repository and journal adoption both commit.
+    var appliedCanonicalGenerationID: String?
 }
 
 struct CloudKitPendingCanonicalRecovery: Codable, Equatable, Sendable {
@@ -649,6 +652,38 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
             guard snapshot.pendingCanonicalRecovery == marker else {
                 throw CloudKitFamilyPersistenceError.bindingConflict
             }
+            snapshot.pendingCanonicalRecovery = nil
+            try persistLocked(snapshot)
+        }
+    }
+
+    func appliedCanonicalGenerationID() throws -> String? {
+        try withLock {
+            let snapshot = loadLocked()
+            guard !loadFailed else {
+                throw CloudKitFamilyPersistenceError.corruptMetadata
+            }
+            return snapshot.appliedCanonicalGenerationID
+        }
+    }
+
+    func markCanonicalGenerationApplied(_ generationID: String) throws {
+        try withLock {
+            var snapshot = loadLocked()
+            guard !loadFailed, !snapshot.requiresAccountConfirmation,
+                !generationID.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).isEmpty
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            snapshot.appliedCanonicalGenerationID = generationID
+            // All pre-generation transport state belongs to the superseded
+            // history. Retaining it would immediately recreate the conflict
+            // that the authoritative snapshot resolved.
+            snapshot.quarantined = []
+            snapshot.protectedRecordKeys = []
+            snapshot.inbox = []
             snapshot.pendingCanonicalRecovery = nil
             try persistLocked(snapshot)
         }

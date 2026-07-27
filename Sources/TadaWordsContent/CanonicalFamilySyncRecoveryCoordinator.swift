@@ -61,7 +61,7 @@ public actor CanonicalFamilySyncRecoveryCoordinator:
             throw FamilySyncCanonicalRecoveryError.unavailable
         }
 
-        let receipt = try await recoveryTransport.replaceRemoteWithCanonicalRecords(
+        let receipt = try await recoveryTransport.publishCanonicalGeneration(
             before,
             authorization: authorization
         )

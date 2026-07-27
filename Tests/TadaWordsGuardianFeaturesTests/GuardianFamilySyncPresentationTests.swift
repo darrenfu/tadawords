@@ -38,7 +38,7 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
             authorization?.verifiedBackupSHA256,
             GuardianCanonicalRecoveryProviderStub.backupSHA256
         )
-        XCTAssertEqual(actions, [.replaceFamilySyncData])
+        XCTAssertEqual(actions, [.resolveFamilySyncConflict])
     }
 
     @MainActor
