@@ -31,7 +31,7 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
         XCTAssertNil(try restarted.pendingCanonicalRecovery())
     }
 
-    func testDifferentBackupCannotClaimPendingRecovery() throws {
+    func testDifferentSnapshotCannotClaimPendingRecovery() throws {
         let fixture = try CloudKitCanonicalRecoveryFixture()
         defer { fixture.remove() }
         let store = CloudKitFamilyMetadataStore(snapshotURL: fixture.url)
@@ -40,9 +40,15 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
             authorization: fixture.authorization,
             originAccountRecordName: fixture.account
         )
+        let expected = fixture.authorization.expectedPlan
         let mismatched = FamilySyncCanonicalRecoveryAuthorization(
-            expectedPlan: fixture.authorization.expectedPlan,
-            verifiedBackupSHA256: String(repeating: "b", count: 64)
+            expectedPlan: .init(
+                profileIDs: expected.profileIDs,
+                recordCount: expected.recordCount,
+                recordCountsByKind: expected.recordCountsByKind,
+                recordSetFingerprint: .init(records: []),
+                installationID: expected.installationID
+            )
         )
 
         XCTAssertThrowsError(
@@ -313,9 +319,7 @@ private struct CloudKitCanonicalRecoveryFixture {
                 recordCount: records.count,
                 recordSetFingerprint: .init(records: records),
                 installationID: "F399F4B9-EB03-4BA5-8290-2D6653A465BE"
-            ),
-            verifiedBackupSHA256:
-                "e616ce98d1e37b6949a203563399a2da204d72efec077619594b4c109ae78db2"
+            )
         )
     }
 

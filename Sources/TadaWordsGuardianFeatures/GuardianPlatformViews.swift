@@ -485,7 +485,6 @@ struct GuardianFamilySyncView: View {
     let onAcceptShare: () -> Void
     let onRetryProfileErasure: () -> Void
     let canonicalRecoveryPlan: FamilySyncCanonicalRecoveryPlan?
-    @Binding var canonicalRecoveryBackupSHA256: String
     let isCanonicalRecoveryRunning: Bool
     let canonicalRecoveryMessage: String?
     let onRecoverCanonicalData: () -> Void
@@ -508,7 +507,6 @@ struct GuardianFamilySyncView: View {
         onAcceptShare: @escaping () -> Void,
         onRetryProfileErasure: @escaping () -> Void = {},
         canonicalRecoveryPlan: FamilySyncCanonicalRecoveryPlan? = nil,
-        canonicalRecoveryBackupSHA256: Binding<String> = .constant(""),
         isCanonicalRecoveryRunning: Bool = false,
         canonicalRecoveryMessage: String? = nil,
         onRecoverCanonicalData: @escaping () -> Void = {}
@@ -527,7 +525,6 @@ struct GuardianFamilySyncView: View {
         self.onAcceptShare = onAcceptShare
         self.onRetryProfileErasure = onRetryProfileErasure
         self.canonicalRecoveryPlan = canonicalRecoveryPlan
-        _canonicalRecoveryBackupSHA256 = canonicalRecoveryBackupSHA256
         self.isCanonicalRecoveryRunning = isCanonicalRecoveryRunning
         self.canonicalRecoveryMessage = canonicalRecoveryMessage
         self.onRecoverCanonicalData = onRecoverCanonicalData
@@ -599,17 +596,23 @@ struct GuardianFamilySyncView: View {
                                         confirmsCanonicalRecovery = true
                                     }
                                     .buttonStyle(.bordered)
-                                    .disabled(
-                                        isCanonicalRecoveryRunning
-                                            || canonicalRecoveryBackupSHA256
-                                                .trimmingCharacters(
-                                                    in: .whitespacesAndNewlines
-                                                ).count != 64
-                                    )
+                                    .disabled(isCanonicalRecoveryRunning)
                                     .accessibilityIdentifier(
                                         "guardian.sync.canonical-recovery.start"
                                     )
                                 }
+                            }
+                            if isCanonicalRecoveryRunning {
+                                ProgressView("Publishing verified sync version…")
+                            }
+                            if let canonicalRecoveryMessage {
+                                Text(canonicalRecoveryMessage)
+                                    .foregroundStyle(
+                                        GuardianSemanticTokens.secondaryForeground
+                                    )
+                                    .accessibilityIdentifier(
+                                        "guardian.sync.canonical-recovery.result"
+                                    )
                             }
                         }
                         ShareLink(
@@ -656,63 +659,6 @@ struct GuardianFamilySyncView: View {
                         }
                     }
                     .accessibilityIdentifier("guardian.sync.erasure-card")
-                }
-
-                if showsCanonicalRecovery,
-                    let canonicalRecoveryPlan
-                {
-                    GuardianCard {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Label(
-                                "Resolve Family Sync conflict",
-                                systemImage: "externaldrive.badge.checkmark"
-                            )
-                            .font(.system(.title3, design: .rounded, weight: .bold))
-                            Text(
-                                "This verifies and publishes \(canonicalRecoveryPlan.recordCount) local records, including \(canonicalRecoveryPlan.recordCountsByKind[.wordPoolEntry, default: 0]) words, for \(canonicalRecoveryPlan.profileIDs.count) child profiles as a new versioned sync snapshot. Other updated devices adopt it before uploading. Profile IDs and every local word stay unchanged. Snapshot \(canonicalRecoveryPlan.recordSetFingerprint.value.prefix(12))."
-                            )
-                            .foregroundStyle(
-                                GuardianSemanticTokens.secondaryForeground
-                            )
-                            SecureField(
-                                "Verified backup SHA-256",
-                                text: $canonicalRecoveryBackupSHA256
-                            )
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .accessibilityIdentifier(
-                                "guardian.sync.canonical-recovery.backup"
-                            )
-                            if isCanonicalRecoveryRunning {
-                                ProgressView("Publishing verified sync version…")
-                            }
-                            if let canonicalRecoveryMessage {
-                                Text(canonicalRecoveryMessage)
-                                    .foregroundStyle(
-                                        GuardianSemanticTokens.secondaryForeground
-                                    )
-                                    .accessibilityIdentifier(
-                                        "guardian.sync.canonical-recovery.result"
-                                    )
-                            }
-                        }
-                    }
-                    .confirmationDialog(
-                        "Use this iPad to resolve the conflict?",
-                        isPresented: $confirmsCanonicalRecovery,
-                        titleVisibility: .visible
-                    ) {
-                        Button(
-                            "Publish This iPad’s Data",
-                            action: onRecoverCanonicalData
-                        )
-                        Button("Cancel", role: .cancel) {}
-                    } message: {
-                        Text(
-                            "A verified, versioned sync snapshot will become "
-                                + "active. Other updated devices will adopt it "
-                                + "before they upload."
-                        )
-                    }
                 }
 
                 if presentation.showsPreferenceToggle {
@@ -789,6 +735,27 @@ struct GuardianFamilySyncView: View {
             for await state in states {
                 guard !Task.isCancelled else { break }
                 remoteNotificationRegistration = state
+            }
+        }
+        .confirmationDialog(
+            "Use this iPad to resolve the conflict?",
+            isPresented: $confirmsCanonicalRecovery,
+            titleVisibility: .visible
+        ) {
+            Button(
+                "Publish This iPad’s Data",
+                action: onRecoverCanonicalData
+            )
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let canonicalRecoveryPlan {
+                Text(
+                    "Publish \(canonicalRecoveryPlan.recordCount) local records, "
+                        + "including \(canonicalRecoveryPlan.recordCountsByKind[.wordPoolEntry, default: 0]) words "
+                        + "for \(canonicalRecoveryPlan.profileIDs.count) child profiles, "
+                        + "as the active versioned snapshot. Other updated devices "
+                        + "will adopt it before uploading."
+                )
             }
         }
         .accessibilityIdentifier("guardian.sync.page")

@@ -362,8 +362,6 @@ public struct GuardianRootView: View {
                 onAcceptShare: model.acceptFamilyShare,
                 onRetryProfileErasure: model.retryProfileErasure,
                 canonicalRecoveryPlan: model.canonicalRecoveryPlan,
-                canonicalRecoveryBackupSHA256:
-                    $model.canonicalRecoveryBackupSHA256,
                 isCanonicalRecoveryRunning:
                     model.isCanonicalRecoveryRunning,
                 canonicalRecoveryMessage: model.canonicalRecoveryMessage,

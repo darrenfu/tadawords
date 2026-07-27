@@ -5,6 +5,43 @@ import XCTest
 @testable import TadaWordsGuardianFeatures
 
 final class GuardianFamilySyncPresentationTests: XCTestCase {
+    func testConflictResolutionIsAdjacentToSyncWithoutBackupInputGate() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf:
+                repositoryRoot
+                .appendingPathComponent(
+                    "Sources/TadaWordsGuardianFeatures/GuardianPlatformViews.swift"
+                ),
+            encoding: .utf8
+        )
+
+        let actionStart = try XCTUnwrap(
+            source.range(of: "if presentation.showsSyncAction {")
+        )
+        let actionEnd = try XCTUnwrap(
+            source.range(
+                of: "ShareLink(",
+                range: actionStart.upperBound..<source.endIndex
+            )
+        )
+        let buttonGroup = source[actionStart.lowerBound..<actionEnd.lowerBound]
+
+        XCTAssertTrue(buttonGroup.contains("HStack"))
+        XCTAssertTrue(buttonGroup.contains(#"Button("Sync Now""#))
+        XCTAssertTrue(buttonGroup.contains(#"Button("Resolve Conflict")"#))
+        XCTAssertFalse(buttonGroup.contains("SecureField"))
+        XCTAssertFalse(source.contains("Resolve Family Sync conflict"))
+        XCTAssertFalse(source.contains("Verified backup SHA-256"))
+        XCTAssertFalse(
+            source.contains("guardian.sync.canonical-recovery.backup")
+        )
+        XCTAssertTrue(source.contains(".disabled(isCanonicalRecoveryRunning)"))
+    }
+
     @MainActor
     func testCanonicalRecoveryLoadsExactPlanAndRequiresSensitiveAuthorization()
         async throws
@@ -25,8 +62,6 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
         }
         XCTAssertEqual(model.canonicalRecoveryPlan?.recordCount, 220)
 
-        model.canonicalRecoveryBackupSHA256 =
-            GuardianCanonicalRecoveryProviderStub.backupSHA256
         model.recoverCanonicalLocalData()
         for _ in 0..<100 where await provider.authorization() == nil {
             try await Task.sleep(for: .milliseconds(10))
@@ -35,8 +70,8 @@ final class GuardianFamilySyncPresentationTests: XCTestCase {
         let authorization = await provider.authorization()
         let actions = await authorizer.actions
         XCTAssertEqual(
-            authorization?.verifiedBackupSHA256,
-            GuardianCanonicalRecoveryProviderStub.backupSHA256
+            authorization?.authorizationFingerprint,
+            model.canonicalRecoveryPlan?.recordSetFingerprint.value
         )
         XCTAssertEqual(actions, [.resolveFamilySyncConflict])
     }
@@ -703,7 +738,6 @@ private actor GuardianFamilyAccessRecorder {
 private actor GuardianCanonicalRecoveryProviderStub:
     FamilySyncCanonicalRecoveryProviding
 {
-    static let backupSHA256 = String(repeating: "a", count: 64)
     private let plan: FamilySyncCanonicalRecoveryPlan
     private var receivedAuthorization: FamilySyncCanonicalRecoveryAuthorization?
 

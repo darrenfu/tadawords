@@ -28,14 +28,16 @@ public struct FamilySyncCanonicalRecoveryPlan: Equatable, Sendable {
 
 public struct FamilySyncCanonicalRecoveryAuthorization: Equatable, Sendable {
     public let expectedPlan: FamilySyncCanonicalRecoveryPlan
-    public let verifiedBackupSHA256: String
 
-    public init(
-        expectedPlan: FamilySyncCanonicalRecoveryPlan,
-        verifiedBackupSHA256: String
-    ) {
+    public init(expectedPlan: FamilySyncCanonicalRecoveryPlan) {
         self.expectedPlan = expectedPlan
-        self.verifiedBackupSHA256 = verifiedBackupSHA256.lowercased()
+    }
+
+    /// A non-secret durable identity for replaying the exact authorized
+    /// snapshot. Backup verification is a release/operations gate, not a
+    /// value a parent should have to transcribe into the app.
+    public var authorizationFingerprint: String {
+        expectedPlan.recordSetFingerprint.value
     }
 }
 
@@ -146,7 +148,6 @@ public struct FamilySyncCanonicalGenerationSnapshot: Equatable, Sendable {
 
 public enum FamilySyncCanonicalRecoveryError: Error, Equatable, Sendable {
     case unavailable
-    case invalidBackupDigest
     case invalidGeneration
     case profileSetChanged
     case localSnapshotChanged

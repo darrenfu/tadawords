@@ -544,9 +544,19 @@ struct CloudKitPendingCanonicalRecovery: Codable, Equatable, Sendable {
     let recordCount: Int
     let recordSetFingerprint: String
     let installationID: String
-    let verifiedBackupSHA256: String
+    let authorizationFingerprint: String
     let originAccountRecordName: String
     let stagedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case profileIDs
+        case recordCount
+        case recordSetFingerprint
+        case installationID
+        case authorizationFingerprint = "verifiedBackupSHA256"
+        case originAccountRecordName
+        case stagedAt
+    }
 }
 
 enum CloudKitFamilyAccountGate: Equatable {
@@ -610,7 +620,8 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
                 recordSetFingerprint:
                     authorization.expectedPlan.recordSetFingerprint.value,
                 installationID: authorization.expectedPlan.installationID,
-                verifiedBackupSHA256: authorization.verifiedBackupSHA256,
+                authorizationFingerprint:
+                    authorization.authorizationFingerprint,
                 originAccountRecordName: originAccountRecordName,
                 stagedAt: stagedAt
             )
@@ -619,7 +630,8 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
                     existing.recordCount == marker.recordCount,
                     existing.recordSetFingerprint == marker.recordSetFingerprint,
                     existing.installationID == marker.installationID,
-                    existing.verifiedBackupSHA256 == marker.verifiedBackupSHA256,
+                    existing.authorizationFingerprint
+                        == marker.authorizationFingerprint,
                     existing.originAccountRecordName
                         == marker.originAccountRecordName
                 else {
@@ -3511,8 +3523,8 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
                 recovery.recordSetFingerprint.count == 64,
                 recovery.recordSetFingerprint.allSatisfy(Self.isLowerHex),
                 isNonEmpty(recovery.installationID),
-                recovery.verifiedBackupSHA256.count == 64,
-                recovery.verifiedBackupSHA256.allSatisfy(Self.isLowerHex),
+                recovery.authorizationFingerprint.count == 64,
+                recovery.authorizationFingerprint.allSatisfy(Self.isLowerHex),
                 recovery.originAccountRecordName
                     == snapshot.confirmedAccountRecordName,
                 !(snapshot.pendingAcceptedShareCleanups ?? []).contains(

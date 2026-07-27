@@ -112,7 +112,6 @@ final class GuardianDashboardViewModel: ObservableObject {
     @Published private(set) var syncStatus: FamilySyncStatus = .idle
     @Published private(set) var isFamilySyncEnabled = false
     @Published private(set) var canonicalRecoveryPlan: FamilySyncCanonicalRecoveryPlan?
-    @Published var canonicalRecoveryBackupSHA256 = ""
     @Published private(set) var isCanonicalRecoveryRunning = false
     @Published private(set) var canonicalRecoveryMessage: String?
     @Published private(set) var profileErasurePresentation: GuardianProfileErasurePresentation?
@@ -363,10 +362,6 @@ final class GuardianDashboardViewModel: ObservableObject {
             let plan = canonicalRecoveryPlan,
             !isCanonicalRecoveryRunning
         else { return }
-        let digest =
-            canonicalRecoveryBackupSHA256
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
         Task {
             guard
                 await sensitiveActionAuthorizer.authorize(
@@ -378,10 +373,7 @@ final class GuardianDashboardViewModel: ObservableObject {
             defer { isCanonicalRecoveryRunning = false }
             do {
                 let receipt = try await provider.recoverCanonicalLocalData(
-                    authorization: .init(
-                        expectedPlan: plan,
-                        verifiedBackupSHA256: digest
-                    )
+                    authorization: .init(expectedPlan: plan)
                 )
                 canonicalRecoveryMessage =
                     "Published and verified \(receipt.recoveredRecordCount) records. "
@@ -392,7 +384,7 @@ final class GuardianDashboardViewModel: ObservableObject {
             } catch {
                 canonicalRecoveryMessage =
                     "Recovery stopped safely. Local learning data and the "
-                    + "recovery marker were kept; check the backup code and try again."
+                    + "recovery marker were kept. Try again."
             }
         }
     }

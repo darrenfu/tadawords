@@ -37,10 +37,7 @@ final class CanonicalFamilySyncRecoveryCoordinatorTests: XCTestCase {
         XCTAssertEqual(plan.recordCountsByKind[.practiceSettings], 12)
         XCTAssertEqual(plan.recordCountsByKind[.rewardGrant], 1)
         let receipt = try await coordinator.recoverCanonicalLocalData(
-            authorization: .init(
-                expectedPlan: plan,
-                verifiedBackupSHA256: fixture.backupSHA256
-            )
+            authorization: .init(expectedPlan: plan)
         )
 
         XCTAssertEqual(receipt.recoveredRecordCount, 220)
@@ -55,36 +52,6 @@ final class CanonicalFamilySyncRecoveryCoordinatorTests: XCTestCase {
             FamilySyncRecordSetFingerprint(records: versioned)
         )
         XCTAssertTrue(pending.isEmpty)
-    }
-
-    func testInvalidBackupDigestNeverCallsDestructiveTransport() async throws {
-        let fixture = CanonicalRecoveryFixture()
-        let records = fixture.records(count: 4)
-        let store = CanonicalRecoveryStore(records: records)
-        let transport = CanonicalRecoveryTransport()
-        let coordinator = CanonicalFamilySyncRecoveryCoordinator(
-            store: store,
-            transport: transport,
-            journal: VolatileFamilySyncJournalRepository(),
-            installationID: fixture.installationID
-        )
-        let plan = try await coordinator.canonicalRecoveryPlan()
-
-        await assertThrowsErrorAsync(
-            try await coordinator.recoverCanonicalLocalData(
-                authorization: .init(
-                    expectedPlan: plan,
-                    verifiedBackupSHA256: "not-a-backup"
-                )
-            )
-        ) {
-            XCTAssertEqual(
-                $0 as? FamilySyncCanonicalRecoveryError,
-                .invalidBackupDigest
-            )
-        }
-        let callCount = await transport.callCount()
-        XCTAssertEqual(callCount, 0)
     }
 
     func testChangedProfileSetNeverCallsDestructiveTransport() async throws {
@@ -106,10 +73,7 @@ final class CanonicalFamilySyncRecoveryCoordinatorTests: XCTestCase {
 
         await assertThrowsErrorAsync(
             try await coordinator.recoverCanonicalLocalData(
-                authorization: .init(
-                    expectedPlan: plan,
-                    verifiedBackupSHA256: fixture.backupSHA256
-                )
+                authorization: .init(expectedPlan: plan)
             )
         ) {
             XCTAssertEqual(
@@ -142,10 +106,7 @@ final class CanonicalFamilySyncRecoveryCoordinatorTests: XCTestCase {
 
         await assertThrowsErrorAsync(
             try await coordinator.recoverCanonicalLocalData(
-                authorization: .init(
-                    expectedPlan: wrongPlan,
-                    verifiedBackupSHA256: fixture.backupSHA256
-                )
+                authorization: .init(expectedPlan: wrongPlan)
             )
         ) {
             XCTAssertEqual(
@@ -181,10 +142,7 @@ final class CanonicalFamilySyncRecoveryCoordinatorTests: XCTestCase {
 
         await assertThrowsErrorAsync(
             try await coordinator.recoverCanonicalLocalData(
-                authorization: .init(
-                    expectedPlan: plan,
-                    verifiedBackupSHA256: fixture.backupSHA256
-                )
+                authorization: .init(expectedPlan: plan)
             )
         )
         let pending = await journal.pendingChanges(
@@ -221,10 +179,7 @@ final class CanonicalFamilySyncRecoveryCoordinatorTests: XCTestCase {
 
         await assertThrowsErrorAsync(
             try await coordinator.recoverCanonicalLocalData(
-                authorization: .init(
-                    expectedPlan: plan,
-                    verifiedBackupSHA256: fixture.backupSHA256
-                )
+                authorization: .init(expectedPlan: plan)
             )
         ) {
             XCTAssertEqual(
@@ -268,10 +223,7 @@ final class CanonicalFamilySyncRecoveryCoordinatorTests: XCTestCase {
 
         await assertThrowsErrorAsync(
             try await coordinator.recoverCanonicalLocalData(
-                authorization: .init(
-                    expectedPlan: plan,
-                    verifiedBackupSHA256: fixture.backupSHA256
-                )
+                authorization: .init(expectedPlan: plan)
             )
         ) {
             XCTAssertEqual(
@@ -378,8 +330,6 @@ private struct CanonicalRecoveryFixture {
         ProfileID(rawValue: UUID(uuidString: "8EFBB428-64EC-40EE-BF52-362160E744A7")!),
     ]
     let installationID = "F399F4B9-EB03-4BA5-8290-2D6653A465BE"
-    let backupSHA256 =
-        "e616ce98d1e37b6949a203563399a2da204d72efec077619594b4c109ae78db2"
     let now = Date(timeIntervalSince1970: 1_785_121_955)
 
     func records(count: Int) -> [FamilySyncRecord] {

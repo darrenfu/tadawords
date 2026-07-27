@@ -36,9 +36,6 @@ public actor CanonicalFamilySyncRecoveryCoordinator:
     public func recoverCanonicalLocalData(
         authorization: FamilySyncCanonicalRecoveryAuthorization
     ) async throws -> FamilySyncCanonicalRecoveryReceipt {
-        guard Self.isSHA256(authorization.verifiedBackupSHA256) else {
-            throw FamilySyncCanonicalRecoveryError.invalidBackupDigest
-        }
         let before = try await localSnapshot()
         let actualPlan = Self.plan(
             records: before,
@@ -135,12 +132,5 @@ public actor CanonicalFamilySyncRecoveryCoordinator:
             return lhs.recordName < rhs.recordName
         }
         return lhs.kind.rawValue < rhs.kind.rawValue
-    }
-
-    private static func isSHA256(_ value: String) -> Bool {
-        value.count == 64
-            && value.allSatisfy {
-                $0.isNumber || ("a"..."f").contains($0.lowercased())
-            }
     }
 }
