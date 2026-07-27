@@ -245,7 +245,7 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         let support = element(label: "Support")
         let localDeletion = element(labelPrefix: "Delete a local profile.")
         let permissions = element(labelPrefix: "Manage iOS permissions.")
-        let appVersion = element(label: "Version 0.7.48 (2026072505)")
+        let appVersion = element(label: "Version 0.7.50 (2026072602)")
 
         for _ in 0..<4 where !privacy.exists {
             app.scrollViews.firstMatch.swipeUp()
@@ -268,7 +268,7 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         }
 
         XCTAssertTrue(appVersion.waitForExistence(timeout: 5))
-        XCTAssertEqual(appVersion.label, "Version 0.7.48 (2026072505)")
+        XCTAssertEqual(appVersion.label, "Version 0.7.50 (2026072602)")
     }
 
     /// Third-party credits stay behind the Parent Gate while their complete
