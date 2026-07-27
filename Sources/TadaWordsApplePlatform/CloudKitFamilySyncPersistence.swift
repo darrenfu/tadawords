@@ -602,6 +602,44 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
         }
     }
 
+    func pendingCanonicalRecoveryAuthorization(
+        for records: [FamilySyncRecord]
+    ) throws -> FamilySyncCanonicalRecoveryAuthorization? {
+        try withLock {
+            let snapshot = loadLocked()
+            guard !loadFailed else {
+                throw CloudKitFamilyPersistenceError.corruptMetadata
+            }
+            guard let marker = snapshot.pendingCanonicalRecovery else {
+                return nil
+            }
+            let profileIDs = Array(Set(records.map(\.profileID))).sorted {
+                $0.description < $1.description
+            }
+            let fingerprint =
+                FamilySyncRecordSetFingerprint(records: records)
+            guard marker.profileIDs == profileIDs,
+                marker.recordCount == records.count,
+                marker.recordSetFingerprint == fingerprint.value,
+                marker.authorizationFingerprint == fingerprint.value
+            else {
+                throw FamilySyncCanonicalRecoveryError.localSnapshotChanged
+            }
+            return FamilySyncCanonicalRecoveryAuthorization(
+                expectedPlan: FamilySyncCanonicalRecoveryPlan(
+                    profileIDs: profileIDs,
+                    recordCount: records.count,
+                    recordCountsByKind: Dictionary(
+                        grouping: records,
+                        by: \.kind
+                    ).mapValues(\.count),
+                    recordSetFingerprint: fingerprint,
+                    installationID: marker.installationID
+                )
+            )
+        }
+    }
+
     func prepareCanonicalRecovery(
         authorization: FamilySyncCanonicalRecoveryAuthorization,
         originAccountRecordName: String,

@@ -60,6 +60,60 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
         XCTAssertNotNil(try store.pendingCanonicalRecovery())
     }
 
+    func testRestartReconstructsOnlyTheExactPendingAuthorization() throws {
+        let fixture = try CloudKitCanonicalRecoveryFixture()
+        defer { fixture.remove() }
+        let store = CloudKitFamilyMetadataStore(snapshotURL: fixture.url)
+        try store.confirm(accountRecordName: fixture.account)
+        _ = try store.prepareCanonicalRecovery(
+            authorization: fixture.authorization,
+            originAccountRecordName: fixture.account,
+            stagedAt: fixture.now
+        )
+
+        let restarted = CloudKitFamilyMetadataStore(snapshotURL: fixture.url)
+        let recovered =
+            try restarted.pendingCanonicalRecoveryAuthorization(
+                for: fixture.records
+            )
+
+        XCTAssertEqual(recovered, fixture.authorization)
+        XCTAssertNotNil(try restarted.pendingCanonicalRecovery())
+    }
+
+    func testRestartRejectsChangedRecordsWithoutClearingPendingMarker() throws {
+        let fixture = try CloudKitCanonicalRecoveryFixture()
+        defer { fixture.remove() }
+        let store = CloudKitFamilyMetadataStore(snapshotURL: fixture.url)
+        try store.confirm(accountRecordName: fixture.account)
+        _ = try store.prepareCanonicalRecovery(
+            authorization: fixture.authorization,
+            originAccountRecordName: fixture.account,
+            stagedAt: fixture.now
+        )
+        var changed = fixture.records
+        let original = changed[0]
+        changed[0] = FamilySyncRecord(
+            recordName: original.recordName,
+            profileID: original.profileID,
+            kind: original.kind,
+            payload: Data("changed-after-authorization".utf8),
+            updatedAt: original.updatedAt,
+            deviceID: original.deviceID,
+            isDeleted: original.isDeleted,
+            logicalRevision: original.logicalRevision
+        )
+
+        let restarted = CloudKitFamilyMetadataStore(snapshotURL: fixture.url)
+
+        XCTAssertThrowsError(
+            try restarted.pendingCanonicalRecoveryAuthorization(
+                for: changed
+            )
+        )
+        XCTAssertNotNil(try restarted.pendingCanonicalRecovery())
+    }
+
     func testCorruptPendingRecoveryMarkerFailsClosedAfterRestart() throws {
         let fixture = try CloudKitCanonicalRecoveryFixture()
         defer { fixture.remove() }
@@ -278,6 +332,7 @@ private struct CloudKitCanonicalRecoveryFixture {
     let url: URL
     let account = "owner-account"
     let now = Date(timeIntervalSince1970: 1_785_121_955)
+    let records: [FamilySyncRecord]
     let authorization: FamilySyncCanonicalRecoveryAuthorization
 
     init() throws {
@@ -303,7 +358,7 @@ private struct CloudKitCanonicalRecoveryFixture {
                 )!
             ),
         ]
-        let records = profileIDs.enumerated().map { index, profileID in
+        records = profileIDs.enumerated().map { index, profileID in
             FamilySyncRecord(
                 recordName: "profile-\(profileID)",
                 profileID: profileID,
@@ -317,6 +372,7 @@ private struct CloudKitCanonicalRecoveryFixture {
             expectedPlan: .init(
                 profileIDs: profileIDs,
                 recordCount: records.count,
+                recordCountsByKind: [.profile: records.count],
                 recordSetFingerprint: .init(records: records),
                 installationID: "F399F4B9-EB03-4BA5-8290-2D6653A465BE"
             )

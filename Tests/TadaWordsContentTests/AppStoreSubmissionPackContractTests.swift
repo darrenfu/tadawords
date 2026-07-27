@@ -139,8 +139,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 "<string>https://audio.pawgoo.app</string>"
             )
         )
-        XCTAssertTrue(productionPlist.contains("<string>0.7.51</string>"))
-        XCTAssertTrue(productionPlist.contains("<string>2026072605</string>"))
+        XCTAssertTrue(productionPlist.contains("<string>0.7.52</string>"))
+        XCTAssertTrue(productionPlist.contains("<string>2026072703</string>"))
         XCTAssertFalse(productionPlist.contains("voice setup"))
 
         for plistPath in ["Apps/TadaWordsApp/InfoLocalQA.plist"] {
@@ -149,8 +149,8 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 encoding: .utf8
             )
             XCTAssertFalse(plist.contains("TadaWordsTeacherAudioEndpoint"))
-            XCTAssertTrue(plist.contains("<string>0.7.51</string>"))
-            XCTAssertTrue(plist.contains("<string>2026072605</string>"))
+            XCTAssertTrue(plist.contains("<string>0.7.52</string>"))
+            XCTAssertTrue(plist.contains("<string>2026072703</string>"))
             XCTAssertFalse(plist.contains("voice setup"))
         }
 
@@ -165,15 +165,15 @@ final class AppStoreSubmissionPackContractTests: XCTestCase {
                 "<string>https://audio-dev.pawgoo.app</string>"
             )
         )
-        XCTAssertTrue(debugPlist.contains("<string>0.7.51</string>"))
-        XCTAssertTrue(debugPlist.contains("<string>2026072605</string>"))
+        XCTAssertTrue(debugPlist.contains("<string>0.7.52</string>"))
+        XCTAssertTrue(debugPlist.contains("<string>2026072703</string>"))
 
         let project = try String(
             contentsOf: repositoryRoot.appendingPathComponent("project.yml"),
             encoding: .utf8
         )
-        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.51"))
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072605"))
+        XCTAssertTrue(project.contains("MARKETING_VERSION: 0.7.52"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: 2026072703"))
 
         let appComposition = try String(
             contentsOf: repositoryRoot.appendingPathComponent(

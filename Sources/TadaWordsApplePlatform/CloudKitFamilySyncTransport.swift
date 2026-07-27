@@ -872,6 +872,23 @@ public actor CloudKitFamilySyncTransport:
         }
     }
 
+    public func resumePendingCanonicalGeneration(
+        _ records: [FamilySyncRecord]
+    ) async throws -> FamilySyncCanonicalRecoveryReceipt? {
+        guard
+            let authorization =
+                try metadataStore.pendingCanonicalRecoveryAuthorization(
+                    for: records
+                )
+        else {
+            return nil
+        }
+        return try await publishCanonicalGeneration(
+            records,
+            authorization: authorization
+        )
+    }
+
     public func activeCanonicalGeneration() async throws
         -> FamilySyncCanonicalGenerationSnapshot?
     {

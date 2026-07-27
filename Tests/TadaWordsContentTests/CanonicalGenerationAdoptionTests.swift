@@ -52,6 +52,164 @@ final class CanonicalGenerationAdoptionTests: XCTestCase {
         XCTAssertTrue(didMarkApplied)
     }
 
+    func testFreshFindConfirmsAccountBeforeAdoptingCanonicalGeneration()
+        async throws
+    {
+        let profileID = ProfileID()
+        let record = FamilySyncRecord(
+            recordName: "profile-\(profileID)",
+            profileID: profileID,
+            kind: .profile,
+            payload: Data("canonical".utf8),
+            updatedAt: Date(timeIntervalSince1970: 10),
+            deviceID: "canonical"
+        )
+        let snapshot = FamilySyncCanonicalGenerationSnapshot(
+            generationID: "generation-find",
+            previousGenerationID: nil,
+            sourceInstallationID: "source-ipad",
+            createdAt: Date(timeIntervalSince1970: 20),
+            records: [record]
+        )
+        let store = CanonicalAdoptionStore()
+        let transport = CanonicalAdoptionTransport(
+            snapshot: snapshot,
+            confirmationRequired: true
+        )
+        let coordinator = LocalFirstFamilySyncCoordinator(
+            store: store,
+            transport: transport,
+            preferenceRepository: InMemoryFamilySyncPreferenceRepository(
+                isEnabled: false
+            ),
+            journalRepository: VolatileFamilySyncJournalRepository(),
+            deviceID: "fresh-install",
+            clock: CanonicalAdoptionClock(
+                now: Date(timeIntervalSince1970: 30)
+            )
+        )
+
+        let status = try await coordinator.setEnabled(true)
+        let confirmationCount = await transport.confirmationCount()
+        let currentRecords = await store.currentRecords()
+        let replacementCount = await store.replacementCount()
+        let sendCount = await transport.sendCount()
+
+        XCTAssertEqual(status, .synced(at: Date(timeIntervalSince1970: 30)))
+        XCTAssertEqual(confirmationCount, 1)
+        XCTAssertEqual(currentRecords, [record])
+        XCTAssertEqual(replacementCount, 1)
+        XCTAssertEqual(sendCount, 0)
+    }
+
+    func testInterruptedSourcePublicationResumesBeforeOrdinarySync()
+        async throws
+    {
+        let profileID = ProfileID()
+        let record = FamilySyncRecord(
+            recordName: "profile-\(profileID)",
+            profileID: profileID,
+            kind: .profile,
+            payload: Data("canonical-source".utf8),
+            updatedAt: Date(timeIntervalSince1970: 10),
+            deviceID: "source-ipad",
+            logicalRevision: .init(counter: 7, deviceID: "source-ipad")
+        )
+        let snapshot = FamilySyncCanonicalGenerationSnapshot(
+            generationID: "generation-resumed",
+            previousGenerationID: "generation-old",
+            sourceInstallationID: "source-ipad",
+            createdAt: Date(timeIntervalSince1970: 20),
+            records: [record]
+        )
+        let store = CanonicalAdoptionStore(records: [record])
+        let transport = CanonicalAdoptionTransport(
+            snapshot: snapshot,
+            pendingResumeRecords: [record]
+        )
+        let coordinator = LocalFirstFamilySyncCoordinator(
+            store: store,
+            transport: transport,
+            preferenceRepository: InMemoryFamilySyncPreferenceRepository(
+                isEnabled: true
+            ),
+            journalRepository: VolatileFamilySyncJournalRepository(),
+            deviceID: "source-ipad",
+            clock: CanonicalAdoptionClock(
+                now: Date(timeIntervalSince1970: 30)
+            )
+        )
+
+        let status = await coordinator.synchronize()
+        let resumeCount = await transport.resumeCount()
+        let fetchCount = await transport.fetchCount()
+        let sendCount = await transport.sendCount()
+        let currentRecords = await store.currentRecords()
+        let replacementCount = await store.replacementCount()
+
+        XCTAssertEqual(status, .synced(at: Date(timeIntervalSince1970: 30)))
+        XCTAssertEqual(resumeCount, 1)
+        XCTAssertEqual(fetchCount, 1)
+        XCTAssertEqual(sendCount, 0)
+        XCTAssertEqual(currentRecords, [record])
+        XCTAssertEqual(replacementCount, 0)
+    }
+
+    func testChangedSourceSnapshotCannotClaimPendingPublication() async {
+        let profileID = ProfileID()
+        let authorized = FamilySyncRecord(
+            recordName: "profile-\(profileID)",
+            profileID: profileID,
+            kind: .profile,
+            payload: Data("authorized".utf8),
+            updatedAt: Date(timeIntervalSince1970: 10),
+            deviceID: "source-ipad"
+        )
+        let changed = FamilySyncRecord(
+            recordName: authorized.recordName,
+            profileID: profileID,
+            kind: .profile,
+            payload: Data("changed".utf8),
+            updatedAt: Date(timeIntervalSince1970: 11),
+            deviceID: "source-ipad"
+        )
+        let snapshot = FamilySyncCanonicalGenerationSnapshot(
+            generationID: "generation-pending",
+            previousGenerationID: nil,
+            sourceInstallationID: "source-ipad",
+            createdAt: Date(),
+            records: [authorized]
+        )
+        let store = CanonicalAdoptionStore(records: [changed])
+        let transport = CanonicalAdoptionTransport(
+            snapshot: snapshot,
+            pendingResumeRecords: [authorized]
+        )
+        let coordinator = LocalFirstFamilySyncCoordinator(
+            store: store,
+            transport: transport,
+            preferenceRepository: InMemoryFamilySyncPreferenceRepository(
+                isEnabled: true
+            )
+        )
+
+        let status = await coordinator.synchronize()
+        let resumeCount = await transport.resumeCount()
+        let fetchCount = await transport.fetchCount()
+        let sendCount = await transport.sendCount()
+        let didMarkApplied = await transport.didMarkApplied()
+        let currentRecords = await store.currentRecords()
+
+        guard case .failed = status else {
+            return XCTFail("Expected changed source snapshot to fail closed")
+        }
+        XCTAssertEqual(resumeCount, 0)
+        XCTAssertEqual(fetchCount, 0)
+        XCTAssertEqual(sendCount, 0)
+        XCTAssertFalse(didMarkApplied)
+        XCTAssertEqual(currentRecords, [changed])
+    }
+
     func testFailedAuthoritativeApplyNeverAdvancesFenceOrUploads() async {
         let profileID = ProfileID()
         let snapshot = FamilySyncCanonicalGenerationSnapshot(
@@ -97,11 +255,15 @@ private enum CanonicalAdoptionFailure: Error {
 }
 
 private actor CanonicalAdoptionStore: FamilySyncRecordStore {
-    private var records: [FamilySyncRecord] = []
+    private var records: [FamilySyncRecord]
     private var replacements = 0
     private let failReplacement: Bool
 
-    init(failReplacement: Bool = false) {
+    init(
+        records: [FamilySyncRecord] = [],
+        failReplacement: Bool = false
+    ) {
+        self.records = records
         self.failReplacement = failReplacement
     }
 
@@ -138,11 +300,22 @@ private actor CanonicalAdoptionTransport:
 {
     nonisolated let capability: FamilySyncCapability = .iCloud
     private let snapshot: FamilySyncCanonicalGenerationSnapshot
+    private var pendingResumeRecords: [FamilySyncRecord]?
+    private var confirmationRequired: Bool
+    private var confirmations = 0
     private var applied = false
     private var sends = 0
+    private var fetches = 0
+    private var resumes = 0
 
-    init(snapshot: FamilySyncCanonicalGenerationSnapshot) {
+    init(
+        snapshot: FamilySyncCanonicalGenerationSnapshot,
+        pendingResumeRecords: [FamilySyncRecord]? = nil,
+        confirmationRequired: Bool = false
+    ) {
         self.snapshot = snapshot
+        self.pendingResumeRecords = pendingResumeRecords
+        self.confirmationRequired = confirmationRequired
     }
 
     nonisolated func availability() async -> FamilySyncAvailability {
@@ -167,9 +340,36 @@ private actor CanonicalAdoptionTransport:
     }
 
     func activeCanonicalGeneration()
-        -> FamilySyncCanonicalGenerationSnapshot?
+        throws -> FamilySyncCanonicalGenerationSnapshot?
     {
-        snapshot
+        if confirmationRequired {
+            throw CanonicalAdoptionFailure.injected
+        }
+        return snapshot
+    }
+
+    func confirmCurrentAccount() -> FamilySyncAccountChange? {
+        confirmations += 1
+        confirmationRequired = false
+        return .signedIn
+    }
+
+    func resumePendingCanonicalGeneration(
+        _ records: [FamilySyncRecord]
+    ) throws -> FamilySyncCanonicalRecoveryReceipt? {
+        guard let pendingResumeRecords else { return nil }
+        guard records == pendingResumeRecords else {
+            throw FamilySyncCanonicalRecoveryError.localSnapshotChanged
+        }
+        resumes += 1
+        self.pendingResumeRecords = nil
+        applied = true
+        return FamilySyncCanonicalRecoveryReceipt(
+            generationID: snapshot.generationID,
+            previousGenerationID: snapshot.previousGenerationID,
+            verifiedRemoteFingerprint: snapshot.recordSetFingerprint,
+            recoveredRecordCount: snapshot.records.count
+        )
     }
 
     func markCanonicalGenerationApplied(_ generationID: String) throws {
@@ -189,13 +389,14 @@ private actor CanonicalAdoptionTransport:
     ) -> FamilySyncTransportResult {
         _ = profileIDs
         _ = terminalProfileIDs
+        fetches += 1
         return FamilySyncTransportResult(reachedServerHead: true)
     }
 
     func sendChanges(
         _ changes: [FamilySyncPendingOperation]
     ) -> FamilySyncTransportResult {
-        sends += 1
+        sends += changes.count
         return FamilySyncTransportResult(
             acknowledged: Set(
                 changes.map(FamilySyncChangeAcknowledgement.init)
@@ -222,6 +423,9 @@ private actor CanonicalAdoptionTransport:
 
     func didMarkApplied() -> Bool { applied }
     func sendCount() -> Int { sends }
+    func fetchCount() -> Int { fetches }
+    func resumeCount() -> Int { resumes }
+    func confirmationCount() -> Int { confirmations }
 }
 
 private struct CanonicalAdoptionClock: AppClock {

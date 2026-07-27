@@ -170,6 +170,14 @@ public protocol FamilySyncCanonicalRecoveryTransport: FamilySyncTransport {
         authorization: FamilySyncCanonicalRecoveryAuthorization
     ) async throws -> FamilySyncCanonicalRecoveryReceipt
 
+    /// Resumes an owner-authorized publication that already crossed the
+    /// durable local marker boundary. Implementations must return `nil` when
+    /// no marker exists and must reject any record set that differs from the
+    /// exact authorized snapshot.
+    func resumePendingCanonicalGeneration(
+        _ records: [FamilySyncRecord]
+    ) async throws -> FamilySyncCanonicalRecoveryReceipt?
+
     /// Returns nil when no canonical pointer exists or this device already
     /// applied it. A returned generation is manifest- and fingerprint-verified.
     func activeCanonicalGeneration() async throws
@@ -199,6 +207,13 @@ extension FamilySyncCanonicalRecoveryTransport {
             records,
             authorization: authorization
         )
+    }
+
+    public func resumePendingCanonicalGeneration(
+        _ records: [FamilySyncRecord]
+    ) async throws -> FamilySyncCanonicalRecoveryReceipt? {
+        _ = records
+        return nil
     }
 
     public func activeCanonicalGeneration() async throws
