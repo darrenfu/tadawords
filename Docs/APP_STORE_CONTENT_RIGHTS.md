@@ -2,7 +2,7 @@
 
 - Exact source baseline integrated: `2d3e75420e620d3e24a31125a8e5d30486261f97`
 - Content-bearing Third-Party Notices implementation: `1fd65c583583bf9ec6b01a4f5cacee3a4c286011`
-- Final evidence-freeze identity: `0.7.51 / 2026072603`
+- Final evidence-freeze identity: `0.7.51 / 2026072604`
 - Audit date: 2026-07-25
 - Scope: production iOS target, repository-owned App Store/QA captures, runtime family content, and test-only fixtures
 
