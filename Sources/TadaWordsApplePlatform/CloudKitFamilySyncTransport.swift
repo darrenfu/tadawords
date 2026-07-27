@@ -12,6 +12,27 @@ public enum CloudKitFamilySyncError: Error, Sendable {
     case operationFailed(String)
 }
 
+struct CloudKitCanonicalRecoveryExecutor {
+    func recover<T>(
+        isolation: isolated (any Actor)? = #isolation,
+        prepareDurableMarker: () throws -> Void,
+        verifyOriginAccount: () async throws -> Void,
+        replaceProfiles: () async throws -> Void,
+        verifyRemoteManifest: () async throws -> T,
+        completeDurableMarker: () throws -> Void
+    ) async throws -> T {
+        _ = isolation
+        try prepareDurableMarker()
+        try await verifyOriginAccount()
+        try await replaceProfiles()
+        try await verifyOriginAccount()
+        let result = try await verifyRemoteManifest()
+        try await verifyOriginAccount()
+        try completeDurableMarker()
+        return result
+    }
+}
+
 /// Makes the owner-ledger recovery barrier explicit and testable. The remote
 /// payload zone must be absent before a terminal binding can ever be written;
 /// receipt plus terminal route are committed atomically after that proof.
@@ -463,7 +484,10 @@ struct CloudKitAmbiguousRemoteRemovalRecoveryExecutor {
 /// One persistent CKSyncEngine per CloudKit database. The engine delegates
 /// translate CloudKit callbacks into deterministic, unit-testable events; they
 /// never start nested fetch/send operations.
-public actor CloudKitFamilySyncTransport: FamilySyncTransport {
+public actor CloudKitFamilySyncTransport:
+    FamilySyncTransport,
+    FamilySyncCanonicalRecoveryTransport
+{
     public nonisolated let capability = FamilySyncCapability.iCloud
     public nonisolated let initialProfilePolicy =
         FamilySyncInitialProfilePolicy.discoverBeforeCreating
@@ -486,6 +510,7 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
     private var acceptedShareOperationFence =
         CloudKitAcceptedShareOperationFence()
     private var claimedPrivateRouteProfileIDs = Set<ProfileID>()
+    private var canonicalRecoveryInProgress = false
 
     public init(
         containerIdentifier: String = "iCloud.com.tadawords.app",
@@ -633,6 +658,92 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         }
     }
 
+    public func replaceRemoteWithCanonicalRecords(
+        _ records: [FamilySyncRecord],
+        authorization: FamilySyncCanonicalRecoveryAuthorization
+    ) async throws -> FamilySyncCanonicalRecoveryReceipt {
+        guard !canonicalRecoveryInProgress else {
+            throw CloudKitFamilySyncError.operationFailed(
+                "Canonical recovery is already in progress"
+            )
+        }
+        for record in records { try record.validateCompatibility() }
+        let profileIDs = Array(Set(records.map(\.profileID))).sorted {
+            $0.description < $1.description
+        }
+        let fingerprint = FamilySyncRecordSetFingerprint(records: records)
+        guard profileIDs == authorization.expectedPlan.profileIDs,
+            records.count == authorization.expectedPlan.recordCount,
+            fingerprint == authorization.expectedPlan.recordSetFingerprint
+        else {
+            throw FamilySyncCanonicalRecoveryError.localSnapshotChanged
+        }
+        try await requireAuthorizedAccount()
+        let account = try await currentAuthorizedAccountRecordName()
+        canonicalRecoveryInProgress = true
+        await cancelEngines()
+
+        do {
+            try stateStore.clear()
+            let marker = try metadataStore.prepareCanonicalRecovery(
+                authorization: authorization,
+                originAccountRecordName: account
+            )
+            let receipt = try await CloudKitCanonicalRecoveryExecutor().recover(
+                prepareDurableMarker: {
+                    guard
+                        try self.metadataStore.pendingCanonicalRecovery() == marker
+                    else {
+                        throw CloudKitFamilyPersistenceError.bindingConflict
+                    }
+                },
+                verifyOriginAccount: {
+                    try await self.requireCurrentAccountRecordName(account)
+                },
+                replaceProfiles: {
+                    for profileID in profileIDs {
+                        try await self.replaceCanonicalProfileZone(
+                            profileID,
+                            records: records.filter {
+                                $0.profileID == profileID
+                            },
+                            accountRecordName: account
+                        )
+                    }
+                },
+                verifyRemoteManifest: {
+                    let verified = try await self.fetchCanonicalRecords(
+                        profileIDs: profileIDs,
+                        accountRecordName: account
+                    )
+                    guard verified.count == records.count,
+                        FamilySyncRecordSetFingerprint(records: verified)
+                            == fingerprint
+                    else {
+                        throw FamilySyncCanonicalRecoveryError
+                            .remoteVerificationFailed
+                    }
+                    return FamilySyncCanonicalRecoveryReceipt(
+                        verifiedRemoteFingerprint: fingerprint,
+                        recoveredRecordCount: verified.count
+                    )
+                },
+                completeDurableMarker: {
+                    try self.metadataStore.completeCanonicalRecovery(marker)
+                }
+            )
+            try stateStore.clear()
+            await rebuildEngines()
+            canonicalRecoveryInProgress = false
+            return receipt
+        } catch {
+            try? stateStore.clear()
+            await rebuildEngines()
+            canonicalRecoveryInProgress = false
+            throw error
+        }
+    }
+
     public func exchange(
         _ batch: FamilySyncTransportBatch
     ) async throws -> FamilySyncTransportResult {
@@ -659,6 +770,15 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
         for profileIDs: [ProfileID],
         terminalProfileIDs: Set<ProfileID>
     ) async throws -> FamilySyncTransportResult {
+        let hasPendingCanonicalRecovery =
+            try metadataStore.pendingCanonicalRecovery() != nil
+        if canonicalRecoveryInProgress || hasPendingCanonicalRecovery {
+            return FamilySyncTransportResult(
+                failures: [
+                    FamilySyncTransportFailure(key: nil, category: .conflict)
+                ]
+            )
+        }
         if let accountChange = try await accountChangeBlockingUpload() {
             return FamilySyncTransportResult(accountChange: accountChange)
         }
@@ -1094,6 +1214,15 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
     public func sendChanges(
         _ changes: [FamilySyncPendingOperation]
     ) async throws -> FamilySyncTransportResult {
+        let hasPendingCanonicalRecovery =
+            try metadataStore.pendingCanonicalRecovery() != nil
+        if canonicalRecoveryInProgress || hasPendingCanonicalRecovery {
+            return FamilySyncTransportResult(
+                failures: [
+                    FamilySyncTransportFailure(key: nil, category: .conflict)
+                ]
+            )
+        }
         if let accountChange = try await accountChangeBlockingUpload() {
             return FamilySyncTransportResult(accountChange: accountChange)
         }
@@ -2117,6 +2246,183 @@ public actor CloudKitFamilySyncTransport: FamilySyncTransport {
                 throw error
             }
         }
+    }
+
+    private func replaceCanonicalProfileZone(
+        _ profileID: ProfileID,
+        records: [FamilySyncRecord],
+        accountRecordName: String
+    ) async throws {
+        guard !records.isEmpty,
+            records.allSatisfy({ $0.profileID == profileID })
+        else {
+            throw FamilySyncCanonicalRecoveryError.profileSetChanged
+        }
+        let zoneID = privateZoneID(for: profileID)
+        let rootID = privateRootRecordID(for: profileID)
+        let existing = metadataStore.binding(for: profileID)
+        switch existing.state {
+        case .unbound:
+            break
+        case .privateOwner:
+            guard existing.zoneID == zoneID,
+                existing.rootRecordID == nil || existing.rootRecordID == rootID,
+                metadataStore.isBindingAuthorizedForConfirmedAccount(existing)
+            else {
+                throw CloudKitFamilySyncError.accountBindingMismatch
+            }
+        case .sharedParticipant, .revoked, .ownerDeleted, .participantLeft:
+            throw CloudKitFamilySyncError.accountBindingMismatch
+        }
+
+        try await requireCurrentAccountRecordName(accountRecordName)
+        let deletion = try await privateDatabase.modifyRecordZones(
+            saving: [],
+            deleting: [zoneID]
+        )
+        try await requireCurrentAccountRecordName(accountRecordName)
+        try CloudKitTerminalDeletionProof.require(
+            deletion.deleteResults[zoneID],
+            acceptingAbsenceCodes: [.zoneNotFound, .unknownItem],
+            operation: "Canonical Profile zone deletion result unavailable"
+        )
+        try metadataStore.purgeCanonicalRecoveryTransportBytes(
+            profileID: profileID,
+            zoneID: zoneID
+        )
+
+        let zone = CKRecordZone(zoneID: zoneID)
+        let zoneSave = try await privateDatabase.modifyRecordZones(
+            saving: [zone],
+            deleting: []
+        )
+        try await requireCurrentAccountRecordName(accountRecordName)
+        guard case .success = zoneSave.saveResults[zoneID] else {
+            throw CloudKitFamilySyncError.operationFailed(
+                "Canonical Profile zone could not be recreated"
+            )
+        }
+
+        let root = CKRecord(
+            recordType: CloudKitFamilyRecordCodec.Schema.rootRecordType,
+            recordID: rootID
+        )
+        root[CloudKitFamilyRecordCodec.Schema.profileID] =
+            profileID.rawValue.uuidString as NSString
+        let rootSave = try await privateDatabase.modifyRecords(
+            saving: [root],
+            deleting: [],
+            savePolicy: .ifServerRecordUnchanged,
+            atomically: true
+        )
+        try await requireCurrentAccountRecordName(accountRecordName)
+        guard case .success(let savedRoot) = rootSave.saveResults[rootID] else {
+            throw CloudKitFamilySyncError.operationFailed(
+                "Canonical Profile root could not be recreated"
+            )
+        }
+        try metadataStore.saveSystemFields(
+            for: savedRoot,
+            scope: .privateDatabase
+        )
+
+        let cloudRecords = try records.map { record in
+            try CloudKitFamilyRecordCodec.cloudRecord(
+                for: record,
+                recordID: CKRecord.ID(
+                    recordName: record.recordName,
+                    zoneID: zoneID
+                ),
+                rootRecordID: rootID,
+                scope: .privateDatabase,
+                metadataStore: metadataStore,
+                photoAssetSourceDirectory: photoAssetSourceDirectory
+            )
+        }
+        let upload = try await privateDatabase.modifyRecords(
+            saving: cloudRecords,
+            deleting: [],
+            savePolicy: .allKeys,
+            atomically: true
+        )
+        try await requireCurrentAccountRecordName(accountRecordName)
+        for cloudRecord in cloudRecords {
+            guard
+                case .success(let saved) = upload.saveResults[
+                    cloudRecord.recordID
+                ]
+            else {
+                throw CloudKitFamilySyncError.operationFailed(
+                    "Canonical Profile records could not be uploaded"
+                )
+            }
+            try metadataStore.saveSystemFields(
+                for: saved,
+                scope: .privateDatabase
+            )
+        }
+
+        let verified = try await fetchCanonicalRecords(
+            profileIDs: [profileID],
+            accountRecordName: accountRecordName
+        )
+        guard verified.count == records.count,
+            FamilySyncRecordSetFingerprint(records: verified)
+                == FamilySyncRecordSetFingerprint(records: records)
+        else {
+            throw FamilySyncCanonicalRecoveryError.remoteVerificationFailed
+        }
+        try metadataStore.save(
+            binding: ProfileCloudBinding(
+                profileID: profileID,
+                state: .privateOwner,
+                zoneName: zoneID.zoneName,
+                ownerName: zoneID.ownerName,
+                rootRecordName: rootID.recordName,
+                originAccountRecordName: accountRecordName
+            )
+        )
+    }
+
+    private func fetchCanonicalRecords(
+        profileIDs: [ProfileID],
+        accountRecordName: String
+    ) async throws -> [FamilySyncRecord] {
+        var records: [FamilySyncRecord] = []
+        for profileID in profileIDs {
+            let zoneID = privateZoneID(for: profileID)
+            let query = CKQuery(
+                recordType: CloudKitFamilyRecordCodec.Schema.itemRecordType,
+                predicate: NSPredicate(value: true)
+            )
+            var page = try await privateDatabase.records(
+                matching: query,
+                inZoneWith: zoneID
+            )
+            while true {
+                try await requireCurrentAccountRecordName(accountRecordName)
+                for (_, result) in page.matchResults {
+                    let cloudRecord = try result.get()
+                    switch CloudKitFamilyRecordCodec.decode(cloudRecord) {
+                    case .record(let record):
+                        guard record.profileID == profileID else {
+                            throw CloudKitFamilySyncError.malformedRecord(
+                                cloudRecord.recordID.recordName
+                            )
+                        }
+                        records.append(record)
+                    case .quarantine:
+                        throw FamilySyncCanonicalRecoveryError
+                            .remoteVerificationFailed
+                    }
+                }
+                guard let cursor = page.queryCursor else { break }
+                page = try await privateDatabase.records(
+                    continuingMatchFrom: cursor
+                )
+            }
+        }
+        return records
     }
 
     private func preparePrivateZone(

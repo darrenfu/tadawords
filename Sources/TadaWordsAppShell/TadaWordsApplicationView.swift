@@ -425,6 +425,8 @@ public struct TadaWordsApplicationView: View {
                             audioPromptService: audioPromptService,
                             audioExperienceService: audioExperienceService,
                             familySyncCoordinator: environment.familySyncCoordinator,
+                            familySyncCanonicalRecovery:
+                                environment.familySyncCanonicalRecovery,
                             familySyncAccessManagement: familySyncAccessManagement,
                             notificationScheduler: notificationScheduler,
                             voiceprintEnrollmentService: voiceprintEnrollmentService,

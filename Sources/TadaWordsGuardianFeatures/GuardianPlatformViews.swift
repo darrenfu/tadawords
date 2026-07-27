@@ -484,8 +484,14 @@ struct GuardianFamilySyncView: View {
     let onManageAccess: () -> Void
     let onAcceptShare: () -> Void
     let onRetryProfileErasure: () -> Void
+    let canonicalRecoveryPlan: FamilySyncCanonicalRecoveryPlan?
+    @Binding var canonicalRecoveryBackupSHA256: String
+    let isCanonicalRecoveryRunning: Bool
+    let canonicalRecoveryMessage: String?
+    let onRecoverCanonicalData: () -> Void
     @State private var remoteNotificationRegistration:
         FamilySyncRemoteNotificationRegistrationState = .notRequested
+    @State private var confirmsCanonicalRecovery = false
 
     init(
         status: FamilySyncStatus,
@@ -500,7 +506,12 @@ struct GuardianFamilySyncView: View {
         onCreateShare: @escaping () -> Void,
         onManageAccess: @escaping () -> Void,
         onAcceptShare: @escaping () -> Void,
-        onRetryProfileErasure: @escaping () -> Void = {}
+        onRetryProfileErasure: @escaping () -> Void = {},
+        canonicalRecoveryPlan: FamilySyncCanonicalRecoveryPlan? = nil,
+        canonicalRecoveryBackupSHA256: Binding<String> = .constant(""),
+        isCanonicalRecoveryRunning: Bool = false,
+        canonicalRecoveryMessage: String? = nil,
+        onRecoverCanonicalData: @escaping () -> Void = {}
     ) {
         self.status = status
         self.isEnabled = isEnabled
@@ -515,6 +526,11 @@ struct GuardianFamilySyncView: View {
         self.onManageAccess = onManageAccess
         self.onAcceptShare = onAcceptShare
         self.onRetryProfileErasure = onRetryProfileErasure
+        self.canonicalRecoveryPlan = canonicalRecoveryPlan
+        _canonicalRecoveryBackupSHA256 = canonicalRecoveryBackupSHA256
+        self.isCanonicalRecoveryRunning = isCanonicalRecoveryRunning
+        self.canonicalRecoveryMessage = canonicalRecoveryMessage
+        self.onRecoverCanonicalData = onRecoverCanonicalData
     }
 
     private var presentation: GuardianFamilySyncPresentation {
@@ -622,6 +638,78 @@ struct GuardianFamilySyncView: View {
                     .accessibilityIdentifier("guardian.sync.erasure-card")
                 }
 
+                if showsCanonicalRecovery,
+                    let canonicalRecoveryPlan
+                {
+                    GuardianCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label(
+                                "Use this iPad as the source",
+                                systemImage: "externaldrive.badge.checkmark"
+                            )
+                            .font(.system(.title3, design: .rounded, weight: .bold))
+                            Text(
+                                "This replaces conflicting iCloud copies with \(canonicalRecoveryPlan.recordCount) local records, including \(canonicalRecoveryPlan.recordCountsByKind[.wordPoolEntry, default: 0]) words, for \(canonicalRecoveryPlan.profileIDs.count) child profiles. Profile IDs and every local word stay unchanged. Snapshot \(canonicalRecoveryPlan.recordSetFingerprint.value.prefix(12))."
+                            )
+                            .foregroundStyle(
+                                GuardianSemanticTokens.secondaryForeground
+                            )
+                            SecureField(
+                                "Verified backup SHA-256",
+                                text: $canonicalRecoveryBackupSHA256
+                            )
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .accessibilityIdentifier(
+                                "guardian.sync.canonical-recovery.backup"
+                            )
+                            Button("Replace iCloud with this iPad") {
+                                confirmsCanonicalRecovery = true
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.red)
+                            .disabled(
+                                isCanonicalRecoveryRunning
+                                    || canonicalRecoveryBackupSHA256
+                                        .trimmingCharacters(
+                                            in: .whitespacesAndNewlines
+                                        ).count != 64
+                            )
+                            .accessibilityIdentifier(
+                                "guardian.sync.canonical-recovery.start"
+                            )
+                            if isCanonicalRecoveryRunning {
+                                ProgressView("Verifying every iCloud record…")
+                            }
+                            if let canonicalRecoveryMessage {
+                                Text(canonicalRecoveryMessage)
+                                    .foregroundStyle(
+                                        GuardianSemanticTokens.secondaryForeground
+                                    )
+                                    .accessibilityIdentifier(
+                                        "guardian.sync.canonical-recovery.result"
+                                    )
+                            }
+                        }
+                    }
+                    .confirmationDialog(
+                        "Replace conflicting iCloud Family Sync data?",
+                        isPresented: $confirmsCanonicalRecovery,
+                        titleVisibility: .visible
+                    ) {
+                        Button(
+                            "Use this iPad’s local data",
+                            role: .destructive,
+                            action: onRecoverCanonicalData
+                        )
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text(
+                            "Only continue after backing up this iPad. Other "
+                                + "conflicting iCloud copies will be replaced."
+                        )
+                    }
+                }
+
                 if presentation.showsPreferenceToggle {
                     GuardianCard {
                         VStack(alignment: .leading, spacing: 12) {
@@ -699,6 +787,12 @@ struct GuardianFamilySyncView: View {
             }
         }
         .accessibilityIdentifier("guardian.sync.page")
+    }
+
+    private var showsCanonicalRecovery: Bool {
+        guard isEnabled, canonicalRecoveryPlan != nil else { return false }
+        if case .failed = status { return true }
+        return false
     }
 }
 

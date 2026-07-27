@@ -6,6 +6,42 @@ import XCTest
 
 final class GuardianFamilySyncPresentationTests: XCTestCase {
     @MainActor
+    func testCanonicalRecoveryLoadsExactPlanAndRequiresSensitiveAuthorization()
+        async throws
+    {
+        let provider = GuardianCanonicalRecoveryProviderStub()
+        let authorizer = GuardianFamilyAccessAuthorizer()
+        let model = GuardianDashboardViewModel(
+            store: DemoGuardianFamilyStore(),
+            audioPromptService: GuardianFamilySyncSilentAudioService(),
+            familySyncCoordinator: GuardianFamilySyncCoordinatorStub(),
+            familySyncCanonicalRecovery: provider,
+            sensitiveActionAuthorizer: authorizer
+        )
+
+        model.showFamilySync()
+        for _ in 0..<100 where model.canonicalRecoveryPlan == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(model.canonicalRecoveryPlan?.recordCount, 220)
+
+        model.canonicalRecoveryBackupSHA256 =
+            GuardianCanonicalRecoveryProviderStub.backupSHA256
+        model.recoverCanonicalLocalData()
+        for _ in 0..<100 where await provider.authorization() == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        let authorization = await provider.authorization()
+        let actions = await authorizer.actions
+        XCTAssertEqual(
+            authorization?.verifiedBackupSHA256,
+            GuardianCanonicalRecoveryProviderStub.backupSHA256
+        )
+        XCTAssertEqual(actions, [.replaceFamilySyncData])
+    }
+
+    @MainActor
     func testUnlockLoadsPersistedProfileErasureState() async throws {
         let coordinator = GuardianFamilySyncCoordinatorStub(
             lifecycles: [
@@ -661,6 +697,53 @@ private actor GuardianFamilyAccessRecorder {
 
     func record(_ profileID: ProfileID) {
         profileIDs.append(profileID)
+    }
+}
+
+private actor GuardianCanonicalRecoveryProviderStub:
+    FamilySyncCanonicalRecoveryProviding
+{
+    static let backupSHA256 = String(repeating: "a", count: 64)
+    private let plan: FamilySyncCanonicalRecoveryPlan
+    private var receivedAuthorization: FamilySyncCanonicalRecoveryAuthorization?
+
+    init() {
+        let profileIDs = [ProfileID(), ProfileID()]
+        let records = profileIDs.map { profileID in
+            FamilySyncRecord(
+                recordName: "profile-\(profileID)",
+                profileID: profileID,
+                kind: .profile,
+                payload: Data(profileID.description.utf8),
+                updatedAt: Date(timeIntervalSince1970: 1_735_689_600),
+                deviceID: "installation"
+            )
+        }
+        plan = .init(
+            profileIDs: profileIDs,
+            recordCount: 220,
+            recordSetFingerprint: .init(records: records),
+            installationID: "installation"
+        )
+    }
+
+    func canonicalRecoveryPlan() -> FamilySyncCanonicalRecoveryPlan {
+        plan
+    }
+
+    func recoverCanonicalLocalData(
+        authorization: FamilySyncCanonicalRecoveryAuthorization
+    ) -> FamilySyncCanonicalRecoveryReceipt {
+        receivedAuthorization = authorization
+        return .init(
+            verifiedRemoteFingerprint: authorization.expectedPlan
+                .recordSetFingerprint,
+            recoveredRecordCount: authorization.expectedPlan.recordCount
+        )
+    }
+
+    func authorization() -> FamilySyncCanonicalRecoveryAuthorization? {
+        receivedAuthorization
     }
 }
 

@@ -111,6 +111,10 @@ final class GuardianDashboardViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var syncStatus: FamilySyncStatus = .idle
     @Published private(set) var isFamilySyncEnabled = false
+    @Published private(set) var canonicalRecoveryPlan: FamilySyncCanonicalRecoveryPlan?
+    @Published var canonicalRecoveryBackupSHA256 = ""
+    @Published private(set) var isCanonicalRecoveryRunning = false
+    @Published private(set) var canonicalRecoveryMessage: String?
     @Published private(set) var profileErasurePresentation: GuardianProfileErasurePresentation?
     @Published private(set) var shareURL: URL?
     @Published var shareURLText = ""
@@ -132,6 +136,7 @@ final class GuardianDashboardViewModel: ObservableObject {
     private let audioPromptService: any AudioPromptService
     private let audioExperienceService: any AudioExperienceService
     private let familySyncCoordinator: (any FamilySyncCoordinating)?
+    private let familySyncCanonicalRecovery: (any FamilySyncCanonicalRecoveryProviding)?
     private let familySyncAccessManagement: (@MainActor (ProfileID) async throws -> Void)?
     private let notificationScheduler: (any LearningNotificationScheduling)?
     private let voiceprintEnrollmentService: (any DeviceVoiceprintEnrolling)?
@@ -155,6 +160,8 @@ final class GuardianDashboardViewModel: ObservableObject {
         audioExperienceService: any AudioExperienceService =
             SilentAudioExperienceService(),
         familySyncCoordinator: (any FamilySyncCoordinating)? = nil,
+        familySyncCanonicalRecovery:
+            (any FamilySyncCanonicalRecoveryProviding)? = nil,
         familySyncAccessManagement:
             (@MainActor (ProfileID) async throws -> Void)? = nil,
         notificationScheduler: (any LearningNotificationScheduling)? = nil,
@@ -173,6 +180,7 @@ final class GuardianDashboardViewModel: ObservableObject {
         self.audioPromptService = audioPromptService
         self.audioExperienceService = audioExperienceService
         self.familySyncCoordinator = familySyncCoordinator
+        self.familySyncCanonicalRecovery = familySyncCanonicalRecovery
         self.familySyncAccessManagement = familySyncAccessManagement
         self.notificationScheduler = notificationScheduler
         self.voiceprintEnrollmentService = voiceprintEnrollmentService
@@ -347,6 +355,56 @@ final class GuardianDashboardViewModel: ObservableObject {
     func showFamilySync() {
         destination = .familySync
         refreshSyncStatus()
+        loadCanonicalRecoveryPlan()
+    }
+
+    func recoverCanonicalLocalData() {
+        guard let provider = familySyncCanonicalRecovery,
+            let plan = canonicalRecoveryPlan,
+            !isCanonicalRecoveryRunning
+        else { return }
+        let digest =
+            canonicalRecoveryBackupSHA256
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        Task {
+            guard
+                await sensitiveActionAuthorizer.authorize(
+                    .replaceFamilySyncData
+                )
+            else { return }
+            isCanonicalRecoveryRunning = true
+            canonicalRecoveryMessage = nil
+            defer { isCanonicalRecoveryRunning = false }
+            do {
+                let receipt = try await provider.recoverCanonicalLocalData(
+                    authorization: .init(
+                        expectedPlan: plan,
+                        verifiedBackupSHA256: digest
+                    )
+                )
+                canonicalRecoveryMessage =
+                    "Verified \(receipt.recoveredRecordCount) records in iCloud. "
+                    + "This iPad is now the Family Sync source."
+                if let familySyncCoordinator {
+                    syncStatus = await familySyncCoordinator.synchronize()
+                }
+            } catch {
+                canonicalRecoveryMessage =
+                    "Recovery stopped safely. Local learning data and the "
+                    + "recovery marker were kept; check the backup code and try again."
+            }
+        }
+    }
+
+    private func loadCanonicalRecoveryPlan() {
+        guard let provider = familySyncCanonicalRecovery else {
+            canonicalRecoveryPlan = nil
+            return
+        }
+        Task {
+            canonicalRecoveryPlan = try? await provider.canonicalRecoveryPlan()
+        }
     }
 
     func returnFromFamilySync() {

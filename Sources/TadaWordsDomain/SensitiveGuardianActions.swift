@@ -5,6 +5,7 @@ public enum SensitiveGuardianAction: String, Codable, CaseIterable, Hashable,
     case exportLearningData
     case enableFamilySync
     case manageGuardians
+    case replaceFamilySyncData
 }
 
 public protocol SensitiveGuardianActionAuthorizing: Sendable {
