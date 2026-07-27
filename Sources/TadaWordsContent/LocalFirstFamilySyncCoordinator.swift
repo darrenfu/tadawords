@@ -406,10 +406,34 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
             return currentStatus
         }
 
-        let pendingCount = await durablePendingCount()
+        var pendingCount = await durablePendingCount()
         currentStatus = .syncing(pendingCount: pendingCount)
         let availability = await transport.availability()
         guard availability == .available else {
+            do {
+                // Preserve the durable local-first outbox and erasure lifecycle
+                // while offline. This performs no remote fetch or upload, so an
+                // authorized canonical publication still resumes first once
+                // CloudKit becomes available.
+                _ = try await journalRepository.reconcileLocalRecords(
+                    rawRecords,
+                    deviceID: deviceID,
+                    now: now
+                )
+                if let profileDeletionRepository {
+                    try await repairProfileErasureLifecyclesFromJournal(
+                        in: profileDeletionRepository,
+                        at: now
+                    )
+                }
+                pendingCount = await durablePendingCount()
+            } catch {
+                currentStatus = .failed(
+                    message: Self.privacySafeMessage(for: error),
+                    pendingCount: await durablePendingCount()
+                )
+                return currentStatus
+            }
             switch availability {
             case .available:
                 break
