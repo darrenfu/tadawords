@@ -76,7 +76,7 @@ final class GuardianParentNavigationTests: XCTestCase {
                 "Notifications",
                 "Speech & Microphone",
                 "Family Sync",
-                "Third-Party Notices",
+                "Credits",
             ]
         )
         XCTAssertEqual(
@@ -155,7 +155,7 @@ final class GuardianParentNavigationTests: XCTestCase {
     func testThirdPartyNoticeMatchesBundledTwemojiAttribution() {
         XCTAssertEqual(
             GuardianThirdPartyNoticesContent.title,
-            "Third-Party Notices"
+            "Credits"
         )
         XCTAssertEqual(
             GuardianThirdPartyNoticesContent.attribution,
@@ -195,28 +195,69 @@ final class GuardianParentNavigationTests: XCTestCase {
         )
     }
 
-    func testDataControlCopyNamesExistingParentPathsAndIOSPermissions() {
-        XCTAssertTrue(
-            GuardianDataControlCopy.localProfileDeletion.contains(
-                "tap the child card, choose Edit, then Delete profile"
-            )
+    func testOnlyAppAndFamilyConfigPagesAutoSave() {
+        XCTAssertFalse(GuardianSettingsSection.practicePlan.usesAutoSave)
+        XCTAssertTrue(GuardianSettingsSection.soundAndAccessibility.usesAutoSave)
+        XCTAssertTrue(GuardianSettingsSection.notifications.usesAutoSave)
+    }
+
+    @MainActor
+    func testAppAndFamilyAutoSavePersistsLatestChangeWithoutLeavingPage() async throws {
+        let store = DemoGuardianFamilyStore()
+        let model = GuardianDashboardViewModel(
+            store: store,
+            audioPromptService: NavigationTestAudioPromptService()
         )
-        XCTAssertTrue(
-            GuardianDataControlCopy.localProfileDeletion.contains("from this device")
+        await model.refreshAfterExternalSyncAndWait()
+        let original = try XCTUnwrap(model.snapshot?.practiceSettings)
+        model.showSettings(.soundAndAccessibility)
+
+        let first = ProfilePracticeSettings(
+            profileID: original.profileID,
+            read: original.read,
+            write: original.write,
+            audio: AudioPreferences(musicEnabled: false),
+            notifications: original.notifications,
+            interface: original.interface
+        )
+        let latest = ProfilePracticeSettings(
+            profileID: original.profileID,
+            read: original.read,
+            write: original.write,
+            audio: AudioPreferences(
+                voiceEnabled: false,
+                musicEnabled: false,
+                soundEffectsEnabled: false,
+                reducedSoundEnabled: true,
+                calmEmergencyEnabled: true
+            ),
+            notifications: original.notifications,
+            interface: PracticeInterfacePreferences(
+                leftHandedLayoutEnabled: true,
+                selectedHandwritingTool: original.interface.selectedHandwritingTool
+            )
         )
 
-        for permission in [
-            "Camera",
-            "Photos",
-            "Microphone",
-            "Speech Recognition",
-            "Notifications",
-        ] {
-            XCTAssertTrue(
-                GuardianDataControlCopy.permissionManagement.contains(permission),
-                "Permission guidance should name \(permission)."
-            )
+        model.autoSavePracticeSettings(first, section: .soundAndAccessibility)
+        model.autoSavePracticeSettings(latest, section: .soundAndAccessibility)
+
+        let deadline = ContinuousClock.now + .seconds(2)
+        var saved = original
+        while ContinuousClock.now < deadline {
+            saved = try await store.dashboardSnapshot().practiceSettings
+            if saved.audio == latest.audio, saved.interface == latest.interface {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(25))
         }
+
+        XCTAssertEqual(saved.audio, latest.audio)
+        XCTAssertEqual(saved.interface, latest.interface)
+        XCTAssertEqual(
+            model.transitionKey,
+            "settings-soundAndAccessibility",
+            "Auto-save must not close the settings page."
+        )
     }
 
     func testPracticePlanMergePreservesHiddenAppAndFamilySettings() throws {

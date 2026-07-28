@@ -66,16 +66,22 @@ struct GuardianPracticeSettingsView: View {
 
                 settingsContent
 
-                Button(section.saveButtonTitle) {
-                    onSave(assembledSettings)
+                if !section.usesAutoSave {
+                    Button("Save practice plan") {
+                        onSave(assembledSettings)
+                    }
+                    .buttonStyle(GuardianPrimaryButtonStyle())
                 }
-                .buttonStyle(GuardianPrimaryButtonStyle())
             }
             .frame(maxWidth: 880, alignment: .leading)
             .guardianParentPageInsets()
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)
+        .onChange(of: assembledSettings) { _, settings in
+            guard section.usesAutoSave else { return }
+            onSave(settings)
+        }
     }
 
     @ViewBuilder
@@ -284,6 +290,15 @@ struct GuardianPracticeSettingsView: View {
 }
 
 extension GuardianSettingsSection {
+    var usesAutoSave: Bool {
+        switch self {
+        case .practicePlan:
+            false
+        case .soundAndAccessibility, .notifications:
+            true
+        }
+    }
+
     fileprivate var navigationTitle: String {
         switch self {
         case .practicePlan:
@@ -292,17 +307,6 @@ extension GuardianSettingsSection {
             "Sound & Accessibility"
         case .notifications:
             "Notifications"
-        }
-    }
-
-    fileprivate var saveButtonTitle: String {
-        switch self {
-        case .practicePlan:
-            "Save practice plan"
-        case .soundAndAccessibility:
-            "Save sound & accessibility"
-        case .notifications:
-            "Save notifications"
         }
     }
 }

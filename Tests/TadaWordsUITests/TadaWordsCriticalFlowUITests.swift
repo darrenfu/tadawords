@@ -234,9 +234,9 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         )
     }
 
-    /// App Store privacy and support resources stay parent-only while remaining
-    /// discoverable in both compact phone and regular-width iPad layouts.
-    func testParentAppAndFamilyExposesPrivacySupportAndDataControls() throws {
+    /// App Store privacy and support resources stay parent-only and concise
+    /// in both compact phone and regular-width iPad layouts.
+    func testParentAppAndFamilyExposesPrivacyAndSupport() throws {
         launchDemo()
         unlockParentArea()
 
@@ -253,7 +253,7 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
             ("guardian.app.notifications", "Notifications"),
             ("guardian.app.speech-permissions", "Speech & Microphone"),
             ("guardian.app.sync", "Family Sync"),
-            ("guardian.app.third-party-notices", "Third-Party Notices"),
+            ("guardian.app.third-party-notices", "Credits"),
         ] {
             let button = app.buttons[feature.0]
             for _ in 0..<4 where !button.exists {
@@ -268,8 +268,6 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
 
         let privacy = element(label: "Privacy Policy")
         let support = element(label: "Support")
-        let localDeletion = element(labelPrefix: "Delete a local profile.")
-        let permissions = element(labelPrefix: "Manage iOS permissions.")
         let appVersion = element(label: "Version 0.8.1 (2026072801)")
 
         for _ in 0..<4 where !privacy.exists {
@@ -281,12 +279,8 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         XCTAssertEqual(privacy.label, "Privacy Policy")
         XCTAssertEqual(support.label, "Support")
 
-        for _ in 0..<4 where !permissions.exists {
-            app.scrollViews.firstMatch.swipeUp()
-        }
-
-        XCTAssertTrue(localDeletion.waitForExistence(timeout: 5))
-        XCTAssertTrue(permissions.waitForExistence(timeout: 5))
+        XCTAssertFalse(element(labelPrefix: "Delete a local profile.").exists)
+        XCTAssertFalse(element(labelPrefix: "Manage iOS permissions.").exists)
 
         for _ in 0..<4 where !appVersion.exists {
             app.scrollViews.firstMatch.swipeUp()
@@ -294,6 +288,36 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
 
         XCTAssertTrue(appVersion.waitForExistence(timeout: 5))
         XCTAssertEqual(appVersion.label, "Version 0.8.1 (2026072801)")
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "App & Family aligned layout"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testAppAndFamilySettingsAutoSaveWithoutSaveButtons() throws {
+        launchDemo()
+        unlockParentArea()
+
+        app.buttons["guardian.home.app-and-family"].tap()
+        let sound = app.buttons["guardian.app.sound-accessibility"]
+        XCTAssertTrue(sound.waitForExistence(timeout: 5))
+        sound.tap()
+
+        XCTAssertTrue(app.switches["Voice"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Save sound & accessibility"].exists)
+        app.switches["Voice"].tap()
+        XCTAssertTrue(app.buttons["guardian.navigation.back"].exists)
+
+        app.buttons["guardian.navigation.back"].tap()
+        let notifications = app.buttons["guardian.app.notifications"]
+        XCTAssertTrue(notifications.waitForExistence(timeout: 5))
+        notifications.tap()
+
+        XCTAssertTrue(app.switches["Daily reminder"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Save notifications"].exists)
+        app.switches["Daily reminder"].tap()
+        XCTAssertTrue(app.buttons["guardian.navigation.back"].exists)
     }
 
     /// Third-party credits stay behind the Parent Gate while their complete
@@ -342,7 +366,7 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         XCTAssertTrue(licenseLink.exists || licenseButton.exists)
 
         let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Third-Party Notices - Largest Dynamic Type"
+        screenshot.name = "Credits - Largest Dynamic Type"
         screenshot.lifetime = .keepAlways
         add(screenshot)
 

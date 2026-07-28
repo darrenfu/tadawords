@@ -340,10 +340,17 @@ public struct GuardianRootView: View {
                     section: section,
                     onBack: model.returnToParentSection,
                     onSave: { settings in
-                        model.savePracticeSettings(
-                            settings,
-                            section: section
-                        )
+                        if section.usesAutoSave {
+                            model.autoSavePracticeSettings(
+                                settings,
+                                section: section
+                            )
+                        } else {
+                            model.savePracticeSettings(
+                                settings,
+                                section: section
+                            )
+                        }
                     }
                 )
             } else {

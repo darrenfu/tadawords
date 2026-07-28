@@ -492,7 +492,7 @@ enum GuardianAppAndFamilyFeature: CaseIterable, Equatable {
         case .familySync:
             "Family Sync"
         case .thirdPartyNotices:
-            "Third-Party Notices"
+            "Credits"
         }
     }
 
@@ -513,6 +513,8 @@ enum GuardianAppAndFamilyFeature: CaseIterable, Equatable {
 }
 
 struct GuardianAppAndFamilyView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     let snapshot: GuardianDashboardSnapshot
     let syncState: GuardianSyncState
     let onBack: () -> Void
@@ -529,12 +531,7 @@ struct GuardianAppAndFamilyView: View {
             onBack: onBack
         ) {
             LazyVGrid(
-                columns: [
-                    GridItem(
-                        .adaptive(minimum: 150, maximum: 260),
-                        spacing: GuardianPrimitiveTokens.Spacing.small
-                    )
-                ],
+                columns: featureColumns,
                 alignment: .leading,
                 spacing: GuardianPrimitiveTokens.Spacing.small
             ) {
@@ -589,8 +586,21 @@ struct GuardianAppAndFamilyView: View {
                     action: onOpenThirdPartyNotices
                 )
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             GuardianPrivacyAndSupportSection(appVersion: .current)
         }
+    }
+
+    private var featureColumns: [GridItem] {
+        let columnCount = horizontalSizeClass == .regular ? 5 : 2
+        return Array(
+            repeating: GridItem(
+                .flexible(minimum: 0),
+                spacing: GuardianPrimitiveTokens.Spacing.small,
+                alignment: .top
+            ),
+            count: columnCount
+        )
     }
 
     private var audioSummary: String {
@@ -600,7 +610,7 @@ struct GuardianAppAndFamilyView: View {
         let hand =
             snapshot.practiceSettings.interface.leftHandedLayoutEnabled
             ? "Left-handed controls"
-            : "Right-handed controls"
+            : "Right-handed"
         return "\(music) · \(voice) · \(hand)"
     }
 
@@ -703,15 +713,6 @@ enum GuardianParentResource: String, CaseIterable, Equatable {
     }
 }
 
-enum GuardianDataControlCopy {
-    static let localProfileDeletion =
-        "From Parent Home, tap the child card, choose Edit, then Delete profile. "
-        + "This removes that child’s words, settings, quest history, rewards, and saved picture from this device."
-
-    static let permissionManagement =
-        "Use Speech & Microphone above to review or finish setup. To change access later, open the iOS Settings app, choose Apps, then Tada Words to review Camera, Photos, Microphone, Speech Recognition, and Notifications."
-}
-
 private struct GuardianPrivacyAndSupportSection: View {
     let appVersion: GuardianAppVersionPresentation
 
@@ -724,25 +725,19 @@ private struct GuardianPrivacyAndSupportSection: View {
                 LazyVGrid(
                     columns: [
                         GridItem(
-                            .adaptive(minimum: 132, maximum: 220),
-                            spacing: GuardianPrimitiveTokens.Spacing.small
-                        )
+                            .flexible(minimum: 0),
+                            spacing: GuardianPrimitiveTokens.Spacing.small,
+                            alignment: .top
+                        ),
+                        GridItem(
+                            .flexible(minimum: 0),
+                            spacing: GuardianPrimitiveTokens.Spacing.small,
+                            alignment: .top
+                        ),
                     ],
                     spacing: GuardianPrimitiveTokens.Spacing.small
                 ) {
                     resourceLinks
-                    GuardianDataControlGuide(
-                        title: "Delete a local profile",
-                        detail: GuardianDataControlCopy.localProfileDeletion,
-                        symbol: "person.crop.circle.badge.minus",
-                        accessibilityIdentifier: "guardian.app.local-profile-deletion"
-                    )
-                    GuardianDataControlGuide(
-                        title: "Manage iOS permissions",
-                        detail: GuardianDataControlCopy.permissionManagement,
-                        symbol: "gearshape.fill",
-                        accessibilityIdentifier: "guardian.app.permission-management"
-                    )
                 }
 
                 Text(appVersion.footerText)
@@ -755,7 +750,9 @@ private struct GuardianPrivacyAndSupportSection: View {
                         GuardianAppVersionPresentation.accessibilityIdentifier
                     )
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("guardian.app.privacy-and-support")
     }
 
@@ -799,41 +796,6 @@ private struct GuardianParentResourceLink: View {
         .accessibilityLabel(resource.title)
         .accessibilityHint("Opens \(resource.title) in your web browser")
         .accessibilityIdentifier(resource.accessibilityIdentifier)
-    }
-}
-
-private struct GuardianDataControlGuide: View {
-    let title: String
-    let detail: String
-    let symbol: String
-    let accessibilityIdentifier: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.xSmall) {
-            Image(systemName: symbol)
-                .font(.system(.title3, design: .rounded, weight: .bold))
-                .foregroundStyle(GuardianSemanticTokens.primary)
-                .accessibilityHidden(true)
-            Text(title)
-                .font(.system(.subheadline, design: .rounded, weight: .bold))
-                .lineLimit(1)
-            Text(detail)
-                .font(.system(.caption, design: .rounded, weight: .medium))
-                .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
-                .lineLimit(3)
-        }
-        .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
-        .padding(GuardianPrimitiveTokens.Spacing.small)
-        .background(
-            GuardianSemanticTokens.primary.opacity(0.08),
-            in: RoundedRectangle(
-                cornerRadius: GuardianPrimitiveTokens.Radius.medium,
-                style: .continuous
-            )
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title). \(detail)")
-        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 

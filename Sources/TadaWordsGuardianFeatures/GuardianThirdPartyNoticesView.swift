@@ -2,7 +2,7 @@ import SwiftUI
 import TadaWordsDesignSystem
 
 enum GuardianThirdPartyNoticesContent {
-    static let title = "Third-Party Notices"
+    static let title = "Credits"
     static let attribution = "Twemoji graphics © X Corp. and other contributors."
     static let sourceDescription =
         "Tada Words includes 74 unmodified graphics from jdecked/twemoji 17.0.3."
