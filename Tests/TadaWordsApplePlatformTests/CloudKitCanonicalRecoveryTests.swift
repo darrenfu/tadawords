@@ -6,6 +6,14 @@ import XCTest
 @testable import TadaWordsApplePlatform
 
 final class CloudKitCanonicalRecoveryTests: XCTestCase {
+    func testAllRecordsQueryUsesCloudKitSupportedFormatPredicate() {
+        let query = CloudKitFamilyAllRecordsQuery.make(
+            recordType: CloudKitFamilyRecordCodec.Schema.itemRecordType
+        )
+
+        XCTAssertEqual(query.predicate.predicateFormat, "TRUEPREDICATE")
+    }
+
     func testDurableMarkerSurvivesRestartAndIdenticalRetry() throws {
         let fixture = try CloudKitCanonicalRecoveryFixture()
         defer { fixture.remove() }

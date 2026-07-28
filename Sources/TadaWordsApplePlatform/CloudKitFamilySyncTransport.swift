@@ -12,6 +12,20 @@ public enum CloudKitFamilySyncError: Error, Sendable {
     case operationFailed(String)
 }
 
+enum CloudKitFamilyAllRecordsQuery {
+    static func make(
+        recordType: CKRecord.RecordType
+    ) -> CKQuery {
+        // CloudKit accepts TRUEPREDICATE as a format predicate. A value-based
+        // NSPredicate serializes differently and Production rejects it as a
+        // BAD_REQUEST even though local tests and Development may appear fine.
+        CKQuery(
+            recordType: recordType,
+            predicate: NSPredicate(format: "TRUEPREDICATE")
+        )
+    }
+}
+
 struct CloudKitCanonicalRecoveryExecutor {
     func recover<T>(
         isolation: isolated (any Actor)? = #isolation,
@@ -2500,9 +2514,8 @@ public actor CloudKitFamilySyncTransport:
         )
 
         var existingItemIDs = Set<CKRecord.ID>()
-        let query = CKQuery(
-            recordType: CloudKitFamilyRecordCodec.Schema.itemRecordType,
-            predicate: NSPredicate(value: true)
+        let query = CloudKitFamilyAllRecordsQuery.make(
+            recordType: CloudKitFamilyRecordCodec.Schema.itemRecordType
         )
         var page = try await privateDatabase.records(
             matching: query,
@@ -2614,9 +2627,8 @@ public actor CloudKitFamilySyncTransport:
         var records: [FamilySyncRecord] = []
         for profileID in profileIDs {
             let zoneID = privateZoneID(for: profileID)
-            let query = CKQuery(
-                recordType: CloudKitFamilyRecordCodec.Schema.itemRecordType,
-                predicate: NSPredicate(value: true)
+            let query = CloudKitFamilyAllRecordsQuery.make(
+                recordType: CloudKitFamilyRecordCodec.Schema.itemRecordType
             )
             var page = try await privateDatabase.records(
                 matching: query,
