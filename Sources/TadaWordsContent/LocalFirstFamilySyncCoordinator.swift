@@ -31,6 +31,13 @@ public protocol FamilySyncRecordStore: Sendable {
         expected: FamilySyncRecordSetFingerprint
     ) async throws -> Bool
 
+    /// Replaces the complete synchronized Profile set with a verified
+    /// canonical generation. Production implementations make this crash
+    /// replayable and remove synchronized records absent from the snapshot.
+    func replaceWithCanonicalSnapshot(
+        _ snapshot: FamilySyncCanonicalGenerationSnapshot
+    ) async throws
+
     func isProfileDeleted(_ profileID: ProfileID) async throws -> Bool
 }
 
@@ -67,6 +74,18 @@ extension FamilySyncRecordStore {
         }
         try await apply(records, for: profileID)
         return true
+    }
+
+    public func replaceWithCanonicalSnapshot(
+        _ snapshot: FamilySyncCanonicalGenerationSnapshot
+    ) async throws {
+        try snapshot.validate()
+        for profileID in snapshot.profileIDs {
+            try await apply(
+                snapshot.records.filter { $0.profileID == profileID },
+                for: profileID
+            )
+        }
     }
 }
 
@@ -365,7 +384,7 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
 
         let now = clock.now
         let profileIDs: [ProfileID]
-        let versionedRecords: [FamilySyncRecord]
+        let rawRecords: [FamilySyncRecord]
         do {
             try await store.recoverPendingApplies()
             let excludedProfileIDs = try await store.profileIDsExcludedFromSync()
@@ -374,21 +393,11 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                     .union(explicitlyRequestedProfileIDs)
                     .subtracting(excludedProfileIDs)
             ).sorted { $0.description < $1.description }
-            var rawRecords: [FamilySyncRecord] = []
+            var collectedRecords: [FamilySyncRecord] = []
             for profileID in profileIDs {
-                rawRecords += try await store.records(for: profileID)
+                collectedRecords += try await store.records(for: profileID)
             }
-            versionedRecords = try await journalRepository.reconcileLocalRecords(
-                rawRecords,
-                deviceID: deviceID,
-                now: now
-            )
-            if let profileDeletionRepository {
-                try await repairProfileErasureLifecyclesFromJournal(
-                    in: profileDeletionRepository,
-                    at: now
-                )
-            }
+            rawRecords = collectedRecords
         } catch {
             currentStatus = .failed(
                 message: Self.privacySafeMessage(for: error),
@@ -397,10 +406,34 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
             return currentStatus
         }
 
-        let pendingCount = await durablePendingCount()
+        var pendingCount = await durablePendingCount()
         currentStatus = .syncing(pendingCount: pendingCount)
         let availability = await transport.availability()
         guard availability == .available else {
+            do {
+                // Preserve the durable local-first outbox and erasure lifecycle
+                // while offline. This performs no remote fetch or upload, so an
+                // authorized canonical publication still resumes first once
+                // CloudKit becomes available.
+                _ = try await journalRepository.reconcileLocalRecords(
+                    rawRecords,
+                    deviceID: deviceID,
+                    now: now
+                )
+                if let profileDeletionRepository {
+                    try await repairProfileErasureLifecyclesFromJournal(
+                        in: profileDeletionRepository,
+                        at: now
+                    )
+                }
+                pendingCount = await durablePendingCount()
+            } catch {
+                currentStatus = .failed(
+                    message: Self.privacySafeMessage(for: error),
+                    pendingCount: await durablePendingCount()
+                )
+                return currentStatus
+            }
             switch availability {
             case .available:
                 break
@@ -454,6 +487,77 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
 
         var dueChanges: [FamilySyncPendingOperation] = []
         do {
+            if let canonicalTransport =
+                transport as? any FamilySyncCanonicalRecoveryTransport,
+                let receipt =
+                    try await canonicalTransport
+                    .resumePendingCanonicalGeneration(rawRecords)
+            {
+                let after = try await currentCanonicalResumeRecords()
+                let expectedFingerprint =
+                    FamilySyncRecordSetFingerprint(records: rawRecords)
+                guard receipt.recoveredRecordCount == rawRecords.count,
+                    receipt.verifiedRemoteFingerprint == expectedFingerprint,
+                    FamilySyncRecordSetFingerprint(records: after)
+                        == expectedFingerprint,
+                    Set(after.map(\.profileID))
+                        == Set(rawRecords.map(\.profileID))
+                else {
+                    throw FamilySyncCanonicalRecoveryError
+                        .localSnapshotChanged
+                }
+                let resumedVersionedRecords =
+                    try await journalRepository.reconcileLocalRecords(
+                        rawRecords,
+                        deviceID: deviceID,
+                        now: now
+                    )
+                guard
+                    FamilySyncRecordSetFingerprint(
+                        records: resumedVersionedRecords
+                    ) == expectedFingerprint
+                else {
+                    throw FamilySyncCanonicalRecoveryError
+                        .localSnapshotChanged
+                }
+                try await journalRepository.recordTransportResult(
+                    acknowledged: Set(
+                        resumedVersionedRecords.map {
+                            FamilySyncChangeAcknowledgement(
+                                operation: .save($0)
+                            )
+                        }
+                    ),
+                    failures: [],
+                    at: now
+                )
+                // The verified pointer is active and this source device has
+                // advanced its local fence. Rebuild the normal journal from
+                // that exact generation before any ordinary upload.
+                needsAnotherPass = true
+                currentStatus = .syncing(pendingCount: 0)
+                return currentStatus
+            }
+            let versionedRecords =
+                try await journalRepository.reconcileLocalRecords(
+                    rawRecords,
+                    deviceID: deviceID,
+                    now: now
+                )
+            if let profileDeletionRepository {
+                try await repairProfileErasureLifecyclesFromJournal(
+                    in: profileDeletionRepository,
+                    at: now
+                )
+            }
+            if try await adoptActiveCanonicalGenerationIfNeeded(at: now) {
+                // Re-enumerate the exact adopted Profile set and rebuild the
+                // normal journal view in a fresh pass. No pre-adoption outbox
+                // entry may reach CloudKit.
+                needsAnotherPass = true
+                currentStatus = .syncing(pendingCount: 0)
+                return currentStatus
+            }
             var terminalProfileIDs = Set<ProfileID>()
             for profileID in profileIDs
             where try await store.isProfileDeleted(profileID) {
@@ -960,6 +1064,45 @@ public actor LocalFirstFamilySyncCoordinator: FamilySyncCoordinating {
                 || lhs.isDeleted != rhs.isDeleted
                 || lhs.logicalRevision != rhs.logicalRevision
         }
+    }
+
+    private func currentCanonicalResumeRecords() async throws
+        -> [FamilySyncRecord]
+    {
+        let excludedProfileIDs = try await store.profileIDsExcludedFromSync()
+        let allProfileIDs = try await store.profileIDsForSync()
+        let profileIDs = allProfileIDs.filter {
+            !excludedProfileIDs.contains($0)
+        }.sorted { $0.description < $1.description }
+        var records: [FamilySyncRecord] = []
+        for profileID in profileIDs {
+            records += try await store.records(for: profileID)
+        }
+        return records
+    }
+
+    private func adoptActiveCanonicalGenerationIfNeeded(
+        at date: Date
+    ) async throws -> Bool {
+        guard
+            let canonicalTransport =
+                transport as? any FamilySyncCanonicalRecoveryTransport,
+            let snapshot =
+                try await canonicalTransport.activeCanonicalGeneration(),
+            !(try await canonicalTransport.isCanonicalGenerationApplied(
+                snapshot.generationID
+            ))
+        else {
+            return false
+        }
+        try snapshot.validate()
+        try await store.replaceWithCanonicalSnapshot(snapshot)
+        try await journalRepository.adoptCanonicalSnapshot(snapshot, at: date)
+        try await canonicalTransport.markCanonicalGenerationApplied(
+            snapshot.generationID
+        )
+        explicitlyRequestedProfileIDs.formUnion(snapshot.profileIDs)
+        return true
     }
 
     private func recordProfileErasureAttempts(

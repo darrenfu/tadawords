@@ -337,6 +337,13 @@ public protocol FamilySyncJournalRepository: Sendable {
         at date: Date
     ) async throws
 
+    /// Drops stale manifests, quarantine-driven retries, and outbox state only
+    /// after an authoritative generation has replaced local repositories.
+    func adoptCanonicalSnapshot(
+        _ snapshot: FamilySyncCanonicalGenerationSnapshot,
+        at date: Date
+    ) async throws
+
     func invalidateAcknowledgementsForAccountChange(at date: Date) async throws
 
     /// Removes cached, nonterminal records that were only discovered during an
@@ -521,6 +528,30 @@ public actor VolatileFamilySyncJournalRepository: FamilySyncJournalRepository {
             acknowledged.removeValue(forKey: deletion.key)
             pending.remove(deletion.key)
         }
+    }
+
+    public func adoptCanonicalSnapshot(
+        _ snapshot: FamilySyncCanonicalGenerationSnapshot,
+        at date: Date
+    ) throws {
+        try snapshot.validate()
+        records = Dictionary(
+            uniqueKeysWithValues: snapshot.records.map { record in
+                (
+                    FamilySyncChangeKey(
+                        profileID: record.profileID,
+                        recordName: record.recordName
+                    ),
+                    record
+                )
+            }
+        )
+        acknowledged = records.mapValues(\.logicalRevision)
+        pending.removeAll()
+        lastAttemptAt = date
+        lastSuccessAt = date
+        errorCategory = nil
+        condition = .idle
     }
 
     public func invalidateAcknowledgementsForAccountChange(at date: Date) {
@@ -1035,6 +1066,31 @@ public actor LocalJSONFamilySyncJournalRepository: FamilySyncJournalRepository {
                     lastSuccessAt: outbox.isEmpty ? date : current.status.lastSuccessAt,
                     errorCategory: current.status.errorCategory,
                     condition: current.status.condition
+                )
+            )
+        )
+    }
+
+    public func adoptCanonicalSnapshot(
+        _ canonical: FamilySyncCanonicalGenerationSnapshot,
+        at date: Date
+    ) throws {
+        try canonical.validate()
+        let manifests = canonical.records.map(FamilySyncManifestEntry.init)
+        _ = try dictionary(manifests, duplicate: .manifest)
+        try persist(
+            FamilySyncJournalSnapshot(
+                localManifest: manifests.sorted(by: Self.manifestOrder),
+                acknowledgedManifest: manifests.sorted(
+                    by: Self.manifestOrder
+                ),
+                outbox: [],
+                status: FamilySyncDurableStatus(
+                    pendingCount: 0,
+                    lastAttemptAt: date,
+                    lastSuccessAt: date,
+                    errorCategory: nil,
+                    condition: .idle
                 )
             )
         )

@@ -595,6 +595,14 @@ actor CloudKitFamilySyncEventBuffer {
                 guard generation == activeGeneration,
                     accountChange == nil
                 else { break }
+                if CloudKitFamilyCanonicalGenerationCodec.isGenerationRecord(
+                    cloudRecord.recordID
+                ) {
+                    // Canonical generations use an explicit, verified
+                    // control-plane fetch before ordinary reconciliation.
+                    // They never enter the Profile item decoder or quarantine.
+                    continue
+                }
                 if let binding = metadataStore.binding(
                     for: cloudRecord.recordID.zoneID
                 ),
@@ -751,6 +759,11 @@ actor CloudKitFamilySyncEventBuffer {
                 guard generation == activeGeneration,
                     accountChange == nil
                 else { break }
+                if CloudKitFamilyCanonicalGenerationCodec.isGenerationRecord(
+                    recordID
+                ) {
+                    continue
+                }
                 guard let binding = metadataStore.binding(for: recordID.zoneID) else {
                     quarantinedRecordCount += 1
                     continue

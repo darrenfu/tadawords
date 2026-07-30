@@ -484,8 +484,13 @@ struct GuardianFamilySyncView: View {
     let onManageAccess: () -> Void
     let onAcceptShare: () -> Void
     let onRetryProfileErasure: () -> Void
+    let canonicalRecoveryPlan: FamilySyncCanonicalRecoveryPlan?
+    let isCanonicalRecoveryRunning: Bool
+    let canonicalRecoveryMessage: String?
+    let onRecoverCanonicalData: () -> Void
     @State private var remoteNotificationRegistration:
         FamilySyncRemoteNotificationRegistrationState = .notRequested
+    @State private var confirmsCanonicalRecovery = false
 
     init(
         status: FamilySyncStatus,
@@ -500,7 +505,11 @@ struct GuardianFamilySyncView: View {
         onCreateShare: @escaping () -> Void,
         onManageAccess: @escaping () -> Void,
         onAcceptShare: @escaping () -> Void,
-        onRetryProfileErasure: @escaping () -> Void = {}
+        onRetryProfileErasure: @escaping () -> Void = {},
+        canonicalRecoveryPlan: FamilySyncCanonicalRecoveryPlan? = nil,
+        isCanonicalRecoveryRunning: Bool = false,
+        canonicalRecoveryMessage: String? = nil,
+        onRecoverCanonicalData: @escaping () -> Void = {}
     ) {
         self.status = status
         self.isEnabled = isEnabled
@@ -515,6 +524,10 @@ struct GuardianFamilySyncView: View {
         self.onManageAccess = onManageAccess
         self.onAcceptShare = onAcceptShare
         self.onRetryProfileErasure = onRetryProfileErasure
+        self.canonicalRecoveryPlan = canonicalRecoveryPlan
+        self.isCanonicalRecoveryRunning = isCanonicalRecoveryRunning
+        self.canonicalRecoveryMessage = canonicalRecoveryMessage
+        self.onRecoverCanonicalData = onRecoverCanonicalData
     }
 
     private var presentation: GuardianFamilySyncPresentation {
@@ -572,9 +585,35 @@ struct GuardianFamilySyncView: View {
                             }
                         }
                         if presentation.showsSyncAction {
-                            Button("Sync now", action: onSyncNow)
-                                .buttonStyle(.borderedProminent)
-                                .accessibilityIdentifier("guardian.sync.now")
+                            HStack {
+                                Button("Sync Now", action: onSyncNow)
+                                    .buttonStyle(.borderedProminent)
+                                    .accessibilityIdentifier("guardian.sync.now")
+                                if showsCanonicalRecovery,
+                                    canonicalRecoveryPlan != nil
+                                {
+                                    Button("Resolve Conflict") {
+                                        confirmsCanonicalRecovery = true
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(isCanonicalRecoveryRunning)
+                                    .accessibilityIdentifier(
+                                        "guardian.sync.canonical-recovery.start"
+                                    )
+                                }
+                            }
+                            if isCanonicalRecoveryRunning {
+                                ProgressView("Publishing verified sync version…")
+                            }
+                            if let canonicalRecoveryMessage {
+                                Text(canonicalRecoveryMessage)
+                                    .foregroundStyle(
+                                        GuardianSemanticTokens.secondaryForeground
+                                    )
+                                    .accessibilityIdentifier(
+                                        "guardian.sync.canonical-recovery.result"
+                                    )
+                            }
                         }
                         ShareLink(
                             item: GuardianFamilySyncDiagnosticReport(
@@ -698,7 +737,34 @@ struct GuardianFamilySyncView: View {
                 remoteNotificationRegistration = state
             }
         }
+        .confirmationDialog(
+            "Use this iPad to resolve the conflict?",
+            isPresented: $confirmsCanonicalRecovery,
+            titleVisibility: .visible
+        ) {
+            Button(
+                "Publish This iPad’s Data",
+                action: onRecoverCanonicalData
+            )
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let canonicalRecoveryPlan {
+                Text(
+                    "Publish \(canonicalRecoveryPlan.recordCount) local records, "
+                        + "including \(canonicalRecoveryPlan.recordCountsByKind[.wordPoolEntry, default: 0]) words "
+                        + "for \(canonicalRecoveryPlan.profileIDs.count) child profiles, "
+                        + "as the active versioned snapshot. Other updated devices "
+                        + "will adopt it before uploading."
+                )
+            }
+        }
         .accessibilityIdentifier("guardian.sync.page")
+    }
+
+    private var showsCanonicalRecovery: Bool {
+        guard isEnabled, canonicalRecoveryPlan != nil else { return false }
+        if case .failed = status { return true }
+        return false
     }
 }
 

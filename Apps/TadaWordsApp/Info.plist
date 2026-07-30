@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.7.48</string>
+	<string>0.8.1</string>
 	<key>CFBundleVersion</key>
-	<string>2026072505</string>
+	<string>2026072801</string>
 	<key>CKSharingSupported</key>
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>

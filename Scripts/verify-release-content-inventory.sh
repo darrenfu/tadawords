@@ -312,7 +312,7 @@ assert_sha256 "$repo_root/Apps/TadaWordsApp/Assets.xcassets/TadaWordsMark.images
 assert_sha256 "$repo_root/Apps/TadaWordsApp/Assets.xcassets/PawgooMark.imageset/pawgoo-mark.svg" "2653ed92cac054f5df24d1726a90cd8e147b7e784cd98653c26f99d08c05f6c9" "Pawgoo mark"
 assert_sha256 "$repo_root/Tests/Fixtures/ChildSpeech/speechocean762-000010168-bye.wav" "807df45f3aec0718c30929595a9db1e99eab87134e6cdefe15551aa8c0a79db8" "child-speech fixture"
 
-assert_equal "$(find "$repo_root/QAArtifacts" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) | awk 'END { print NR + 0 }')" "19" "tracked QA image count"
+assert_equal "$(find "$repo_root/QAArtifacts" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) | awk 'END { print NR + 0 }')" "0" "tracked QA image count"
 assert_equal "$(find "$repo_root/Sources" -path '*/Resources/*' -type f -name '*.json' | awk 'END { print NR + 0 }')" "4" "source resource JSON count"
 
 if find "$repo_root/Apps" "$repo_root/Sources" -type f \( -iname '*.ttf' -o -iname '*.otf' \) | grep -q .; then

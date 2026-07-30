@@ -530,6 +530,33 @@ private struct CloudKitFamilyMetadataSnapshot: Codable {
     // Optional so metadata written by the first schema-v2 development builds
     // remains readable. New snapshots always persist an explicit array.
     var acknowledgedTerminalRemovals: [CloudKitAcknowledgedTerminalRemoval]? = []
+    // Optional for snapshots written before owner-authorized canonical
+    // recovery existed. The marker contains only integrity metadata and
+    // blocks ordinary sync while canonical publication is incomplete.
+    var pendingCanonicalRecovery: CloudKitPendingCanonicalRecovery?
+    // Optional for schema-v2 snapshots written before canonical generations.
+    // This is advanced only after repository and journal adoption both commit.
+    var appliedCanonicalGenerationID: String?
+}
+
+struct CloudKitPendingCanonicalRecovery: Codable, Equatable, Sendable {
+    let profileIDs: [ProfileID]
+    let recordCount: Int
+    let recordSetFingerprint: String
+    let installationID: String
+    let authorizationFingerprint: String
+    let originAccountRecordName: String
+    let stagedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case profileIDs
+        case recordCount
+        case recordSetFingerprint
+        case installationID
+        case authorizationFingerprint = "verifiedBackupSHA256"
+        case originAccountRecordName
+        case stagedAt
+    }
 }
 
 enum CloudKitFamilyAccountGate: Equatable {
@@ -560,6 +587,177 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
             loadLocked().bindings.first {
                 $0.zoneName == zoneID.zoneName && $0.ownerName == zoneID.ownerName
             }
+        }
+    }
+
+    func pendingCanonicalRecovery() throws
+        -> CloudKitPendingCanonicalRecovery?
+    {
+        try withLock {
+            let snapshot = loadLocked()
+            guard !loadFailed else {
+                throw CloudKitFamilyPersistenceError.corruptMetadata
+            }
+            return snapshot.pendingCanonicalRecovery
+        }
+    }
+
+    func pendingCanonicalRecoveryAuthorization(
+        for records: [FamilySyncRecord]
+    ) throws -> FamilySyncCanonicalRecoveryAuthorization? {
+        try withLock {
+            let snapshot = loadLocked()
+            guard !loadFailed else {
+                throw CloudKitFamilyPersistenceError.corruptMetadata
+            }
+            guard let marker = snapshot.pendingCanonicalRecovery else {
+                return nil
+            }
+            let profileIDs = Array(Set(records.map(\.profileID))).sorted {
+                $0.description < $1.description
+            }
+            let fingerprint =
+                FamilySyncRecordSetFingerprint(records: records)
+            guard marker.profileIDs == profileIDs,
+                marker.recordCount == records.count,
+                marker.recordSetFingerprint == fingerprint.value,
+                marker.authorizationFingerprint == fingerprint.value
+            else {
+                throw FamilySyncCanonicalRecoveryError.localSnapshotChanged
+            }
+            return FamilySyncCanonicalRecoveryAuthorization(
+                expectedPlan: FamilySyncCanonicalRecoveryPlan(
+                    profileIDs: profileIDs,
+                    recordCount: records.count,
+                    recordCountsByKind: Dictionary(
+                        grouping: records,
+                        by: \.kind
+                    ).mapValues(\.count),
+                    recordSetFingerprint: fingerprint,
+                    installationID: marker.installationID
+                )
+            )
+        }
+    }
+
+    func prepareCanonicalRecovery(
+        authorization: FamilySyncCanonicalRecoveryAuthorization,
+        originAccountRecordName: String,
+        stagedAt: Date = Date()
+    ) throws -> CloudKitPendingCanonicalRecovery {
+        try withLock {
+            var snapshot = loadLocked()
+            guard !loadFailed, !snapshot.requiresAccountConfirmation,
+                snapshot.confirmedAccountRecordName == originAccountRecordName
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            let marker = CloudKitPendingCanonicalRecovery(
+                profileIDs: authorization.expectedPlan.profileIDs,
+                recordCount: authorization.expectedPlan.recordCount,
+                recordSetFingerprint:
+                    authorization.expectedPlan.recordSetFingerprint.value,
+                installationID: authorization.expectedPlan.installationID,
+                authorizationFingerprint:
+                    authorization.authorizationFingerprint,
+                originAccountRecordName: originAccountRecordName,
+                stagedAt: stagedAt
+            )
+            if let existing = snapshot.pendingCanonicalRecovery {
+                guard existing.profileIDs == marker.profileIDs,
+                    existing.recordCount == marker.recordCount,
+                    existing.recordSetFingerprint == marker.recordSetFingerprint,
+                    existing.installationID == marker.installationID,
+                    existing.authorizationFingerprint
+                        == marker.authorizationFingerprint,
+                    existing.originAccountRecordName
+                        == marker.originAccountRecordName
+                else {
+                    throw CloudKitFamilyPersistenceError.bindingConflict
+                }
+                return existing
+            }
+            for profileID in marker.profileIDs {
+                let binding =
+                    snapshot.bindings.first { $0.profileID == profileID }
+                    ?? .unbound(profileID)
+                guard
+                    binding.state == .unbound
+                        || binding.state == .privateOwner
+                else {
+                    throw CloudKitFamilyPersistenceError.bindingConflict
+                }
+            }
+            snapshot.pendingCanonicalRecovery = marker
+            try persistLocked(snapshot)
+            return marker
+        }
+    }
+
+    func completeCanonicalRecovery(
+        _ marker: CloudKitPendingCanonicalRecovery
+    ) throws {
+        try withLock {
+            var snapshot = loadLocked()
+            guard snapshot.pendingCanonicalRecovery == marker else {
+                throw CloudKitFamilyPersistenceError.bindingConflict
+            }
+            snapshot.pendingCanonicalRecovery = nil
+            try persistLocked(snapshot)
+        }
+    }
+
+    func appliedCanonicalGenerationID() throws -> String? {
+        try withLock {
+            let snapshot = loadLocked()
+            guard !loadFailed else {
+                throw CloudKitFamilyPersistenceError.corruptMetadata
+            }
+            return snapshot.appliedCanonicalGenerationID
+        }
+    }
+
+    func markCanonicalGenerationApplied(_ generationID: String) throws {
+        try withLock {
+            var snapshot = loadLocked()
+            guard !loadFailed, !snapshot.requiresAccountConfirmation,
+                !generationID.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).isEmpty
+            else {
+                throw CloudKitFamilyPersistenceError.accountBindingMismatch
+            }
+            snapshot.appliedCanonicalGenerationID = generationID
+            // All pre-generation transport state belongs to the superseded
+            // history. Retaining it would immediately recreate the conflict
+            // that the authoritative snapshot resolved.
+            snapshot.quarantined = []
+            snapshot.protectedRecordKeys = []
+            snapshot.inbox = []
+            snapshot.pendingCanonicalRecovery = nil
+            try persistLocked(snapshot)
+        }
+    }
+
+    func purgeCanonicalRecoveryTransportBytes(
+        profileID: ProfileID,
+        zoneID: CKRecordZone.ID
+    ) throws {
+        try withLock {
+            var snapshot = loadLocked()
+            guard
+                snapshot.pendingCanonicalRecovery?.profileIDs.contains(profileID)
+                    == true
+            else {
+                throw CloudKitFamilyPersistenceError.bindingConflict
+            }
+            purgeTransportBytes(
+                for: profileID,
+                zoneName: zoneID.zoneName,
+                ownerName: zoneID.ownerName,
+                snapshot: &snapshot
+            )
+            try persistLocked(snapshot)
         }
     }
 
@@ -3355,7 +3553,38 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
                 }
             }
         }
+        if let recovery = snapshot.pendingCanonicalRecovery {
+            let recoveryProfileIDs = Set(recovery.profileIDs)
+            guard !recovery.profileIDs.isEmpty,
+                recoveryProfileIDs.count == recovery.profileIDs.count,
+                recovery.recordCount >= recovery.profileIDs.count,
+                recovery.recordSetFingerprint.count == 64,
+                recovery.recordSetFingerprint.allSatisfy(Self.isLowerHex),
+                isNonEmpty(recovery.installationID),
+                recovery.authorizationFingerprint.count == 64,
+                recovery.authorizationFingerprint.allSatisfy(Self.isLowerHex),
+                recovery.originAccountRecordName
+                    == snapshot.confirmedAccountRecordName,
+                !(snapshot.pendingAcceptedShareCleanups ?? []).contains(
+                    where: { recoveryProfileIDs.contains($0.profileID) }
+                )
+            else { return false }
+            for profileID in recovery.profileIDs {
+                guard
+                    snapshot.bindings.first(where: {
+                        $0.profileID == profileID
+                    }).map({
+                        $0.state == .privateOwner
+                            && isAuthorized($0, in: snapshot)
+                    }) ?? true
+                else { return false }
+            }
+        }
         return true
+    }
+
+    private static func isLowerHex(_ character: Character) -> Bool {
+        character.isNumber || ("a"..."f").contains(String(character))
     }
 
     private func loadLocked() -> CloudKitFamilyMetadataSnapshot {

@@ -397,6 +397,123 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
         }
     }
 
+    public func replaceWithCanonicalSnapshot(
+        _ snapshot: FamilySyncCanonicalGenerationSnapshot
+    ) async throws {
+        try snapshot.validate()
+        let canonicalProfileIDs = Set(snapshot.profileIDs)
+        let localProfileIDs = Set(try await profileRepository.profiles().map(\.id))
+            .union(try await tombstoneRepository.tombstones().map(\.profileID))
+        let allProfileIDs = localProfileIDs.union(canonicalProfileIDs).sorted {
+            $0.description < $1.description
+        }
+        for profileID in allProfileIDs {
+            let records = snapshot.records.filter {
+                $0.profileID == profileID
+            }
+            try await applyAuthoritativeReplacement(
+                records,
+                for: profileID,
+                profileRemainsCanonical: canonicalProfileIDs.contains(profileID)
+            )
+        }
+    }
+
+    private func applyAuthoritativeReplacement(
+        _ records: [FamilySyncRecord],
+        for profileID: ProfileID,
+        profileRemainsCanonical: Bool
+    ) async throws {
+        for record in records { try record.validateCompatibility() }
+        guard records.allSatisfy({ $0.profileID == profileID }) else {
+            throw RepositoryFamilySyncError.profileMismatch
+        }
+
+        let operation: @Sendable () async throws -> Void = {
+            guard let transactions = self.applyTransactionRepository else {
+                try await self.resetSynchronizedProfileData(
+                    profileID,
+                    profileRemainsCanonical: profileRemainsCanonical
+                )
+                try await self.applyValidated(records, for: profileID)
+                return
+            }
+            switch try await transactions.begin(
+                profileID: profileID,
+                records: records,
+                mode: .authoritativeReplace,
+                at: self.clock.now
+            ) {
+            case .alreadyCommitted:
+                return
+            case .pending(let transaction):
+                do {
+                    try await self.onApplyBoundary(.durableBegin)
+                    try await self.resetSynchronizedProfileData(
+                        profileID,
+                        profileRemainsCanonical: profileRemainsCanonical
+                    )
+                    try await self.applyValidated(
+                        transaction.records,
+                        for: transaction.profileID
+                    )
+                    _ = try await transactions.markCommitted(
+                        transactionID: transaction.id,
+                        at: self.clock.now
+                    )
+                    await self.mutationGate?.clearRecovery(
+                        profileID,
+                        transactionID: transaction.id
+                    )
+                } catch {
+                    await self.mutationGate?.requireRecovery(
+                        profileID,
+                        transactionID: transaction.id
+                    )
+                    throw error
+                }
+            }
+        }
+
+        guard let mutationGate else {
+            try await operation()
+            return
+        }
+        try await mutationGate.acquire(
+            profileID,
+            allowingTerminal: true,
+            allowingRecovery: true
+        )
+        do {
+            try await ProfileScopedMutationLeaseContext.$profileID.withValue(
+                profileID
+            ) {
+                try await operation()
+            }
+            await mutationGate.release(profileID)
+        } catch {
+            await mutationGate.release(profileID)
+            throw error
+        }
+    }
+
+    private func resetSynchronizedProfileData(
+        _ profileID: ProfileID,
+        profileRemainsCanonical: Bool
+    ) async throws {
+        try await tombstoneRepository.delete(for: profileID)
+        guard profileRemainsCanonical else {
+            try await profileDataEraser.eraseProfileData(for: profileID)
+            return
+        }
+        // Keep device-local voiceprint/session/handwriting state for canonical
+        // Profiles. Every Family Sync-owned child collection is replaced.
+        try await wordPoolRepository.deleteAll(for: profileID)
+        try await practiceSettingsRepository.delete(for: profileID)
+        try await learningRepository.deleteLearningRecords(for: profileID)
+        try await dailyQuestRepository.deleteHistory(for: profileID)
+    }
+
     private func applyValidated(
         _ records: [FamilySyncRecord],
         for profileID: ProfileID
@@ -611,6 +728,12 @@ public actor RepositoryFamilySyncRecordStore: FamilySyncRecordStore {
                     transaction.records,
                     for: transaction.profileID
                 )
+                if transaction.mode == .authoritativeReplace {
+                    try await self.resetSynchronizedProfileData(
+                        transaction.profileID,
+                        profileRemainsCanonical: !transaction.records.isEmpty
+                    )
+                }
                 try await self.applyValidated(
                     transaction.records,
                     for: transaction.profileID

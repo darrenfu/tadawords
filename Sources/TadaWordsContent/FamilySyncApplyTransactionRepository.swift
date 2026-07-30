@@ -1,6 +1,11 @@
 import Foundation
 import TadaWordsDomain
 
+public enum FamilySyncApplyMode: String, Codable, Equatable, Sendable {
+    case merge
+    case authoritativeReplace
+}
+
 /// Exact remote bytes kept only while a Profile-scoped multi-repository apply
 /// is unfinished. Bootstrap can deterministically resume this transaction
 /// before exposing the Profile to SwiftUI.
@@ -10,27 +15,37 @@ public struct FamilySyncPendingApplyTransaction: Codable, Equatable, Sendable {
     public let batchID: String
     public let records: [FamilySyncRecord]
     public let startedAt: Date
+    public let mode: FamilySyncApplyMode
 
     public init(
         id: UUID = UUID(),
         profileID: ProfileID,
         records: [FamilySyncRecord],
-        startedAt: Date
+        startedAt: Date,
+        mode: FamilySyncApplyMode = .merge
     ) throws {
-        guard !records.isEmpty,
+        guard mode == .authoritativeReplace || !records.isEmpty,
             records.allSatisfy({ $0.profileID == profileID })
         else {
             throw FamilySyncApplyTransactionError.profileMismatch(profileID)
         }
         self.id = id
         self.profileID = profileID
-        batchID = Self.batchID(for: records)
+        batchID = Self.batchID(for: records, mode: mode)
         self.records = records.sorted(by: Self.recordOrder)
         self.startedAt = startedAt
+        self.mode = mode
     }
 
-    static func batchID(for records: [FamilySyncRecord]) -> String {
+    static func batchID(
+        for records: [FamilySyncRecord],
+        mode: FamilySyncApplyMode = .merge
+    ) -> String {
         var bytes = Data()
+        if mode == .authoritativeReplace {
+            bytes.append(contentsOf: "authoritative-replace".utf8)
+            bytes.append(0)
+        }
         for record in records.sorted(by: recordOrder) {
             bytes.append(contentsOf: record.profileID.description.utf8)
             bytes.append(0)
@@ -46,6 +61,32 @@ public struct FamilySyncPendingApplyTransaction: Codable, Equatable, Sendable {
             bytes.append(record.isDeleted ? 1 : 0)
         }
         return FamilySyncRecord.checksum(for: bytes)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case profileID
+        case batchID
+        case records
+        case startedAt
+        case mode
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        profileID = try container.decode(ProfileID.self, forKey: .profileID)
+        batchID = try container.decode(String.self, forKey: .batchID)
+        records = try container.decode(
+            [FamilySyncRecord].self,
+            forKey: .records
+        )
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        mode =
+            try container.decodeIfPresent(
+                FamilySyncApplyMode.self,
+                forKey: .mode
+            ) ?? .merge
     }
 
     private static func recordOrder(
@@ -100,6 +141,7 @@ public protocol FamilySyncApplyTransactionRepository: Sendable {
     func begin(
         profileID: ProfileID,
         records: [FamilySyncRecord],
+        mode: FamilySyncApplyMode,
         at date: Date
     ) async throws -> FamilySyncApplyTransactionStart
 
@@ -133,6 +175,21 @@ public protocol FamilySyncApplyTransactionRepository: Sendable {
     func hasUnadoptedProfileState() async throws -> Bool
 
     func committedReceipts() async -> AsyncStream<FamilySyncCommittedApplyReceipt>
+}
+
+extension FamilySyncApplyTransactionRepository {
+    public func begin(
+        profileID: ProfileID,
+        records: [FamilySyncRecord],
+        at date: Date
+    ) async throws -> FamilySyncApplyTransactionStart {
+        try await begin(
+            profileID: profileID,
+            records: records,
+            mode: .merge,
+            at: date
+        )
+    }
 }
 
 public struct FamilySyncApplyTransactionSnapshot: Codable, Equatable, Sendable {
@@ -188,15 +245,17 @@ public actor LocalJSONFamilySyncApplyTransactionRepository:
     public func begin(
         profileID: ProfileID,
         records: [FamilySyncRecord],
+        mode: FamilySyncApplyMode,
         at date: Date
     ) async throws -> FamilySyncApplyTransactionStart {
-        guard !records.isEmpty else {
+        guard mode == .authoritativeReplace || !records.isEmpty else {
             throw FamilySyncApplyTransactionError.emptyBatch
         }
         let transaction = try FamilySyncPendingApplyTransaction(
             profileID: profileID,
             records: records,
-            startedAt: date
+            startedAt: date,
+            mode: mode
         )
         var current = try loadedSnapshot()
 
@@ -315,7 +374,8 @@ public actor LocalJSONFamilySyncApplyTransactionRepository:
                     id: transaction.id,
                     profileID: transaction.profileID,
                     records: deletionRecords,
-                    startedAt: transaction.startedAt
+                    startedAt: transaction.startedAt,
+                    mode: .merge
                 )
             }
         let retained = FamilySyncApplyTransactionSnapshot(
@@ -437,7 +497,8 @@ public actor LocalJSONFamilySyncApplyTransactionRepository:
                 }),
                 transaction.batchID
                     == FamilySyncPendingApplyTransaction.batchID(
-                        for: transaction.records
+                        for: transaction.records,
+                        mode: transaction.mode
                     )
             else {
                 throw FamilySyncApplyTransactionError.corruptSnapshot

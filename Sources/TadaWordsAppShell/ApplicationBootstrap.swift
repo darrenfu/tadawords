@@ -91,6 +91,7 @@ struct ProductionApplicationEnvironment: Sendable {
     let lastSelectedProfileID: ProfileID?
     let guardianStore: RepositoryGuardianFamilyStore
     let familySyncCoordinator: LocalFirstFamilySyncCoordinator
+    let familySyncCanonicalRecovery: CanonicalFamilySyncRecoveryCoordinator
     let familySyncTransport: any FamilySyncTransport
     let familySyncJournalRepository: LocalJSONFamilySyncJournalRepository
     let familySyncApplyTransactionRepository: LocalJSONFamilySyncApplyTransactionRepository
@@ -395,6 +396,14 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             deviceID: deviceID,
             clock: clock
         )
+        let familySyncCanonicalRecovery =
+            CanonicalFamilySyncRecoveryCoordinator(
+                store: syncStore,
+                transport: familySyncTransport,
+                journal: familySyncJournalRepository,
+                installationID: deviceID,
+                clock: clock
+            )
         let guardianStore = RepositoryGuardianFamilyStore(
             profiles: profiles,
             selectedProfileID: lastSelectedProfileID,
@@ -446,6 +455,7 @@ struct ProductionApplicationBootstrapper: ApplicationBootstrapping, Sendable {
             lastSelectedProfileID: lastSelectedProfileID,
             guardianStore: guardianStore,
             familySyncCoordinator: familySyncCoordinator,
+            familySyncCanonicalRecovery: familySyncCanonicalRecovery,
             familySyncTransport: familySyncTransport,
             familySyncJournalRepository: familySyncJournalRepository,
             familySyncApplyTransactionRepository:

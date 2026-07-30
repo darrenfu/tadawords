@@ -658,6 +658,79 @@ final class RepositoryFamilySyncRecordStoreTests: XCTestCase {
             "No payload mutation may occur before the durable transaction exists"
         )
     }
+
+    func testCanonicalGenerationAuthoritativelyRemovesAbsentProfileAndReplays()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try await fixture.profiles.save(fixture.profile)
+        let extra = KidProfile(
+            displayName: "Stale local child",
+            avatar: fixture.profile.avatar,
+            selectedWorld: fixture.profile.selectedWorld,
+            createdAt: fixture.now.addingTimeInterval(-50)
+        )
+        try await fixture.profiles.save(extra)
+        let canonicalProfile = KidProfile(
+            id: fixture.profile.id,
+            displayName: "Canonical child",
+            avatar: fixture.profile.avatar,
+            selectedWorld: fixture.profile.selectedWorld,
+            createdAt: fixture.profile.createdAt,
+            updatedAt: fixture.now
+        )
+        let record = FamilySyncRecord(
+            recordName: "profile-\(canonicalProfile.id)",
+            profileID: canonicalProfile.id,
+            kind: .profile,
+            payload: try JSONEncoder.tada.encode(
+                FamilySyncProfilePayload(profile: canonicalProfile)
+            ),
+            updatedAt: fixture.now,
+            deviceID: "canonical-ipad",
+            logicalRevision: .init(
+                counter: 20,
+                deviceID: "canonical-ipad"
+            )
+        )
+        let transactions = LocalJSONFamilySyncApplyTransactionRepository(
+            snapshotURL: fixture.directory.appendingPathComponent(
+                "canonical-apply-transactions.json"
+            )
+        )
+        let store = fixture.makeStore(
+            tombstones: fixture.tombstones,
+            applyTransactionRepository: transactions
+        )
+        let snapshot = FamilySyncCanonicalGenerationSnapshot(
+            generationID: "generation-1",
+            previousGenerationID: nil,
+            sourceInstallationID: "canonical-ipad",
+            createdAt: fixture.now,
+            records: [record]
+        )
+
+        try await store.replaceWithCanonicalSnapshot(snapshot)
+        try await store.recoverPendingApplies()
+        let persistedCanonical = try await fixture.profiles.profile(
+            id: fixture.profile.id
+        )
+        let persistedExtra = try await fixture.profiles.profile(id: extra.id)
+        let pending = try await transactions.pendingTransactions()
+        let canonicalReceipt = try await transactions.lastCommittedReceipt(
+            for: fixture.profile.id
+        )
+        let extraReceipt = try await transactions.lastCommittedReceipt(
+            for: extra.id
+        )
+
+        XCTAssertEqual(persistedCanonical?.displayName, "Canonical child")
+        XCTAssertNil(persistedExtra)
+        XCTAssertTrue(pending.isEmpty)
+        XCTAssertEqual(canonicalReceipt?.recordCount, 1)
+        XCTAssertEqual(extraReceipt?.recordCount, 0)
+    }
 }
 
 private struct Fixture {

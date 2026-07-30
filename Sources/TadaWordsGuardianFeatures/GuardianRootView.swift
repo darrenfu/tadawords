@@ -69,6 +69,8 @@ public struct GuardianRootView: View {
         audioExperienceService: any AudioExperienceService =
             SilentAudioExperienceService(),
         familySyncCoordinator: (any FamilySyncCoordinating)? = nil,
+        familySyncCanonicalRecovery:
+            (any FamilySyncCanonicalRecoveryProviding)? = nil,
         familySyncAccessManagement:
             (@MainActor (ProfileID) async throws -> Void)? = nil,
         notificationScheduler: (any LearningNotificationScheduling)? = nil,
@@ -98,6 +100,7 @@ public struct GuardianRootView: View {
                 audioPromptService: audioPromptService,
                 audioExperienceService: audioExperienceService,
                 familySyncCoordinator: familySyncCoordinator,
+                familySyncCanonicalRecovery: familySyncCanonicalRecovery,
                 familySyncAccessManagement: familySyncAccessManagement,
                 notificationScheduler: notificationScheduler,
                 voiceprintEnrollmentService: voiceprintEnrollmentService,
@@ -357,7 +360,12 @@ public struct GuardianRootView: View {
                 onCreateShare: model.createFamilyShare,
                 onManageAccess: model.manageFamilyAccess,
                 onAcceptShare: model.acceptFamilyShare,
-                onRetryProfileErasure: model.retryProfileErasure
+                onRetryProfileErasure: model.retryProfileErasure,
+                canonicalRecoveryPlan: model.canonicalRecoveryPlan,
+                isCanonicalRecoveryRunning:
+                    model.isCanonicalRecoveryRunning,
+                canonicalRecoveryMessage: model.canonicalRecoveryMessage,
+                onRecoverCanonicalData: model.recoverCanonicalLocalData
             )
 
         case .speechPermissions:
