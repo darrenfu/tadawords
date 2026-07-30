@@ -1,0 +1,1031 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tada Words — OCR Lemma Review Prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #f4f7fc;
+      --surface: #ffffff;
+      --ink: #142542;
+      --soft-ink: #5f6b82;
+      --line: #dce3ef;
+      --indigo: #6250c2;
+      --indigo-soft: #f0edff;
+      --orange: #c96813;
+      --orange-soft: #fff4e8;
+      --green: #1f8c59;
+      --green-soft: #eaf8f1;
+      --red: #bd333b;
+      --shadow: 0 20px 58px rgba(20, 37, 66, 0.12);
+      --radius-sm: 12px;
+      --radius-md: 18px;
+      --radius-lg: 26px;
+      font-family: ui-rounded, "SF Pro Rounded", "Avenir Next", system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-width: 320px;
+      margin: 0;
+      color: var(--ink);
+      background: #e9eef7;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      min-height: 44px;
+      color: inherit;
+      cursor: pointer;
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 3px solid rgba(98, 80, 194, 0.35);
+      outline-offset: 2px;
+    }
+
+    .prototype-bar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 58px;
+      padding: 8px 18px;
+      border-bottom: 1px solid rgba(20, 37, 66, 0.12);
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(16px);
+    }
+
+    .prototype-title {
+      min-width: 0;
+    }
+
+    .prototype-title strong,
+    .prototype-title span {
+      display: block;
+    }
+
+    .prototype-title span {
+      margin-top: 2px;
+      color: var(--soft-ink);
+      font-size: 12px;
+    }
+
+    .device-toggle {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 14px;
+      background: #edf1f7;
+    }
+
+    .device-toggle button {
+      min-height: 36px;
+      padding: 0 14px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--soft-ink);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .device-toggle button[aria-pressed="true"] {
+      color: var(--ink);
+      background: var(--surface);
+      box-shadow: 0 2px 8px rgba(20, 37, 66, 0.12);
+    }
+
+    .stage {
+      width: min(100%, 980px);
+      min-height: calc(100vh - 58px);
+      margin: 0 auto;
+      padding: 24px;
+      transition: width 180ms ease;
+    }
+
+    .stage.phone {
+      width: 430px;
+    }
+
+    .app {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      height: calc(100vh - 106px);
+      min-height: calc(100vh - 106px);
+      overflow: hidden;
+      border: 1px solid rgba(20, 37, 66, 0.08);
+      border-radius: 34px;
+      background: var(--canvas);
+      box-shadow: var(--shadow);
+    }
+
+    .app-nav {
+      position: relative;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      min-height: 68px;
+      padding: 10px 16px;
+      border-bottom: 1px solid rgba(20, 37, 66, 0.08);
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(18px);
+    }
+
+    .nav-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: max-content;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      font-size: 14px;
+      font-weight: 760;
+    }
+
+    .nav-action:last-child {
+      justify-self: end;
+    }
+
+    .nav-title {
+      min-width: 0;
+      overflow: hidden;
+      text-align: center;
+    }
+
+    .nav-title strong,
+    .nav-title span {
+      display: block;
+    }
+
+    .nav-title strong {
+      overflow: hidden;
+      font-size: 17px;
+      letter-spacing: -0.01em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .nav-title span {
+      margin-top: 2px;
+      color: var(--indigo);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    main {
+      width: min(100%, 820px);
+      min-width: 0;
+      height: 100%;
+      margin: 0 auto;
+      padding: 20px 22px 24px;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    .intro {
+      margin: 0 0 16px;
+      color: var(--soft-ink);
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.45;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .metric {
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+    }
+
+    .metric strong,
+    .metric span {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .metric strong {
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .metric span {
+      margin-top: 5px;
+      color: var(--soft-ink);
+      font-size: 11px;
+      font-weight: 750;
+    }
+
+    .metric.warning {
+      border-color: #efc18e;
+      background: var(--orange-soft);
+    }
+
+    .filters {
+      display: flex;
+      gap: 8px;
+      margin: 0 0 14px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .filters::-webkit-scrollbar {
+      display: none;
+    }
+
+    .filter {
+      flex: 0 0 auto;
+      padding: 0 15px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--soft-ink);
+      font-size: 13px;
+      font-weight: 780;
+    }
+
+    .filter[aria-pressed="true"] {
+      border-color: var(--indigo);
+      color: var(--indigo);
+      background: var(--indigo-soft);
+    }
+
+    .review-list {
+      display: grid;
+      min-width: 0;
+      gap: 12px;
+    }
+
+    .word-card {
+      min-width: 0;
+      padding: 16px;
+      border: 1px solid rgba(20, 37, 66, 0.08);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: 0 8px 24px rgba(20, 37, 66, 0.06);
+    }
+
+    .word-card[hidden] {
+      display: none;
+    }
+
+    .word-head {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .ordinal {
+      width: 26px;
+      color: var(--soft-ink);
+      font-size: 12px;
+      font-weight: 800;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .eyebrow {
+      display: block;
+      color: var(--soft-ink);
+      font-size: 10px;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .photo-word {
+      display: block;
+      margin-top: 2px;
+      overflow: hidden;
+      font-size: 18px;
+      font-weight: 820;
+      text-overflow: ellipsis;
+    }
+
+    .state {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 0 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .state.ready {
+      color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .state.confirm {
+      color: var(--orange);
+      background: var(--orange-soft);
+    }
+
+    .state.skipped {
+      color: var(--soft-ink);
+      background: #eef1f6;
+    }
+
+    .remove {
+      width: 44px;
+      padding: 0;
+      border: 0;
+      border-radius: 12px;
+      color: var(--red);
+      background: transparent;
+      font-size: 19px;
+    }
+
+    .guidance {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      margin: 13px 0 9px 36px;
+      color: var(--soft-ink);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.4;
+    }
+
+    .guidance.warning {
+      color: var(--orange);
+    }
+
+    .options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+      margin-left: 36px;
+    }
+
+    .word-option {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 9px;
+      min-height: 58px;
+      padding: 8px 11px;
+      border: 1px solid #d9dff0;
+      border-radius: var(--radius-sm);
+      background: #fbfcff;
+      text-align: left;
+    }
+
+    .word-option.selected {
+      border: 2px solid var(--indigo);
+      background: var(--indigo-soft);
+    }
+
+    .choice-mark {
+      display: grid;
+      width: 20px;
+      height: 20px;
+      place-items: center;
+      border: 2px solid #9aa5b8;
+      border-radius: 50%;
+      color: transparent;
+      font-size: 12px;
+    }
+
+    .selected .choice-mark {
+      border-color: var(--indigo);
+      color: white;
+      background: var(--indigo);
+    }
+
+    .option-copy {
+      min-width: 0;
+    }
+
+    .option-copy small,
+    .option-copy strong {
+      display: block;
+    }
+
+    .option-copy small {
+      color: var(--soft-ink);
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .option-copy strong {
+      margin-top: 1px;
+      overflow: hidden;
+      font-size: 15px;
+      text-overflow: ellipsis;
+    }
+
+    .pool-badge {
+      padding: 4px 6px;
+      border-radius: 7px;
+      color: var(--soft-ink);
+      background: #e9edf4;
+      font-size: 9px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .edit-row {
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      margin: 12px 0 0 36px;
+    }
+
+    .edit-row label {
+      color: var(--soft-ink);
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .edit-row input {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid #cfd7e5;
+      border-radius: 11px;
+      color: var(--ink);
+      background: white;
+      font-weight: 750;
+    }
+
+    .no-lemma .guidance,
+    .no-lemma .options {
+      display: none;
+    }
+
+    .bottom-bar {
+      position: relative;
+      z-index: 10;
+      padding: 10px 18px 16px;
+      border-top: 1px solid rgba(20, 37, 66, 0.1);
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(18px);
+    }
+
+    .blocking-message {
+      min-height: 20px;
+      margin: 0 0 6px;
+      color: var(--orange);
+      font-size: 11px;
+      font-weight: 760;
+      text-align: center;
+    }
+
+    .primary {
+      width: 100%;
+      min-height: 52px;
+      border: 0;
+      border-radius: 16px;
+      color: white;
+      background: var(--indigo);
+      font-size: 16px;
+      font-weight: 850;
+      box-shadow: 0 7px 0 #493a9e;
+    }
+
+    .primary:active:not(:disabled) {
+      transform: translateY(3px);
+      box-shadow: 0 4px 0 #493a9e;
+    }
+
+    .primary:disabled {
+      cursor: not-allowed;
+      color: #8b94a5;
+      background: #dfe4ec;
+      box-shadow: none;
+    }
+
+    .toast {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 30;
+      max-width: min(360px, calc(100vw - 40px));
+      padding: 12px 16px;
+      border-radius: 14px;
+      color: white;
+      background: var(--ink);
+      box-shadow: var(--shadow);
+      font-size: 13px;
+      font-weight: 700;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(12px);
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .empty-state {
+      padding: 36px 20px;
+      border: 1px dashed #cbd3e2;
+      border-radius: var(--radius-lg);
+      color: var(--soft-ink);
+      background: rgba(255, 255, 255, 0.7);
+      font-size: 14px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    @media (max-width: 620px) {
+      .prototype-bar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .device-toggle {
+        width: 100%;
+      }
+
+      .device-toggle button {
+        flex: 1;
+      }
+
+      .stage,
+      .stage.phone {
+        width: 100%;
+        padding: 0;
+      }
+
+      .app {
+        height: calc(100vh - 104px);
+        min-height: calc(100vh - 104px);
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .app-nav {
+        grid-template-columns: auto 1fr auto;
+        padding: 8px 10px;
+      }
+
+      .nav-action {
+        width: 44px;
+        padding: 0;
+        font-size: 0;
+      }
+
+      .nav-action span {
+        font-size: 18px;
+      }
+
+      main {
+        padding: 16px 14px 20px;
+      }
+
+      .summary {
+        gap: 7px;
+      }
+
+      .metric {
+        padding: 10px;
+      }
+
+      .metric strong {
+        font-size: 19px;
+      }
+
+      .word-card {
+        padding: 14px 12px;
+        border-radius: 20px;
+      }
+
+      .guidance,
+      .options,
+      .edit-row {
+        margin-left: 0;
+      }
+
+      .options {
+        grid-template-columns: 1fr;
+      }
+
+      .edit-row {
+        grid-template-columns: 78px minmax(0, 1fr);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="prototype-bar">
+    <div class="prototype-title">
+      <strong>OCR lemma review prototype</strong>
+      <span>Interactive UI only · no words are saved</span>
+    </div>
+    <div class="device-toggle" role="group" aria-label="Preview width">
+      <button type="button" data-device="phone" aria-pressed="false">iPhone</button>
+      <button type="button" data-device="tablet" aria-pressed="true">iPad</button>
+    </div>
+  </header>
+
+  <div class="stage tablet" id="stage">
+    <section class="app" aria-label="Tada Words review scanned words prototype">
+      <nav class="app-nav" aria-label="Review navigation">
+        <button class="nav-action" type="button" id="backButton">
+          <span aria-hidden="true">‹</span> Back
+        </button>
+        <div class="nav-title">
+          <strong>Review scanned words</strong>
+          <span>Read Pool</span>
+        </div>
+        <button class="nav-action" type="button" id="photoButton">
+          <span aria-hidden="true">＋</span> Photos
+        </button>
+      </nav>
+
+      <main>
+        <p class="intro">
+          Base-form suggestions are selected by default. Keep the photo word or edit any
+          selection before adding.
+        </p>
+
+        <section class="summary" aria-label="Review summary">
+          <div class="metric">
+            <strong id="detectedCount">5</strong>
+            <span>Detected</span>
+          </div>
+          <div class="metric">
+            <strong id="readyCount">2</strong>
+            <span>Ready to add</span>
+          </div>
+          <div class="metric warning" id="confirmMetric">
+            <strong id="confirmCount">2</strong>
+            <span>Need confirmation</span>
+          </div>
+        </section>
+
+        <div class="filters" role="group" aria-label="Filter scanned words">
+          <button class="filter" type="button" data-filter="all" aria-pressed="true">All</button>
+          <button class="filter" type="button" data-filter="confirm" aria-pressed="false">Needs review</button>
+          <button class="filter" type="button" data-filter="ready" aria-pressed="false">Ready</button>
+          <button class="filter" type="button" data-filter="skipped" aria-pressed="false">In pool</button>
+        </div>
+
+        <section class="review-list" id="reviewList" aria-label="Scanned word review list">
+          <article class="word-card" data-original="dogs" data-ambiguous="false">
+            <div class="word-head">
+              <span class="ordinal">1.</span>
+              <div>
+                <span class="eyebrow">Photo word</span>
+                <span class="photo-word">dogs</span>
+              </div>
+              <span class="state skipped">In pool</span>
+              <button class="remove" type="button" aria-label="Remove dogs">⌫</button>
+            </div>
+            <p class="guidance">Choose the base form or keep the photographed spelling.</p>
+            <div class="options" role="group" aria-label="Word form for dogs">
+              <button class="word-option selected" type="button" data-value="dog" data-pool="true">
+                <span class="choice-mark">✓</span>
+                <span class="option-copy"><small>Base form</small><strong>dog</strong></span>
+                <span class="pool-badge">In pool</span>
+              </button>
+              <button class="word-option" type="button" data-value="dogs" data-pool="false">
+                <span class="choice-mark">✓</span>
+                <span class="option-copy"><small>Keep photo word</small><strong>dogs</strong></span>
+              </button>
+            </div>
+            <div class="edit-row">
+              <label for="edit-dogs">Word to add</label>
+              <input id="edit-dogs" value="dog" autocomplete="off" spellcheck="false">
+            </div>
+          </article>
+
+          <article class="word-card" data-original="children" data-ambiguous="false">
+            <div class="word-head">
+              <span class="ordinal">2.</span>
+              <div>
+                <span class="eyebrow">Photo word</span>
+                <span class="photo-word">children</span>
+              </div>
+              <span class="state ready">Ready</span>
+              <button class="remove" type="button" aria-label="Remove children">⌫</button>
+            </div>
+            <p class="guidance">Choose the base form or keep the photographed spelling.</p>
+            <div class="options" role="group" aria-label="Word form for children">
+              <button class="word-option selected" type="button" data-value="child" data-pool="false">
+                <span class="choice-mark">✓</span>
+                <span class="option-copy"><small>Base form</small><strong>child</strong></span>
+              </button>
+              <button class="word-option" type="button" data-value="children" data-pool="false">
+                <span class="choice-mark">✓</span>
+                <span class="option-copy"><small>Keep photo word</small><strong>children</strong></span>
+              </button>
+            </div>
+            <div class="edit-row">
+              <label for="edit-children">Word to add</label>
+              <input id="edit-children" value="child" autocomplete="off" spellcheck="false">
+            </div>
+          </article>
+
+          <article class="word-card" data-original="leaves" data-ambiguous="true" data-confirmed="false">
+            <div class="word-head">
+              <span class="ordinal">3.</span>
+              <div>
+                <span class="eyebrow">Photo word</span>
+                <span class="photo-word">leaves</span>
+              </div>
+              <span class="state confirm">Confirm</span>
+              <button class="remove" type="button" aria-label="Remove leaves">⌫</button>
+            </div>
+            <p class="guidance warning">
+              <span aria-hidden="true">▲</span>
+              More than one base form is possible. Choose one to confirm.
+            </p>
+            <div class="options" role="group" aria-label="Word form for leaves">
+              <button class="word-option selected" type="button" data-value="leaf" data-pool="false">
+                <span class="choice-mark">✓</span>
+                <span class="option-copy"><small>Base form · possible</small><strong>leaf</strong></span>
+              </button>
+              <button class="word-option" type="button" data-value="leave" data-pool="false">
+                <span class="choice-mark">✓</span>
+                <span class="option-copy"><small>Base form · possible</small><strong>leave</strong></span>
+              </button>
+              <button class="word-option" type="button" data-value="leaves" data-pool="false">
+                <span class="choice-mark">✓</span>
+                <span class="option-copy"><small>Keep photo word</small><strong>leaves</strong></span>
+              </button>
+            </div>
+            <div class="edit-row">
+              <label for="edit-leaves">Word to add</label>
+              <input id="edit-leaves" value="leaf" autocomplete="off" spellcheck="false">
+            </div>
+          </article>
+
+          <article class="word-card" data-original="axes" data-ambiguous="true" data-confirmed="false">
+            <div class="word-head">
+              <span class="ordinal">4.</span>
+              <div>
+                <span class="eyebrow">Photo word</span>
+                <span class="photo-word">axes</span>
+              </div>
+              <span class="state confirm">Confirm</span>
+              <button class="remove" type="button" aria-label="Remove axes">⌫</button>
+            </div>
+            <p class="guidance warning">
+              <span aria-hidden="true">▲</span>
+              This may mean more than one thing. Choose one to confirm.
+            </p>
+            <div class="options" role="group" aria-label="Word form for axes">
+              <button class="word-option selected" type="button" data-value="ax" data-pool="false">
+                <span class="choice-mark">✓</span>
+                <span class="option-copy"><small>Base form · possible</small><strong>ax</strong></span>
+              </button>
+              <button class="word-option" type="button" data-value="axis" data-pool="true">
+                <span class="choice-mark">✓</span>
+                <span class="option-copy"><small>Base form · possible</small><strong>axis</strong></span>
+                <span class="pool-badge">In pool</span>
+              </button>
+              <button class="word-option" type="button" data-value="axes" data-pool="false">
+                <span class="choice-mark">✓</span>
+                <span class="option-copy"><small>Keep photo word</small><strong>axes</strong></span>
+              </button>
+            </div>
+            <div class="edit-row">
+              <label for="edit-axes">Word to add</label>
+              <input id="edit-axes" value="ax" autocomplete="off" spellcheck="false">
+            </div>
+          </article>
+
+          <article class="word-card no-lemma" data-original="apple" data-ambiguous="false">
+            <div class="word-head">
+              <span class="ordinal">5.</span>
+              <div>
+                <span class="eyebrow">Photo word</span>
+                <span class="photo-word">apple</span>
+              </div>
+              <span class="state ready">Ready</span>
+              <button class="remove" type="button" aria-label="Remove apple">⌫</button>
+            </div>
+            <div class="edit-row">
+              <label for="edit-apple">Word to add</label>
+              <input id="edit-apple" value="apple" autocomplete="off" spellcheck="false">
+            </div>
+          </article>
+        </section>
+      </main>
+
+      <footer class="bottom-bar">
+        <p class="blocking-message" id="blockingMessage" aria-live="polite">
+          Confirm 2 ambiguous words before adding.
+        </p>
+        <button class="primary" type="button" id="addButton" disabled>
+          Add ready words to Read
+        </button>
+      </footer>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const stage = document.getElementById("stage");
+    const cards = [...document.querySelectorAll(".word-card")];
+    const filters = [...document.querySelectorAll(".filter")];
+    const addButton = document.getElementById("addButton");
+    const blockingMessage = document.getElementById("blockingMessage");
+    const toast = document.getElementById("toast");
+    let activeFilter = "all";
+    let toastTimer;
+
+    if (window.matchMedia("(max-width: 620px)").matches) {
+      stage.className = "stage phone";
+      document.querySelectorAll("[data-device]").forEach((item) => {
+        item.setAttribute("aria-pressed", String(item.dataset.device === "phone"));
+      });
+    }
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add("show");
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => toast.classList.remove("show"), 2200);
+    }
+
+    function normalized(value) {
+      return value.trim().toLowerCase();
+    }
+
+    function cardState(card) {
+      if (card.dataset.ambiguous === "true" && card.dataset.confirmed !== "true") {
+        return "confirm";
+      }
+      const selected = card.querySelector(".word-option.selected");
+      if (selected?.dataset.pool === "true") {
+        return "skipped";
+      }
+      return "ready";
+    }
+
+    function updateStateBadge(card) {
+      const badge = card.querySelector(".state");
+      const state = cardState(card);
+      badge.className = `state ${state}`;
+      badge.textContent =
+        state === "confirm" ? "Confirm" : state === "skipped" ? "In pool" : "Ready";
+    }
+
+    function updateSummary() {
+      const liveCards = cards.filter((card) => !card.dataset.removed);
+      const confirmCount = liveCards.filter((card) => cardState(card) === "confirm").length;
+      const readyCount = liveCards.filter((card) => cardState(card) === "ready").length;
+      const skippedCount = liveCards.filter((card) => cardState(card) === "skipped").length;
+
+      document.getElementById("detectedCount").textContent = liveCards.length;
+      document.getElementById("readyCount").textContent = readyCount;
+      document.getElementById("confirmCount").textContent = confirmCount;
+      document.getElementById("confirmMetric").classList.toggle("warning", confirmCount > 0);
+
+      if (confirmCount > 0) {
+        blockingMessage.textContent =
+          `Confirm ${confirmCount} ambiguous ${confirmCount === 1 ? "word" : "words"} before adding.`;
+        addButton.disabled = true;
+        addButton.textContent = `Add ${readyCount} ready ${readyCount === 1 ? "word" : "words"} to Read`;
+      } else {
+        blockingMessage.textContent =
+          skippedCount > 0 ? `${skippedCount} existing ${skippedCount === 1 ? "word is" : "words are"} skipped.` : "";
+        addButton.disabled = readyCount === 0;
+        addButton.textContent = `Add ${readyCount} to Read`;
+      }
+      applyFilter();
+    }
+
+    function applyFilter() {
+      let visible = 0;
+      cards.forEach((card) => {
+        const shouldShow =
+          !card.dataset.removed
+          && (activeFilter === "all" || cardState(card) === activeFilter);
+        card.hidden = !shouldShow;
+        if (shouldShow) visible += 1;
+      });
+
+      let empty = document.querySelector(".empty-state");
+      if (visible === 0) {
+        if (!empty) {
+          empty = document.createElement("div");
+          empty.className = "empty-state";
+          empty.textContent = "No words in this view.";
+          document.getElementById("reviewList").append(empty);
+        }
+      } else {
+        empty?.remove();
+      }
+    }
+
+    cards.forEach((card) => {
+      const options = [...card.querySelectorAll(".word-option")];
+      const input = card.querySelector("input");
+
+      options.forEach((option) => {
+        option.addEventListener("click", () => {
+          options.forEach((item) => item.classList.remove("selected"));
+          option.classList.add("selected");
+          input.value = option.dataset.value;
+          if (card.dataset.ambiguous === "true") {
+            card.dataset.confirmed = "true";
+          }
+          updateStateBadge(card);
+          updateSummary();
+        });
+      });
+
+      input.addEventListener("input", () => {
+        options.forEach((item) => item.classList.remove("selected"));
+        if (card.dataset.ambiguous === "true" && normalized(input.value)) {
+          card.dataset.confirmed = "true";
+        }
+        updateStateBadge(card);
+        updateSummary();
+      });
+
+      card.querySelector(".remove").addEventListener("click", () => {
+        card.dataset.removed = "true";
+        updateSummary();
+        showToast(`${card.dataset.original} removed from this review.`);
+      });
+    });
+
+    filters.forEach((filter) => {
+      filter.addEventListener("click", () => {
+        activeFilter = filter.dataset.filter;
+        filters.forEach((item) => item.setAttribute("aria-pressed", String(item === filter)));
+        applyFilter();
+      });
+    });
+
+    document.querySelectorAll("[data-device]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const device = button.dataset.device;
+        stage.className = `stage ${device}`;
+        document.querySelectorAll("[data-device]").forEach((item) => {
+          item.setAttribute("aria-pressed", String(item === button));
+        });
+      });
+    });
+
+    document.getElementById("backButton").addEventListener("click", () => {
+      showToast("Back returns to Manage words without importing.");
+    });
+
+    document.getElementById("photoButton").addEventListener("click", () => {
+      showToast("Add Photos opens the existing local photo flow.");
+    });
+
+    addButton.addEventListener("click", () => {
+      const readyCount = cards.filter(
+        (card) => !card.dataset.removed && cardState(card) === "ready"
+      ).length;
+      showToast(`${readyCount} words would be added to the Read Pool.`);
+    });
+
+    updateSummary();
+  </script>
+</body>
+</html>

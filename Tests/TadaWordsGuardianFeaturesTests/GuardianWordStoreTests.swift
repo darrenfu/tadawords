@@ -401,6 +401,131 @@ final class GuardianWordStoreTests: XCTestCase {
         XCTAssertEqual(analysis.stateByID[inPool.id], .alreadyInPool)
         XCTAssertEqual(analysis.stateByID[duplicate.id], .duplicateInPreview)
         XCTAssertEqual(analysis.stateByID[invalid.id], .invalid)
+        XCTAssertEqual(analysis.unconfirmedLemmaSelectionCount, 0)
+    }
+
+    func testOCRLemmaSuggestionsCoverRegularAndIrregularWordForms() {
+        let suggester = GuardianEnglishLemmaSuggester()
+        let cases: [(String, [String])] = [
+            ("dogs", ["dog"]),
+            ("children", ["child"]),
+            ("running", ["run"]),
+            ("studies", ["study"]),
+            ("glasses", ["glass"]),
+            ("has", ["have"]),
+        ]
+
+        for (surface, expected) in cases {
+            let proposal = suggester.proposal(for: surface)
+            XCTAssertEqual(proposal.candidates, expected, surface)
+            XCTAssertFalse(proposal.requiresConfirmation, surface)
+        }
+        XCTAssertEqual(suggester.proposal(for: "glass"), .unchanged)
+        XCTAssertEqual(suggester.proposal(for: "news"), .unchanged)
+        XCTAssertEqual(suggester.proposal(for: "this"), .unchanged)
+        XCTAssertEqual(suggester.proposal(for: "lens"), .unchanged)
+        XCTAssertEqual(suggester.proposal(for: "alias"), .unchanged)
+    }
+
+    func testOCRLemmaSuggestionsMarkLexicallyAmbiguousForms() {
+        let suggester = GuardianEnglishLemmaSuggester()
+
+        XCTAssertEqual(
+            suggester.proposal(for: "axes"),
+            GuardianOCRLemmaProposal(
+                candidates: ["ax", "axis"],
+                requiresConfirmation: true
+            )
+        )
+        XCTAssertEqual(
+            suggester.proposal(for: "leaves"),
+            GuardianOCRLemmaProposal(
+                candidates: ["leaf", "leave"],
+                requiresConfirmation: true
+            )
+        )
+    }
+
+    func testEditableOCRWordDefaultsToLemmaAndPreservesOriginalChoice() {
+        var word = GuardianEditableOCRWord(text: "dogs")
+
+        XCTAssertEqual(word.originalText, "dogs")
+        XCTAssertEqual(word.lemmaCandidates, ["dog"])
+        XCTAssertEqual(word.text, "dog")
+        XCTAssertEqual(word.selection, .lemma("dog"))
+        XCTAssertFalse(word.needsLemmaConfirmation)
+
+        word.selectOriginal()
+        XCTAssertEqual(word.text, "dogs")
+        XCTAssertEqual(word.selection, .original)
+    }
+
+    func testAmbiguousOCRLemmaRequiresExplicitChoiceOrManualEdit() {
+        var word = GuardianEditableOCRWord(text: "axes")
+        var analysis = GuardianOCRPreviewAnalysis(
+            words: [word],
+            existingNormalizedWords: []
+        )
+
+        XCTAssertEqual(word.text, "ax")
+        XCTAssertTrue(word.needsLemmaConfirmation)
+        XCTAssertEqual(
+            analysis.stateByID[word.id],
+            .needsConfirmation(suggestedWord: "ax")
+        )
+        XCTAssertTrue(analysis.addableWords.isEmpty)
+        XCTAssertEqual(analysis.unconfirmedLemmaSelectionCount, 1)
+        XCTAssertFalse(
+            GuardianOCRSubmissionPolicy.canSubmit(
+                addableWords: ["ax"],
+                isAdding: false,
+                isRecognizingAdditionalPhotos: false,
+                hasUnconfirmedLemmaSelections: true
+            )
+        )
+
+        word.selectLemma("axis")
+        analysis = GuardianOCRPreviewAnalysis(
+            words: [word],
+            existingNormalizedWords: []
+        )
+        XCTAssertFalse(word.needsLemmaConfirmation)
+        XCTAssertEqual(analysis.addableWords, ["axis"])
+
+        var edited = GuardianEditableOCRWord(text: "leaves")
+        edited.applyManualEdit("leave")
+        XCTAssertFalse(edited.needsLemmaConfirmation)
+        XCTAssertEqual(edited.selection, .edited)
+    }
+
+    func testOCRWordFormOptionsMarkExistingLemmaAndOriginalIndependently() {
+        var word = GuardianEditableOCRWord(text: "dogs")
+        var options = word.formOptions(existingNormalizedWords: ["dog"])
+
+        XCTAssertEqual(
+            options,
+            [
+                GuardianOCRWordFormOption(
+                    word: "dog",
+                    role: .lemma,
+                    isSelected: true,
+                    isAlreadyInPool: true
+                ),
+                GuardianOCRWordFormOption(
+                    word: "dogs",
+                    role: .original,
+                    isSelected: false,
+                    isAlreadyInPool: false
+                ),
+            ]
+        )
+
+        word.selectOriginal()
+        options = word.formOptions(existingNormalizedWords: ["dog", "dogs"])
+        XCTAssertTrue(options[0].isAlreadyInPool)
+        XCTAssertFalse(options[0].isSelected)
+        XCTAssertTrue(options[1].isAlreadyInPool)
+        XCTAssertTrue(options[1].isSelected)
     }
 
     func testOCRBatchKeepsStableOneBasedNumbersAcrossMultiplePhotos() {
