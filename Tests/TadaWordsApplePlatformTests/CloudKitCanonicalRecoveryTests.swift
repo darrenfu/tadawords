@@ -333,6 +333,84 @@ final class CloudKitCanonicalRecoveryTests: XCTestCase {
         )
         XCTAssertEqual(restarted.quarantinedCount(), 0)
     }
+
+    func testPendingCanonicalRecoveryDominatesByteEquivalentAutoRecovery()
+        throws
+    {
+        let fixture = try CloudKitCanonicalRecoveryFixture()
+        defer { fixture.remove() }
+        let store = CloudKitFamilyMetadataStore(snapshotURL: fixture.url)
+        try store.confirm(accountRecordName: fixture.account)
+        let marker = try store.prepareCanonicalRecovery(
+            authorization: fixture.authorization,
+            originAccountRecordName: fixture.account,
+            stagedAt: fixture.now
+        )
+        let profileID = try XCTUnwrap(fixture.records.first?.profileID)
+        let recordName = "profile-\(profileID)"
+        let zoneID = CKRecordZone.ID(
+            zoneName: "TadaProfile-\(profileID)",
+            ownerName: CKCurrentUserDefaultName
+        )
+        let quarantined = FamilySyncRecord(
+            recordName: recordName,
+            profileID: profileID,
+            kind: .profile,
+            payload: Data("byte-equivalent-profile".utf8),
+            updatedAt: fixture.now,
+            deviceID: "profile-writer",
+            logicalRevision: .init(
+                counter: 4,
+                deviceID: "profile-writer"
+            )
+        )
+        let current = FamilySyncRecord(
+            recordName: recordName,
+            profileID: profileID,
+            kind: .profile,
+            payload: quarantined.payload,
+            updatedAt: fixture.now.addingTimeInterval(1),
+            deviceID: "profile-writer",
+            logicalRevision: .init(
+                counter: 5,
+                deviceID: "profile-writer"
+            )
+        )
+        try store.quarantine(
+            CloudKitFamilyQuarantineEntry(
+                id: UUID(),
+                scope: .privateDatabase,
+                recordName: recordName,
+                zoneName: zoneID.zoneName,
+                ownerName: zoneID.ownerName,
+                reason: .conflict,
+                envelopeData: try JSONEncoder().encode(
+                    FamilySyncEnvelope(record: quarantined)
+                ),
+                quarantinedAt: fixture.now
+            )
+        )
+
+        XCTAssertFalse(
+            try store.recoverByteEquivalentHistoricalProfileConflict(
+                currentLocalRecord: current,
+                recordID: CKRecord.ID(
+                    recordName: recordName,
+                    zoneID: zoneID
+                ),
+                scope: .privateDatabase
+            )
+        )
+
+        let restarted = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.url
+        )
+        XCTAssertEqual(
+            try restarted.pendingCanonicalRecovery(),
+            marker
+        )
+        XCTAssertEqual(restarted.quarantinedCount(), 1)
+    }
 }
 
 private struct CloudKitCanonicalRecoveryFixture {

@@ -1918,6 +1918,7 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
             guard
                 !loadFailed,
                 !snapshot.requiresAccountConfirmation,
+                snapshot.pendingCanonicalRecovery == nil,
                 currentLocalRecord.kind == .profile,
                 !currentLocalRecord.isDeleted,
                 currentLocalRecord.recordName == recordID.recordName,
