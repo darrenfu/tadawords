@@ -66,17 +66,22 @@ struct GuardianPracticeSettingsView: View {
 
                 settingsContent
 
-                Button(section.saveButtonTitle) {
-                    onSave(assembledSettings)
+                if !section.usesAutoSave {
+                    Button("Save practice plan") {
+                        onSave(assembledSettings)
+                    }
+                    .buttonStyle(GuardianPrimaryButtonStyle())
                 }
-                .buttonStyle(GuardianPrimaryButtonStyle())
             }
             .frame(maxWidth: 880, alignment: .leading)
-            .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
-            .padding(.vertical, GuardianPrimitiveTokens.Spacing.large)
+            .guardianParentPageInsets()
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)
+        .onChange(of: assembledSettings) { _, settings in
+            guard section.usesAutoSave else { return }
+            onSave(settings)
+        }
     }
 
     @ViewBuilder
@@ -154,7 +159,7 @@ struct GuardianPracticeSettingsView: View {
                 Label("Audio", systemImage: "speaker.wave.2.fill")
                     .font(.system(.title3, design: .rounded, weight: .bold))
 
-                Text("Each child can have their own bright, encouraging sound settings.")
+                Text("These choices apply throughout Tada Words.")
                     .font(.system(.subheadline, design: .rounded, weight: .medium))
                     .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
 
@@ -190,7 +195,7 @@ struct GuardianPracticeSettingsView: View {
                     .font(.system(.title3, design: .rounded, weight: .bold))
 
                 Text(
-                    "Choose which family updates matter for this child. System notification permission is managed separately."
+                    "Choose which family updates matter. System notification permission is managed separately."
                 )
                 .font(.system(.subheadline, design: .rounded, weight: .medium))
                 .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
@@ -285,6 +290,15 @@ struct GuardianPracticeSettingsView: View {
 }
 
 extension GuardianSettingsSection {
+    var usesAutoSave: Bool {
+        switch self {
+        case .practicePlan:
+            false
+        case .soundAndAccessibility, .notifications:
+            true
+        }
+    }
+
     fileprivate var navigationTitle: String {
         switch self {
         case .practicePlan:
@@ -293,17 +307,6 @@ extension GuardianSettingsSection {
             "Sound & Accessibility"
         case .notifications:
             "Notifications"
-        }
-    }
-
-    fileprivate var saveButtonTitle: String {
-        switch self {
-        case .practicePlan:
-            "Save practice plan"
-        case .soundAndAccessibility:
-            "Save sound & accessibility"
-        case .notifications:
-            "Save notifications"
         }
     }
 }

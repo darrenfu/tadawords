@@ -176,11 +176,15 @@ public struct GuardianRootView: View {
             )
 
         case .dashboard:
-            if let snapshot = model.snapshot {
+            if let snapshot = model.snapshot,
+                let family = model.familySnapshot
+            {
                 GuardianTodayView(
                     snapshot: snapshot,
+                    family: family,
                     onBack: returnToPreviousPage,
-                    onOpenProfiles: model.showProfiles,
+                    onSelectProfile: model.selectProfile,
+                    onEditProfile: model.showEditProfileFromDashboard,
                     onOpenWordsAndPractice: model.showWordsAndPractice,
                     onOpenProgressAndPerformance: model.showProgressAndPerformance,
                     onOpenAppAndFamily: model.showAppAndFamily,
@@ -336,10 +340,17 @@ public struct GuardianRootView: View {
                     section: section,
                     onBack: model.returnToParentSection,
                     onSave: { settings in
-                        model.savePracticeSettings(
-                            settings,
-                            section: section
-                        )
+                        if section.usesAutoSave {
+                            model.autoSavePracticeSettings(
+                                settings,
+                                section: section
+                            )
+                        } else {
+                            model.savePracticeSettings(
+                                settings,
+                                section: section
+                            )
+                        }
                     }
                 )
             } else {

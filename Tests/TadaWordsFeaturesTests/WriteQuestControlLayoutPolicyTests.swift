@@ -82,6 +82,13 @@ final class WriteQuestControlLayoutPolicyTests: XCTestCase {
         )
     }
 
+    func testRevealedWriteSpellingUsesAllCaps() {
+        XCTAssertEqual(
+            WriteQuestSpellingPresentation.revealedWord("Butterfly"),
+            "BUTTERFLY"
+        )
+    }
+
     func testPictureHintIsRequestedOnlyForFirstIndependentMismatch() {
         XCTAssertTrue(
             WritePictureHintRequestPolicy.shouldRequest(

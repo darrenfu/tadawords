@@ -96,8 +96,7 @@ struct GuardianPresetWordsView: View {
                 }
             }
             .frame(maxWidth: 920, alignment: .leading)
-            .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
-            .padding(.vertical, GuardianPrimitiveTokens.Spacing.large)
+            .guardianParentPageInsets()
             .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.immediately)
@@ -313,8 +312,7 @@ struct GuardianPresetWordsView: View {
                 }
             }
             .frame(maxWidth: 920, alignment: .leading)
-            .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
-            .padding(.vertical, GuardianPrimitiveTokens.Spacing.large)
+            .guardianParentPageInsets()
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)
@@ -448,8 +446,7 @@ struct GuardianPresetWordsView: View {
                 addButton(for: recommendation.list)
             }
             .frame(maxWidth: 920, alignment: .leading)
-            .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
-            .padding(.vertical, GuardianPrimitiveTokens.Spacing.large)
+            .guardianParentPageInsets()
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)

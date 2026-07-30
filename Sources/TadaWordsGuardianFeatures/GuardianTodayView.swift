@@ -5,8 +5,10 @@ import TadaWordsDomain
 
 struct GuardianTodayView: View {
     let snapshot: GuardianDashboardSnapshot
+    let family: GuardianFamilySnapshot
     let onBack: () -> Void
-    let onOpenProfiles: () -> Void
+    let onSelectProfile: (KidProfile) -> Void
+    let onEditProfile: (KidProfile) -> Void
     let onOpenWordsAndPractice: () -> Void
     let onOpenProgressAndPerformance: () -> Void
     let onOpenAppAndFamily: () -> Void
@@ -15,53 +17,42 @@ struct GuardianTodayView: View {
     var body: some View {
         TadaWorldBackground(theme: theme, sceneStyle: .lobby) {
             ScrollView {
-                VStack(alignment: .leading, spacing: TadaPrimitiveTokens.Spacing.large) {
+                VStack(alignment: .leading, spacing: TadaPrimitiveTokens.Spacing.medium) {
                     header
-                    selectedKidCard
+                    profileStrip
 
-                    LazyVGrid(
-                        columns: [
-                            GridItem(
-                                .adaptive(minimum: 250, maximum: 360),
-                                spacing: TadaPrimitiveTokens.Spacing.medium,
-                                alignment: .top
-                            )
-                        ],
-                        alignment: .leading,
-                        spacing: TadaPrimitiveTokens.Spacing.medium
-                    ) {
-                        GuardianNavigationTile(
-                            title: "Words & Practice",
+                    HStack(alignment: .top, spacing: TadaPrimitiveTokens.Spacing.small) {
+                        GuardianHomeNavigationTile(
+                            title: "Words",
                             summary: wordPoolSummary,
                             symbol: "text.book.closed.fill",
                             tint: theme.primary,
+                            fill: theme.primary.opacity(0.15),
                             accessibilityIdentifier: "guardian.home.words-and-practice",
-                            theme: theme,
                             action: onOpenWordsAndPractice
                         )
-                        GuardianNavigationTile(
+                        GuardianHomeNavigationTile(
                             title: "Progress",
                             summary: progressSummary,
                             symbol: "chart.line.uptrend.xyaxis",
                             tint: theme.secondary,
+                            fill: theme.secondary.opacity(0.16),
                             accessibilityIdentifier: "guardian.home.progress-and-performance",
-                            theme: theme,
                             action: onOpenProgressAndPerformance
                         )
-                        GuardianNavigationTile(
+                        GuardianHomeNavigationTile(
                             title: "App & Family",
-                            summary: syncState.title,
+                            summary: "All profiles",
                             symbol: "gearshape.2.fill",
                             tint: theme.accent,
+                            fill: theme.accent.opacity(0.18),
                             accessibilityIdentifier: "guardian.home.app-and-family",
-                            theme: theme,
                             action: onOpenAppAndFamily
                         )
                     }
                 }
-                .frame(maxWidth: 960, alignment: .leading)
-                .padding(.horizontal, TadaPrimitiveTokens.Spacing.large)
-                .padding(.vertical, TadaPrimitiveTokens.Spacing.medium)
+                .frame(maxWidth: 1040, alignment: .leading)
+                .guardianParentPageInsets()
                 .frame(maxWidth: .infinity)
             }
             .scrollIndicators(.hidden)
@@ -69,74 +60,46 @@ struct GuardianTodayView: View {
     }
 
     private var header: some View {
-        HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-            Image(systemName: theme.motifSymbol)
-                .font(.system(.title2, design: .rounded, weight: .bold))
-                .foregroundStyle(theme.primary)
-                .frame(
-                    width: TadaPrimitiveTokens.TouchTarget.minimum,
-                    height: TadaPrimitiveTokens.TouchTarget.minimum
-                )
-                .background(theme.surface, in: Circle())
-                .accessibilityHidden(true)
-
-            Text("Parent Home")
-                .font(.system(.largeTitle, design: .rounded, weight: .bold))
-
-            Spacer()
-
-            Button(action: onBack) {
-                Label("Back", systemImage: "chevron.left")
-            }
-            .buttonStyle(
-                TadaPrimaryButtonStyle(
-                    fill: theme.surface,
-                    foreground: theme.ink,
-                    isCompact: true
-                )
-            )
-            .accessibilityHint("Returns to the previous page")
-            .accessibilityIdentifier("guardian.home.back")
-        }
+        GuardianNavigationHeader(
+            title: "Parent Home",
+            onBack: onBack,
+            backAccessibilityIdentifier: "guardian.home.back"
+        )
+        .accessibilityHint("Returns to the previous page")
     }
 
-    private var selectedKidCard: some View {
+    private var profileStrip: some View {
         VStack(alignment: .leading, spacing: TadaPrimitiveTokens.Spacing.small) {
-            TadaPanel(theme: theme) {
-                HStack(spacing: TadaPrimitiveTokens.Spacing.medium) {
-                    GuardianProfileAvatarBadge(
-                        profile: snapshot.profile,
-                        size: 72,
-                        tint: theme.primary
-                    )
+            Label("Kids", systemImage: "person.2.fill")
+                .font(.system(.headline, design: .rounded, weight: .bold))
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Managing")
-                            .font(.system(.caption, design: .rounded, weight: .bold))
-                            .foregroundStyle(theme.primary)
-                        Text(snapshot.profile.displayName)
-                            .font(.system(.title2, design: .rounded, weight: .bold))
-                        Text(snapshot.profile.schoolGrade.displayName)
-                            .font(.system(.subheadline, design: .rounded, weight: .medium))
-                            .foregroundStyle(TadaSemanticColors.secondaryOnSurface(for: theme))
+            ScrollView(.horizontal) {
+                HStack(spacing: TadaPrimitiveTokens.Spacing.small) {
+                    ForEach(family.profiles, id: \.id) { profile in
+                        GuardianHomeProfileChip(
+                            profile: profile,
+                            isSelected: profile.id == snapshot.profile.id,
+                            tint: profile.id == snapshot.profile.id
+                                ? theme.primary
+                                : theme.ink.opacity(0.58),
+                            onSelect: { onSelectProfile(profile) },
+                            onEdit: { onEditProfile(profile) }
+                        )
                     }
-
                 }
+                .padding(.top, 6)
+                .padding(.trailing, 6)
             }
-
-            Button(action: onOpenProfiles) {
-                Label("Switch or manage child", systemImage: "person.2.fill")
-            }
-            .buttonStyle(
-                TadaPrimaryButtonStyle(
-                    fill: theme.primary,
-                    foreground: .white,
-                    isCompact: true
-                )
-            )
-            .accessibilityHint("Opens all child profiles")
-            .accessibilityIdentifier("guardian.home.switch-child")
+            .scrollIndicators(.hidden)
         }
+        .padding(TadaPrimitiveTokens.Spacing.medium)
+        .background(
+            theme.surface.opacity(0.94),
+            in: RoundedRectangle(
+                cornerRadius: TadaPrimitiveTokens.Radius.large,
+                style: .continuous
+            )
+        )
     }
 
     private var wordPoolSummary: String {
@@ -168,6 +131,124 @@ struct GuardianTodayView: View {
         case .coasterCarnival:
             .coasterCarnival
         }
+    }
+}
+
+private struct GuardianHomeProfileChip: View {
+    let profile: KidProfile
+    let isSelected: Bool
+    let tint: Color
+    let onSelect: () -> Void
+    let onEdit: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Button(action: onSelect) {
+                VStack(spacing: 5) {
+                    GuardianProfileAvatarBadge(
+                        profile: profile,
+                        size: 48,
+                        tint: tint
+                    )
+                    Text(profile.displayName)
+                        .font(.system(.subheadline, design: .rounded, weight: .bold))
+                        .lineLimit(1)
+                }
+                .frame(width: 104, height: 82)
+                .foregroundStyle(GuardianSemanticTokens.foreground)
+                .background(
+                    isSelected ? tint.opacity(0.14) : Color.clear,
+                    in: RoundedRectangle(
+                        cornerRadius: TadaPrimitiveTokens.Radius.medium,
+                        style: .continuous
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: TadaPrimitiveTokens.Radius.medium,
+                        style: .continuous
+                    )
+                    .strokeBorder(
+                        isSelected
+                            ? tint
+                            : GuardianSemanticTokens.foreground.opacity(0.12),
+                        lineWidth: isSelected ? 2.5 : 1
+                    )
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(isSelected)
+            .accessibilityLabel(
+                isSelected
+                    ? "\(profile.displayName), currently selected"
+                    : "Switch to \(profile.displayName)"
+            )
+            .accessibilityIdentifier("guardian.home.profile.\(profile.id).select")
+
+            Button(action: onEdit) {
+                Image(systemName: "pencil.circle.fill")
+                    .font(.system(size: 24, weight: .bold))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, tint)
+                    .frame(
+                        width: TadaPrimitiveTokens.TouchTarget.minimum,
+                        height: TadaPrimitiveTokens.TouchTarget.minimum
+                    )
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .offset(x: 8, y: -8)
+            .accessibilityLabel("Edit \(profile.displayName)")
+            .accessibilityIdentifier("guardian.home.profile.\(profile.id).edit")
+        }
+    }
+}
+
+private struct GuardianHomeNavigationTile: View {
+    let title: String
+    let summary: String
+    let symbol: String
+    let tint: Color
+    let fill: Color
+    let accessibilityIdentifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(.title, design: .rounded, weight: .bold))
+                    .foregroundStyle(tint)
+                    .accessibilityHidden(true)
+
+                Spacer(minLength: 2)
+
+                Text(title)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .foregroundStyle(GuardianSemanticTokens.foreground)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+
+                Text(summary)
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .frame(maxWidth: .infinity, minHeight: 126, alignment: .leading)
+            .padding(TadaPrimitiveTokens.Spacing.medium)
+            .background(
+                fill,
+                in: RoundedRectangle(
+                    cornerRadius: TadaPrimitiveTokens.Radius.large,
+                    style: .continuous
+                )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens \(title)")
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
@@ -248,8 +329,7 @@ struct GuardianProgressAndPerformanceView: View {
                 )
             }
             .frame(maxWidth: 880, alignment: .leading)
-            .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
-            .padding(.vertical, GuardianPrimitiveTokens.Spacing.large)
+            .guardianParentPageInsets()
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)
@@ -394,7 +474,47 @@ struct GuardianProgressAndPerformanceView: View {
     }
 }
 
+enum GuardianAppAndFamilyFeature: CaseIterable, Equatable {
+    case soundAndAccessibility
+    case notifications
+    case speechAndMicrophone
+    case familySync
+    case thirdPartyNotices
+
+    var title: String {
+        switch self {
+        case .soundAndAccessibility:
+            "Sound & Accessibility"
+        case .notifications:
+            "Notifications"
+        case .speechAndMicrophone:
+            "Speech & Microphone"
+        case .familySync:
+            "Family Sync"
+        case .thirdPartyNotices:
+            "Credits"
+        }
+    }
+
+    var accessibilityIdentifier: String {
+        switch self {
+        case .soundAndAccessibility:
+            "guardian.app.sound-accessibility"
+        case .notifications:
+            "guardian.app.notifications"
+        case .speechAndMicrophone:
+            "guardian.app.speech-permissions"
+        case .familySync:
+            "guardian.app.sync"
+        case .thirdPartyNotices:
+            "guardian.app.third-party-notices"
+        }
+    }
+}
+
 struct GuardianAppAndFamilyView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     let snapshot: GuardianDashboardSnapshot
     let syncState: GuardianSyncState
     let onBack: () -> Void
@@ -408,67 +528,138 @@ struct GuardianAppAndFamilyView: View {
     var body: some View {
         GuardianParentHubLayout(
             title: "App & Family",
-            profile: snapshot.profile,
             onBack: onBack
         ) {
-            GuardianNavigationTile(
-                title: "Sound & Accessibility",
-                summary: audioSummary,
-                symbol: "speaker.wave.2.fill",
-                tint: GuardianPrimitiveTokens.ColorValue.indigo,
-                accessibilityIdentifier: "guardian.app.sound-accessibility",
-                action: onOpenSoundAndAccessibility
-            )
-            GuardianNavigationTile(
-                title: "Notifications",
-                summary: snapshot.practiceSettings.notifications.hasEnabledNotifications
-                    ? "Family reminders are on"
-                    : "Family reminders are off",
-                symbol: "bell.badge.fill",
-                tint: GuardianPrimitiveTokens.ColorValue.orange,
-                accessibilityIdentifier: "guardian.app.notifications",
-                action: onOpenNotifications
-            )
-            GuardianNavigationTile(
-                title: "Speech & Microphone",
-                summary: GuardianSpeechPermissionPresentation.tileSummary(
-                    for: speechPermissionState
-                ),
-                symbol: "waveform.badge.mic",
-                tint: GuardianPrimitiveTokens.ColorValue.indigo,
-                accessibilityIdentifier: "guardian.app.speech-permissions",
-                action: onOpenSpeechPermissions
-            )
-            GuardianNavigationTile(
-                title: syncState == .thisDeviceOnly ? "Device Storage" : "Family Sync",
-                summary: syncState.title,
-                symbol: syncState == .thisDeviceOnly
-                    ? "externaldrive.fill"
-                    : "person.2.badge.gearshape.fill",
-                tint: GuardianPrimitiveTokens.ColorValue.teal,
-                accessibilityIdentifier: "guardian.app.sync",
-                action: onOpenFamilySync
-            )
-            GuardianNavigationTile(
-                title: "Third-Party Notices",
-                summary: "Licenses and credits available offline",
-                symbol: "doc.text.magnifyingglass",
-                tint: GuardianPrimitiveTokens.ColorValue.blue,
-                accessibilityIdentifier: "guardian.app.third-party-notices",
-                action: onOpenThirdPartyNotices
-            )
+            LazyVGrid(
+                columns: featureColumns,
+                alignment: .leading,
+                spacing: GuardianPrimitiveTokens.Spacing.small
+            ) {
+                GuardianAppNavigationTile(
+                    title: GuardianAppAndFamilyFeature.soundAndAccessibility.title,
+                    summary: audioSummary,
+                    symbol: "speaker.wave.2.fill",
+                    tint: GuardianPrimitiveTokens.ColorValue.indigo,
+                    accessibilityIdentifier: GuardianAppAndFamilyFeature
+                        .soundAndAccessibility.accessibilityIdentifier,
+                    action: onOpenSoundAndAccessibility
+                )
+                GuardianAppNavigationTile(
+                    title: GuardianAppAndFamilyFeature.notifications.title,
+                    summary: snapshot.practiceSettings.notifications
+                        .hasEnabledNotifications
+                        ? "Family reminders are on"
+                        : "Family reminders are off",
+                    symbol: "bell.badge.fill",
+                    tint: GuardianPrimitiveTokens.ColorValue.orange,
+                    accessibilityIdentifier: GuardianAppAndFamilyFeature.notifications
+                        .accessibilityIdentifier,
+                    action: onOpenNotifications
+                )
+                GuardianAppNavigationTile(
+                    title: GuardianAppAndFamilyFeature.speechAndMicrophone.title,
+                    summary: GuardianSpeechPermissionPresentation.tileSummary(
+                        for: speechPermissionState
+                    ),
+                    symbol: "waveform.badge.mic",
+                    tint: GuardianPrimitiveTokens.ColorValue.indigo,
+                    accessibilityIdentifier: GuardianAppAndFamilyFeature
+                        .speechAndMicrophone.accessibilityIdentifier,
+                    action: onOpenSpeechPermissions
+                )
+                GuardianAppNavigationTile(
+                    title: GuardianAppAndFamilyFeature.familySync.title,
+                    summary: familySyncSummary,
+                    symbol: "person.2.badge.gearshape.fill",
+                    tint: GuardianPrimitiveTokens.ColorValue.teal,
+                    accessibilityIdentifier: GuardianAppAndFamilyFeature.familySync
+                        .accessibilityIdentifier,
+                    action: onOpenFamilySync
+                )
+                GuardianAppNavigationTile(
+                    title: GuardianAppAndFamilyFeature.thirdPartyNotices.title,
+                    summary: "Licenses and credits available offline",
+                    symbol: "doc.text.magnifyingglass",
+                    tint: GuardianPrimitiveTokens.ColorValue.blue,
+                    accessibilityIdentifier: GuardianAppAndFamilyFeature
+                        .thirdPartyNotices.accessibilityIdentifier,
+                    action: onOpenThirdPartyNotices
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             GuardianPrivacyAndSupportSection(appVersion: .current)
         }
+    }
+
+    private var featureColumns: [GridItem] {
+        let columnCount = horizontalSizeClass == .regular ? 5 : 2
+        return Array(
+            repeating: GridItem(
+                .flexible(minimum: 0),
+                spacing: GuardianPrimitiveTokens.Spacing.small,
+                alignment: .top
+            ),
+            count: columnCount
+        )
     }
 
     private var audioSummary: String {
         let audio = snapshot.practiceSettings.audio
         let music = audio.musicEnabled ? "Music on" : "Music off"
         let voice = audio.voiceEnabled ? "Voice on" : "Voice off"
-        let usesLeftHandedControls =
+        let hand =
             snapshot.practiceSettings.interface.leftHandedLayoutEnabled
-        let hand = usesLeftHandedControls ? "Left-handed controls" : "Right-handed controls"
+            ? "Left-handed controls"
+            : "Right-handed"
         return "\(music) · \(voice) · \(hand)"
+    }
+
+    private var familySyncSummary: String {
+        syncState == .thisDeviceOnly
+            ? "Share profiles and progress across family devices"
+            : syncState.title
+    }
+}
+
+private struct GuardianAppNavigationTile: View {
+    let title: String
+    let summary: String
+    let symbol: String
+    let tint: Color
+    let accessibilityIdentifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .foregroundStyle(tint)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .foregroundStyle(GuardianSemanticTokens.foreground)
+                    .lineLimit(2)
+                Text(summary)
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    .lineLimit(3)
+            }
+            .frame(maxWidth: .infinity, minHeight: 108, alignment: .leading)
+            .padding(GuardianPrimitiveTokens.Spacing.medium)
+            .background(
+                tint.opacity(0.10),
+                in: RoundedRectangle(
+                    cornerRadius: GuardianPrimitiveTokens.Radius.medium,
+                    style: .continuous
+                )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title). \(summary)")
+        .accessibilityHint("Opens \(title)")
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
@@ -522,59 +713,32 @@ enum GuardianParentResource: String, CaseIterable, Equatable {
     }
 }
 
-enum GuardianDataControlCopy {
-    static let localProfileDeletion =
-        "From Parent Home, tap the child card, choose Edit, then Delete profile. "
-        + "This removes that child’s words, settings, quest history, rewards, and saved picture from this device."
-
-    static let permissionManagement =
-        "Use Speech & Microphone above to review or finish setup. To change access later, open the iOS Settings app, choose Apps, then Tada Words to review Camera, Photos, Microphone, Speech Recognition, and Notifications."
-}
-
 private struct GuardianPrivacyAndSupportSection: View {
     let appVersion: GuardianAppVersionPresentation
 
     var body: some View {
         GuardianCard {
-            VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.medium) {
-                VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.xSmall) {
-                    Text("Privacy & Support")
-                        .font(.system(.title3, design: .rounded, weight: .bold))
-                    Text(
-                        "Parent resources open outside Tada Words and require an internet connection."
-                    )
-                    .font(.system(.subheadline, design: .rounded, weight: .medium))
-                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
-                }
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
-                        resourceLinks
-                    }
-                    VStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
-                        resourceLinks
-                    }
-                }
-
-                Divider()
-
-                Text("Data controls")
+            VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.small) {
+                Label("Privacy & Support", systemImage: "hand.raised.fill")
                     .font(.system(.headline, design: .rounded, weight: .bold))
 
-                GuardianDataControlGuide(
-                    title: "Delete a local profile",
-                    detail: GuardianDataControlCopy.localProfileDeletion,
-                    symbol: "person.crop.circle.badge.minus",
-                    accessibilityIdentifier: "guardian.app.local-profile-deletion"
-                )
-                GuardianDataControlGuide(
-                    title: "Manage iOS permissions",
-                    detail: GuardianDataControlCopy.permissionManagement,
-                    symbol: "gearshape.fill",
-                    accessibilityIdentifier: "guardian.app.permission-management"
-                )
-
-                Divider()
+                LazyVGrid(
+                    columns: [
+                        GridItem(
+                            .flexible(minimum: 0),
+                            spacing: GuardianPrimitiveTokens.Spacing.small,
+                            alignment: .top
+                        ),
+                        GridItem(
+                            .flexible(minimum: 0),
+                            spacing: GuardianPrimitiveTokens.Spacing.small,
+                            alignment: .top
+                        ),
+                    ],
+                    spacing: GuardianPrimitiveTokens.Spacing.small
+                ) {
+                    resourceLinks
+                }
 
                 Text(appVersion.footerText)
                     .font(.system(.caption, design: .rounded, weight: .medium))
@@ -586,7 +750,9 @@ private struct GuardianPrivacyAndSupportSection: View {
                         GuardianAppVersionPresentation.accessibilityIdentifier
                     )
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("guardian.app.privacy-and-support")
     }
 
@@ -602,25 +768,20 @@ private struct GuardianParentResourceLink: View {
 
     var body: some View {
         Link(destination: resource.destination) {
-            HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+            VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.xSmall) {
                 Image(systemName: resource.symbol)
-                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .font(.system(.title3, design: .rounded, weight: .bold))
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(resource.title)
-                        .font(.system(.headline, design: .rounded, weight: .bold))
-                    Text(resource.summary)
-                        .font(.system(.caption, design: .rounded, weight: .medium))
-                        .multilineTextAlignment(.leading)
-                }
-                Spacer(minLength: GuardianPrimitiveTokens.Spacing.xSmall)
-                Image(systemName: "arrow.up.right.square")
+                Text(resource.title)
                     .font(.system(.subheadline, design: .rounded, weight: .bold))
-                    .accessibilityHidden(true)
+                    .lineLimit(1)
+                Text(resource.summary)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    .lineLimit(2)
             }
-            .frame(maxWidth: .infinity, minHeight: TadaPrimitiveTokens.TouchTarget.minimum)
-            .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
-            .padding(.vertical, GuardianPrimitiveTokens.Spacing.small)
+            .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
+            .padding(GuardianPrimitiveTokens.Spacing.small)
         }
         .buttonStyle(.plain)
         .foregroundStyle(GuardianSemanticTokens.primary)
@@ -635,35 +796,6 @@ private struct GuardianParentResourceLink: View {
         .accessibilityLabel(resource.title)
         .accessibilityHint("Opens \(resource.title) in your web browser")
         .accessibilityIdentifier(resource.accessibilityIdentifier)
-    }
-}
-
-private struct GuardianDataControlGuide: View {
-    let title: String
-    let detail: String
-    let symbol: String
-    let accessibilityIdentifier: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: GuardianPrimitiveTokens.Spacing.small) {
-            Image(systemName: symbol)
-                .font(.system(.headline, design: .rounded, weight: .semibold))
-                .foregroundStyle(GuardianSemanticTokens.primary)
-                .frame(width: 28)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(.subheadline, design: .rounded, weight: .bold))
-                Text(detail)
-                    .font(.system(.caption, design: .rounded, weight: .medium))
-                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title). \(detail)")
-        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
@@ -758,13 +890,13 @@ struct GuardianNavigationTile: View {
 
 private struct GuardianParentHubLayout<Content: View>: View {
     let title: String
-    let profile: KidProfile
+    let profile: KidProfile?
     let onBack: () -> Void
     let content: Content
 
     init(
         title: String,
-        profile: KidProfile,
+        profile: KidProfile? = nil,
         onBack: @escaping () -> Void,
         @ViewBuilder content: () -> Content
     ) {
@@ -776,14 +908,15 @@ private struct GuardianParentHubLayout<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.large) {
+            VStack(alignment: .leading, spacing: GuardianPrimitiveTokens.Spacing.medium) {
                 GuardianNavigationHeader(title: title, onBack: onBack)
-                GuardianParentContextHeader(profile: profile)
+                if let profile {
+                    GuardianParentContextHeader(profile: profile)
+                }
                 content
             }
-            .frame(maxWidth: 880, alignment: .leading)
-            .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
-            .padding(.vertical, GuardianPrimitiveTokens.Spacing.large)
+            .frame(maxWidth: 980, alignment: .leading)
+            .guardianParentPageInsets()
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)

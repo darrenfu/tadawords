@@ -150,6 +150,10 @@ final class GuardianDashboardViewModel: ObservableObject {
     private var voiceprintPromptTask: Task<Void, Never>?
     private var pendingProfileAutoSave: (profileID: ProfileID, draft: GuardianProfileDraft)?
     private var profileAutoSaveTask: Task<Void, Never>?
+    private var pendingPracticeSettingsAutoSave:
+        (settings: ProfilePracticeSettings, section: GuardianSettingsSection)?
+    private var practiceSettingsAutoSaveTask: Task<Void, Never>?
+    private var returnsFromProfileEditorToDashboard = false
     private var externalSyncRefreshGeneration: UInt64 = 0
     private var syncPresentationRefreshGeneration: UInt64 = 0
 
@@ -288,13 +292,18 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func showNewProfile() {
+        returnsFromProfileEditorToDashboard = false
         destination = .profileEditor(nil)
     }
 
     @discardableResult
     func returnFromProfileEditor() -> Bool {
         guard familySnapshot?.profiles.isEmpty == true else {
-            showProfiles()
+            if returnsFromProfileEditorToDashboard {
+                showDashboard()
+            } else {
+                showProfiles()
+            }
             return false
         }
         lockGuardianArea()
@@ -302,6 +311,12 @@ final class GuardianDashboardViewModel: ObservableObject {
     }
 
     func showEditProfile(_ profile: KidProfile) {
+        returnsFromProfileEditorToDashboard = false
+        destination = .profileEditor(profile)
+    }
+
+    func showEditProfileFromDashboard(_ profile: KidProfile) {
+        returnsFromProfileEditorToDashboard = true
         destination = .profileEditor(profile)
     }
 
@@ -962,6 +977,68 @@ final class GuardianDashboardViewModel: ObservableObject {
                 await reconcileNotifications(for: updated)
                 await applyAudioSnapshot()
                 destination = .parentSection(section.parentSection)
+            } catch {
+                errorMessage = "Practice settings could not be saved. Please try again."
+            }
+        }
+    }
+
+    func autoSavePracticeSettings(
+        _ settings: ProfilePracticeSettings,
+        section: GuardianSettingsSection
+    ) {
+        guard section.usesAutoSave else {
+            savePracticeSettings(settings, section: section)
+            return
+        }
+        pendingPracticeSettingsAutoSave = (settings, section)
+        guard practiceSettingsAutoSaveTask == nil else { return }
+        practiceSettingsAutoSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            await self?.drainPracticeSettingsAutoSaves()
+        }
+    }
+
+    private func drainPracticeSettingsAutoSaves() async {
+        defer { practiceSettingsAutoSaveTask = nil }
+
+        while let pendingPracticeSettingsAutoSave {
+            self.pendingPracticeSettingsAutoSave = nil
+            let currentSettings: ProfilePracticeSettings
+            if let visibleSettings = snapshot?.practiceSettings,
+                visibleSettings.profileID == pendingPracticeSettingsAutoSave.settings.profileID
+            {
+                currentSettings = visibleSettings
+            } else {
+                do {
+                    currentSettings =
+                        try await store.dashboardSnapshot(
+                            for: pendingPracticeSettingsAutoSave.settings.profileID
+                        )
+                        .practiceSettings
+                } catch {
+                    errorMessage = "Practice settings could not be loaded. Please try again."
+                    continue
+                }
+            }
+            guard
+                let scopedSettings = GuardianSettingsMergePolicy.merging(
+                    edited: pendingPracticeSettingsAutoSave.settings,
+                    section: pendingPracticeSettingsAutoSave.section,
+                    into: currentSettings
+                )
+            else {
+                errorMessage = "Practice settings belong to a different Kid profile."
+                continue
+            }
+
+            do {
+                let updated = try await store.updatePracticeSettings(scopedSettings)
+                if snapshot?.profile.id == updated.profile.id {
+                    snapshot = updated
+                }
+                await reconcileNotifications(for: updated)
+                await applyAudioSnapshot()
             } catch {
                 errorMessage = "Practice settings could not be saved. Please try again."
             }

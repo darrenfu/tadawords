@@ -726,7 +726,7 @@ struct GuardianFamilySyncView: View {
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
-            .padding(GuardianPrimitiveTokens.Spacing.large)
+            .guardianParentPageInsets()
             .frame(maxWidth: .infinity)
         }
         .task {
@@ -873,7 +873,7 @@ struct GuardianVoiceprintEnrollmentView: View {
                 Spacer()
             }
             .frame(maxWidth: 760, alignment: .leading)
-            .padding(GuardianPrimitiveTokens.Spacing.large)
+            .guardianParentPageInsets()
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)

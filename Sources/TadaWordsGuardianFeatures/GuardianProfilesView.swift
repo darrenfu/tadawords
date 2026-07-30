@@ -52,8 +52,7 @@ struct GuardianProfilesView: View {
                 maxWidth: GuardianProfileCardLayoutPolicy.maximumContentWidth,
                 alignment: .leading
             )
-            .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
-            .padding(.vertical, GuardianPrimitiveTokens.Spacing.large)
+            .guardianParentPageInsets()
             .frame(maxWidth: .infinity)
         }
         .scrollIndicators(.hidden)
@@ -239,8 +238,7 @@ struct GuardianProfileEditorView: View {
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
-            .padding(.horizontal, GuardianPrimitiveTokens.Spacing.medium)
-            .padding(.vertical, GuardianPrimitiveTokens.Spacing.large)
+            .guardianParentPageInsets()
             .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)

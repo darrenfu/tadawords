@@ -153,7 +153,7 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         unlockParentArea()
 
         XCTAssertTrue(app.staticTexts["Remote Mia"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["guardian.home.switch-child"].exists)
+        XCTAssertTrue(app.buttons["guardian.home.words-and-practice"].exists)
 
         let progress = app.buttons["guardian.home.progress-and-performance"]
         XCTAssertTrue(progress.waitForExistence(timeout: 5))
@@ -265,12 +265,8 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         kids.tap()
         unlockParentArea()
 
-        let switchChild = app.buttons["guardian.home.switch-child"]
-        XCTAssertTrue(switchChild.waitForExistence(timeout: 6))
-        switchChild.tap()
-
         let edit = app.buttons[
-            "guardian.profile.\(Self.defaultProfileID).edit"
+            "guardian.home.profile.\(Self.defaultProfileID).edit"
         ]
         XCTAssertTrue(edit.waitForExistence(timeout: 5))
         edit.tap()
@@ -291,12 +287,8 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         kids.tap()
         unlockParentArea()
 
-        let switchChild = app.buttons["guardian.home.switch-child"]
-        XCTAssertTrue(switchChild.waitForExistence(timeout: 6))
-        switchChild.tap()
-
         let edit = app.buttons[
-            "guardian.profile.\(Self.defaultProfileID).edit"
+            "guardian.home.profile.\(Self.defaultProfileID).edit"
         ]
         XCTAssertTrue(edit.waitForExistence(timeout: 5))
         edit.tap()
@@ -433,7 +425,8 @@ final class TadaWordsFamilySyncUITests: XCTestCase {
         // immediately after the single tap on Parents.
         answer.typeText(String(factors[0] * factors[1]))
         XCTAssertTrue(
-            app.buttons["guardian.home.switch-child"].waitForExistence(timeout: 10)
+            app.buttons["guardian.home.words-and-practice"]
+                .waitForExistence(timeout: 10)
         )
     }
 
