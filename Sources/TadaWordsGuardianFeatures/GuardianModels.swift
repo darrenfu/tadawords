@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 import TadaWordsContent
 import TadaWordsDomain
 
@@ -536,17 +537,311 @@ public struct GuardianWordImportReport: Equatable, Sendable {
     }
 }
 
+struct GuardianOCRLemmaProposal: Equatable, Sendable {
+    let candidates: [String]
+    let requiresConfirmation: Bool
+
+    static let unchanged = GuardianOCRLemmaProposal(
+        candidates: [],
+        requiresConfirmation: false
+    )
+}
+
+struct GuardianEnglishLemmaSuggester: Sendable {
+    func proposal(for source: String) -> GuardianOCRLemmaProposal {
+        guard let normalized = try? EnglishWordNormalizer.normalize(source) else {
+            return .unchanged
+        }
+        guard !Self.unchangedSuffixForms.contains(normalized) else {
+            return .unchanged
+        }
+
+        if let candidates = Self.ambiguousForms[normalized] {
+            return GuardianOCRLemmaProposal(
+                candidates: validUniqueCandidates(candidates, excluding: normalized),
+                requiresConfirmation: true
+            )
+        }
+
+        if let irregular = Self.irregularForms[normalized] {
+            return GuardianOCRLemmaProposal(
+                candidates: validUniqueCandidates([irregular], excluding: normalized),
+                requiresConfirmation: false
+            )
+        }
+
+        var candidates: [String] = []
+        if let systemCandidate = systemLemmaCandidate(for: normalized) {
+            candidates.append(systemCandidate)
+        }
+        if let ruleCandidate = ruleBasedCandidate(for: normalized) {
+            candidates.append(ruleCandidate)
+        }
+        candidates = validUniqueCandidates(candidates, excluding: normalized)
+
+        return GuardianOCRLemmaProposal(
+            candidates: candidates,
+            requiresConfirmation: candidates.count > 1
+        )
+    }
+
+    private func systemLemmaCandidate(for word: String) -> String? {
+        let tagger = NLTagger(tagSchemes: [.lemma])
+        tagger.string = word
+        guard
+            let candidate = tagger.tag(
+                at: word.startIndex,
+                unit: .word,
+                scheme: .lemma
+            ).0?.rawValue,
+            candidate != word
+        else { return nil }
+        return candidate
+    }
+
+    private func ruleBasedCandidate(for word: String) -> String? {
+        if word.hasSuffix("ied"), word.count > 3 {
+            return String(word.dropLast(3)) + "y"
+        }
+        if word.hasSuffix("ies"), word.count > 3 {
+            return String(word.dropLast(3)) + "y"
+        }
+
+        if word.hasSuffix("ing"), word.count > 4 {
+            let stem = String(word.dropLast(3))
+            return Self.restoredSilentEForms[word] ?? removingDoubledConsonant(from: stem)
+        }
+
+        if word.hasSuffix("ed"), word.count > 3 {
+            let stem = String(word.dropLast(2))
+            return Self.restoredSilentEForms[word] ?? removingDoubledConsonant(from: stem)
+        }
+
+        if word.hasSuffix("sses"), word.count > 4 {
+            return String(word.dropLast(2))
+        }
+        if word.hasSuffix("ches") || word.hasSuffix("shes")
+            || word.hasSuffix("xes") || word.hasSuffix("zzes")
+        {
+            return String(word.dropLast(2))
+        }
+        if word.hasSuffix("oes"), word.count > 4 {
+            return String(word.dropLast(2))
+        }
+        if word.hasSuffix("s"), word.count > 3,
+            !word.hasSuffix("ss"),
+            !word.hasSuffix("us"),
+            !word.hasSuffix("is"),
+            !word.hasSuffix("ous")
+        {
+            return String(word.dropLast())
+        }
+
+        return nil
+    }
+
+    private func removingDoubledConsonant(from stem: String) -> String {
+        guard
+            stem.count >= 2,
+            let last = stem.last,
+            stem.dropLast().last == last,
+            !"aeiou".contains(last)
+        else { return stem }
+        return String(stem.dropLast())
+    }
+
+    private func validUniqueCandidates(
+        _ candidates: [String],
+        excluding original: String
+    ) -> [String] {
+        var seen = Set<String>()
+        return candidates.compactMap { candidate in
+            guard
+                let normalized = try? EnglishWordNormalizer.normalize(candidate),
+                normalized != original,
+                seen.insert(normalized).inserted
+            else { return nil }
+            return normalized
+        }
+    }
+
+    private static let ambiguousForms: [String: [String]] = [
+        "axes": ["ax", "axis"],
+        "found": ["find"],
+        "leaves": ["leaf", "leave"],
+        "left": ["leave"],
+        "lives": ["life", "live"],
+        "rose": ["rise"],
+        "saw": ["see"],
+    ]
+
+    private static let irregularForms: [String: String] = [
+        "buses": "bus",
+        "children": "child",
+        "cookies": "cookie",
+        "dies": "die",
+        "died": "die",
+        "feet": "foot",
+        "gave": "give",
+        "geese": "goose",
+        "houses": "house",
+        "knives": "knife",
+        "lies": "lie",
+        "lied": "lie",
+        "made": "make",
+        "men": "man",
+        "mice": "mouse",
+        "movies": "movie",
+        "oxen": "ox",
+        "people": "person",
+        "pies": "pie",
+        "rode": "ride",
+        "shoes": "shoe",
+        "teeth": "tooth",
+        "ties": "tie",
+        "tied": "tie",
+        "tomatoes": "tomato",
+        "wives": "wife",
+        "wolves": "wolf",
+        "women": "woman",
+        "wrote": "write",
+    ]
+
+    private static let restoredSilentEForms: [String: String] = [
+        "closed": "close",
+        "closing": "close",
+        "danced": "dance",
+        "dancing": "dance",
+        "hoped": "hope",
+        "hoping": "hope",
+        "loved": "love",
+        "loving": "love",
+        "making": "make",
+        "moved": "move",
+        "moving": "move",
+        "riding": "ride",
+        "smiled": "smile",
+        "smiling": "smile",
+        "taking": "take",
+        "used": "use",
+        "using": "use",
+        "writing": "write",
+    ]
+
+    private static let unchangedSuffixForms: Set<String> = [
+        "alias",
+        "atlas",
+        "bias",
+        "business",
+        "gas",
+        "lens",
+        "news",
+        "series",
+        "species",
+        "this",
+        "yes",
+    ]
+}
+
+enum GuardianOCRWordSelection: Equatable, Sendable {
+    case original
+    case lemma(String)
+    case edited
+}
+
+enum GuardianOCRWordFormRole: Equatable, Sendable {
+    case lemma
+    case original
+}
+
+struct GuardianOCRWordFormOption: Equatable, Sendable {
+    let word: String
+    let role: GuardianOCRWordFormRole
+    let isSelected: Bool
+    let isAlreadyInPool: Bool
+}
+
 struct GuardianEditableOCRWord: Identifiable, Equatable {
     let id: UUID
     /// Stable one-based position in the complete photo batch. This stays fixed
     /// while the parent changes the visible sort order for easier auditing.
     let sourceOrdinal: Int
+    let originalText: String
+    let lemmaCandidates: [String]
+    let lemmaRequiresConfirmation: Bool
     var text: String
+    var selection: GuardianOCRWordSelection
+    private(set) var hasConfirmedLemmaSelection: Bool
 
-    init(id: UUID = UUID(), sourceOrdinal: Int = 1, text: String) {
+    init(
+        id: UUID = UUID(),
+        sourceOrdinal: Int = 1,
+        text: String,
+        lemmaProposal: GuardianOCRLemmaProposal? = nil
+    ) {
+        let proposal = lemmaProposal ?? GuardianEnglishLemmaSuggester().proposal(for: text)
+        let defaultLemma = proposal.candidates.first
         self.id = id
         self.sourceOrdinal = max(1, sourceOrdinal)
-        self.text = text
+        self.originalText = text
+        self.lemmaCandidates = proposal.candidates
+        self.lemmaRequiresConfirmation = proposal.requiresConfirmation
+        self.text = defaultLemma ?? text
+        self.selection = defaultLemma.map(GuardianOCRWordSelection.lemma) ?? .original
+        self.hasConfirmedLemmaSelection = !proposal.requiresConfirmation
+    }
+
+    var needsLemmaConfirmation: Bool {
+        lemmaRequiresConfirmation && !hasConfirmedLemmaSelection
+    }
+
+    var hasLemmaSuggestion: Bool {
+        !lemmaCandidates.isEmpty
+    }
+
+    mutating func selectOriginal() {
+        text = originalText
+        selection = .original
+        hasConfirmedLemmaSelection = true
+    }
+
+    mutating func selectLemma(_ candidate: String) {
+        guard lemmaCandidates.contains(candidate) else { return }
+        text = candidate
+        selection = .lemma(candidate)
+        hasConfirmedLemmaSelection = true
+    }
+
+    mutating func applyManualEdit(_ editedText: String) {
+        text = editedText
+        selection = .edited
+        hasConfirmedLemmaSelection = true
+    }
+
+    mutating func confirmCurrentSelection() {
+        hasConfirmedLemmaSelection = true
+    }
+
+    func formOptions(
+        existingNormalizedWords: Set<String>
+    ) -> [GuardianOCRWordFormOption] {
+        let lemmaOptions = lemmaCandidates.map { candidate in
+            GuardianOCRWordFormOption(
+                word: candidate,
+                role: .lemma,
+                isSelected: selection == .lemma(candidate),
+                isAlreadyInPool: existingNormalizedWords.contains(candidate)
+            )
+        }
+        let normalizedOriginal =
+            (try? EnglishWordNormalizer.normalize(originalText)) ?? originalText
+        let originalOption = GuardianOCRWordFormOption(
+            word: originalText,
+            role: .original,
+            isSelected: selection == .original,
+            isAlreadyInPool: existingNormalizedWords.contains(normalizedOriginal)
+        )
+        return lemmaOptions + [originalOption]
     }
 }
 
@@ -593,9 +888,13 @@ struct GuardianOCRSubmissionPolicy {
     static func canSubmit(
         addableWords: [String],
         isAdding: Bool,
-        isRecognizingAdditionalPhotos: Bool
+        isRecognizingAdditionalPhotos: Bool,
+        hasUnconfirmedLemmaSelections: Bool = false
     ) -> Bool {
-        !addableWords.isEmpty && !isAdding && !isRecognizingAdditionalPhotos
+        !addableWords.isEmpty
+            && !isAdding
+            && !isRecognizingAdditionalPhotos
+            && !hasUnconfirmedLemmaSelections
     }
 }
 
@@ -723,6 +1022,7 @@ struct GuardianWordListPresentation {
 
 enum GuardianOCRWordState: Equatable {
     case ready(normalizedWord: String)
+    case needsConfirmation(suggestedWord: String)
     case alreadyInPool
     case duplicateInPreview
     case invalid
@@ -731,6 +1031,7 @@ enum GuardianOCRWordState: Equatable {
 struct GuardianOCRPreviewAnalysis: Equatable {
     let stateByID: [UUID: GuardianOCRWordState]
     let addableWords: [String]
+    let unconfirmedLemmaSelectionCount: Int
 
     init(
         words: [GuardianEditableOCRWord],
@@ -739,10 +1040,16 @@ struct GuardianOCRPreviewAnalysis: Equatable {
         var seen = Set<String>()
         var stateByID: [UUID: GuardianOCRWordState] = [:]
         var addableWords: [String] = []
+        var unconfirmedLemmaSelectionCount = 0
 
         for word in words {
             guard let normalized = try? EnglishWordNormalizer.normalize(word.text) else {
                 stateByID[word.id] = .invalid
+                continue
+            }
+            guard !word.needsLemmaConfirmation else {
+                stateByID[word.id] = .needsConfirmation(suggestedWord: normalized)
+                unconfirmedLemmaSelectionCount += 1
                 continue
             }
             guard seen.insert(normalized).inserted else {
@@ -759,6 +1066,7 @@ struct GuardianOCRPreviewAnalysis: Equatable {
 
         self.stateByID = stateByID
         self.addableWords = addableWords
+        self.unconfirmedLemmaSelectionCount = unconfirmedLemmaSelectionCount
     }
 }
 

@@ -971,8 +971,12 @@ private struct GuardianOCRPreviewView: View {
     private var analysis: GuardianOCRPreviewAnalysis {
         GuardianOCRPreviewAnalysis(
             words: words,
-            existingNormalizedWords: Set(existingWords.map(\.normalizedText))
+            existingNormalizedWords: existingNormalizedWords
         )
+    }
+
+    private var existingNormalizedWords: Set<String> {
+        Set(existingWords.map(\.normalizedText))
     }
 
     private var presentedWords: [GuardianEditableOCRWord] {
@@ -997,11 +1001,12 @@ private struct GuardianOCRPreviewView: View {
                             .id(topAnchor)
 
                         Text(
-                            "Edit mistakes or remove anything that is not part of the school list. Duplicates are skipped automatically."
+                            "Suggestions start in the editable field. Use an option to switch forms."
                         )
                         .font(.system(.subheadline, design: .rounded, weight: .medium))
                         .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
 
+                        reviewSummary
                         reviewControls
 
                         if isRecognizingAdditionalPhotos {
@@ -1022,40 +1027,7 @@ private struct GuardianOCRPreviewView: View {
                         GuardianCard {
                             LazyVStack(spacing: 0) {
                                 ForEach(presentedWords) { word in
-                                    HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
-                                        Text("\(word.sourceOrdinal).")
-                                            .font(
-                                                .system(
-                                                    .caption,
-                                                    design: .rounded,
-                                                    weight: .bold
-                                                )
-                                            )
-                                            .foregroundStyle(
-                                                GuardianSemanticTokens.secondaryForeground
-                                            )
-                                            .frame(width: 34, alignment: .trailing)
-                                            .monospacedDigit()
-
-                                        TextField("Word", text: textBinding(for: word.id))
-                                            .textFieldStyle(.roundedBorder)
-                                            .font(
-                                                .system(.body, design: .rounded, weight: .semibold)
-                                            )
-                                            .focused($inputIsFocused)
-                                        previewState(for: word)
-                                        practiceFrequencyBadge(for: word)
-                                        Button(role: .destructive) {
-                                            words.removeAll { $0.id == word.id }
-                                        } label: {
-                                            Image(systemName: "trash")
-                                                .frame(width: 44, height: 44)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .foregroundStyle(.red)
-                                        .accessibilityLabel("Remove \(word.text)")
-                                    }
-                                    .padding(.vertical, 6)
+                                    reviewRow(word)
                                     if word.id != presentedWords.last?.id { Divider() }
                                 }
                             }
@@ -1079,6 +1051,237 @@ private struct GuardianOCRPreviewView: View {
             }
         }
         .foregroundStyle(GuardianSemanticTokens.foreground)
+    }
+
+    private var reviewSummary: some View {
+        HStack(spacing: GuardianPrimitiveTokens.Spacing.small) {
+            Label("\(words.count) detected", systemImage: "text.viewfinder")
+            Label(
+                "\(analysis.addableWords.count) ready",
+                systemImage: "checkmark.circle.fill"
+            )
+            if analysis.unconfirmedLemmaSelectionCount > 0 {
+                Label(
+                    "\(analysis.unconfirmedLemmaSelectionCount) to confirm",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .foregroundStyle(GuardianPrimitiveTokens.ColorValue.orange)
+            }
+        }
+        .font(.system(.caption, design: .rounded, weight: .bold))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func reviewRow(_ word: GuardianEditableOCRWord) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("\(word.sourceOrdinal).")
+                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    .frame(width: 24, alignment: .trailing)
+                    .monospacedDigit()
+
+                (Text("Photo: ")
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    + Text(word.originalText)
+                    .foregroundStyle(GuardianSemanticTokens.foreground))
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .lineLimit(1)
+
+                Spacer()
+                previewState(for: word)
+                Button(role: .destructive) {
+                    words.removeAll { $0.id == word.id }
+                } label: {
+                    Image(systemName: "trash")
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .accessibilityLabel("Remove \(word.originalText)")
+            }
+
+            let alternatives = word.formOptions(
+                existingNormalizedWords: existingNormalizedWords
+            ).filter { !$0.isSelected }
+            wordFormChooser(word, alternatives: alternatives)
+
+            if word.needsLemmaConfirmation {
+                Label(
+                    "Ambiguous — confirm this word or choose another form.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(GuardianPrimitiveTokens.ColorValue.orange)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private func wordFormChooser(
+        _ word: GuardianEditableOCRWord,
+        alternatives: [GuardianOCRWordFormOption]
+    ) -> some View {
+        if alternatives.isEmpty {
+            selectedWordEditor(word)
+        } else {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    selectedWordEditor(word)
+                        .frame(minWidth: 220)
+                    ForEach(Array(alternatives.enumerated()), id: \.offset) { _, option in
+                        formOptionButton(option, wordID: word.id)
+                            .frame(minWidth: 112)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    selectedWordEditor(word)
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 118), spacing: 6)],
+                        spacing: 6
+                    ) {
+                        ForEach(Array(alternatives.enumerated()), id: \.offset) { _, option in
+                            formOptionButton(option, wordID: word.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func selectedWordEditor(_ word: GuardianEditableOCRWord) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(selectionTitle(for: word))
+                    .font(.system(.caption2, design: .rounded, weight: .bold))
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                TextField("Word", text: textBinding(for: word.id))
+                    .textFieldStyle(.plain)
+                    .font(.system(.body, design: .rounded, weight: .bold))
+                    .focused($inputIsFocused)
+                    .accessibilityLabel("Selected word for photo word \(word.originalText)")
+            }
+
+            if currentWordIsInPool(word) {
+                Text("In pool")
+                    .font(.system(.caption2, design: .rounded, weight: .bold))
+                    .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+            }
+
+            if word.needsLemmaConfirmation {
+                Button("Confirm") {
+                    guard let index = words.firstIndex(where: { $0.id == word.id }) else {
+                        return
+                    }
+                    words[index].confirmCurrentSelection()
+                }
+                .font(.system(.caption, design: .rounded, weight: .bold))
+                .buttonStyle(.borderedProminent)
+                .tint(GuardianPrimitiveTokens.ColorValue.orange)
+                .frame(minHeight: 44)
+                .accessibilityLabel("Confirm \(word.text) for photo word \(word.originalText)")
+            }
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, word.needsLemmaConfirmation ? 4 : 12)
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+        .background(
+            GuardianSemanticTokens.accent(for: mode).opacity(0.10),
+            in: RoundedRectangle(
+                cornerRadius: GuardianPrimitiveTokens.Radius.small,
+                style: .continuous
+            )
+        )
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: GuardianPrimitiveTokens.Radius.small,
+                style: .continuous
+            )
+            .strokeBorder(
+                word.needsLemmaConfirmation
+                    ? GuardianPrimitiveTokens.ColorValue.orange.opacity(0.72)
+                    : GuardianSemanticTokens.accent(for: mode).opacity(0.58),
+                lineWidth: 1.5
+            )
+        }
+    }
+
+    private func selectionTitle(for word: GuardianEditableOCRWord) -> String {
+        switch word.selection {
+        case .lemma:
+            word.needsLemmaConfirmation ? "Suggested base form" : "Base form"
+        case .original:
+            "Photo word"
+        case .edited:
+            "Edited word"
+        }
+    }
+
+    private func currentWordIsInPool(_ word: GuardianEditableOCRWord) -> Bool {
+        let normalized =
+            (try? EnglishWordNormalizer.normalize(word.text))
+            ?? word.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return existingNormalizedWords.contains(normalized)
+    }
+
+    private func formOptionButton(
+        _ option: GuardianOCRWordFormOption,
+        wordID: UUID
+    ) -> some View {
+        Button {
+            guard let index = words.firstIndex(where: { $0.id == wordID }) else {
+                return
+            }
+            switch option.role {
+            case .lemma:
+                words[index].selectLemma(option.word)
+            case .original:
+                words[index].selectOriginal()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(option.role == .lemma ? "Try base form" : "Keep photo word")
+                        .font(.system(.caption2, design: .rounded, weight: .bold))
+                        .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                    Text(option.word)
+                        .font(.system(.subheadline, design: .rounded, weight: .bold))
+                        .foregroundStyle(GuardianSemanticTokens.foreground)
+                }
+                Spacer(minLength: 4)
+                if option.isAlreadyInPool {
+                    Text("In pool")
+                        .font(.system(.caption2, design: .rounded, weight: .bold))
+                        .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .background(
+                GuardianSemanticTokens.accent(for: mode).opacity(0.04),
+                in: RoundedRectangle(
+                    cornerRadius: GuardianPrimitiveTokens.Radius.small,
+                    style: .continuous
+                )
+            )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: GuardianPrimitiveTokens.Radius.small,
+                    style: .continuous
+                )
+                .strokeBorder(
+                    GuardianSemanticTokens.accent(for: mode).opacity(0.18),
+                    lineWidth: 1
+                )
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            "\(option.role == .lemma ? "Use base form" : "Keep photo word") \(option.word)"
+        )
+        .accessibilityValue(option.isAlreadyInPool ? "Already in pool" : "Not in pool")
     }
 
     private func navigationBar(proxy: ScrollViewProxy) -> some View {
@@ -1187,6 +1390,14 @@ private struct GuardianOCRPreviewView: View {
                     .font(.system(.caption, design: .rounded, weight: .semibold))
                     .foregroundStyle(.red)
             }
+            if analysis.unconfirmedLemmaSelectionCount > 0 {
+                Label(
+                    "Confirm \(analysis.unconfirmedLemmaSelectionCount) ambiguous \(analysis.unconfirmedLemmaSelectionCount == 1 ? "word" : "words") before adding.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(GuardianPrimitiveTokens.ColorValue.orange)
+            }
             Button {
                 inputIsFocused = false
                 addAll()
@@ -1206,7 +1417,9 @@ private struct GuardianOCRPreviewView: View {
                 !GuardianOCRSubmissionPolicy.canSubmit(
                     addableWords: analysis.addableWords,
                     isAdding: isAdding,
-                    isRecognizingAdditionalPhotos: isRecognizingAdditionalPhotos
+                    isRecognizingAdditionalPhotos: isRecognizingAdditionalPhotos,
+                    hasUnconfirmedLemmaSelections:
+                        analysis.unconfirmedLemmaSelectionCount > 0
                 )
             )
         }
@@ -1224,6 +1437,10 @@ private struct GuardianOCRPreviewView: View {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(GuardianSemanticTokens.success)
                 .accessibilityLabel("Ready to add")
+        case .needsConfirmation:
+            Text("Confirm")
+                .font(.system(.caption2, design: .rounded, weight: .bold))
+                .foregroundStyle(GuardianPrimitiveTokens.ColorValue.orange)
         case .alreadyInPool:
             Text("In pool")
                 .font(.system(.caption2, design: .rounded, weight: .bold))
@@ -1239,17 +1456,6 @@ private struct GuardianOCRPreviewView: View {
         }
     }
 
-    private func practiceFrequencyBadge(for word: GuardianEditableOCRWord) -> some View {
-        let count = GuardianWordListPresentation.recognizedFrequency(
-            for: word,
-            in: practiceFrequencyByNormalizedWord
-        )
-        return Label("\(count)", systemImage: "repeat")
-            .font(.system(.caption2, design: .rounded, weight: .bold))
-            .foregroundStyle(GuardianSemanticTokens.secondaryForeground)
-            .accessibilityLabel("Practiced \(count) \(count == 1 ? "time" : "times")")
-    }
-
     private func textBinding(for id: UUID) -> Binding<String> {
         Binding(
             get: {
@@ -1259,7 +1465,7 @@ private struct GuardianOCRPreviewView: View {
                 guard let index = words.firstIndex(where: { $0.id == id }) else {
                     return
                 }
-                words[index].text = newValue
+                words[index].applyManualEdit(newValue)
             }
         )
     }
