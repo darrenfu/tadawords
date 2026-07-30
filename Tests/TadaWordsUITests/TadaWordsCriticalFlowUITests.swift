@@ -268,7 +268,7 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
 
         let privacy = element(label: "Privacy Policy")
         let support = element(label: "Support")
-        let appVersion = element(label: "Version 0.8.1 (2026072801)")
+        let appVersion = element(label: "Version 0.8.1 (2026072901)")
 
         for _ in 0..<4 where !privacy.exists {
             app.scrollViews.firstMatch.swipeUp()
@@ -287,7 +287,7 @@ final class TadaWordsCriticalFlowUITests: XCTestCase {
         }
 
         XCTAssertTrue(appVersion.waitForExistence(timeout: 5))
-        XCTAssertEqual(appVersion.label, "Version 0.8.1 (2026072801)")
+        XCTAssertEqual(appVersion.label, "Version 0.8.1 (2026072901)")
 
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "App & Family aligned layout"

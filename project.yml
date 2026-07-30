@@ -45,7 +45,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: app.tadawords.app
         PRODUCT_NAME: Tada Words
         MARKETING_VERSION: 0.8.1
-        CURRENT_PROJECT_VERSION: 2026072801
+        CURRENT_PROJECT_VERSION: 2026072901
         TADA_GIT_COMMIT: unknown
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -76,7 +76,7 @@ targets:
       properties:
         CFBundleDisplayName: Tada Words
         CFBundleShortVersionString: "0.8.1"
-        CFBundleVersion: "2026072801"
+        CFBundleVersion: "2026072901"
         TadaWordsGitCommit: "$(TADA_GIT_COMMIT)"
         TadaWordsTeacherAudioEndpoint: https://audio.pawgoo.app
         CKSharingSupported: true
