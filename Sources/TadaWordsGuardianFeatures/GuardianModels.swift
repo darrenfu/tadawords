@@ -818,6 +818,10 @@ struct GuardianEditableOCRWord: Identifiable, Equatable {
         hasConfirmedLemmaSelection = true
     }
 
+    mutating func confirmCurrentSelection() {
+        hasConfirmedLemmaSelection = true
+    }
+
     func formOptions(
         existingNormalizedWords: Set<String>
     ) -> [GuardianOCRWordFormOption] {

@@ -496,6 +496,12 @@ final class GuardianWordStoreTests: XCTestCase {
         edited.applyManualEdit("leave")
         XCTAssertFalse(edited.needsLemmaConfirmation)
         XCTAssertEqual(edited.selection, .edited)
+
+        var confirmedDefault = GuardianEditableOCRWord(text: "axes")
+        confirmedDefault.confirmCurrentSelection()
+        XCTAssertFalse(confirmedDefault.needsLemmaConfirmation)
+        XCTAssertEqual(confirmedDefault.selection, .lemma("ax"))
+        XCTAssertEqual(confirmedDefault.text, "ax")
     }
 
     func testOCRWordFormOptionsMarkExistingLemmaAndOriginalIndependently() {

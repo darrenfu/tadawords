@@ -140,8 +140,8 @@
       display: grid;
       grid-template-columns: 1fr auto 1fr;
       align-items: center;
-      min-height: 68px;
-      padding: 10px 16px;
+      min-height: 60px;
+      padding: 7px 14px;
       border-bottom: 1px solid rgba(20, 37, 66, 0.08);
       background: rgba(255, 255, 255, 0.92);
       backdrop-filter: blur(18px);
@@ -198,46 +198,47 @@
       min-width: 0;
       height: 100%;
       margin: 0 auto;
-      padding: 20px 22px 24px;
+      padding: 14px 18px 18px;
       overflow-x: hidden;
       overflow-y: auto;
     }
 
     .intro {
-      margin: 0 0 16px;
+      margin: 0 0 10px;
       color: var(--soft-ink);
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 600;
       line-height: 1.45;
     }
 
     .summary {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-      margin-bottom: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
     }
 
     .metric {
-      padding: 12px 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 10px;
       border: 1px solid var(--line);
-      border-radius: var(--radius-md);
+      border-radius: 999px;
       background: var(--surface);
     }
 
     .metric strong,
     .metric span {
-      display: block;
       overflow-wrap: anywhere;
     }
 
     .metric strong {
-      font-size: 22px;
+      font-size: 15px;
       line-height: 1;
     }
 
     .metric span {
-      margin-top: 5px;
       color: var(--soft-ink);
       font-size: 11px;
       font-weight: 750;
@@ -250,8 +251,8 @@
 
     .filters {
       display: flex;
-      gap: 8px;
-      margin: 0 0 14px;
+      gap: 6px;
+      margin: 0 0 10px;
       overflow-x: auto;
       scrollbar-width: none;
     }
@@ -262,7 +263,7 @@
 
     .filter {
       flex: 0 0 auto;
-      padding: 0 15px;
+      padding: 0 13px;
       border: 1px solid var(--line);
       border-radius: 999px;
       background: var(--surface);
@@ -280,16 +281,20 @@
     .review-list {
       display: grid;
       min-width: 0;
-      gap: 12px;
+      gap: 8px;
     }
 
     .word-card {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(116px, 260px);
+      column-gap: 6px;
+      row-gap: 6px;
       min-width: 0;
-      padding: 16px;
+      padding: 10px 12px;
       border: 1px solid rgba(20, 37, 66, 0.08);
-      border-radius: var(--radius-lg);
+      border-radius: 18px;
       background: var(--surface);
-      box-shadow: 0 8px 24px rgba(20, 37, 66, 0.06);
+      box-shadow: 0 5px 16px rgba(20, 37, 66, 0.05);
     }
 
     .word-card[hidden] {
@@ -298,9 +303,11 @@
 
     .word-head {
       display: grid;
+      grid-column: 1 / -1;
+      grid-row: 1;
       grid-template-columns: auto minmax(0, 1fr) auto auto;
       align-items: center;
-      gap: 10px;
+      gap: 7px;
     }
 
     .ordinal {
@@ -312,22 +319,22 @@
       font-variant-numeric: tabular-nums;
     }
 
-    .eyebrow {
-      display: block;
+    .photo-inline {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 14px;
+      font-weight: 820;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .photo-inline small {
       color: var(--soft-ink);
       font-size: 10px;
       font-weight: 850;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-    }
-
-    .photo-word {
-      display: block;
-      margin-top: 2px;
-      overflow: hidden;
-      font-size: 18px;
-      font-weight: 820;
-      text-overflow: ellipsis;
+      margin-right: 5px;
     }
 
     .state {
@@ -356,6 +363,11 @@
       background: #eef1f6;
     }
 
+    .state.invalid {
+      color: var(--red);
+      background: #fff0f1;
+    }
+
     .remove {
       width: 44px;
       padding: 0;
@@ -368,9 +380,11 @@
 
     .guidance {
       display: flex;
+      grid-column: 1 / -1;
+      grid-row: 3;
       align-items: flex-start;
       gap: 7px;
-      margin: 13px 0 9px 36px;
+      margin: 0;
       color: var(--soft-ink);
       font-size: 12px;
       font-weight: 650;
@@ -383,45 +397,29 @@
 
     .options {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 8px;
-      margin-left: 36px;
+      grid-column: 2;
+      grid-row: 2;
+      grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
+      gap: 6px;
+      align-self: start;
     }
 
     .word-option {
       min-width: 0;
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      gap: 9px;
-      min-height: 58px;
-      padding: 8px 11px;
+      gap: 6px;
+      min-height: 44px;
+      padding: 5px 9px;
       border: 1px solid #d9dff0;
-      border-radius: var(--radius-sm);
+      border-radius: 10px;
       background: #fbfcff;
       text-align: left;
     }
 
-    .word-option.selected {
-      border: 2px solid var(--indigo);
-      background: var(--indigo-soft);
-    }
-
-    .choice-mark {
-      display: grid;
-      width: 20px;
-      height: 20px;
-      place-items: center;
-      border: 2px solid #9aa5b8;
-      border-radius: 50%;
-      color: transparent;
-      font-size: 12px;
-    }
-
-    .selected .choice-mark {
-      border-color: var(--indigo);
-      color: white;
-      background: var(--indigo);
+    .word-option[hidden] {
+      display: none;
     }
 
     .option-copy {
@@ -456,33 +454,81 @@
       white-space: nowrap;
     }
 
-    .edit-row {
+    .selection-row {
       display: grid;
-      grid-template-columns: 88px minmax(0, 1fr);
+      grid-column: 1;
+      grid-row: 2;
+      grid-template-columns: minmax(0, 1fr) auto auto;
       align-items: center;
-      gap: 10px;
-      margin: 12px 0 0 36px;
+      gap: 7px;
+      min-height: 48px;
+      margin: 0;
+      padding: 3px 4px 3px 11px;
+      border: 1.5px solid rgba(98, 80, 194, 0.58);
+      border-radius: 11px;
+      background: var(--indigo-soft);
     }
 
-    .edit-row label {
+    .selection-row.needs-confirmation {
+      border-color: rgba(201, 104, 19, 0.72);
+      background: var(--orange-soft);
+    }
+
+    .selection-copy {
+      min-width: 0;
+    }
+
+    .selection-copy label {
+      display: block;
       color: var(--soft-ink);
-      font-size: 11px;
+      font-size: 9px;
+      font-weight: 850;
+      line-height: 1.15;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .selection-copy input {
+      width: 100%;
+      min-height: 25px;
+      padding: 0;
+      border: 0;
+      outline: 0;
+      color: var(--ink);
+      background: transparent;
+      font-size: 16px;
+      font-weight: 820;
+    }
+
+    .selection-row:focus-within {
+      outline: 3px solid rgba(98, 80, 194, 0.35);
+      outline-offset: 2px;
+    }
+
+    .current-pool {
+      padding: 4px 6px;
+      border-radius: 7px;
+      color: var(--soft-ink);
+      background: #e1e5ee;
+      font-size: 9px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .confirm-choice {
+      min-height: 44px;
+      padding: 0 11px;
+      border: 0;
+      border-radius: 9px;
+      color: white;
+      background: var(--orange);
+      font-size: 12px;
       font-weight: 850;
     }
 
-    .edit-row input {
-      width: 100%;
-      min-height: 44px;
-      padding: 0 12px;
-      border: 1px solid #cfd7e5;
-      border-radius: 11px;
-      color: var(--ink);
-      background: white;
-      font-weight: 750;
-    }
-
-    .no-lemma .guidance,
-    .no-lemma .options {
+    .current-pool[hidden],
+    .confirm-choice[hidden],
+    .guidance[hidden] {
       display: none;
     }
 
@@ -607,7 +653,7 @@
       }
 
       main {
-        padding: 16px 14px 20px;
+        padding: 11px 10px 14px;
       }
 
       .summary {
@@ -615,7 +661,7 @@
       }
 
       .metric {
-        padding: 10px;
+        padding: 6px 8px;
       }
 
       .metric strong {
@@ -623,22 +669,26 @@
       }
 
       .word-card {
-        padding: 14px 12px;
-        border-radius: 20px;
-      }
-
-      .guidance,
-      .options,
-      .edit-row {
-        margin-left: 0;
+        padding: 9px 10px;
+        border-radius: 16px;
       }
 
       .options {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+      }
+    }
+
+    @media (max-width: 380px) {
+      .word-card {
+        grid-template-columns: minmax(0, 1fr);
       }
 
-      .edit-row {
-        grid-template-columns: 78px minmax(0, 1fr);
+      .word-head,
+      .selection-row,
+      .options,
+      .guidance {
+        grid-column: 1;
+        grid-row: auto;
       }
     }
 
@@ -682,8 +732,7 @@
 
       <main>
         <p class="intro">
-          Base-form suggestions are selected by default. Keep the photo word or edit any
-          selection before adding.
+          Suggested base forms start in the editable field. Use an option only to switch forms.
         </p>
 
         <section class="summary" aria-label="Review summary">
@@ -712,140 +761,138 @@
           <article class="word-card" data-original="dogs" data-ambiguous="false">
             <div class="word-head">
               <span class="ordinal">1.</span>
-              <div>
-                <span class="eyebrow">Photo word</span>
-                <span class="photo-word">dogs</span>
-              </div>
+              <span class="photo-inline"><small>Photo</small>dogs</span>
               <span class="state skipped">In pool</span>
               <button class="remove" type="button" aria-label="Remove dogs">⌫</button>
             </div>
-            <p class="guidance">Choose the base form or keep the photographed spelling.</p>
-            <div class="options" role="group" aria-label="Word form for dogs">
-              <button class="word-option selected" type="button" data-value="dog" data-pool="true">
-                <span class="choice-mark">✓</span>
-                <span class="option-copy"><small>Base form</small><strong>dog</strong></span>
+            <div class="selection-row">
+              <div class="selection-copy">
+                <label for="edit-dogs">Base form</label>
+                <input id="edit-dogs" value="dog" autocomplete="off" spellcheck="false">
+              </div>
+              <span class="current-pool">In pool</span>
+              <button class="confirm-choice" type="button" hidden>Confirm</button>
+            </div>
+            <div class="options" role="group" aria-label="Other word forms for dogs">
+              <button class="word-option" type="button" data-value="dog" data-kind="Base form" data-pool="true" hidden>
+                <span class="option-copy"><small>Use base form</small><strong>dog</strong></span>
                 <span class="pool-badge">In pool</span>
               </button>
-              <button class="word-option" type="button" data-value="dogs" data-pool="false">
-                <span class="choice-mark">✓</span>
+              <button class="word-option" type="button" data-value="dogs" data-kind="Photo word" data-pool="false">
                 <span class="option-copy"><small>Keep photo word</small><strong>dogs</strong></span>
               </button>
-            </div>
-            <div class="edit-row">
-              <label for="edit-dogs">Word to add</label>
-              <input id="edit-dogs" value="dog" autocomplete="off" spellcheck="false">
             </div>
           </article>
 
           <article class="word-card" data-original="children" data-ambiguous="false">
             <div class="word-head">
               <span class="ordinal">2.</span>
-              <div>
-                <span class="eyebrow">Photo word</span>
-                <span class="photo-word">children</span>
-              </div>
+              <span class="photo-inline"><small>Photo</small>children</span>
               <span class="state ready">Ready</span>
               <button class="remove" type="button" aria-label="Remove children">⌫</button>
             </div>
-            <p class="guidance">Choose the base form or keep the photographed spelling.</p>
-            <div class="options" role="group" aria-label="Word form for children">
-              <button class="word-option selected" type="button" data-value="child" data-pool="false">
-                <span class="choice-mark">✓</span>
-                <span class="option-copy"><small>Base form</small><strong>child</strong></span>
+            <div class="selection-row">
+              <div class="selection-copy">
+                <label for="edit-children">Base form</label>
+                <input id="edit-children" value="child" autocomplete="off" spellcheck="false">
+              </div>
+              <span class="current-pool" hidden>In pool</span>
+              <button class="confirm-choice" type="button" hidden>Confirm</button>
+            </div>
+            <div class="options" role="group" aria-label="Other word forms for children">
+              <button class="word-option" type="button" data-value="child" data-kind="Base form" data-pool="false" hidden>
+                <span class="option-copy"><small>Use base form</small><strong>child</strong></span>
               </button>
-              <button class="word-option" type="button" data-value="children" data-pool="false">
-                <span class="choice-mark">✓</span>
+              <button class="word-option" type="button" data-value="children" data-kind="Photo word" data-pool="false">
                 <span class="option-copy"><small>Keep photo word</small><strong>children</strong></span>
               </button>
-            </div>
-            <div class="edit-row">
-              <label for="edit-children">Word to add</label>
-              <input id="edit-children" value="child" autocomplete="off" spellcheck="false">
             </div>
           </article>
 
           <article class="word-card" data-original="leaves" data-ambiguous="true" data-confirmed="false">
             <div class="word-head">
               <span class="ordinal">3.</span>
-              <div>
-                <span class="eyebrow">Photo word</span>
-                <span class="photo-word">leaves</span>
-              </div>
+              <span class="photo-inline"><small>Photo</small>leaves</span>
               <span class="state confirm">Confirm</span>
               <button class="remove" type="button" aria-label="Remove leaves">⌫</button>
             </div>
+            <div class="selection-row needs-confirmation">
+              <div class="selection-copy">
+                <label for="edit-leaves">Suggested base form</label>
+                <input id="edit-leaves" value="leaf" autocomplete="off" spellcheck="false">
+              </div>
+              <span class="current-pool" hidden>In pool</span>
+              <button class="confirm-choice" type="button">Confirm</button>
+            </div>
             <p class="guidance warning">
               <span aria-hidden="true">▲</span>
-              More than one base form is possible. Choose one to confirm.
+              Ambiguous — confirm this word or choose another form.
             </p>
-            <div class="options" role="group" aria-label="Word form for leaves">
-              <button class="word-option selected" type="button" data-value="leaf" data-pool="false">
-                <span class="choice-mark">✓</span>
-                <span class="option-copy"><small>Base form · possible</small><strong>leaf</strong></span>
+            <div class="options" role="group" aria-label="Other word forms for leaves">
+              <button class="word-option" type="button" data-value="leaf" data-kind="Base form" data-pool="false" hidden>
+                <span class="option-copy"><small>Try base form</small><strong>leaf</strong></span>
               </button>
-              <button class="word-option" type="button" data-value="leave" data-pool="false">
-                <span class="choice-mark">✓</span>
-                <span class="option-copy"><small>Base form · possible</small><strong>leave</strong></span>
+              <button class="word-option" type="button" data-value="leave" data-kind="Base form" data-pool="false">
+                <span class="option-copy"><small>Try base form</small><strong>leave</strong></span>
               </button>
-              <button class="word-option" type="button" data-value="leaves" data-pool="false">
-                <span class="choice-mark">✓</span>
+              <button class="word-option" type="button" data-value="leaves" data-kind="Photo word" data-pool="false">
                 <span class="option-copy"><small>Keep photo word</small><strong>leaves</strong></span>
               </button>
-            </div>
-            <div class="edit-row">
-              <label for="edit-leaves">Word to add</label>
-              <input id="edit-leaves" value="leaf" autocomplete="off" spellcheck="false">
             </div>
           </article>
 
           <article class="word-card" data-original="axes" data-ambiguous="true" data-confirmed="false">
             <div class="word-head">
               <span class="ordinal">4.</span>
-              <div>
-                <span class="eyebrow">Photo word</span>
-                <span class="photo-word">axes</span>
-              </div>
+              <span class="photo-inline"><small>Photo</small>axes</span>
               <span class="state confirm">Confirm</span>
               <button class="remove" type="button" aria-label="Remove axes">⌫</button>
             </div>
+            <div class="selection-row needs-confirmation">
+              <div class="selection-copy">
+                <label for="edit-axes">Suggested base form</label>
+                <input id="edit-axes" value="ax" autocomplete="off" spellcheck="false">
+              </div>
+              <span class="current-pool" hidden>In pool</span>
+              <button class="confirm-choice" type="button">Confirm</button>
+            </div>
             <p class="guidance warning">
               <span aria-hidden="true">▲</span>
-              This may mean more than one thing. Choose one to confirm.
+              Ambiguous — confirm this word or choose another form.
             </p>
-            <div class="options" role="group" aria-label="Word form for axes">
-              <button class="word-option selected" type="button" data-value="ax" data-pool="false">
-                <span class="choice-mark">✓</span>
-                <span class="option-copy"><small>Base form · possible</small><strong>ax</strong></span>
+            <div class="options" role="group" aria-label="Other word forms for axes">
+              <button class="word-option" type="button" data-value="ax" data-kind="Base form" data-pool="false" hidden>
+                <span class="option-copy"><small>Try base form</small><strong>ax</strong></span>
               </button>
-              <button class="word-option" type="button" data-value="axis" data-pool="true">
-                <span class="choice-mark">✓</span>
-                <span class="option-copy"><small>Base form · possible</small><strong>axis</strong></span>
+              <button class="word-option" type="button" data-value="axis" data-kind="Base form" data-pool="true">
+                <span class="option-copy"><small>Try base form</small><strong>axis</strong></span>
                 <span class="pool-badge">In pool</span>
               </button>
-              <button class="word-option" type="button" data-value="axes" data-pool="false">
-                <span class="choice-mark">✓</span>
+              <button class="word-option" type="button" data-value="axes" data-kind="Photo word" data-pool="false">
                 <span class="option-copy"><small>Keep photo word</small><strong>axes</strong></span>
               </button>
             </div>
-            <div class="edit-row">
-              <label for="edit-axes">Word to add</label>
-              <input id="edit-axes" value="ax" autocomplete="off" spellcheck="false">
-            </div>
           </article>
 
-          <article class="word-card no-lemma" data-original="apple" data-ambiguous="false">
+          <article class="word-card" data-original="apple" data-ambiguous="false">
             <div class="word-head">
               <span class="ordinal">5.</span>
-              <div>
-                <span class="eyebrow">Photo word</span>
-                <span class="photo-word">apple</span>
-              </div>
+              <span class="photo-inline"><small>Photo</small>apple</span>
               <span class="state ready">Ready</span>
               <button class="remove" type="button" aria-label="Remove apple">⌫</button>
             </div>
-            <div class="edit-row">
-              <label for="edit-apple">Word to add</label>
-              <input id="edit-apple" value="apple" autocomplete="off" spellcheck="false">
+            <div class="selection-row">
+              <div class="selection-copy">
+                <label for="edit-apple">Photo word</label>
+                <input id="edit-apple" value="apple" autocomplete="off" spellcheck="false">
+              </div>
+              <span class="current-pool" hidden>In pool</span>
+              <button class="confirm-choice" type="button" hidden>Confirm</button>
+            </div>
+            <div class="options" role="group" aria-label="Other word forms for apple">
+              <button class="word-option" type="button" data-value="apple" data-kind="Photo word" data-pool="false" hidden>
+                <span class="option-copy"><small>Use photo word</small><strong>apple</strong></span>
+              </button>
             </div>
           </article>
         </section>
@@ -892,12 +939,43 @@
       return value.trim().toLowerCase();
     }
 
+    function syncSelectedEditor(card) {
+      const input = card.querySelector("input");
+      const options = [...card.querySelectorAll(".word-option")];
+      const selectedValue = normalized(input.value);
+      const selected = options.find(
+        (option) => normalized(option.dataset.value) === selectedValue
+      );
+      options.forEach((option) => {
+        option.hidden = option === selected;
+      });
+      card.querySelector(".options").hidden = options.every((option) => option.hidden);
+
+      card.querySelector(".selection-copy label").textContent =
+        selected?.dataset.kind ?? "Edited word";
+      const selectedIsInPool = selected?.dataset.pool === "true";
+      card.dataset.selectedPool = String(selectedIsInPool);
+      card.querySelector(".current-pool").hidden = !selectedIsInPool;
+
+      const needsConfirmation =
+        card.dataset.ambiguous === "true" && card.dataset.confirmed !== "true";
+      card.querySelector(".selection-row").classList.toggle(
+        "needs-confirmation",
+        needsConfirmation
+      );
+      card.querySelector(".confirm-choice").hidden = !needsConfirmation;
+      const warning = card.querySelector(".guidance.warning");
+      if (warning) warning.hidden = !needsConfirmation;
+    }
+
     function cardState(card) {
+      if (!normalized(card.querySelector("input").value)) {
+        return "invalid";
+      }
       if (card.dataset.ambiguous === "true" && card.dataset.confirmed !== "true") {
         return "confirm";
       }
-      const selected = card.querySelector(".word-option.selected");
-      if (selected?.dataset.pool === "true") {
+      if (card.dataset.selectedPool === "true") {
         return "skipped";
       }
       return "ready";
@@ -908,7 +986,13 @@
       const state = cardState(card);
       badge.className = `state ${state}`;
       badge.textContent =
-        state === "confirm" ? "Confirm" : state === "skipped" ? "In pool" : "Ready";
+        state === "confirm"
+          ? "Confirm"
+          : state === "skipped"
+            ? "In pool"
+            : state === "invalid"
+              ? "Fix"
+              : "Ready";
     }
 
     function updateSummary() {
@@ -965,22 +1049,28 @@
 
       options.forEach((option) => {
         option.addEventListener("click", () => {
-          options.forEach((item) => item.classList.remove("selected"));
-          option.classList.add("selected");
           input.value = option.dataset.value;
           if (card.dataset.ambiguous === "true") {
             card.dataset.confirmed = "true";
           }
+          syncSelectedEditor(card);
           updateStateBadge(card);
           updateSummary();
         });
       });
 
       input.addEventListener("input", () => {
-        options.forEach((item) => item.classList.remove("selected"));
         if (card.dataset.ambiguous === "true" && normalized(input.value)) {
           card.dataset.confirmed = "true";
         }
+        syncSelectedEditor(card);
+        updateStateBadge(card);
+        updateSummary();
+      });
+
+      card.querySelector(".confirm-choice").addEventListener("click", () => {
+        card.dataset.confirmed = "true";
+        syncSelectedEditor(card);
         updateStateBadge(card);
         updateSummary();
       });
@@ -990,6 +1080,8 @@
         updateSummary();
         showToast(`${card.dataset.original} removed from this review.`);
       });
+
+      syncSelectedEditor(card);
     });
 
     filters.forEach((filter) => {
