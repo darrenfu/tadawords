@@ -396,6 +396,306 @@ final class CloudKitFamilySyncDurableInboxHarnessTests: XCTestCase {
         )
     }
 
+    func testLaterByteEquivalentProfileFromSameWriterClearsHistoricalConflict()
+        throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore()
+        let quarantined = fixture.profileRecord(
+            payload: "same-profile-payload",
+            revision: FamilySyncLogicalRevision(
+                counter: 4,
+                deviceID: "profile-writer"
+            )
+        )
+        let current = fixture.profileRecord(
+            payload: "same-profile-payload",
+            revision: FamilySyncLogicalRevision(
+                counter: 5,
+                deviceID: "profile-writer"
+            )
+        )
+        let recordID = fixture.recordID(name: quarantined.recordName)
+        try store.quarantine(
+            fixture.conflictEntry(record: quarantined)
+        )
+
+        XCTAssertTrue(
+            try store.recoverByteEquivalentHistoricalProfileConflict(
+                currentLocalRecord: current,
+                recordID: recordID,
+                scope: .privateDatabase
+            )
+        )
+
+        let restarted = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        XCTAssertEqual(restarted.quarantinedCount(), 0)
+        XCTAssertFalse(
+            restarted.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            )
+        )
+    }
+
+    func testHistoricalProfileConflictRecoveryKeepsUnsafeVariantsProtected()
+        throws
+    {
+        enum UnsafeVariant: CaseIterable {
+            case differentPayload
+            case differentWriter
+            case sameOrOlderRevision
+            case deletion
+            case quarantinedDeletion
+            case nonProfile
+            case immutableConflict
+            case incompatibleSchema
+            case incompatibleCurrentSchema
+            case wrongScope
+            case missingEnvelope
+        }
+
+        for variant in UnsafeVariant.allCases {
+            let fixture = try CloudInboxHarnessFixture()
+            defer { fixture.remove() }
+            let store = try fixture.configuredStore()
+            let quarantined = fixture.profileRecord(
+                payload: "retained-profile-payload",
+                revision: FamilySyncLogicalRevision(
+                    counter: 4,
+                    deviceID: "profile-writer"
+                )
+            )
+            let recordID = fixture.recordID(name: quarantined.recordName)
+            let current: FamilySyncRecord
+            let recoveryScope: CloudKitFamilyDatabaseScope
+            let quarantine: CloudKitFamilyQuarantineEntry
+
+            switch variant {
+            case .differentPayload:
+                current = fixture.profileRecord(
+                    payload: "different-profile-payload",
+                    revision: FamilySyncLogicalRevision(
+                        counter: 5,
+                        deviceID: "profile-writer"
+                    )
+                )
+                recoveryScope = .privateDatabase
+                quarantine = fixture.conflictEntry(record: quarantined)
+            case .differentWriter:
+                current = fixture.profileRecord(
+                    payload: "retained-profile-payload",
+                    revision: FamilySyncLogicalRevision(
+                        counter: 5,
+                        deviceID: "other-writer"
+                    )
+                )
+                recoveryScope = .privateDatabase
+                quarantine = fixture.conflictEntry(record: quarantined)
+            case .sameOrOlderRevision:
+                current = quarantined
+                recoveryScope = .privateDatabase
+                quarantine = fixture.conflictEntry(record: quarantined)
+            case .deletion:
+                current = fixture.profileRecord(
+                    payload: "retained-profile-payload",
+                    revision: FamilySyncLogicalRevision(
+                        counter: 5,
+                        deviceID: "profile-writer"
+                    ),
+                    isDeleted: true
+                )
+                recoveryScope = .privateDatabase
+                quarantine = fixture.conflictEntry(record: quarantined)
+            case .quarantinedDeletion:
+                current = fixture.profileRecord(
+                    payload: "retained-profile-payload",
+                    revision: FamilySyncLogicalRevision(
+                        counter: 5,
+                        deviceID: "profile-writer"
+                    )
+                )
+                recoveryScope = .privateDatabase
+                quarantine = fixture.conflictEntry(
+                    record: fixture.profileRecord(
+                        payload: "retained-profile-payload",
+                        revision: FamilySyncLogicalRevision(
+                            counter: 4,
+                            deviceID: "profile-writer"
+                        ),
+                        isDeleted: true
+                    )
+                )
+            case .nonProfile:
+                current = fixture.record(
+                    name: quarantined.recordName,
+                    payload: "retained-profile-payload",
+                    revision: FamilySyncLogicalRevision(
+                        counter: 5,
+                        deviceID: "profile-writer"
+                    )
+                )
+                recoveryScope = .privateDatabase
+                quarantine = fixture.conflictEntry(record: quarantined)
+            case .immutableConflict:
+                current = fixture.profileRecord(
+                    payload: "retained-profile-payload",
+                    revision: FamilySyncLogicalRevision(
+                        counter: 5,
+                        deviceID: "profile-writer"
+                    )
+                )
+                recoveryScope = .privateDatabase
+                quarantine = fixture.conflictEntry(
+                    record: fixture.record(
+                        name: quarantined.recordName,
+                        payload: "retained-profile-payload",
+                        kind: .attempt,
+                        revision: FamilySyncLogicalRevision(
+                            counter: 4,
+                            deviceID: "profile-writer"
+                        )
+                    )
+                )
+            case .incompatibleSchema:
+                current = fixture.profileRecord(
+                    payload: "retained-profile-payload",
+                    revision: FamilySyncLogicalRevision(
+                        counter: 5,
+                        deviceID: "profile-writer"
+                    )
+                )
+                recoveryScope = .privateDatabase
+                quarantine = fixture.conflictEntry(
+                    record: fixture.profileRecord(
+                        payload: "retained-profile-payload",
+                        revision: FamilySyncLogicalRevision(
+                            counter: 4,
+                            deviceID: "profile-writer"
+                        ),
+                        schemaVersion: FamilySyncRecord.currentSchemaVersion + 1
+                    )
+                )
+            case .incompatibleCurrentSchema:
+                current = fixture.profileRecord(
+                    payload: "retained-profile-payload",
+                    revision: FamilySyncLogicalRevision(
+                        counter: 5,
+                        deviceID: "profile-writer"
+                    ),
+                    schemaVersion: FamilySyncRecord.currentSchemaVersion + 1
+                )
+                recoveryScope = .privateDatabase
+                quarantine = fixture.conflictEntry(record: quarantined)
+            case .wrongScope:
+                current = fixture.profileRecord(
+                    payload: "retained-profile-payload",
+                    revision: FamilySyncLogicalRevision(
+                        counter: 5,
+                        deviceID: "profile-writer"
+                    )
+                )
+                recoveryScope = .sharedDatabase
+                quarantine = fixture.conflictEntry(record: quarantined)
+            case .missingEnvelope:
+                current = fixture.profileRecord(
+                    payload: "retained-profile-payload",
+                    revision: FamilySyncLogicalRevision(
+                        counter: 5,
+                        deviceID: "profile-writer"
+                    )
+                )
+                recoveryScope = .privateDatabase
+                quarantine = fixture.conflictEntry(
+                    record: quarantined,
+                    includeEnvelope: false
+                )
+            }
+
+            try store.quarantine(quarantine)
+            XCTAssertFalse(
+                try store.recoverByteEquivalentHistoricalProfileConflict(
+                    currentLocalRecord: current,
+                    recordID: recordID,
+                    scope: recoveryScope
+                ),
+                "Unexpected recovery for \(variant)"
+            )
+
+            let restarted = CloudKitFamilyMetadataStore(
+                snapshotURL: fixture.metadataURL
+            )
+            XCTAssertTrue(
+                restarted.isConflictQuarantined(
+                    recordID: recordID,
+                    scope: .privateDatabase
+                ),
+                "The conflict lock must remain for \(variant)"
+            )
+        }
+    }
+
+    func testHistoricalProfileConflictRecoveryWriteFailureKeepsLockDurable()
+        throws
+    {
+        let fixture = try CloudInboxHarnessFixture()
+        defer { fixture.remove() }
+        let store = try fixture.configuredStore()
+        let quarantined = fixture.profileRecord(
+            payload: "same-profile-payload",
+            revision: FamilySyncLogicalRevision(
+                counter: 4,
+                deviceID: "profile-writer"
+            )
+        )
+        let current = fixture.profileRecord(
+            payload: "same-profile-payload",
+            revision: FamilySyncLogicalRevision(
+                counter: 5,
+                deviceID: "profile-writer"
+            )
+        )
+        let recordID = fixture.recordID(name: quarantined.recordName)
+        try store.quarantine(fixture.conflictEntry(record: quarantined))
+        let writablePermissions = 0o755
+        let readOnlyPermissions = 0o555
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: writablePermissions],
+                ofItemAtPath: fixture.directory.path
+            )
+        }
+        try FileManager.default.setAttributes(
+            [.posixPermissions: readOnlyPermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+
+        XCTAssertThrowsError(
+            try store.recoverByteEquivalentHistoricalProfileConflict(
+                currentLocalRecord: current,
+                recordID: recordID,
+                scope: .privateDatabase
+            )
+        )
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: writablePermissions],
+            ofItemAtPath: fixture.directory.path
+        )
+        let restarted = CloudKitFamilyMetadataStore(
+            snapshotURL: fixture.metadataURL
+        )
+        XCTAssertTrue(
+            restarted.isConflictQuarantined(
+                recordID: recordID,
+                scope: .privateDatabase
+            )
+        )
+    }
+
     func testInboxSaveAndDeletionReplayAcrossRestartUntilEachReceiptIsAcknowledged()
         async throws
     {
@@ -2895,6 +3195,7 @@ private struct CloudInboxHarnessFixture {
     func record(
         name: String = "profile",
         payload: String,
+        kind: FamilySyncRecordKind = .wordPoolEntry,
         revision: FamilySyncLogicalRevision = FamilySyncLogicalRevision(
             counter: 1,
             deviceID: "remote"
@@ -2903,11 +3204,49 @@ private struct CloudInboxHarnessFixture {
         FamilySyncRecord(
             recordName: name,
             profileID: profileID,
-            kind: .wordPoolEntry,
+            kind: kind,
             payload: Data(payload.utf8),
             updatedAt: now,
             deviceID: revision.deviceID,
             logicalRevision: revision
+        )
+    }
+
+    func profileRecord(
+        name: String = "profile",
+        payload: String,
+        revision: FamilySyncLogicalRevision,
+        isDeleted: Bool = false,
+        schemaVersion: Int = FamilySyncRecord.currentSchemaVersion
+    ) -> FamilySyncRecord {
+        FamilySyncRecord(
+            recordName: name,
+            profileID: profileID,
+            kind: .profile,
+            payload: Data(payload.utf8),
+            updatedAt: now,
+            deviceID: revision.deviceID,
+            isDeleted: isDeleted,
+            schemaVersion: schemaVersion,
+            logicalRevision: revision
+        )
+    }
+
+    func conflictEntry(
+        record: FamilySyncRecord,
+        includeEnvelope: Bool = true
+    ) -> CloudKitFamilyQuarantineEntry {
+        CloudKitFamilyQuarantineEntry(
+            id: UUID(),
+            scope: .privateDatabase,
+            recordName: record.recordName,
+            zoneName: zoneID.zoneName,
+            ownerName: zoneID.ownerName,
+            reason: .conflict,
+            envelopeData: includeEnvelope
+                ? try? JSONEncoder().encode(FamilySyncEnvelope(record: record))
+                : nil,
+            quarantinedAt: now
         )
     }
 

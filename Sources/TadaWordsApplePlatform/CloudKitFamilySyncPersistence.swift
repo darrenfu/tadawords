@@ -1900,6 +1900,77 @@ final class CloudKitFamilyMetadataStore: @unchecked Sendable {
         }
     }
 
+    /// Clears one historical Profile conflict only after the current local
+    /// record has converged byte-for-byte with the retained CloudKit envelope.
+    ///
+    /// The original conflict remains a fail-closed disposition until a later
+    /// revision from the same logical writer proves that there is no longer a
+    /// content choice to make. Other record kinds, deletions, cross-writer
+    /// revisions, incompatible envelopes, and compacted conflicts without
+    /// diagnostic bytes remain protected.
+    func recoverByteEquivalentHistoricalProfileConflict(
+        currentLocalRecord: FamilySyncRecord,
+        recordID: CKRecord.ID,
+        scope: CloudKitFamilyDatabaseScope
+    ) throws -> Bool {
+        try withLock {
+            var snapshot = loadLocked()
+            guard
+                !loadFailed,
+                !snapshot.requiresAccountConfirmation,
+                snapshot.pendingCanonicalRecovery == nil,
+                currentLocalRecord.kind == .profile,
+                !currentLocalRecord.isDeleted,
+                currentLocalRecord.recordName == recordID.recordName,
+                (try? currentLocalRecord.validateCompatibility()) != nil
+            else {
+                return false
+            }
+
+            let candidates = snapshot.quarantined.filter {
+                $0.scope == scope
+                    && $0.recordName == recordID.recordName
+                    && $0.zoneName == recordID.zoneID.zoneName
+                    && $0.ownerName == recordID.zoneID.ownerName
+            }
+            guard candidates.count == 1,
+                let candidate = candidates.first,
+                candidate.reason == .conflict,
+                let envelopeData = candidate.envelopeData,
+                let envelope = try? JSONDecoder().decode(
+                    FamilySyncEnvelope.self,
+                    from: envelopeData
+                ),
+                let quarantinedRecord = try? envelope.decodedRecord(),
+                quarantinedRecord.kind == .profile,
+                !quarantinedRecord.isDeleted,
+                quarantinedRecord.recordName == currentLocalRecord.recordName,
+                quarantinedRecord.profileID == currentLocalRecord.profileID,
+                quarantinedRecord.payloadChecksum
+                    == currentLocalRecord.payloadChecksum,
+                quarantinedRecord.payload == currentLocalRecord.payload,
+                quarantinedRecord.logicalRevision.deviceID
+                    == currentLocalRecord.logicalRevision.deviceID,
+                currentLocalRecord.logicalRevision.counter
+                    > quarantinedRecord.logicalRevision.counter
+            else {
+                return false
+            }
+
+            guard
+                clearQuarantine(
+                    recordID: recordID,
+                    scope: scope,
+                    snapshot: &snapshot
+                )
+            else {
+                return false
+            }
+            try persistLocked(snapshot)
+            return true
+        }
+    }
+
     func appendInbox(
         record: FamilySyncRecord,
         recordID: CKRecord.ID,
